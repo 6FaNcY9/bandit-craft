@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mcbots-lab": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["tools/mcbots-mcp/server.js"],
+      "env": {"MCBOTS_API": "https://bandit-lab.tail7facc9.ts.net:8445"}
+    }
+  }
+}
