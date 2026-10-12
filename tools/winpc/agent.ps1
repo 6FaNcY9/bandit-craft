@@ -321,10 +321,14 @@ function Get-UpdateStatus {
     Read-BoundedText $path 1MB | ConvertFrom-Json
 }
 function Get-Status {
-    if ($script:statusCache -and $script:statusUntil -gt [datetime]::UtcNow) { return $script:statusCache }
+    # Each part is a PowerShell process (about 0.3-0.6 s CPU on slayer): only Andy and the GPU are
+    # refreshed with the page's 3 s poll; slow-changing parts are kept longer, failures are retried.
+    $ttl = @{ andy = 3; gpu = 3; processes = 10; services = 60; autostart = 60; updates = 60 }
     $result = [ordered]@{}
     foreach ($part in 'Andy', 'Gpu', 'Process', 'Service', 'Autostart', 'Update') {
         $key = @{ Andy = 'andy'; Gpu = 'gpu'; Process = 'processes'; Service = 'services'; Autostart = 'autostart'; Update = 'updates' }[$part]
+        $cached = $script:statusCache[$key]
+        if ($cached -and $cached.until -gt [datetime]::UtcNow) { $result[$key] = $cached.value; continue }
         try {
             # A separate, killable PS5.1 process bounds even a stalled CIM/provider call.
             $functions = $script:probeFunctions[$part]
@@ -334,10 +338,10 @@ function Get-Status {
             $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
             $value = Invoke-Program "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -NonInteractive -EncodedCommand $encoded" 6500
             $result[$key] = $value | ConvertFrom-Json
-        } catch { $result[$key] = @{ error = $_.Exception.Message } }
+            $seconds = $ttl[$key]
+        } catch { $result[$key] = @{ error = $_.Exception.Message }; $seconds = 3 }
+        $script:statusCache[$key] = @{ value = $result[$key]; until = [datetime]::UtcNow.AddSeconds($seconds) }
     }
-    $script:statusCache = $result
-    $script:statusUntil = [datetime]::UtcNow.AddSeconds(3)
     return $result
 }
 function Send-Response($Response, [int]$Code, $Value, [switch]$Html) {
@@ -373,7 +377,7 @@ function Invoke-AgentRequest($Context) {
             # Check audit writability before mutating; record the outcome before responding.
             Assert-AuditWritable
             Write-Control $change
-            $script:statusCache = $null
+            $script:statusCache.Remove('andy')
             $result = 'allowed'; $code = 200
             $value = @{ ok = $true }
         } elseif ($request.HttpMethod -ceq 'GET' -and $path -ceq '/') {
@@ -406,7 +410,7 @@ function Start-Agent {
     $script:access = @{}
     $acl = Read-BoundedText 'C:\bandit-ai\agent\access.json' | ConvertFrom-Json
     foreach ($property in $acl.PSObject.Properties) { $script:access[$property.Name] = $property.Value }
-    $script:whoisCache = @{}; $script:statusCache = $null
+    $script:whoisCache = @{}; $script:statusCache = @{}
     $authority = "$($script:config.fqdn):$($script:config.port)"
     $script:origin = "https://$authority"
     if ($script:config.port -eq 443) { $script:origin = "https://$($script:config.fqdn)" }

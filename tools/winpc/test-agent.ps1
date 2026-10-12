@@ -157,7 +157,7 @@ try {
     Remove-Item -LiteralPath $temp -Recurse -Force
 }
 # Exercise the real dispatcher with external boundaries mocked, without touching C:\bandit-ai.
-$script:audits = @(); $script:responses = @(); $script:denyPeer = $false; $script:readCalls = 0
+$script:audits = @(); $script:responses = @(); $script:denyPeer = $false; $script:readCalls = 0; $script:statusCache = @{}
 function Get-PeerIdentity { param($Ip, $Method) if ($script:denyPeer) { throw 'Peer denied' }; @{ StableID = 'pc'; role = 'self' } }
 function Read-RequestBody { param($Request) $script:readCalls++; throw 'Do not read refused bodies' }
 function Write-Audit { param($Peer, $Identity, $Action, $Result) $script:audits += @{ peer=$Peer; action=$Action; result=$Result } }
@@ -191,7 +191,7 @@ Assert ($script:writes -eq 3 -and $script:audits.Count -eq 5) 'Andy roles must w
 Assert (($script:responses[-3..-1] -join ',') -eq '200,200,200') 'Allowed Andy requests failed'
 'PASS: all three roles reach only the Andy control route and every allowed POST is audited'
 $script:probeFunctions = @{ Andy=''; Gpu=''; Process=''; Service=''; Autostart=''; Update='' }
-$script:statusCache = $null; $script:probeCalls = 0
+$script:statusCache = @{}; $script:probeCalls = 0
 function Invoke-Program {
     param($Exe, $Arguments, $TimeoutMs)
     Assert ($TimeoutMs -eq 6500) 'Status worker deadline changed'
@@ -202,8 +202,12 @@ function Invoke-Program {
 $status = Get-Status
 Assert ($status.services.error -eq 'service provider timeout' -and $status.andy.fixture -and $status.updates.fixture) 'Status failures must remain independent'
 $null = Get-Status
-Assert ($script:probeCalls -eq 6) 'Whole status cache not used'
-'PASS: independent time-boxed status failures and whole-status cache'
+Assert ($script:probeCalls -eq 6) 'Status cache not used'
+# Andy and GPU age out after 3 s, a failed part too; services, autostart and updates are kept for 60 s.
+foreach ($key in @($script:statusCache.Keys)) { $script:statusCache[$key].until = $script:statusCache[$key].until.AddSeconds(-5) }
+$status = Get-Status
+Assert ($script:probeCalls -eq 9 -and $status.services.fixture) 'Only Andy, GPU and the failed part may be probed again'
+'PASS: independent time-boxed status failures, per-part cache (fast parts 3 s, failures retried)'
 $ui = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ui.html'))
 Assert ([regex]::Matches($ui, '(?i)<script\b').Count -eq 1 -and [regex]::Matches($ui, '(?s)<script>(.*?)</script>').Count -eq 1) 'Exactly one inline script required'
 Assert ($ui -notmatch '(?i)innerHTML|outerHTML|insertAdjacentHTML|document\.write|<script[^>]+src=') 'Unsafe DOM or external script'
