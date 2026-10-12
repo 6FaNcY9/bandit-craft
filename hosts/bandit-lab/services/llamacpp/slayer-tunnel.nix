@@ -33,6 +33,13 @@ in {
       hostKey = lib.mkDefault pcs.slayer.hostKey;
       localPort = lib.mkDefault 18081;
     };
+    # albert: bandit-nix enables it; where it is and who it is come from pcs.nix too.
+    bandit-lab.inferenceHosts.albert = {
+      address = lib.mkDefault pcs.albert.address;
+      user = lib.mkDefault pcs.albert.user;
+      hostKey = lib.mkDefault pcs.albert.hostKey;
+      localPort = lib.mkDefault 18082;
+    };
     assertions = [
       {
         assertion = lib.all (name: builtins.match "[a-z][a-z0-9_-]{0,24}" name != null) (builtins.attrNames hosts);
