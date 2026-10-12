@@ -22,9 +22,14 @@
       ./hosts/bandit-lab/services/mcagents
     ];
 
-    # mcbots-worker needs bandit-nix's repoConfig (lab address, hub port), so bandit-nix builds the
-    # packages: hosts/bandit-lab/services/mcbots/{package,worker}.nix.
-    checks.${system}.mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
+    # The bot runner and dashboard; its build runs app/test.js. mcbots-worker needs bandit-nix's
+    # repoConfig (lab address, hub port), so bandit-nix builds that one (mcbots/worker.nix).
+    packages.${system}.mcbots = pkgs.callPackage ./hosts/bandit-lab/services/mcbots/package.nix {};
+
+    checks.${system} = {
+      mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
+      inherit (self.packages.${system}) mcbots;
+    };
 
     formatter.${system} = pkgs.alejandra;
   };

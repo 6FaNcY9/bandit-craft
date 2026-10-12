@@ -1,0 +1,4 @@
+# The Windows installers embed their scripts as base64 of the LF files; a CRLF checkout (Windows
+# runners, core.autocrlf) would break the payload parity tests and the scripts must stay byte-equal.
+tools/slayer/** text eol=lf
+tools/winpc/** text eol=lf
