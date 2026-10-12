@@ -25,27 +25,19 @@
     ANDY_BACKEND_NAMES = lib.concatStringsSep "," inferenceNames;
     ANDY_OFFLINE_NAMES = lib.concatStringsSep "," offlineNames;
   };
-  # Two Andy-4.2 brains, each with its own scripted crew (lead mode, H4):
-  # bot1 keeps the base chest stocked, bot2 builds; they talk with
-  # !startConversation. One lead with four independent goals drifted, and one
-  # lead with every task did not get to the building (2026-10-10).
+  # Three equal Andy-4.2 bots, each with a role and no scripted crew (owner 2026-10-12: few but smart;
+  # docs/specs/2026-10-12-in-game-bot-control.md). They talk with !startConversation.
   agents = {
     bot1 = {
-      goal = "You help the crew but do not run it: the hub plan assigns the workers. Gather what the base chest lacks (logs, cobblestone, coal, raw_iron, torches) yourself with !collectBlocks or !startShift, fight mobs near the base, and answer bot2. Do not try to !assign workers.";
+      goal = "Your role: gatherer. Keep the base chest stocked with logs, cobblestone, coal and torches: check it with !viewChest, fill what is short with !startShift or !collectBlocks, craft torches from coal and sticks, and fight mobs near the base. Tell bot2 or bot3 with !startConversation when they ask for something you can bring.";
       workers = "";
     };
-    # The storage room goes under the base-v1 hut (-272 65 -219, on ground a block
-    # scan found flat); the owner asked for it underground, for chests and beds.
-    # bot2 no longer digs the shaft itself: its own shaft job held the shaft walls as stair steps and
-    # every plan strip on that shaft failed ("holds up the base or a shaft step", lab 2026-10-11).
     bot2 = {
-      goal = "You keep the shaft crew safe but do not run it: the hub plan's workers dig the shaft west of the base (-291, -222 to -276, -207). Stand guard at the shaft with !guardHere(16), pick up what lies around with !collectDrops(16), and tell bot1 with !startConversation when the crew needs torches or food. Never dig the shaft yourself and do not try to !assign workers.";
+      goal = "Your role: miner. Dig the shaft west of the base with !digShaft(-291, -222, -276, -207) until it reaches the bottom, then mine its iron level with !mineLevel(16). Put raw_iron and coal in the base chest with !putInChest, and ask bot1 with !startConversation when you need torches or food.";
       workers = "";
     };
-    # A third brain while the lab GPU idles (owner, 2026-10-11: more bots should think): bot3 left the
-    # plan roster and mines the iron the iron-quota objective waits for.
     bot3 = {
-      goal = "You are the crew's iron miner, while the hub plan assigns the other workers. Mine iron ore with !collectBlocks(\"iron_ore\", 16) (best around y 16, reached through the shaft west of the base), put the raw_iron and coal in the base chest with !putInChest, and take torches or food from the base chest when you run low. Never dig the shaft itself and do not try to !assign workers.";
+      goal = "Your role: wood and food. Keep the tree farm going with !tendTreeFarm(-262, -238, -248, -224), and when the base chest is low on food hunt cows or pigs with !huntAnimals and cook the meat with !smeltItem, and put logs and food in the base chest. Never dig the shaft.";
       workers = "";
     };
   };

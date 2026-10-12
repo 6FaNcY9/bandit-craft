@@ -9,6 +9,10 @@ type is one entry in `JOBS` and one in `VALIDATE` in `app/bots.js`.
 
 ## How it fits together
 
+- Since 2026-10-12 only three bots play on the lab, all of them Andy-4.2 agents with a role:
+  `bot1` gatherer (base chest), `bot2` miner (shaft, iron level), `bot3` wood and food (tree farm,
+  hunting). The scripted crew (`bot4`, `bot10` at the gold farm, `bot16`-`bot18`) is retired and the
+  plan is off (`PLAN_ENABLE` empty); the text below still describes them where it explains the code.
 - Bots are named `bot1`..`bot4` on the lab (`bot5`+ on the laptop). BotGate
   admits offline logins only for `^bot[0-9]{1,2}$` from the owner laptop
   (`100.102.247.30/32`) or the `mcbots` Docker network (`10.250.77.0/29`).
