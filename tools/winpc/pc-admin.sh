@@ -33,8 +33,11 @@ q() {
   printf "'%s'" "$s"
 }
 remote_ps() {
+  # No progress records: under -EncodedCommand PowerShell sends them as CLIXML, which flooded the
+  # terminal and stalled the first `pc-admin run` of install-agent.ps1 on slayer (2026-10-13).
+  local cmd="\$ProgressPreference = 'SilentlyContinue'; $1"
   # shellcheck disable=SC2029 # the encoded command is built here on purpose
-  ssh "${opts[@]}" "$user@$addr" "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $(printf '%s' "$1" | iconv -f UTF-8 -t UTF-16LE | base64 -w0)"
+  ssh "${opts[@]}" "$user@$addr" "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $(printf '%s' "$cmd" | iconv -f UTF-8 -t UTF-16LE | base64 -w0)"
 }
 
 src=$(realpath "$3")
