@@ -225,7 +225,8 @@ function Write-Control($Action, [string]$Control = 'C:\bandit-ai\control') {
         $f = [IO.File]::Open($temp, 'CreateNew', 'Write', 'None')
         try { $bytes = [Text.Encoding]::UTF8.GetBytes($Action.text); $f.Write($bytes, 0, $bytes.Length) } finally { $f.Dispose() }
         Assert-NoReparse $target
-        if (Test-Path -LiteralPath $target) { [IO.File]::Replace($temp, $target, $null) }
+        # [NullString]: PowerShell would pass $null as "", which Replace refuses as a path.
+        if (Test-Path -LiteralPath $target) { [IO.File]::Replace($temp, $target, [NullString]::Value) }
         else { Move-Item -LiteralPath $temp -Destination $target -Force }
     } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
 }
