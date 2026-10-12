@@ -47,7 +47,7 @@ try {
     foreach ($r in 'fullscreen window', 'game cs2.exe', 'non-llama GPU 99%') {
         Assert ((PickMode $r) -eq 'shared') "Busy reason '$r' must run shared"
     }
-    foreach ($r in 'training', 'another console session (or no console)', 'probe failed: x') {
+    foreach ($r in 'training', 'paused by the owner', 'another console session (or no console)', 'probe failed: x') {
         Assert ($null -eq (PickMode $r)) "Reason '$r' must stop the server"
     }
     $script:freeSince = (Get-Date).AddMinutes(-1)

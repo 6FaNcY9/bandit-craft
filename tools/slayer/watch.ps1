@@ -130,6 +130,8 @@ function Publish {
 function Training {
     $lock = Get-Item "$base\training.lock" -ErrorAction SilentlyContinue
     if ($lock -and ((Get-Date) - $lock.LastWriteTime).TotalHours -lt 24) { return 'training' }
+    # The owner's pause switch (the PC manager's page, or by hand): no Andy until the file is gone.
+    if (Test-Path "$runtime\pause.flag") { return 'paused by the owner' }
     return $null
 }
 $script:modelChecks = @{}
@@ -188,7 +190,7 @@ try {
                 }
             } elseif (-not $listeners.Count -and -not $servers.Count -and ($serving = Serving)) {
                 # Verification can take seconds; a game may have started during hashing.
-                if (Training) { throw 'Training started during model verification; launch deferred' }
+                if ($stop = Training) { throw "$stop during model verification; launch deferred" }
                 if ($mode -eq 'full' -and ($again = Busy)) {
                     $mode = PickMode $again
                     if (-not $mode) { throw "$again during model verification; launch deferred" }
