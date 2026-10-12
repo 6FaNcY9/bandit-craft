@@ -209,8 +209,9 @@ in {
         };
       };
 
-      # The menus go in while the server runs and are reloaded in place (/pa reload, as the console),
-      # so a menu change never restarts Minecraft; a server still starting reads the new files itself.
+      # The menus go in while the server runs and are reloaded in place (/pa reload over RCON, which only
+      # answers once the server is up: through the console pipe the reload hit a server still starting
+      # and failed, 2026-10-12), so a menu change never restarts Minecraft.
       minecraft-panels = {
         description = "Install the CommandPanels menus and reload them";
         after = ["docker-minecraft.service"];
@@ -229,8 +230,8 @@ in {
           for panel in "$PANELS"/*.yml; do
             install -o 1000 -g 1000 -m 0644 "$panel" "$d/panels/$(basename "$panel")"
           done
-          for _ in $(seq 30); do
-            timeout 20 docker exec -u 1000 minecraft mc-send-to-console pa reload 2>/dev/null && exit 0
+          for _ in $(seq 50); do
+            timeout 20 docker exec minecraft rcon-cli "pa reload" >/dev/null 2>&1 && exit 0
             sleep 10
           done
           echo "Minecraft is not running; it reads the menus when it starts" >&2
