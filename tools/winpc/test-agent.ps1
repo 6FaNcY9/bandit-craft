@@ -219,6 +219,17 @@ $script:statusCache = @{}; $script:oneRow = $true
 $json = Get-Status | ConvertTo-Json -Depth 16 -Compress
 Assert ($json -match '"services":\[\{"a":1\}\]') "A one-row status array must stay a JSON array: $json"
 'PASS: status tables reach the page as JSON arrays, also with one row'
+# HEAD gets the headers only: HttpListener refuses body bytes there ("bytes exceed Content-Length",
+# agent.log on slayer after a curl -I).
+$sendAst = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Send-Response' }, $true)
+. ([scriptblock]::Create($sendAst.Extent.Text))
+$script:csp = 'x'
+foreach ($head in $true, $false) {
+    $response = [pscustomobject]@{ StatusCode = 0; Headers = @{}; ContentType = ''; ContentLength64 = 0; OutputStream = (New-Object IO.MemoryStream) }
+    Send-Response $response 404 @{ error = 'Route not found' } -NoBody:$head
+    Assert ($response.ContentLength64 -gt 0 -and ($response.OutputStream.Length -eq 0) -eq $head) "HEAD must send headers only, GET the body (head=$head)"
+}
+'PASS: HEAD answers with headers only'
 # Invoke-RestMethod emits llama-server's /slots array as one object; PS 5.1 then writes it as
 # {"value":[...],"Count":n} and the page's slot table stays empty (seen on slayer).
 function Invoke-RestMethod { '[{"id":0,"is_processing":true}]' | ConvertFrom-Json }

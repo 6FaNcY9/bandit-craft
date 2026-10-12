@@ -350,7 +350,7 @@ function Get-Status {
     }
     return $result
 }
-function Send-Response($Response, [int]$Code, $Value, [switch]$Html) {
+function Send-Response($Response, [int]$Code, $Value, [switch]$Html, [switch]$NoBody) {
     $Response.StatusCode = $Code
     $Response.Headers['Content-Security-Policy'] = $script:csp
     $Response.Headers['X-Content-Type-Options'] = 'nosniff'
@@ -361,7 +361,8 @@ function Send-Response($Response, [int]$Code, $Value, [switch]$Html) {
     if ($Html) { $Response.ContentType = 'text/html; charset=utf-8'; $text = $Value }
     $bytes = [Text.Encoding]::UTF8.GetBytes($text)
     $Response.ContentLength64 = $bytes.Length
-    $Response.OutputStream.Write($bytes, 0, $bytes.Length)
+    # HEAD: headers only; HttpListener refuses body bytes there.
+    if (-not $NoBody) { $Response.OutputStream.Write($bytes, 0, $bytes.Length) }
 }
 function Invoke-AgentRequest($Context) {
     $request = $Context.Request
@@ -403,7 +404,7 @@ function Invoke-AgentRequest($Context) {
                 try { Write-RotatedLine 'C:\bandit-ai\agent\agent.log' ('Audit failure: ' + $_.Exception.Message) } catch { }
             }
         }
-        try { Send-Response $Context.Response $code $value -Html:$html } catch {
+        try { Send-Response $Context.Response $code $value -Html:$html -NoBody:($request.HttpMethod -ceq 'HEAD') } catch {
             try { Write-RotatedLine 'C:\bandit-ai\agent\agent.log' ('Response failure: ' + $_.Exception.Message) } catch { }
         }
         try { $Context.Response.Close() } catch { }
