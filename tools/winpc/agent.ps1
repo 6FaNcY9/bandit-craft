@@ -442,7 +442,11 @@ function Start-Agent {
     } finally { $listener.Close() }
 }
 # Parts 0, 2 and 3 (keys, admin actions and Wake-on-LAN) are deliberately absent.
-try { Start-Agent } catch {
-    try { Write-RotatedLine 'C:\bandit-ai\agent\agent.log' ([datetime]::UtcNow.ToString('o') + ' Fatal: ' + $_.Exception.Message) } catch { }
-    exit 1
+# Task Scheduler's RestartCount covers only a failed launch, not a script that ends with an error, so
+# the agent restarts itself (config and access are read again each time).
+while ($true) {
+    try { Start-Agent } catch {
+        try { Write-RotatedLine 'C:\bandit-ai\agent\agent.log' ([datetime]::UtcNow.ToString('o') + ' Fatal, restart in 30 s: ' + $_.Exception.Message) } catch { }
+    }
+    Start-Sleep -Seconds 30
 }

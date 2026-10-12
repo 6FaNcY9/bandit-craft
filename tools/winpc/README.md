@@ -26,13 +26,16 @@ Open `https://slayerpc.tail7facc9.ts.net:8443/`. The firewall permits only
 protects their ACLs before writing code, imports the certificate, binds HTTP.sys,
 and starts `bandit-agent` as SYSTEM. `bandit-agent-renew` renews/rebinds daily.
 Rerunning stops both tasks, replaces the protected files, and starts the agent.
-It leaves the watcher and writable runtime folder alone. A failed install may
+It leaves the watcher alone; `runtime` gets its own Modify grant for the watcher
+account before `C:\bandit-ai` loses broad write (on slayer runtime only inherited
+it from `C:\`). The agent restarts itself 30 s after a fatal error, since Task
+Scheduler's restart count only covers a failed launch. A failed install may
 leave the agent stopped; inspect the error and rerun after correcting it.
 
 Files on the PC:
 
 - `C:\bandit-ai\agent`: `agent.ps1`, `ui.html`, installed renewal
-  `install-agent.ps1`, `config.json` (`fqdn`, `port`, absolute `tailscale` path),
+  `install-agent.ps1`, `config.json` (`fqdn`, `port`, `tailscale` = the Program Files binary),
   `access.json`, `audit.log` and `agent.log` (5 MiB rotation to `.1`).
 - `agent\state`: protected certificate/key/PFX and optional `updates.json`.
   No update scan runs in Part 1. Missing cached updates show `no scan yet`.
@@ -45,7 +48,8 @@ Files on the PC:
   read as bounded text with reparse-point refusal. `/slots` is loopback-only.
 
 GET whois answers cache for 60 seconds (expiry is still checked); POST checks
-again. Whole status caches for 3 seconds. Each status section runs in a killable
+again. Each status section has its own cache: Andy and GPU 3 s, processes 10 s,
+services, autostart and updates 60 s; a failed section is retried after 3 s. Each status section runs in a killable
 PowerShell worker with a 6.5-second budget; slots have 2 seconds and nvidia-smi
 3 seconds. Errors stay in the affected section. Unavailable per-process/Andy GPU
 load shows unknown. Probes can make a refresh slower than the 3-second polling
