@@ -4,6 +4,7 @@
   pkgs,
   ...
 }: let
+  pcs = import ../../../../tools/winpc/pcs.nix;
   hosts = lib.filterAttrs (_: host: host.enable) config.bandit-lab.inferenceHosts;
   named = f: lib.mapAttrs' (name: host: lib.nameValuePair "${name}-tunnel" (f name host)) hosts;
 in {
@@ -27,9 +28,9 @@ in {
     # Compatibility with the deployed option, identity, port and secret name.
     bandit-lab.inferenceHosts.slayer = {
       enable = lib.mkDefault config.bandit-lab.slayerTunnel.enable;
-      address = lib.mkDefault "100.76.40.98";
-      user = lib.mkDefault "yassi";
-      hostKey = lib.mkDefault "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIQqLzKYo4S6Ldqfyt9kWOUPNg82r8/QsJTKOPsqN1G9";
+      address = lib.mkDefault pcs.slayer.address;
+      user = lib.mkDefault pcs.slayer.user;
+      hostKey = lib.mkDefault pcs.slayer.hostKey;
       localPort = lib.mkDefault 18081;
     };
     assertions = [
