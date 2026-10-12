@@ -208,6 +208,17 @@ foreach ($key in @($script:statusCache.Keys)) { $script:statusCache[$key].until 
 $status = Get-Status
 Assert ($script:probeCalls -eq 9 -and $status.services.fixture) 'Only Andy, GPU and the failed part may be probed again'
 'PASS: independent time-boxed status failures, per-part cache (fast parts 3 s, failures retried)'
+# ConvertFrom-Json hands a JSON array over as one wrapped object that PS 5.1 writes back as
+# {"value":[...]}; the page then showed empty process, service and autostart tables (slayer, 2026-10-13).
+$script:statusCache = @{}
+function Invoke-Program { param($Exe, $Arguments, $TimeoutMs) if ($script:oneRow) { '[{"a":1}]' } else { '[{"a":1},{"a":2}]' } }
+$script:oneRow = $false
+$json = Get-Status | ConvertTo-Json -Depth 16 -Compress
+Assert ($json -match '"processes":\[\{"a":1\},\{"a":2\}\]') "Status arrays must stay JSON arrays: $json"
+$script:statusCache = @{}; $script:oneRow = $true
+$json = Get-Status | ConvertTo-Json -Depth 16 -Compress
+Assert ($json -match '"services":\[\{"a":1\}\]') "A one-row status array must stay a JSON array: $json"
+'PASS: status tables reach the page as JSON arrays, also with one row'
 # Invoke-RestMethod emits llama-server's /slots array as one object; PS 5.1 then writes it as
 # {"value":[...],"Count":n} and the page's slot table stays empty (seen on slayer).
 function Invoke-RestMethod { '[{"id":0,"is_processing":true}]' | ConvertFrom-Json }

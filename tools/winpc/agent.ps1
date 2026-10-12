@@ -339,7 +339,11 @@ function Get-Status {
             $code = "$functions`n`$ErrorActionPreference = 'Stop'; try { ConvertTo-Json -InputObject ($expression) -Depth 12 -Compress } catch { @{error = `$_.Exception.Message} | ConvertTo-Json -Compress }"
             $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
             $value = Invoke-Program "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -NonInteractive -EncodedCommand $encoded" 6500
-            $result[$key] = $value | ConvertFrom-Json
+            $parsed = $value | ConvertFrom-Json
+            # ConvertFrom-Json hands a JSON array over as one wrapped object, which PS 5.1 writes back as
+            # {"value":[...]}: rebuild it as a plain array (kept an array with one row).
+            if ($parsed -is [array]) { $parsed = @($parsed | ForEach-Object { $_ }) }
+            $result[$key] = $parsed
             $seconds = $ttl[$key]
         } catch { $result[$key] = @{ error = $_.Exception.Message }; $seconds = 3 }
         $script:statusCache[$key] = @{ value = $result[$key]; until = [datetime]::UtcNow.AddSeconds($seconds) }
