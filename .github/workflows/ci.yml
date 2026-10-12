@@ -27,7 +27,7 @@ jobs:
         run: nix fmt -- --check .
 
   windows:
-    name: Windows scripts (slayer watcher and installer, Windows PowerShell 5.1)
+    name: Windows scripts (slayer watcher, PC manager, Windows PowerShell 5.1)
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -38,3 +38,9 @@ jobs:
         run: |
           .\test-watch.ps1
           .\test-install.ps1
+      - name: PC manager agent and installer tests
+        shell: powershell
+        working-directory: tools/winpc
+        run: |
+          .\test-agent.ps1
+          .\test-install-agent.ps1
