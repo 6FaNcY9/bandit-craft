@@ -101,3 +101,7 @@ $mode = 'full'
 try { & $launch } catch { }
 Assert ($script:starts.Count -eq 1 -and $script:starts[0] -match '--n-gpu-layers 0 --no-op-offload' -and $script:starts[0] -match '--prio -1') 'Game appearing during hashing must launch the shared server'
 'PASS: payload parity, key migration, retry checksums, verification cache and game-start race'
+# Once the PC manager owns the SSH keys (tools/winpc/install-agent.ps1, keys.json), a rerun of this
+# installer must not merge the coordinator key or an unbound tunnel line back in.
+Assert ($installer -match "(?s)if \(Test-Path -LiteralPath 'C:\\bandit-ai\\agent\\keys\.json'\) \{.*\} else \{\s*Set-AuthorizedKeys 'C:\\ProgramData\\ssh\\administrators_authorized_keys'") 'Keys managed by the PC manager must be left alone'
+'PASS: SSH keys left alone once the PC manager manages them'

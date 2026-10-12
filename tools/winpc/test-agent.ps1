@@ -229,3 +229,17 @@ Assert ($agentText -match '\$p.Kill\(\)' -and $agentText -match 'WaitForExit\(\$
 Assert ($agentText -match "/slots' -TimeoutSec 2 -MaximumRedirection 0") 'SYSTEM must not follow a redirect from whatever listens on the slots port'
 Assert ($agentText -match '(?s)while \(\$true\) \{\s*try \{ Start-Agent \}' -and $agentText -notmatch '(?m)^\s*exit 1') 'The agent must restart itself; Task Scheduler does not after an error exit'
 'PASS: runtime no-follow reads, fail-closed process deadlines, exact listener and response headers'
+# diag.ps1, the forced command of Claude's read-only key: fixed requests only, nothing else runs.
+$diagAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'diag.ps1'), [ref]$null, [ref]$null)
+. ([scriptblock]::Create($diagAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-Diag' }, $true).Extent.Text))
+function Get-AndyStatus { @{ mode = 'fixture' } }
+function Get-GpuStatus { @{ temp = 61 } }
+function Read-BoundedText { param($Path, [switch]$Tail) "read:$Path tail:$Tail" }
+Assert ((Invoke-Diag 'andy') -match '"mode":\s*"fixture"') 'Diag andy failed'
+Assert ((Invoke-Diag ' gpu ') -match '"temp":\s*61') 'Diag gpu failed'
+Assert ((Invoke-Diag 'watch-log') -ceq 'read:C:\bandit-ai\runtime\watch.log tail:True') 'Diag watch-log must tail the runtime log'
+Assert ((Invoke-Diag 'audit-log') -ceq 'read:C:\bandit-ai\agent\audit.log tail:True') 'Diag audit-log must tail the audit log'
+foreach ($bad in '', 'GPU', 'gpu; whoami', 'gpu whoami', 'watch-log ..\..\x', 'powershell', 'cmd /c whoami') {
+    Reject { Invoke-Diag $bad } "Diag accepted: $bad"
+}
+'PASS: diag answers only its fixed read-only requests'

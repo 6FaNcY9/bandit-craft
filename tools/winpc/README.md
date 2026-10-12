@@ -70,5 +70,33 @@ installer; the parity test refuses stale payloads. Tests load functions from the
 AST and mock external boundaries. Windows certificate import/renewal, HTTP.sys,
 ACLs, firewall, tasks and real device access still need a live acceptance check.
 
-Parts 0, 2 and 3 are absent: no key changes, approve/diag keys, admin API/actions,
-Windows mutations, update scans/installations, restart/shutdown or Wake-on-LAN.
+## Part 0: keys behind the finger
+
+`pc-admin` on the laptop (`pc-admin.nix`, imported by bandit-nix; PCs in `pcs.nix`) is the only admin
+way onto a PC. Every call re-authenticates through sudo (`sudo -k` first: finger, password as fallback)
+and uses `/var/lib/pc-admin/shell`, a key only root can read:
+
+```bash
+pc-admin shell slayer                               # admin PowerShell, for repairs
+pc-admin run slayer tools/winpc test-agent.ps1      # copy the folder to C:\bandit-ai\agent\run\<stamp>, run, remove
+```
+
+`agent\run` is Administrators/SYSTEM only, so nothing unprivileged on the PC can swap the files between
+copy and run. Claude's own key is `diag`: its line forces `diag.ps1`, which answers only `andy`, `gpu`,
+`processes`, `watch-log`, `agent-log` and `audit-log` (`ssh -i ~/.ssh/pc-diag yassi@<pc> gpu`).
+
+The installer writes `C:\ProgramData\ssh\administrators_authorized_keys` whole from five parameters
+(all or none; saved in `agent\keys.json` for reruns): `-TunnelPublicKey` (the lab's tunnel key, bound to
+`-LabAddress`, `command="exit"`), `-ShellPublicKey` and `-DiagPublicKey` (bound to `-LaptopAddress`, the
+diag line `restrict` with its forced command). Every line carries `from=`. The switch-over:
+
+1. Install with the five key parameters plus `-CoordinatorPublicKey <old laptop key>` (kept bound to the
+   laptop for this run only, never saved), from the old key's session.
+2. Check `pc-admin shell slayer` (finger) and the diag key.
+3. Rerun through `pc-admin run slayer tools/winpc install-agent.ps1`: without the parameter the old key is
+   gone. Reruns reuse the saved FQDN, port, watcher account, access map and keys.
+
+`tools/slayer/install.ps1` leaves the keys alone once `agent\keys.json` exists.
+
+Parts 2 and 3 are absent: no approve key, admin API/actions, Windows mutations, update
+scans/installations, restart/shutdown or Wake-on-LAN.

@@ -35,8 +35,9 @@ Later: albert (own install, its quiet heat profile), admin from the phone (passk
 
 ## Part 0: keys
 
-- `nixos/pc-admin.nix` on the laptop makes root-only keys in `/var/lib/pc-admin` (as
-  `nixos/lab-apply.nix` does): `shell` (full admin login, for deploys and repairs) and `approve` (one
+- `tools/winpc/pc-admin.nix` (bandit-craft, imported into the laptop by bandit-nix; implemented
+  2026-10-12 with `shell` only, `approve` comes with part 2) makes root-only keys in `/var/lib/pc-admin`
+  (as bandit-nix `nixos/lab-apply.nix` does): `shell` (full admin login, for deploys and repairs) and `approve` (one
   forced command, below). `pc-admin` re-runs itself through sudo with a fresh authentication every time
   (`sudo -k` first: no reuse of an earlier sudo timestamp; finger, password as fallback).
 - On slayer the `shell` key replaces the coordinator key in `administrators_authorized_keys`

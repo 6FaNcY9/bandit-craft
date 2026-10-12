@@ -22,13 +22,20 @@
       ./hosts/bandit-lab/services/mcagents
     ];
 
+    # The laptop side of the PC manager: `pc-admin`, admin on the gaming PCs with the owner's finger
+    # (tools/winpc/README.md). bandit-nix imports it into the laptop host.
+    nixosModules.pc-admin = ./tools/winpc/pc-admin.nix;
+
     # The bot runner and dashboard; its build runs app/test.js. mcbots-worker needs bandit-nix's
     # repoConfig (lab address, hub port), so bandit-nix builds that one (mcbots/worker.nix).
-    packages.${system}.mcbots = pkgs.callPackage ./hosts/bandit-lab/services/mcbots/package.nix {};
+    packages.${system} = {
+      mcbots = pkgs.callPackage ./hosts/bandit-lab/services/mcbots/package.nix {};
+      pc-admin = pkgs.callPackage ./tools/winpc/pc-admin-package.nix {};
+    };
 
     checks.${system} = {
       mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
-      inherit (self.packages.${system}) mcbots;
+      inherit (self.packages.${system}) mcbots pc-admin;
     };
 
     formatter.${system} = pkgs.alejandra;
