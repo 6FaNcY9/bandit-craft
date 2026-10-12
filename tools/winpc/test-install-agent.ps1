@@ -22,6 +22,8 @@ Assert ($installer -match '100\.64\.0\.0/10' -and $installer -match 'InterfaceAl
 # broad Modify goes (on slayer runtime only inherited it from C:\, 2026-10-12).
 $runtimeGrant = $installer.IndexOf('Set-ExactAcl "$base\runtime" $watcherSid ''Modify''')
 Assert ($runtimeGrant -gt 0 -and $runtimeGrant -lt $installer.IndexOf('Remove-BroadWrite $base')) 'runtime must get the watcher grant before the parent loses broad write'
+# The protected folders must never exist while the parent still grants everyone Modify.
+Assert ($installer.IndexOf('Remove-BroadWrite $base') -lt $installer.IndexOf('New-Item -ItemType Directory -Force -Path $agent,$state,$control')) 'agent, state and control must be created after the parent is narrowed'
 # SYSTEM runs this path for good: never resolve it through a PATH that has user-writable entries.
 Assert ($installer -notmatch 'Get-Command tailscale' -and $installer -match '\$env:ProgramFiles\\Tailscale\\tailscale\.exe') 'Tailscale must be the Program Files binary'
 Assert ($installer -match 'AtStartup' -and $installer -match 'UserId .SYSTEM.' -and $installer -match 'RestartCount') 'SYSTEM restart task missing'

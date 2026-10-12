@@ -260,7 +260,7 @@ function Get-AndyStatus {
     $logs = try { @((Read-BoundedText 'C:\bandit-ai\runtime\watch.log' -Tail) -split '\r?\n' | Where-Object { $_ } | Select-Object -Last 20) } catch { @{ error = $_.Exception.Message } }
     # ForEach-Object unwraps the array IRM emits as one object, which PS 5.1 would write as {"value":[...]};
     # the comma keeps a single slot an array through the try.
-    $slots = try { , @(Invoke-RestMethod -Uri 'http://127.0.0.1:8081/slots' -TimeoutSec 2 -UseBasicParsing | ForEach-Object { $_ }) } catch { @{ error = $_.Exception.Message } }
+    $slots = try { , @(Invoke-RestMethod -Uri 'http://127.0.0.1:8081/slots' -TimeoutSec 2 -MaximumRedirection 0 -UseBasicParsing | ForEach-Object { $_ }) } catch { @{ error = $_.Exception.Message } }
     @{ mode = $mode; paused = $paused; training = $training; logs = $logs; slots = $slots; model = @($servers | ForEach-Object { if ($_.CommandLine -match '--alias\s+(\S+)') { $Matches[1] } }) }
 }
 function Get-GpuStatus {

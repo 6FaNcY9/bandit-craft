@@ -226,5 +226,6 @@ Assert ($agentText -match 'OPEN_REPARSE_POINT' -and $agentText -match 'file.pare
 Assert ($agentText -notmatch 'Access-Control-Allow' -and $agentText -notmatch 'https://[+*]') 'CORS or wildcard listener forbidden'
 Assert ($agentText -match 'ComputeHash' -and $agentText -match 'X-Frame-Options' -and $agentText -match 'Cache-Control') 'CSP hash and security headers missing'
 Assert ($agentText -match '\$p.Kill\(\)' -and $agentText -match 'WaitForExit\(\$TimeoutMs\)') 'Process deadlines must kill timed-out children'
+Assert ($agentText -match "/slots' -TimeoutSec 2 -MaximumRedirection 0") 'SYSTEM must not follow a redirect from whatever listens on the slots port'
 Assert ($agentText -match '(?s)while \(\$true\) \{\s*try \{ Start-Agent \}' -and $agentText -notmatch '(?m)^\s*exit 1') 'The agent must restart itself; Task Scheduler does not after an error exit'
 'PASS: runtime no-follow reads, fail-closed process deadlines, exact listener and response headers'
