@@ -208,7 +208,14 @@ foreach ($key in @($script:statusCache.Keys)) { $script:statusCache[$key].until 
 $status = Get-Status
 Assert ($script:probeCalls -eq 9 -and $status.services.fixture) 'Only Andy, GPU and the failed part may be probed again'
 'PASS: independent time-boxed status failures, per-part cache (fast parts 3 s, failures retried)'
-$ui = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ui.html'))
+# Invoke-RestMethod emits llama-server's /slots array as one object; PS 5.1 then writes it as
+# {"value":[...],"Count":n} and the page's slot table stays empty (seen on slayer).
+function Invoke-RestMethod { '[{"id":0,"is_processing":true}]' | ConvertFrom-Json }
+$andyJson = ConvertTo-Json -InputObject (Get-AndyStatus) -Depth 12 -Compress
+Remove-Item Function:\Invoke-RestMethod
+Assert ($andyJson -match '"slots":\[\{"id":0') "Slots must be a JSON array: $andyJson"
+'PASS: llama-server slots reach the page as a JSON array'
+$ui =[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ui.html'))
 Assert ([regex]::Matches($ui, '(?i)<script\b').Count -eq 1 -and [regex]::Matches($ui, '(?s)<script>(.*?)</script>').Count -eq 1) 'Exactly one inline script required'
 Assert ($ui -notmatch '(?i)innerHTML|outerHTML|insertAdjacentHTML|document\.write|<script[^>]+src=') 'Unsafe DOM or external script'
 Assert ($ui -match 'textContent' -and $ui -match 'createElement') 'Safe DOM construction missing'
