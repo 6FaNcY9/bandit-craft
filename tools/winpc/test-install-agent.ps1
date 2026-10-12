@@ -18,6 +18,12 @@ Assert ($installer -match 'Translate\(\[Security\.Principal\.SecurityIdentifier\
 Assert ($installer -match 'Guid\]::NewGuid' -and $installer -match 'CreateNew') 'Atomic writes must use unpredictable exclusive temp files'
 Assert ($installer -match 'function Protect-Tree' -and $installer -notmatch 'Get-ChildItem.*-Recurse') 'Protected trees must check links before descending'
 Assert ($installer -match '100\.64\.0\.0/10' -and $installer -match 'InterfaceAlias') 'Firewall is not tailnet scoped'
+# The watcher runs non-elevated and writes only runtime: it needs its own grant there before the parent's
+# broad Modify goes (on slayer runtime only inherited it from C:\, 2026-10-12).
+$runtimeGrant = $installer.IndexOf('Set-ExactAcl "$base\runtime" $watcherSid ''Modify''')
+Assert ($runtimeGrant -gt 0 -and $runtimeGrant -lt $installer.IndexOf('Remove-BroadWrite $base')) 'runtime must get the watcher grant before the parent loses broad write'
+# SYSTEM runs this path for good: never resolve it through a PATH that has user-writable entries.
+Assert ($installer -notmatch 'Get-Command tailscale' -and $installer -match '\$env:ProgramFiles\\Tailscale\\tailscale\.exe') 'Tailscale must be the Program Files binary'
 Assert ($installer -match 'AtStartup' -and $installer -match 'UserId .SYSTEM.' -and $installer -match 'RestartCount') 'SYSTEM restart task missing'
 Assert ($installer -match 'RenewCertificate' -and $installer -match 'bandit-agent-renew') 'Certificate renewal task missing'
 Assert ($installer -match 'CngKey.Import' -and $installer -match 'CopyWithPrivateKey' -and $installer -match 'netsh.exe.*add sslcert') 'Built-in certificate conversion/binding missing'

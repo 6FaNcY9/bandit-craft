@@ -34,7 +34,7 @@ function Assert-NoLinks([string]$Path) {
         $cursor = $parent
     }
 }
-function Set-ExactAcl([string]$Path, [string]$ReadSid = '') {
+function Set-ExactAcl([string]$Path, [string]$ReadSid = '', [string]$Rights = 'ReadAndExecute') {
     $item = Get-Item -LiteralPath $Path -Force
     $acl = if ($item.PSIsContainer) { New-Object Security.AccessControl.DirectorySecurity } else { New-Object Security.AccessControl.FileSecurity }
     $acl.SetAccessRuleProtection($true, $false)
@@ -45,7 +45,7 @@ function Set-ExactAcl([string]$Path, [string]$ReadSid = '') {
         $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), 'FullControl', $inherit, 'None', 'Allow')))
     }
     if ($ReadSid) {
-        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($ReadSid)), 'ReadAndExecute', $inherit, 'None', 'Allow')))
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($ReadSid)), $Rights, $inherit, 'None', 'Allow')))
     }
     Set-Acl -LiteralPath $Path -AclObject $acl
 }
@@ -187,13 +187,18 @@ function Install-Agent {
     if (-not $WatcherUser) { throw 'WatcherUser is required.' }
     $watcherSid = ([Security.Principal.NTAccount]$WatcherUser).Translate([Security.Principal.SecurityIdentifier]).Value
     $accessMap = Resolve-Access $Access
-    foreach ($p in @($base,$agent,$state,$control,"$agent\agent.ps1","$agent\ui.html","$agent\config.json","$agent\access.json")) { Assert-NoLinks $p }
-    New-Item -ItemType Directory -Force -Path $base,$agent,$state,$control | Out-Null
-    foreach ($p in @($base,$agent,$state,$control)) { Assert-NoLinks $p }
+    $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
+    if (-not (Test-Path -LiteralPath $tailscale -PathType Leaf)) { throw "Tailscale not found at $tailscale" }
+    foreach ($p in @($base,$agent,$state,$control,"$base\runtime","$agent\agent.ps1","$agent\ui.html","$agent\config.json","$agent\access.json")) { Assert-NoLinks $p }
+    New-Item -ItemType Directory -Force -Path $base,$agent,$state,$control,"$base\runtime" | Out-Null
+    foreach ($p in @($base,$agent,$state,$control,"$base\runtime")) { Assert-NoLinks $p }
+    # The watcher (non-elevated) writes only runtime; give it its own grant before the parent's broad
+    # Modify, which runtime may only inherit (slayer: from C:\), is taken away.
+    Set-ExactAcl "$base\runtime" $watcherSid 'Modify'
     Remove-BroadWrite $base
     Protect-Tree $agent
     Protect-Tree $control $watcherSid
-    Write-AtomicBytes "$agent\config.json" ([Text.Encoding]::ASCII.GetBytes((@{ fqdn=$Fqdn; port=$Port; tailscale=(Get-Command tailscale.exe -ErrorAction Stop).Source } | ConvertTo-Json -Compress)))
+    Write-AtomicBytes "$agent\config.json" ([Text.Encoding]::ASCII.GetBytes((@{ fqdn=$Fqdn; port=$Port; tailscale=$tailscale } | ConvertTo-Json -Compress)))
     Write-AtomicBytes "$agent\access.json" ([Text.Encoding]::ASCII.GetBytes(($accessMap | ConvertTo-Json -Compress)))
     Set-ExactAcl "$agent\config.json"
     Set-ExactAcl "$agent\access.json"
