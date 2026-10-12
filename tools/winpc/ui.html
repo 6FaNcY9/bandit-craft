@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bandit PC</title></head>
+<body>
+<h1>Bandit PC - Andy und Windows</h1>
+<p id="connection" role="status">Verbinde...</p>
+<main id="dashboard"></main>
+<script>
+'use strict';
+const main = document.getElementById('dashboard');
+const connection = document.getElementById('connection');
+function element(tag, text, parent) {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = text;
+    if (parent) parent.appendChild(node);
+    return node;
+}
+function value(v) {
+    if (v === null || v === undefined) return 'unbekannt';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+}
+function section(title) {
+    const s = element('section', undefined, main);
+    element('h2', title, s);
+    return s;
+}
+const andy = section('Andy');
+const andyView = element('div', undefined, andy);
+const controls = element('div', undefined, andy);
+const feedback = element('p', '', controls);
+feedback.setAttribute('role', 'status');
+async function post(body) {
+    for (const control of controls.querySelectorAll('button, input')) control.disabled = true;
+    try {
+        const response = await fetch('/api/andy', {
+            method: 'POST', headers: {'Content-Type': 'application/json', 'X-Bandit': '1'},
+            credentials: 'same-origin', body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || String(response.status));
+        feedback.textContent = 'Gespeichert. Der Watcher liest die Einstellung im naechsten Zyklus.';
+    } catch (error) { feedback.textContent = 'Fehler: ' + error.message; }
+    finally { for (const control of controls.querySelectorAll('button, input')) control.disabled = false; }
+}
+function button(label, action) {
+    const b = element('button', label, controls);
+    b.type = 'button';
+    b.addEventListener('click', action);
+}
+button('Pause', () => post({pause: true}));
+button('Fortsetzen', () => post({pause: false}));
+const label = element('label', 'GPU-Anteil bei PC-Nutzung (0-100 %): ', controls);
+const share = element('input', undefined, label);
+share.type = 'number'; share.min = '0'; share.max = '100'; share.step = '1'; share.value = '50';
+button('Anteil speichern', () => {
+    if (!share.value || !share.checkValidity()) { feedback.textContent = 'Bitte eine ganze Zahl von 0 bis 100 eingeben.'; return; }
+    post({share: Number(share.value)});
+});
+button('Leises Albert-Profil', () => post({profile: {packetMinutes: 15, quietFan: 30, maxTemp: 75, resumeTemp: 50}}));
+button('Standardprofil', () => post({profile: null}));
+const gpu = section('GPU');
+const processes = section('Prozesse');
+const services = section('Dienste');
+const autostart = section('Autostart');
+const updates = section('Updates (gespeicherter Stand)');
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+function renderTable(parent, rows, columns) {
+    if (rows && rows.error) { element('p', 'Fehler: ' + rows.error, parent); return; }
+    const list = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+    if (!list.length) { element('p', 'Keine Eintraege', parent); return; }
+    const table = element('table', undefined, parent);
+    const head = element('tr', undefined, element('thead', undefined, table));
+    for (const [key, label] of columns) { const th = element('th', label, head); th.scope = 'col'; }
+    const body = element('tbody', undefined, table);
+    for (const row of list) {
+        const tr = element('tr', undefined, body);
+        for (const [key] of columns) element('td', value(row[key]), tr);
+    }
+}
+function resetSection(s) { while (s.children.length > 1) s.removeChild(s.lastChild); }
+function render(status) {
+    clear(andyView);
+    const a = status.andy || {error: 'Keine Daten'};
+    if (a.error) element('p', 'Fehler: ' + a.error, andyView);
+    else {
+        element('p', 'Modus: ' + value(a.mode) + ' | Modell: ' + value(a.model), andyView);
+        element('h3', 'Aktuelle Anfragen / Slots', andyView);
+        renderTable(andyView, a.slots, [['id', 'Slot'], ['is_processing', 'Aktiv'], ['n_ctx', 'Kontext'], ['next_token', 'Token'], ['params', 'Parameter'], ['timings', 'Token / Sekunde und Zeiten']]);
+        element('h3', 'Watcher-Protokoll', andyView);
+        const log = element('pre', undefined, andyView);
+        log.textContent = Array.isArray(a.logs) ? a.logs.join('\n') : value(a.logs);
+    }
+    resetSection(gpu);
+    const g = status.gpu || {error: 'Keine Daten'};
+    if (g.error) element('p', 'Fehler: ' + g.error, gpu);
+    else {
+        const published = g.published;
+        if (published && !published.error) {
+            const data = Object.assign({}, published, {share: typeof published.share === 'number' ? (published.share * 100).toFixed(1) + ' %' : null, andyLoad: g.andyLoad});
+            renderTable(gpu, data, [['share', 'Andy-Anteil'], ['others', 'Andere (%)'], ['andyLoad', 'Andy-Last'], ['temp', 'Temperatur (C)'], ['fan', 'Luefter (%)'], ['resting', 'Ruhephase'], ['idle', 'Inaktiv (s)'], ['at', 'Stand']]);
+        } else renderTable(gpu, published, []);
+        renderTable(gpu, g.sensors, [['temperature', 'Temperatur (C)'], ['fan', 'Luefter (%)'], ['utilization', 'GPU-Last (%)'], ['memoryUsedMB', 'VRAM benutzt (MB)'], ['memoryTotalMB', 'VRAM gesamt (MB)']]);
+    }
+    resetSection(processes);
+    renderTable(processes, status.processes, [['name', 'Name'], ['id', 'PID'], ['startTime', 'Start'], ['cpuSeconds', 'CPU (s)'], ['workingSetMB', 'RAM (MB)'], ['gpu', 'GPU']]);
+    resetSection(services);
+    renderTable(services, status.services, [['name', 'Name'], ['displayName', 'Anzeigename'], ['status', 'Status'], ['startType', 'Starttyp'], ['pathName', 'Programmpfad']]);
+    resetSection(autostart);
+    renderTable(autostart, status.autostart, [['kind', 'Art'], ['name', 'Name'], ['path', 'Vollstaendiger Pfad'], ['command', 'Befehl'], ['enabled', 'Aktiv'], ['error', 'Hinweis']]);
+    resetSection(updates);
+    renderTable(updates, status.updates, [['id', 'ID'], ['revision', 'Revision'], ['title', 'Titel'], ['size', 'Groesse'], ['needsReboot', 'Neustart noetig']]);
+}
+let polling = false;
+async function poll() {
+    if (polling) return;
+    polling = true;
+    try {
+        const response = await fetch('/api/status', {credentials: 'same-origin', cache: 'no-store'});
+        const status = await response.json();
+        if (!response.ok) throw new Error(status.error || String(response.status));
+        render(status);
+        connection.textContent = 'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE');
+    } catch (error) { connection.textContent = 'Verbindung fehlgeschlagen: ' + error.message; }
+    finally { polling = false; }
+}
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

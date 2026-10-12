@@ -1,4 +1,5 @@
 # Slayer idle inference
+For the Windows monitor and Andy switches, see [tools/winpc/README.md](../winpc/README.md).
 
 `watch.ps1` lives at `C:\bandit-ai\watch.ps1`. Every 15 seconds it checks for
 any foreground fullscreen window, the listed game processes, or >=20% GPU engine
