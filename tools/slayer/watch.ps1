@@ -37,10 +37,13 @@ if (-not (Test-Path $status)) { $null = New-Item -ItemType Directory $status }
 # While someone uses the PC (input in the last 5 min) batch work gets at most this many percent of the GPU,
 # so a game keeps its frames even when it needs little GPU (owner 2026-10-12). The dashboard sets it.
 $shareFile = "$runtime\batch-share.txt"
-# Packets, for PCs with runtime\packets.json (albert; owner 2026-10-12): batch work runs in packets of at
-# most packetMinutes and keeps the fans at or below quietFan % (the share shrinks while they are louder, so
-# the GPU runs a little warmer but quiet); after a packet, or at maxTemp, it rests until resumeTemp.
-$packetFile = "$runtime\packets.json"
+# Heat profile (owner 2026-10-12). Default (slayer): batch work may run on and on with the fans as loud as
+# they need; only at maxTemp 90 C it rests until resumeTemp 80 C. runtime\gpu-profile.json overrides it per
+# PC; albert, where people watch films next to it, gets short packets with quiet fans:
+# {"packetMinutes": 15, "quietFan": 30, "maxTemp": 75, "resumeTemp": 50}. packetMinutes 0 = no limit; while
+# the fans are above quietFan % the share shrinks, so the GPU runs warmer but quiet. With a profile file a
+# missing temperature reading means no work; without one the default guard is skipped.
+$profileFile = "$runtime\gpu-profile.json"
 $script:packet = $null; $script:resting = $false; $script:quiet = 1.0
 $session = (Get-Process -Id $PID).SessionId
 function Listeners {
@@ -79,32 +82,34 @@ function BatchCap {
     if ("$text".Trim() -match '^\d{1,3}$' -and [int]$text -le 100) { return [int]$text }
     return 50
 }
-function PacketConfig {
-    if (-not (Test-Path $packetFile)) { return $null }
-    $c = Get-Content $packetFile -Raw | ConvertFrom-Json
-    $cfg = @{ packetMinutes = 30; quietFan = 45; maxTemp = 80; resumeTemp = 55 }
-    foreach ($k in @($cfg.Keys)) { if ($c.$k -is [ValueType]) { $cfg[$k] = [double]$c.$k } }
+function HeatProfile {
+    $cfg = @{ packetMinutes = 0; quietFan = 100; maxTemp = 90; resumeTemp = 80; strict = $false }
+    if (Test-Path $profileFile) {
+        $c = Get-Content $profileFile -Raw | ConvertFrom-Json
+        foreach ($k in 'packetMinutes', 'quietFan', 'maxTemp', 'resumeTemp') { if ($c.$k -is [ValueType]) { $cfg[$k] = [double]$c.$k } }
+        $cfg.strict = $true
+    }
     return $cfg
 }
 function GpuSensors {
     $t, $f = "$(& nvidia-smi --query-gpu=temperature.gpu,fan.speed --format=csv,noheader,nounits 2>$null | Select-Object -First 1)" -split '\s*,\s*'
     @{ Temp = $(if ($t -match '^\d+$') { [int]$t }); Fan = $(if ($f -match '^\d+$') { [int]$f }) }
 }
-# The packet rule on one reading; $temp $null (no sensor) gives nothing.
+# The heat rule on one reading; without a temperature: nothing under a profile file, unchanged otherwise.
 function Packets([double]$share, $temp, $fan, [datetime]$now, $cfg) {
-    if ($null -eq $temp) { return 0 }
+    if ($null -eq $temp) { if ($cfg.strict) { return 0 } else { return $share } }
     if ($script:resting) {
         if ($temp -gt $cfg.resumeTemp) { return 0 }
         $script:resting = $false; $script:packet = $null
     }
     if (-not $script:packet) { $script:packet = $now }
-    if (($now - $script:packet).TotalMinutes -ge $cfg.packetMinutes -or $temp -ge $cfg.maxTemp) { $script:resting = $true; return 0 }
+    if (($cfg.packetMinutes -gt 0 -and ($now - $script:packet).TotalMinutes -ge $cfg.packetMinutes) -or $temp -ge $cfg.maxTemp) { $script:resting = $true; return 0 }
     if ($null -ne $fan -and $fan -gt $cfg.quietFan) { $script:quiet = [Math]::Max(0.1, $script:quiet * 0.7) }
     elseif ($null -eq $fan -or $fan -lt $cfg.quietFan - 10) { $script:quiet = [Math]::Min(1.0, $script:quiet * 1.1) }
     return $share * $script:quiet
 }
 # share (0..1): the GPU the PC's own programs leave free, capped by BatchCap while someone uses the PC
-# and by the packet rule where it is on.
+# and by the heat profile.
 function Publish {
     try {
         $others = if ($null -ne $GpuPercent) { $GpuPercent } else { GpuUse @(LlamaPids) }
@@ -112,11 +117,9 @@ function Publish {
         $share = [Math]::Max(0, 100 - $others) / 100
         if ($idle -lt 300) { $share = [Math]::Min($share, (BatchCap) / 100) }
         $info = @{ others = $others; idle = $idle }
-        if ($cfg = PacketConfig) {
-            $sensors = GpuSensors
-            $share = Packets $share $sensors.Temp $sensors.Fan (Get-Date) $cfg
-            $info += @{ temp = $sensors.Temp; fan = $sensors.Fan; resting = $script:resting }
-        }
+        $sensors = if ($TestPort) { @{ Temp = $null; Fan = $null } } else { GpuSensors }
+        $share = Packets $share $sensors.Temp $sensors.Fan (Get-Date) (HeatProfile)
+        $info += @{ temp = $sensors.Temp; fan = $sensors.Fan; resting = $script:resting }
         $info += @{ share = [Math]::Round($share, 3); at = (Get-Date).ToUniversalTime().ToString('o') }
         $info | ConvertTo-Json -Compress | Set-Content "$status\gpu.json.tmp" -Encoding ascii
         Move-Item "$status\gpu.json.tmp" "$status\gpu.json" -Force

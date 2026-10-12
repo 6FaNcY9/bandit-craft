@@ -158,12 +158,14 @@ process but llama-server). While someone uses the PC (keyboard or mouse in the l
 game keeps steady frames even when it needs little GPU. A llama-server started by an older
 watcher (no `--path`) is restarted once.
 
-**Packets** (`C:\bandit-ai\runtime\packets.json`, meant for albert; `{}` takes the
-defaults `{"packetMinutes": 30, "quietFan": 45, "maxTemp": 80, "resumeTemp": 55}`): work
-runs in packets of at most 30 min. While the fans are above `quietFan` % the share
-shrinks, so the GPU runs a little warmer and stays quiet. After a packet, or at `maxTemp`
-°C, the PC gives nothing until the GPU has cooled to `resumeTemp`. No temperature reading
-means no work.
+**Heat profile.** By default (slayer) batch work may run on and on with the fans as loud as
+they need; only at 90 °C the PC gives nothing until the GPU is back at 80 °C.
+`C:\bandit-ai\runtime\gpu-profile.json` overrides that per PC. albert, where people watch
+films next to it, gets short runs with quiet fans:
+`{"packetMinutes": 15, "quietFan": 30, "maxTemp": 75, "resumeTemp": 50}`. Work then runs in
+packets of at most 15 min; while the fans are above 30 % the share shrinks (so the GPU runs
+a little warmer but quiet); after a packet, or at 75 °C, it rests until 50 °C. Under a
+profile file a missing temperature reading (`nvidia-smi`) means no work.
 
 ## Lab integration
 

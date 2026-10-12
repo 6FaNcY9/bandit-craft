@@ -60,17 +60,27 @@ try {
     Assert ((ServerMode ([pscustomobject]@{ CommandLine = 'llama-server.exe --port 8081 --n-gpu-layers 99' })) -eq 'old') 'A server without --path (no gpu.json) is restarted'
     Assert ((ServerMode ([pscustomobject]@{ CommandLine = $null })) -eq 'full') 'Unreadable command line counts as full'
     'PASS: mode decision (busy to shared, stop reasons, 5 min hysteresis, command-line mode)'
-    $cfg = @{ packetMinutes = 30; quietFan = 45; maxTemp = 80; resumeTemp = 55 }
+    # albert's quiet profile: 15 min packets, fans at most 30 %, rest from 75 C until 50 C
+    $cfg = @{ packetMinutes = 15; quietFan = 30; maxTemp = 75; resumeTemp = 50; strict = $true }
     $script:packet = $null; $script:resting = $false; $script:quiet = 1.0
     $t0 = [datetime]'2026-10-12T22:00:00'
-    Assert ((Packets 0.8 60 30 $t0 $cfg) -eq 0.8) 'Quiet fans: the free share is used'
-    Assert ((Packets 0.8 70 60 $t0.AddMinutes(1) $cfg) -lt 0.8) 'Loud fans shrink the share'
-    Assert ((Packets 0.8 60 30 $t0.AddMinutes(30) $cfg) -eq 0) 'A packet ends after 30 min'
-    Assert ((Packets 0.8 60 20 $t0.AddMinutes(40) $cfg) -eq 0) 'Rest until the GPU is back at resumeTemp'
-    Assert ((Packets 0.8 50 20 $t0.AddMinutes(45) $cfg) -gt 0) 'Cool again: a new packet'
-    Assert ((Packets 0.8 85 20 $t0.AddMinutes(46) $cfg) -eq 0 -and $script:resting) 'maxTemp ends a packet early'
-    Assert ((Packets 0.8 $null 20 $t0.AddMinutes(90) $cfg) -eq 0) 'No temperature sensor, no work'
-    'PASS: packets (30 min, quiet fans, rest until cool, maxTemp, no sensor)'
+    Assert ((Packets 0.8 60 20 $t0 $cfg) -eq 0.8) 'Quiet fans: the free share is used'
+    Assert ((Packets 0.8 65 50 $t0.AddMinutes(1) $cfg) -lt 0.8) 'Loud fans shrink the share'
+    Assert ((Packets 0.8 60 20 $t0.AddMinutes(15) $cfg) -eq 0) 'A packet ends after 15 min'
+    Assert ((Packets 0.8 55 0 $t0.AddMinutes(20) $cfg) -eq 0) 'Rest until the GPU is back at resumeTemp'
+    Assert ((Packets 0.8 48 0 $t0.AddMinutes(25) $cfg) -gt 0) 'Cool again: a new packet'
+    Assert ((Packets 0.8 76 20 $t0.AddMinutes(26) $cfg) -eq 0 -and $script:resting) 'maxTemp ends a packet early'
+    Assert ((Packets 0.8 $null 20 $t0.AddMinutes(90) $cfg) -eq 0) 'Under a profile: no temperature, no work'
+    # slayer's default: no packets, loud fans allowed, rest only from 90 C until 80 C
+    $cfg = @{ packetMinutes = 0; quietFan = 100; maxTemp = 90; resumeTemp = 80; strict = $false }
+    $script:packet = $null; $script:resting = $false; $script:quiet = 1.0
+    Assert ((Packets 0.9 85 90 $t0 $cfg) -eq 0.9) 'Default: loud fans are fine'
+    Assert ((Packets 0.9 85 90 $t0.AddHours(5) $cfg) -eq 0.9) 'Default: no packet limit'
+    Assert ((Packets 0.9 91 90 $t0.AddHours(6) $cfg) -eq 0) 'Default: rest at 90 C'
+    Assert ((Packets 0.9 85 90 $t0.AddHours(6.1) $cfg) -eq 0) 'Default: until 80 C'
+    Assert ((Packets 0.9 79 60 $t0.AddHours(6.2) $cfg) -eq 0.9) 'Default: back at work'
+    Assert ((Packets 0.9 $null $null $t0.AddHours(7) $cfg) -eq 0.9) 'Default: no sensor, no guard'
+    'PASS: heat profiles (albert: 15 min packets, quiet fans, rest until cool; slayer: on until 90 C)'
 } finally {
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
