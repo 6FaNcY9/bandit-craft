@@ -43,7 +43,7 @@ foreach ($name in 'agent.ps1','ui.html','diag.ps1') {
 }
 foreach ($bad in '??','ForEach-Object -Parallel','curl.exe','Invoke-WebRequest') { Assert ($installer -notmatch [regex]::Escape($bad)) "Forbidden installer syntax/tool: $bad" }
 'PASS: installer parse, ACL, reparse, certificate, firewall, task and payload checks'
-foreach ($name in 'Resolve-Access','Remove-BroadWrite','KeyBlob','Validate-Key','Assert-TailnetAddress','Format-AdminKeys','Resolve-Keys') {
+foreach ($name in 'Resolve-Access','Remove-BroadWrite','Expand-GenericRights','KeyBlob','Validate-Key','Assert-TailnetAddress','Format-AdminKeys','Resolve-Keys') {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     . ([scriptblock]::Create($definition.Extent.Text))
 }
@@ -74,6 +74,21 @@ foreach ($sid in 'S-1-5-11','S-1-5-32-545','S-1-5-21-1-2-3-1001') {
 }
 Assert ($script:parentAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq 'S-1-5-32-544') 'Parent owner must be Administrators'
 'PASS: access parameter validation and parent ACL preserves RX while removing broad write/delete grants'
+# slayer's real C:\bandit-ai (2026-10-12): the inherit-only Authenticated Users entry from C:\ carries
+# generic rights (GR GW GX SD), which FileSystemAccessRule refuses; they must be mapped, not rebuilt raw.
+$script:parentAcl = New-Object Security.AccessControl.DirectorySecurity
+$script:parentAcl.SetSecurityDescriptorSddlForm('O:BAG:S-1-5-21-3920642010-3526450528-2957634877-513D:(A;OICIID;FA;;;BA)(A;OICIID;FA;;;SY)(A;OICIID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)')
+Remove-BroadWrite 'C:\bandit-ai'
+$generic = [long]0xF0000000
+foreach ($rule in $script:parentAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    if ($rule.IdentityReference.Value -notin 'S-1-5-11', 'S-1-5-32-545') { continue }
+    $rights = [long]$rule.FileSystemRights -band [long]0xFFFFFFFF
+    Assert (-not ($rights -band ([long]$writes -bor $generic))) "Broad grant keeps write or generic rights: $($rule.IdentityReference.Value) $rights"
+    Assert (($rights -band 0x1200a9) -eq 0x1200a9) 'Broad grant lost read and execute'
+}
+Assert ($script:parentAcl.AreAccessRulesProtected -and -not @($script:parentAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object IsInherited).Count) 'The parent DACL must be protected and explicit; inherited entries cannot be edited'
+Assert (@($script:parentAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference.Value -eq 'S-1-5-32-544' -and $_.FileSystemRights -eq 'FullControl' }).Count) 'Administrators must keep full control'
+'PASS: generic rights inherited from C:\ (slayer) are mapped and stripped of write'
 # Part 0: administrators_authorized_keys is written whole from the given keys, each line address-bound.
 function New-TestKey([byte]$Seed, [string]$Comment) {
     $kind = [Text.Encoding]::ASCII.GetBytes('ssh-ed25519')

@@ -60,21 +60,37 @@ function Set-ExactAcl([string]$Path, [string]$ReadSid = '', [string]$Rights = 'R
     }
     Set-Acl -LiteralPath $Path -AclObject $acl
 }
+# Inherited entries can carry generic rights (slayer's C:\bandit-ai: Authenticated Users (OI)(CI)(IO)
+# GR GW GX SD from C:\), which FileSystemAccessRule refuses; map them to the file rights they stand for.
+function Expand-GenericRights([long]$Rights) {
+    $rights = $Rights -band [long]0xFFFFFFFF
+    $out = $rights -band [long]0x0FFFFFFF
+    if ($rights -band [long]0x80000000) { $out = $out -bor 0x120089 }   # GENERIC_READ
+    if ($rights -band [long]0x40000000) { $out = $out -bor 0x120116 }   # GENERIC_WRITE
+    if ($rights -band [long]0x20000000) { $out = $out -bor 0x1200A0 }   # GENERIC_EXECUTE
+    if ($rights -band [long]0x10000000) { $out = $out -bor 0x1F01FF }   # GENERIC_ALL
+    return $out
+}
+# Rebuilds the parent's DACL as explicit, protected entries: SetAccessRuleProtection($true, $true) on an
+# in-memory ACL keeps inherited entries inherited, and RemoveAccessRuleSpecific cannot touch those (seen
+# with slayer's ACL, 2026-10-12). Everyone keeps read and execute; only Administrators and SYSTEM keep
+# write, delete and ownership.
 function Remove-BroadWrite([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force
-    $acl = Get-Acl -LiteralPath $Path
-    $acl.SetAccessRuleProtection($true, $true)
+    $old = Get-Acl -LiteralPath $Path
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetAccessRuleProtection($true, $false)
     $acl.SetOwner((New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')))
-    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    $writeBits = [long][Security.AccessControl.FileSystemRights]'WriteData,AppendData,WriteAttributes,WriteExtendedAttributes,Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
+    foreach ($rule in $old.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
         $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
-        $writeBits = [Security.AccessControl.FileSystemRights]'WriteData,AppendData,WriteAttributes,WriteExtendedAttributes,Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
-        $remove = [Security.AccessControl.FileSystemRights]'Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
-        if ($sid -in @('S-1-5-11','S-1-5-32-545')) { $remove = $writeBits }
-        if ($sid -notin @('S-1-5-32-544','S-1-5-18') -and $rule.AccessControlType -eq 'Allow' -and (($rule.FileSystemRights -band $remove) -ne 0)) {
-            $acl.RemoveAccessRuleSpecific($rule)
-            $kept = $rule.FileSystemRights -band (-bnot $remove)
-            if ($kept -ne 0) { $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($rule.IdentityReference, $kept, $rule.InheritanceFlags, $rule.PropagationFlags, $rule.AccessControlType))) }
+        $rights = Expand-GenericRights ([long]$rule.FileSystemRights)
+        if ($rule.AccessControlType -eq 'Allow' -and $sid -notin @('S-1-5-32-544','S-1-5-18')) {
+            $remove = [long][Security.AccessControl.FileSystemRights]'Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
+            if ($sid -in @('S-1-5-11','S-1-5-32-545')) { $remove = $writeBits }
+            $rights = $rights -band (-bnot $remove)
         }
+        if ($rights -ne 0) { $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($rule.IdentityReference, [Security.AccessControl.FileSystemRights][int]$rights, $rule.InheritanceFlags, $rule.PropagationFlags, $rule.AccessControlType))) }
     }
     Set-Acl -LiteralPath $Path -AclObject $acl
 }
