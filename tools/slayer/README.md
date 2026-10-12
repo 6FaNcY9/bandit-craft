@@ -154,13 +154,13 @@ reads `/gpu.json` through the existing tunnel. The lab's replay and judge
 their GPU time stays at that fraction, and below 15 % they wait (up to 5 min per pass).
 `share` is what the PC's own programs leave free (`100 - others`, `others` = GPU % of every
 process but llama-server). While someone uses the PC (keyboard or mouse in the last
-5 min) it is capped at `C:\bandit-ai\runtime\batch-share.txt` (percent, default 50), so a
+5 min) it is capped at `C:\bandit-ai\control\batch-share.txt` (percent, default 50), so a
 game keeps steady frames even when it needs little GPU. A llama-server started by an older
 watcher (no `--path`) is restarted once.
 
 **Heat profile.** By default (slayer) batch work may run on and on with the fans as loud as
 they need; only at 90 °C the PC gives nothing until the GPU is back at 80 °C.
-`C:\bandit-ai\runtime\gpu-profile.json` overrides that per PC. albert, where people watch
+`C:\bandit-ai\control\gpu-profile.json` overrides that per PC. albert, where people watch
 films next to it, gets short runs with quiet fans:
 `{"packetMinutes": 15, "quietFan": 30, "maxTemp": 75, "resumeTemp": 50}`. Work then runs in
 packets of at most 15 min; while the fans are above 30 % the share shrinks (so the GPU runs

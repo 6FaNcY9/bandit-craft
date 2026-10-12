@@ -36,14 +36,17 @@ $status = "$runtime\status-$port"
 if (-not (Test-Path $status)) { $null = New-Item -ItemType Directory $status }
 # While someone uses the PC (input in the last 5 min) batch work gets at most this many percent of the GPU,
 # so a game keeps its frames even when it needs little GPU (owner 2026-10-12). The dashboard sets it.
-$shareFile = "$runtime\batch-share.txt"
+# The owner's switches live in C:\bandit-ai\control (written by administrators and the PC manager's
+# SYSTEM agent only; this watcher just reads them), not in the user-writable runtime folder.
+$control = "$base\control"
+$shareFile = "$control\batch-share.txt"
 # Heat profile (owner 2026-10-12). Default (slayer): batch work may run on and on with the fans as loud as
-# they need; only at maxTemp 90 C it rests until resumeTemp 80 C. runtime\gpu-profile.json overrides it per
+# they need; only at maxTemp 90 C it rests until resumeTemp 80 C. control\gpu-profile.json overrides it per
 # PC; albert, where people watch films next to it, gets short packets with quiet fans:
 # {"packetMinutes": 15, "quietFan": 30, "maxTemp": 75, "resumeTemp": 50}. packetMinutes 0 = no limit; while
 # the fans are above quietFan % the share shrinks, so the GPU runs warmer but quiet. With a profile file a
 # missing temperature reading means no work; without one the default guard is skipped.
-$profileFile = "$runtime\gpu-profile.json"
+$profileFile = "$control\gpu-profile.json"
 $script:packet = $null; $script:resting = $false; $script:quiet = 1.0
 $session = (Get-Process -Id $PID).SessionId
 function Listeners {
@@ -131,7 +134,7 @@ function Training {
     $lock = Get-Item "$base\training.lock" -ErrorAction SilentlyContinue
     if ($lock -and ((Get-Date) - $lock.LastWriteTime).TotalHours -lt 24) { return 'training' }
     # The owner's pause switch (the PC manager's page, or by hand): no Andy until the file is gone.
-    if (Test-Path "$runtime\pause.flag") { return 'paused by the owner' }
+    if (Test-Path "$control\pause.flag") { return 'paused by the owner' }
     return $null
 }
 $script:modelChecks = @{}
