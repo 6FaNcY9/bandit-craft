@@ -144,7 +144,9 @@ foreach ($name in $embedded.Keys) {
 }
 if ([IO.Path]::GetFullPath($PSCommandPath) -ne "$base\install.ps1") { Copy-Item $PSCommandPath "$base\install.ps1" -Force }
 Set-ExactAcl "$base\install.ps1" $userSid
-$restricted = 'restrict,port-forwarding,permitopen="127.0.0.1:8081" ' + $TunnelPublicKey
+# restrict alone still lets the key run a command (as an administrator, from this file): the forced
+# command ends any session at once; the tunnel itself (ssh -N) asks for none (Codex review 2026-10-12).
+$restricted = 'restrict,port-forwarding,permitopen="127.0.0.1:8081",command="exit" ' + $TunnelPublicKey
 Set-AuthorizedKeys 'C:\ProgramData\ssh\administrators_authorized_keys' (@($restricted) + $CoordinatorPublicKey)
 Set-AuthorizedKeys "$ssh\authorized_keys" (@($restricted) + $CoordinatorPublicKey) $userSid
 

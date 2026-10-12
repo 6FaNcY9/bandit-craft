@@ -66,7 +66,7 @@ file or remote script evaluation is needed. `test-install.ps1` checks payload
 parity when those source files change. Never use `irm | iex`.
 
 The tunnel key receives
-`restrict,port-forwarding,permitopen="127.0.0.1:8081"`; coordinator keys receive
+`restrict,port-forwarding,permitopen="127.0.0.1:8081",command="exit"` (the forced command ends any session the key opens; `restrict` alone would still run commands); coordinator keys receive
 normal login access. Prior copies of the supplied keys are replaced, other keys
 are preserved. ACLs use SYSTEM/Administrators SIDs rather than localized group
 names. Only `runtime` is writable by the limited watcher user. The built-in

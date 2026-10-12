@@ -29,7 +29,7 @@ foreach ($name in 'KeyBlob', 'Validate-Key', 'Set-AuthorizedKeys', 'Download-Ver
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 $key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIQqLzKYo4S6Ldqfyt9kWOUPNg82r8/QsJTKOPsqN1G9 test'
-$restricted = 'restrict,port-forwarding,permitopen="127.0.0.1:8081" ' + $key
+$restricted = 'restrict,port-forwarding,permitopen="127.0.0.1:8081",command="exit" ' + $key
 Validate-Key $key
 Assert ((KeyBlob $restricted) -eq (KeyBlob $key)) 'Option-prefixed keys must identify the same blob'
 foreach ($bad in @($restricted, "$key`n$key", 'ssh-ed25519 AAAA bad')) {
