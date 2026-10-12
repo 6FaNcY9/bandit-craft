@@ -12,7 +12,7 @@ const path = require('node:path');
 const {createHash} = require('node:crypto');
 const {parseCommand, knownCommand, commandNames} = require('./agent');
 const {modelRequest, modelReply} = require('./model-protocol');
-const {offlineTargets, pcs, backendBase, peoplePlaying} = require('./routing');
+const {offlineTargets, pcs, backendBase, gpuPacer} = require('./routing');
 
 // The PCs the judge may use: JUDGE_NAMES (owner, 2026-10-11: slayer sat idle, so it grades too), else the
 // offline ones. Still loopback llama-server ports only, never Ollama (backendBase refuses 11434).
@@ -82,12 +82,15 @@ function candidates(records, judged, n, oldest = false) {
 }
 
 // Grade items on one backend; stops at the first health loss or request error and keeps what it has.
-async function runJudge(base, items, names, {timeoutMs = 60000, healthMs = 3000} = {}) {
-  const healthy = () => !peoplePlaying() && fetch(`${base}/health`, {redirect: 'error', signal: AbortSignal.timeout(healthMs)}).then((r) => r.status === 200, () => false);
+async function runJudge(base, items, names, {timeoutMs = 60000, healthMs = 3000, gpu = {}} = {}) {
+  const pace = gpuPacer(base, gpu);
+  const healthy = () => fetch(`${base}/health`, {redirect: 'error', signal: AbortSignal.timeout(healthMs)}).then((r) => r.status === 200, () => false);
   const out = {alias: null, grades: [], stopped: null};
-  if (!await healthy()) { out.stopped = peoplePlaying() ? 'not free (people are playing)' : 'not free (health)'; return out; }
+  if (!await healthy()) { out.stopped = 'not free (health)'; return out; }
   for (const item of items) {
     if (out.grades.length && !await healthy()) { out.stopped = 'health lost'; return out; }
+    const rest = await pace();
+    if (!rest) { out.stopped = 'no GPU to spare'; return out; }
     const body = modelRequest('openai', {model: 'andy', messages: judgeMessages(item.messages, item.reply, names), sampling: SAMPLE});
     try {
       const res = await fetch(`${base}/v1/chat/completions`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(timeoutMs)});
@@ -97,6 +100,7 @@ async function runJudge(base, items, names, {timeoutMs = 60000, healthMs = 3000}
       const v = parseVerdict(modelReply('openai', data));
       if (v) out.grades.push({ref: item.id, ...v});
     } catch (e) { out.stopped = `request failed: ${e.message}`; return out; }
+    await rest();
   }
   return out;
 }

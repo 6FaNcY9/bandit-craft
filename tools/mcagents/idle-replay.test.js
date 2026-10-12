@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const {backendBase, sample, score, scoreAll, wilson, samplingFor, runBackend, withVariant} = require('./idle-replay');
+const {gpuShare} = require('./routing');
 
 (async () => {
   for (const bad of ['http://127.0.0.1:11434', 'http://localhost:11434/v1', 'http://10.0.0.5:18081', 'https://127.0.0.1:18081', 'http://127.0.0.1']) assert.throws(() => backendBase(bad), /Refusing/, bad);
@@ -32,6 +33,7 @@ const {backendBase, sample, score, scoreAll, wilson, samplingFor, runBackend, wi
   let served = 0;
   const server = http.createServer((req, res) => {
     if (req.url === '/health') { res.statusCode = served >= 2 ? 503 : 200; return res.end('{}'); }
+    if (req.url === '/gpu.json') { res.statusCode = 404; return res.end(); } // a PC without a GPU status counts as free
     req.resume(); req.on('end', () => { served++; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({model: 'fake-alias', choices: [{message: {content: '!stop'}, finish_reason: 'stop'}]})); });
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
@@ -44,15 +46,32 @@ const {backendBase, sample, score, scoreAll, wilson, samplingFor, runBackend, wi
   server.close();
   const gone = await runBackend(base, rows, [{name: 'baseline'}]);
   assert.equal(gone.results.length, 0); assert.match(gone.stopped, /not free/);
-  // while people play Minecraft (BUSY_FILE exists) a free PC is left alone, before any request
-  const busy = require('node:path').join(require('node:os').tmpdir(), `busy-${process.pid}`);
-  require('node:fs').writeFileSync(busy, 'fancy8869\n');
-  process.env.BUSY_FILE = busy;
-  const up = http.createServer((req, res) => { res.statusCode = 200; res.end('{}'); });
-  await new Promise((ok) => up.listen(0, '127.0.0.1', ok));
-  const played = await runBackend(`http://127.0.0.1:${up.address().port}`, rows, [{name: 'baseline'}]);
-  assert.equal(played.results.length, 0); assert.match(played.stopped, /people are playing/);
-  require('node:fs').unlinkSync(busy); delete process.env.BUSY_FILE; up.close();
+  // GPU share from the PC's /gpu.json: what the PC gives, nothing below 15 %, nothing for a stale or
+  // broken status; a PC giving 5 % keeps the batch waiting, and it never sends a request
+  let gpu = null, asked = 0;
+  const pc = http.createServer((req, res) => {
+    if (req.url === '/health') return res.end('{}');
+    if (req.url === '/gpu.json') return gpu ? res.end(typeof gpu === 'string' ? gpu : JSON.stringify(gpu)) : (res.statusCode = 404, res.end());
+    req.resume(); req.on('end', () => { asked++; setTimeout(() => res.end(JSON.stringify({model: 'm', choices: [{message: {content: '!stop'}}]})), 60); });
+  });
+  await new Promise((ok) => pc.listen(0, '127.0.0.1', ok));
+  const pcBase = `http://127.0.0.1:${pc.address().port}`;
+  const now = new Date().toISOString();
+  assert.equal(await gpuShare(pcBase), 1);
+  gpu = {share: 0.7, at: now}; assert.equal(await gpuShare(pcBase), 0.7);
+  gpu = {share: 0.1, at: now}; assert.equal(await gpuShare(pcBase), 0);
+  gpu = {share: 1, at: '2026-01-01T00:00:00Z'}; assert.equal(await gpuShare(pcBase), 0, 'stale status');
+  gpu = {others: 0, at: now}; assert.equal(await gpuShare(pcBase), 0, 'no share given');
+  gpu = 'not json'; assert.equal(await gpuShare(pcBase), 0);
+  gpu = {share: 0.05, at: now};
+  const waited = await runBackend(pcBase, rows, [{name: 'baseline'}], {seeds: [], gpu: {maxWaitMs: 50, pollMs: 20}});
+  assert.equal(waited.results.length, 0); assert.match(waited.stopped, /no GPU to spare/); assert.equal(asked, 0);
+  // half the GPU free: after each ~60 ms request the batch rests about as long again
+  gpu = {share: 0.5, at: now};
+  const t0 = Date.now();
+  const paced = await runBackend(pcBase, rows.slice(0, 2), [{name: 'baseline'}], {seeds: []});
+  assert.equal(paced.results.length, 2); assert.ok(Date.now() - t0 >= 220, `rested ${Date.now() - t0} ms`);
+  pc.close();
   // a /health that redirects (to Ollama, say) counts as not free, and is never followed (Codex R7-6)
   let followed = false;
   const target = http.createServer((req, res) => { followed = true; res.end('{}'); });

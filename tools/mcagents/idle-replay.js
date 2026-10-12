@@ -8,7 +8,7 @@ const path = require('node:path');
 const {performance} = require('node:perf_hooks');
 const {parseCommand, SAMPLING} = require('./agent');
 const {modelRequest, modelReply} = require('./model-protocol');
-const {backendBase, offlineTargets, peoplePlaying} = require('./routing');
+const {backendBase, offlineTargets, gpuPacer} = require('./routing');
 const {loadEval} = require('./eval-set');
 
 // Labeled decisions first (newest first), then the newest unlabeled ones, up to n.
@@ -91,15 +91,18 @@ function scoreAll(results, variants, seeds = SEEDS) {
 // Replay rows x variants x runs (greedy, then each seed; seeds only for the first variant, the baseline) against
 // one server. Stops at the first sign the PC is gone (health not 200, any request error) or at the deadline,
 // and keeps what it has.
-async function runBackend(base, rows, variants, {timeoutMs = 60000, healthMs = 3000, seeds = [], deadline = Infinity} = {}) {
+async function runBackend(base, rows, variants, {timeoutMs = 60000, healthMs = 3000, seeds = [], deadline = Infinity, gpu = {}} = {}) {
   base = backendBase(base);
-  const healthy = () => !peoplePlaying() && fetch(`${base}/health`, {redirect: 'error', signal: AbortSignal.timeout(healthMs)}).then((r) => r.status === 200, () => false);
+  const pace = gpuPacer(base, gpu);
+  const healthy = () => fetch(`${base}/health`, {redirect: 'error', signal: AbortSignal.timeout(healthMs)}).then((r) => r.status === 200, () => false);
   const out = {alias: null, results: [], stopped: null};
-  if (!await healthy()) { out.stopped = peoplePlaying() ? 'not free (people are playing)' : 'not free (health)'; return out; }
+  if (!await healthy()) { out.stopped = 'not free (health)'; return out; }
   const plan = variants.flatMap((variant, i) => [{variant, run: 'greedy'}, ...(i === 0 ? seeds.map((seed) => ({variant, run: `seed${seed}`, seed})) : [])]);
   for (const {variant, run, seed} of plan) for (const row of rows) {
     if (Date.now() > deadline) { out.stopped = 'deadline'; return out; }
     if (out.results.length && !await healthy()) { out.stopped = 'health lost'; return out; }
+    const rest = await pace();
+    if (!rest) { out.stopped = 'no GPU to spare'; return out; }
     const body = modelRequest('openai', {model: 'andy', messages: withVariant(row.messages, variant), sampling: samplingFor({seed})});
     const t0 = performance.now();
     try {
@@ -109,6 +112,7 @@ async function runBackend(base, rows, variants, {timeoutMs = 60000, healthMs = 3
       out.alias ??= data.model ?? null;
       out.results.push({id: row.id, variant: variant.name, run, label: row.label, logged: row.reply, reply: modelReply('openai', data), ms: performance.now() - t0});
     } catch (e) { out.stopped = `request failed: ${e.message}`; return out; }
+    await rest();
   }
   return out;
 }

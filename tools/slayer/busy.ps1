@@ -13,6 +13,13 @@ public static class BanditWindow {
     [StructLayout(LayoutKind.Sequential)] public struct Monitor { public int Size; public Rect Bounds, Work; public uint Flags; }
     [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr h, ref Monitor m);
     public static uint ForegroundPid() { uint pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; }
+    [StructLayout(LayoutKind.Sequential)] public struct LastInput { public uint Size; public uint Time; }
+    [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LastInput li);
+    public static uint IdleSeconds() {
+        var li = new LastInput(); li.Size = (uint)Marshal.SizeOf(li);
+        if (!GetLastInputInfo(ref li)) throw new Exception("Input probe failed");
+        return unchecked((uint)Environment.TickCount - li.Time) / 1000;
+    }
     public static bool Fullscreen() {
         var h = GetForegroundWindow();
         if (h == IntPtr.Zero || h == GetShellWindow()) return false;
@@ -47,20 +54,23 @@ function Busy {
     if ($games.Count) { return "game $($games[0].Name)" }
     if ($null -ne $GpuPercent) { $usage = $GpuPercent }
     else {
-        $llama = @(Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" | ForEach-Object ProcessId)
         # Light games (Minecraft, Isaac, browsers) may use the GPU next to Andy: their load does not count either.
-        $llama += @(Get-CimInstance Win32_Process | Where-Object { $light -contains $_.Name } | ForEach-Object ProcessId)
-        $counters = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine)
-        if (-not $counters.Count) { throw 'No GPU engine counters; refusing inference' }
-        $engines = @{}
-        foreach ($counter in $counters) {
-            if ($counter.Name -notmatch '^pid_(\d+)_(.+)$') { throw 'Unrecognized GPU counter' }
-            if ($llama -contains [int]$Matches[1] -or $IgnorePids -contains [int]$Matches[1]) { continue }
-            $engine = $Matches[2]
-            $engines[$engine] += [int]$counter.UtilizationPercentage
-        }
-        $usage = ($engines.Values | Measure-Object -Maximum).Maximum
+        $lightPids = @(Get-CimInstance Win32_Process | Where-Object { $light -contains $_.Name } | ForEach-Object ProcessId)
+        $usage = GpuUse (@(LlamaPids) + $lightPids + $IgnorePids)
     }
     if ($usage -ge 20) { return "non-llama GPU $usage%" }
     return $null
+}
+function LlamaPids { @(Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" | ForEach-Object ProcessId) }
+# GPU load (%, the busiest engine) of every process except $Skip.
+function GpuUse([int[]]$Skip = @()) {
+    $counters = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine)
+    if (-not $counters.Count) { throw 'No GPU engine counters; refusing inference' }
+    $engines = @{}
+    foreach ($counter in $counters) {
+        if ($counter.Name -notmatch '^pid_(\d+)_(.+)$') { throw 'Unrecognized GPU counter' }
+        if ($Skip -contains [int]$Matches[1]) { continue }
+        $engines[$Matches[2]] += [int]$counter.UtilizationPercentage
+    }
+    return [int]($engines.Values | Measure-Object -Maximum).Maximum
 }

@@ -145,6 +145,26 @@ Go back: delete `C:\bandit-ai\candidate.json`.
 `C:\bandit-ai\training.lock` exists and is younger than 24 h, the watcher treats the PC as busy
 ("training"): it stops its server and does not start one. See `train\README.md` (LoRA training).
 
+## Batch share (`gpu.json`)
+
+Every cycle the watcher writes `C:\bandit-ai\runtime\status-8081\gpu.json`
+(`{share, others, idle, at}`), and llama-server serves that folder (`--path`), so the lab
+reads `/gpu.json` through the existing tunnel. The lab's replay and judge
+(`tools/mcagents/routing.js`, `gpuPacer`) keep to `share`: after each request they rest so
+their GPU time stays at that fraction, and below 15 % they wait (up to 5 min per pass).
+`share` is what the PC's own programs leave free (`100 - others`, `others` = GPU % of every
+process but llama-server). While someone uses the PC (keyboard or mouse in the last
+5 min) it is capped at `C:\bandit-ai\runtime\batch-share.txt` (percent, default 50), so a
+game keeps steady frames even when it needs little GPU. A llama-server started by an older
+watcher (no `--path`) is restarted once.
+
+**Packets** (`C:\bandit-ai\runtime\packets.json`, meant for albert; `{}` takes the
+defaults `{"packetMinutes": 30, "quietFan": 45, "maxTemp": 80, "resumeTemp": 55}`): work
+runs in packets of at most 30 min. While the fans are above `quietFan` % the share
+shrinks, so the GPU runs a little warmer and stays quiet. After a packet, or at `maxTemp`
+°C, the PC gives nothing until the GPU has cooled to `resumeTemp`. No temperature reading
+means no work.
+
 ## Lab integration
 
 The existing `bandit-lab.slayerTunnel.enable = true;` remains compatible, with

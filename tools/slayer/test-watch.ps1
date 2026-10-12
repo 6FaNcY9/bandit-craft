@@ -7,7 +7,7 @@ $tokens = $null
 $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'watch.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw $errors[0] }
-foreach ($name in @('Listeners', 'Servers', 'PickMode', 'ServerMode')) {
+foreach ($name in @('Listeners', 'Servers', 'PickMode', 'ServerMode', 'Packets')) {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     . ([scriptblock]::Create($definition.Extent.Text))
 }
@@ -55,10 +55,22 @@ try {
     Assert ((PickMode $null) -eq 'shared') 'Free < 5 min after a game stays shared'
     $script:freeSince = (Get-Date).AddMinutes(-6)
     Assert ((PickMode $null) -eq 'full') 'Free >= 5 min must return to full'
-    Assert ((ServerMode ([pscustomobject]@{ CommandLine = 'llama-server.exe --port 8081 --n-gpu-layers 0 --prio -1' })) -eq 'shared') '--prio -1 is shared'
-    Assert ((ServerMode ([pscustomobject]@{ CommandLine = 'llama-server.exe --port 8081 --n-gpu-layers 99' })) -eq 'full') '--n-gpu-layers is full'
+    Assert ((ServerMode ([pscustomobject]@{ CommandLine = 'llama-server.exe --port 8081 --path C:\bandit-ai\runtime\status-8081 --n-gpu-layers 0 --prio -1' })) -eq 'shared') '--prio -1 is shared'
+    Assert ((ServerMode ([pscustomobject]@{ CommandLine = 'llama-server.exe --port 8081 --path C:\bandit-ai\runtime\status-8081 --n-gpu-layers 99' })) -eq 'full') '--n-gpu-layers is full'
+    Assert ((ServerMode ([pscustomobject]@{ CommandLine = 'llama-server.exe --port 8081 --n-gpu-layers 99' })) -eq 'old') 'A server without --path (no gpu.json) is restarted'
     Assert ((ServerMode ([pscustomobject]@{ CommandLine = $null })) -eq 'full') 'Unreadable command line counts as full'
     'PASS: mode decision (busy to shared, stop reasons, 5 min hysteresis, command-line mode)'
+    $cfg = @{ packetMinutes = 30; quietFan = 45; maxTemp = 80; resumeTemp = 55 }
+    $script:packet = $null; $script:resting = $false; $script:quiet = 1.0
+    $t0 = [datetime]'2026-10-12T22:00:00'
+    Assert ((Packets 0.8 60 30 $t0 $cfg) -eq 0.8) 'Quiet fans: the free share is used'
+    Assert ((Packets 0.8 70 60 $t0.AddMinutes(1) $cfg) -lt 0.8) 'Loud fans shrink the share'
+    Assert ((Packets 0.8 60 30 $t0.AddMinutes(30) $cfg) -eq 0) 'A packet ends after 30 min'
+    Assert ((Packets 0.8 60 20 $t0.AddMinutes(40) $cfg) -eq 0) 'Rest until the GPU is back at resumeTemp'
+    Assert ((Packets 0.8 50 20 $t0.AddMinutes(45) $cfg) -gt 0) 'Cool again: a new packet'
+    Assert ((Packets 0.8 85 20 $t0.AddMinutes(46) $cfg) -eq 0 -and $script:resting) 'maxTemp ends a packet early'
+    Assert ((Packets 0.8 $null 20 $t0.AddMinutes(90) $cfg) -eq 0) 'No temperature sensor, no work'
+    'PASS: packets (30 min, quiet fans, rest until cool, maxTemp, no sensor)'
 } finally {
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }

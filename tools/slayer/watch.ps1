@@ -30,6 +30,18 @@ function Write-Log($message) {
     Add-Content $log "$(Get-Date -Format o) port=$port $message"
 }
 $pidFile = "$runtime\watch-$port.pid"
+# What this PC gives the lab's batch work (replay, judge) is published every cycle as gpu.json in this
+# folder, which llama-server serves (--path) through the tunnel; the lab paces itself by its share.
+$status = "$runtime\status-$port"
+if (-not (Test-Path $status)) { $null = New-Item -ItemType Directory $status }
+# While someone uses the PC (input in the last 5 min) batch work gets at most this many percent of the GPU,
+# so a game keeps its frames even when it needs little GPU (owner 2026-10-12). The dashboard sets it.
+$shareFile = "$runtime\batch-share.txt"
+# Packets, for PCs with runtime\packets.json (albert; owner 2026-10-12): batch work runs in packets of at
+# most packetMinutes and keeps the fans at or below quietFan % (the share shrinks while they are louder, so
+# the GPU runs a little warmer but quiet); after a packet, or at maxTemp, it rests until resumeTemp.
+$packetFile = "$runtime\packets.json"
+$script:packet = $null; $script:resting = $false; $script:quiet = 1.0
 $session = (Get-Process -Id $PID).SessionId
 function Listeners {
     # Enumerate first: querying an unused LocalPort reports an error, not an empty list.
@@ -56,7 +68,60 @@ function PickMode($reason) {
     if ($reason) { return 'shared' }
     return 'full'
 }
-function ServerMode($server) { if ($server.CommandLine -match '--prio\s+-1(?:\s|$)') { 'shared' } else { 'full' } }
+# A server without --path (started by an older watcher) is restarted once so it serves gpu.json.
+function ServerMode($server) {
+    if ($server.CommandLine -and $server.CommandLine -notmatch '--path\s') { 'old' }
+    elseif ($server.CommandLine -match '--prio\s+-1(?:\s|$)') { 'shared' }
+    else { 'full' }
+}
+function BatchCap {
+    $text = Get-Content $shareFile -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ("$text".Trim() -match '^\d{1,3}$' -and [int]$text -le 100) { return [int]$text }
+    return 50
+}
+function PacketConfig {
+    if (-not (Test-Path $packetFile)) { return $null }
+    $c = Get-Content $packetFile -Raw | ConvertFrom-Json
+    $cfg = @{ packetMinutes = 30; quietFan = 45; maxTemp = 80; resumeTemp = 55 }
+    foreach ($k in @($cfg.Keys)) { if ($c.$k -is [ValueType]) { $cfg[$k] = [double]$c.$k } }
+    return $cfg
+}
+function GpuSensors {
+    $t, $f = "$(& nvidia-smi --query-gpu=temperature.gpu,fan.speed --format=csv,noheader,nounits 2>$null | Select-Object -First 1)" -split '\s*,\s*'
+    @{ Temp = $(if ($t -match '^\d+$') { [int]$t }); Fan = $(if ($f -match '^\d+$') { [int]$f }) }
+}
+# The packet rule on one reading; $temp $null (no sensor) gives nothing.
+function Packets([double]$share, $temp, $fan, [datetime]$now, $cfg) {
+    if ($null -eq $temp) { return 0 }
+    if ($script:resting) {
+        if ($temp -gt $cfg.resumeTemp) { return 0 }
+        $script:resting = $false; $script:packet = $null
+    }
+    if (-not $script:packet) { $script:packet = $now }
+    if (($now - $script:packet).TotalMinutes -ge $cfg.packetMinutes -or $temp -ge $cfg.maxTemp) { $script:resting = $true; return 0 }
+    if ($null -ne $fan -and $fan -gt $cfg.quietFan) { $script:quiet = [Math]::Max(0.1, $script:quiet * 0.7) }
+    elseif ($null -eq $fan -or $fan -lt $cfg.quietFan - 10) { $script:quiet = [Math]::Min(1.0, $script:quiet * 1.1) }
+    return $share * $script:quiet
+}
+# share (0..1): the GPU the PC's own programs leave free, capped by BatchCap while someone uses the PC
+# and by the packet rule where it is on.
+function Publish {
+    try {
+        $others = if ($null -ne $GpuPercent) { $GpuPercent } else { GpuUse @(LlamaPids) }
+        $idle = if ($TestPort) { 0 } else { [BanditWindow]::IdleSeconds() }
+        $share = [Math]::Max(0, 100 - $others) / 100
+        if ($idle -lt 300) { $share = [Math]::Min($share, (BatchCap) / 100) }
+        $info = @{ others = $others; idle = $idle }
+        if ($cfg = PacketConfig) {
+            $sensors = GpuSensors
+            $share = Packets $share $sensors.Temp $sensors.Fan (Get-Date) $cfg
+            $info += @{ temp = $sensors.Temp; fan = $sensors.Fan; resting = $script:resting }
+        }
+        $info += @{ share = [Math]::Round($share, 3); at = (Get-Date).ToUniversalTime().ToString('o') }
+        $info | ConvertTo-Json -Compress | Set-Content "$status\gpu.json.tmp" -Encoding ascii
+        Move-Item "$status\gpu.json.tmp" "$status\gpu.json" -Force
+    } catch { } # the old file goes stale (90 s) and the lab waits; a missing one would read as "no status, free"
+}
 # train\run-guarded.ps1 holds C:\bandit-ai\training.lock while it trains: the GPU is its, so the
 # server is stopped and not started. A lock older than 24 h is a crash leftover and ignored.
 function Training {
@@ -98,6 +163,7 @@ try {
             if (-not $reason) { $reason = Busy }
         } catch { $reason = "probe failed: $($_.Exception.Message)" }
         if ($reason) { $script:freeSince = $null } elseif (-not $script:freeSince) { $script:freeSince = Get-Date }
+        Publish
         try {
             $listeners = @(Listeners)
             $servers = @(Servers $listeners)
@@ -129,7 +195,7 @@ try {
                 # once at the start and still left the game 99 MiB and the GPU at 100 % (2026-10-12).
                 if ($mode -eq 'shared') { $gpu = '--n-gpu-layers 0 --no-op-offload --threads 4 --prio -1' }
                 $env:LLAMA_ARG_CHAT_TEMPLATE_KWARGS = '{"enable_thinking":false}'
-                $arguments = "--model $($serving.Path) --alias $($serving.Alias) --host 127.0.0.1 --port $port --jinja --ctx-size 8192 --parallel 1 $gpu --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 --repeat-penalty 1.0"
+                $arguments = "--model $($serving.Path) --alias $($serving.Alias) --host 127.0.0.1 --port $port --path $status --jinja --ctx-size 8192 --parallel 1 $gpu --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 --repeat-penalty 1.0"
                 $server = Start-Process "$base\llama\llama-server.exe" -ArgumentList $arguments -WorkingDirectory "$base\llama" -WindowStyle Hidden -PassThru -RedirectStandardOutput "$runtime\watch-$port.out.log" -RedirectStandardError "$runtime\watch-$port.err.log"
                 # Creation time prevents a stale PID file from authorizing a reused PID.
                 $started = Get-CimInstance Win32_Process -Filter "ProcessId=$($server.Id)"

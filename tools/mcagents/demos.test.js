@@ -132,9 +132,15 @@ const ev = (bot, kind, text) => ({id: ++id, t: Date.now(), bot, kind, text});
   let served = 0;
   const server = http.createServer((req, res) => {
     if (req.url === '/health') { res.statusCode = served >= 1 ? 503 : 200; return res.end('{}'); }
+    if (req.url === '/gpu.json') { res.statusCode = busyGpu ? 200 : 404; return res.end(JSON.stringify({share: 0.01, at: new Date().toISOString()})); }
     req.resume(); req.on('end', () => { served++; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({model: 'alias', choices: [{message: {content: 'good | ok'}}]})); });
   });
+  let busyGpu = true;
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+  // a GPU the PC's own programs use up: the judge waits, then gives up without sending anything
+  const gpuBusy = await runJudge(`http://127.0.0.1:${server.address().port}`, candidates(unknown, new Set(), 5).map((c) => ({...c})), '!stop', {gpu: {maxWaitMs: 50, pollMs: 20}});
+  assert.equal(gpuBusy.grades.length, 0); assert.match(gpuBusy.stopped, /no GPU to spare/); assert.equal(served, 0);
+  busyGpu = false;
   const run = await runJudge(`http://127.0.0.1:${server.address().port}`, candidates(unknown, new Set(), 5).map((c) => ({...c})), '!stop');
   assert.deepEqual(run.grades, [{ref: 'd5', verdict: 'good', reason: 'ok'}]); assert.match(run.stopped, /health lost/); assert.equal(run.alias, 'alias');
   server.close();
