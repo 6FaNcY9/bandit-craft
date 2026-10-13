@@ -980,6 +980,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         let open = 0, held = 0, next = null, above = null, late = null, repair = null, nextScore = Infinity;
         const me2 = bot.entity.position;
         const carried = count();
+        for (const item of Object.keys(carried)) lacking.delete(item); // handed over or brought by the crew: not missing
         const waiting = new Set();
         // Layer by layer: only the lowest open layer and the two above it, with supports for them before
         // anything higher, so the crew grows up with the build (it built a dropper tower to y 17 first and
@@ -1124,7 +1125,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           }
           const why = waiting.size ? `waiting for material: ${[...waiting].join(', ')}` : stuck.size ? `in the way: ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}` : `${open} cells left that this bot cannot place or reach`;
           job.t.doing = why;
-          stalled(why);
+          // Waiting for material is not stuck: the producers or the owner fill the chests, looked at every 5 min
+          if (waiting.size) lastProgress = Date.now(); else stalled(why);
           await sleep(1000);
           continue;
         }

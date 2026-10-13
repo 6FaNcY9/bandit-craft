@@ -53,7 +53,8 @@ chest; (3) walk within reach (never into the cell), sneak, turn, click, set dela
 right-clicks; (4) a cell of the right block in a wrong state is dug and placed again (3 tries); (5) once
 all cells match, a final check of rail shapes and double chests, repairs, done. Material is taken from
 the chests in the given order, as much as the next open cells need; missing items are looked for again
-every 5 minutes.
+every 5 minutes. A bot that only waits for material keeps its job (the producers or the owner fill the
+chests; it gave up after 5 minutes before), and an item it carries is never missing.
 
 ## What the first sandbox run taught (2026-10-13, three bots, local code)
 
