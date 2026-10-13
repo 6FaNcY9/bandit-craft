@@ -527,6 +527,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       const f = bot.entity.position.floored();
       const b = bot.blockAt(f);
       if (!b || b.boundingBox === 'empty' || !plan.byKey.has(keyOf(f))) return;
+      // Only a low block (a comparator, 2/16): on a chest (14/16) the bot merely stands, and digging it spilled
+      // its contents; nothing over a hopper either.
+      const top = Math.max(0, ...(b.shapes || []).map((q) => q[4]));
+      if (top > 0.5 || /chest|barrel|shulker_box|hopper|dropper|dispenser/.test(b.name) || landsInHopper(f.x, f.y, f.z, false)) return;
       r.emit?.('info', `standing on ${b.name} at ${keyOf(f)}: taking it out to get moving`);
       await digAt(r, job, f, (n) => n === b.name).catch(() => guard(job));
     };
