@@ -2,91 +2,200 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bots</title>
 <style>
   :root { --bg: #121417; --card: #1c1f24; --line: #2a2e35; --text: #e8e8e8; --mut: #9aa1aa; --ok: #4ade80; --warn: #f59e0b; --bad: #ef4444; --acc: #60a5fa; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: #0d0f12; border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 18px; margin: 0 8px 0 0; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { padding-bottom: 76px; }
+  header { position: sticky; top: 0; z-index: 3; display: flex; gap: 10px; align-items: center; padding: 10px 16px; background: #0d0f12; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; }
+  header .grow { flex: 1; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; flex: none; }
   .dot.on { background: var(--ok); }
-  nav { display: flex; gap: 4px; flex: 1; }
-  nav button, nav a { background: none; border: 0; color: var(--mut); padding: 6px 10px; border-radius: 6px; font: inherit; cursor: pointer; text-decoration: none; }
-  nav .cur { background: var(--card); color: var(--text); }
-  main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-  section.card, .bot { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 3; display: grid; grid-template-columns: repeat(6, 1fr); background: #0d0f12; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs button { background: none; border: 0; color: var(--mut); font: inherit; font-size: 11px; padding: 8px 2px 10px; cursor: pointer; display: grid; gap: 2px; justify-items: center; }
+  nav.tabs button b { font-size: 20px; font-weight: normal; line-height: 1; }
+  nav.tabs button.cur { color: var(--text); background: var(--card); }
+  @media (min-width: 900px) {
+    body { padding-bottom: 0; }
+    nav.tabs { position: sticky; top: 49px; bottom: auto; display: flex; justify-content: center; gap: 4px; border-top: 0; border-bottom: 1px solid var(--line); padding: 6px; }
+    nav.tabs button { display: flex; gap: 6px; align-items: center; font-size: 14px; padding: 6px 14px; border-radius: 8px; }
+    nav.tabs button b { font-size: 16px; }
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   h2 { font-size: 16px; margin: 0 0 10px; }
-  .mut { color: var(--mut); }
-  .small { font-size: 13px; }
-  .bots { display: grid; gap: 16px; grid-template-columns: 1fr; }
-  @media (min-width: 760px) { .bots { grid-template-columns: repeat(2, 1fr); } }
-  @media (min-width: 1100px) { .bots { grid-template-columns: repeat(3, 1fr); } }
+  h3 { font-size: 14px; margin: 12px 0 6px; color: var(--mut); font-weight: 600; }
+  .mut { color: var(--mut); } .small { font-size: 13px; } .err { color: #fca5a5; } .okc { color: #86efac; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .between { justify-content: space-between; }
+  .grid2 { display: grid; gap: 10px; grid-template-columns: 1fr; }
+  @media (min-width: 700px) { .grid2 { grid-template-columns: 1fr 1fr; } }
   .badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #2b3340; color: #c9d4e3; }
-  .bar { height: 8px; background: #2a2e35; border-radius: 4px; overflow: hidden; flex: 1; min-width: 60px; }
-  .bar > i { display: block; height: 100%; background: var(--acc); }
-  .bar.hp > i { background: var(--bad); } .bar.food > i { background: var(--warn); } .bar.prog > i { background: var(--ok); }
+  .bar { height: 8px; background: #2a2e35; border-radius: 4px; overflow: hidden; flex: 1; min-width: 50px; }
+  .bar > i { display: block; height: 100%; background: var(--ok); }
+  .bar.hp > i { background: var(--bad); } .bar.food > i { background: var(--warn); }
   .bar.big { height: 14px; border-radius: 7px; }
-  .lbl { width: 46px; font-size: 12px; color: var(--mut); }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .chip { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #262a31; }
-  .chip.need { background: #3a2a14; } .chip.owner { background: #3b1d1d; }
-  button.b { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #262a31; color: var(--text); cursor: pointer; min-height: 40px; }
+  .chip { font-size: 13px; padding: 3px 9px; border-radius: 7px; background: #262a31; }
+  .chip.need { background: #3a2a14; } .chip.owner { background: #3b1d1d; } .chip.hit { background: #1d3a26; }
+  button.b, label.b { font: inherit; font-size: 15px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: #262a31; color: var(--text); cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
   button.b:hover { background: #2e333b; }
   button.b.stop { background: #4a1d1d; border-color: #6b2525; }
   button.b.go { background: #1d3a26; border-color: #25603a; }
-  .err { color: #fca5a5; }
-  .ev { display: grid; grid-template-columns: 52px 56px 1fr; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #23272d; }
+  button.b.sel, button.pick.sel { outline: 2px solid var(--acc); background: #1f2c44; }
+  button.b:disabled { opacity: .45; cursor: default; }
+  .tiles { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .tiles button { flex-direction: column; justify-content: center; min-height: 72px; text-align: center; }
+  .tiles button b { font-size: 24px; font-weight: normal; }
+  button.pick { font: inherit; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: #262a31; color: var(--text); cursor: pointer; min-height: 40px; }
+  input.t, select.t, textarea.t { font: inherit; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line); background: #0f1114; color: var(--text); }
+  textarea.t { width: 100%; min-height: 90px; font-family: ui-monospace, monospace; font-size: 13px; }
+  /* bot rows */
+  .botrow { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid #23272d; cursor: pointer; }
+  .botrow:last-child { border-bottom: 0; }
+  .botrow .what { grid-column: 2 / 4; font-size: 13px; color: var(--mut); }
+  .botrow .mini { display: grid; grid-template-columns: 40px 40px; gap: 4px; }
+  .botrow .detail { grid-column: 1 / 4; cursor: default; padding-top: 6px; }
+  .ev { display: grid; grid-template-columns: 46px 52px 1fr; gap: 8px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid #23272d; }
   .ev.fail, .ev.death { color: #fca5a5; } .ev.done { color: #86efac; }
-  input.t { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: #0f1114; color: var(--text); }
-  #toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: #2b3340; padding: 8px 14px; border-radius: 8px; display: none; max-width: 92vw; }
+  #toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 5; background: #2b3340; padding: 10px 16px; border-radius: 10px; display: none; max-width: 92vw; box-shadow: 0 6px 20px #0008; }
   #console { background: #0b0d10; border-radius: 8px; padding: 8px; height: 260px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+  #map { width: 100%; height: 62vh; min-height: 320px; background: #0b0d10; border-radius: 10px; touch-action: none; display: block; }
+  .chest { padding: 10px 0; border-bottom: 1px solid #23272d; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <header>
   <h1>Bots</h1><span class="dot" id="conn" title="Verbindung"></span>
-  <nav>
-    <button id="tabMain" class="cur">Übersicht</button>
-    <button id="tabServer">Server</button>
-    <a href="/mehr" title="Die alte Seite: Karte, 3D, Daueraufträge, Agenten, slayer">Mehr ↗</a>
-  </nav>
-  <button class="b stop" id="stopAll">Alle stopp</button>
+  <span class="grow"></span>
+  <input class="t" id="me" maxlength="16" size="11" placeholder="Dein Name" title="Dein Spielername (für Komm, Folge, Karte)">
+  <button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹ Alle</button>
 </header>
+<nav class="tabs" id="tabs">
+  <button data-tab="home" class="cur"><b>🏠</b>Übersicht</button>
+  <button data-tab="orders"><b>🎯</b>Aufträge</button>
+  <button data-tab="map"><b>🗺️</b>Karte</button>
+  <button data-tab="chests"><b>📦</b>Kisten</button>
+  <button data-tab="project"><b>🏗️</b>Projekt</button>
+  <button data-tab="server"><b>⚙️</b>Server</button>
+</nav>
 
-<main id="pageMain">
-  <section class="card" id="project" hidden>
-    <div class="row between"><h2 id="projTitle">Projekt</h2><span class="mut small" id="projCrew"></span></div>
-    <div class="row"><div class="bar big prog"><i id="projBar"></i></div><b id="projNum"></b></div>
-    <p class="mut small" id="projPhase"></p>
-    <div id="projNeedBox" hidden><div class="small mut">Fehlt noch (die Bots besorgen es):</div><div class="chips" id="projNeed"></div></div>
-    <div id="projOwnerBox" hidden><p class="small"><b>Von dir gebraucht</b> (können die Bots nicht beschaffen), in eine Projektkiste:</p><div class="chips" id="projOwner"></div></div>
-    <p class="mut small" id="projNote"></p>
+<!-- Übersicht -->
+<main data-page="home">
+  <section class="card" id="projMini" hidden>
+    <div class="row between"><b id="projMiniTitle"></b><span class="mut small" id="projMiniNum"></span></div>
+    <div class="bar big" style="margin:8px 0"><i id="projMiniBar"></i></div>
+    <div class="small mut" id="projMiniInfo"></div>
   </section>
+  <section class="card"><h2>Bots</h2><div id="botRows"></div></section>
+  <section class="card"><h2>Ereignisse</h2><div id="events"></div></section>
+</main>
 
-  <div class="row small mut">Dein Spielername (für „Komm“ und „Folge“): <input class="t" id="me" maxlength="16" size="14"></div>
-  <div class="bots" id="bots"></div>
-
+<!-- Aufträge -->
+<main data-page="orders" hidden>
   <section class="card">
-    <h2>Ereignisse</h2>
-    <div id="events"></div>
+    <h2>1. Wer?</h2>
+    <div class="row" id="pickBots"></div>
+  </section>
+  <section class="card">
+    <h2>2. Was?</h2>
+    <div class="tiles">
+      <button class="b" data-order="come"><b>🙋</b>Komm</button>
+      <button class="b" data-order="follow"><b>👣</b>Folge</button>
+      <button class="b" data-order="guard"><b>🛡️</b>Wache</button>
+      <button class="b" data-order="rearm"><b>🎒</b>Ausrüsten</button>
+      <button class="b" data-order="deposit"><b>📥</b>Einlagern</button>
+      <button class="b" data-order="tidy"><b>🧹</b>Aufräumen</button>
+      <button class="b stop" data-order="stop"><b>⏹</b>Stopp</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Sammeln</h2>
+    <div class="tiles" id="gatherItems"></div>
+    <h3>Menge</h3>
+    <div class="row" id="gatherCounts"></div>
+    <div class="row" style="margin-top:12px"><button class="b go" id="gatherGo">Sammeln schicken</button><span class="mut small" id="gatherHint"></span></div>
+  </section>
+  <p class="mut small">Hinschicken: auf der <a href="#" data-goto-tab="map" style="color:var(--acc)">Karte</a> eine Stelle antippen.</p>
+</main>
+
+<!-- Karte -->
+<main data-page="map" hidden>
+  <section class="card">
+    <div class="row between" style="margin-bottom:8px">
+      <div class="row">
+        <button class="b" id="mapMe">Zu mir</button>
+        <button class="b" id="mapSite">Bauplatz</button>
+        <button class="b" id="mapBots">Bots</button>
+      </div>
+      <div class="row"><button class="b" id="zoomOut">−</button><button class="b" id="zoomIn">+</button></div>
+    </div>
+    <canvas id="map"></canvas>
+    <div class="row between" id="mapPick" hidden style="margin-top:10px">
+      <span id="mapPickText"></span>
+      <div class="row"><button class="b go" id="mapSend">Ausgewählte Bots hierher</button><button class="b" id="mapCancel">Abbrechen</button></div>
+    </div>
+    <p class="mut small" id="mapInfo">Ziehen zum Verschieben, antippen um einen Ort zu wählen. Bots wählst du unter „Aufträge“.</p>
   </section>
 </main>
 
-<main id="pageServer" hidden>
+<!-- Kisten -->
+<main data-page="chests" hidden>
   <section class="card">
-    <div class="row between"><h2>Server</h2><button class="b" id="refresh">Aktualisieren</button></div>
+    <div class="row between"><h2>Kisten</h2><button class="b" id="chestReload">Aktualisieren</button></div>
+    <input class="t" id="chestSearch" placeholder="Suchen, z.B. Redstone, Eisen, Kiste" style="width:100%;display:block;margin-top:6px">
+    <p class="small" id="chestSum"></p>
+    <div id="chestList"></div>
+  </section>
+</main>
+
+<!-- Projekt -->
+<main data-page="project" hidden>
+  <section class="card" id="projCard">
+    <div class="row between"><h2 id="projTitle">Projekt</h2><span class="mut small" id="projCrew"></span></div>
+    <div class="row"><div class="bar big"><i id="projBar"></i></div><b id="projNum"></b></div>
+    <p class="mut small" id="projPhase"></p>
+    <div id="projOwnerBox" hidden><h3>Von dir gebraucht (in eine Projektkiste legen)</h3><div class="chips" id="projOwner"></div></div>
+    <div id="projNeedBox" hidden><h3>Fehlt noch (die Bots besorgen es)</h3><div class="chips" id="projNeed"></div></div>
+    <div id="projStockBox" hidden><h3>In den Projektkisten</h3><div class="chips" id="projStock"></div></div>
+    <p class="mut small" id="projNote"></p>
+    <div class="row" style="margin-top:10px" id="projCtl"></div>
+  </section>
+  <section class="card">
+    <h2>Neues Projekt</h2>
+    <h3>1. Schematic</h3>
+    <div class="row"><select class="t" id="npFile" style="flex:1"></select><label class="b">⬆ Hochladen<input type="file" id="npUpload" accept=".litematic" hidden></label></div>
+    <p class="small mut" id="npInfo"></p>
+    <h3>2. Ort (untere Ecke des Schematics)</h3>
+    <div class="row">
+      <input class="t" id="npX" size="6" placeholder="x"><input class="t" id="npY" size="5" placeholder="y"><input class="t" id="npZ" size="6" placeholder="z">
+      <button class="b" id="npHere">An meinem Standort</button>
+      <select class="t" id="npRot"><option value="0">nicht gedreht</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select>
+    </div>
+    <h3>3. Projektkisten (eine pro Zeile: x y z, die erste ist das Lager der Produktion)</h3>
+    <textarea class="t" id="npChests" placeholder="-310 111 8&#10;-310 111 10"></textarea>
+    <h3>4. Bots</h3>
+    <div class="small mut">Bauen:</div><div class="row" id="npBuild"></div>
+    <div class="small mut" style="margin-top:6px">Material besorgen:</div><div class="row" id="npProduce"></div>
+    <div class="row" style="margin-top:12px"><button class="b go" id="npStart">Projekt starten</button><span class="small mut" id="npHint"></span></div>
+  </section>
+</main>
+
+<!-- Server -->
+<main data-page="server" hidden>
+  <section class="card">
+    <div class="row between"><h2>Server</h2><button class="b" id="srvReload">Aktualisieren</button></div>
     <p id="srvStatus" class="mut">…</p>
     <div class="chips" id="players"></div>
     <div class="row" style="margin-top:12px">
-      <button class="b" data-act="time" data-value="day">Tag</button>
-      <button class="b" data-act="time" data-value="night">Nacht</button>
-      <button class="b" data-act="weather-clear">Wetter klar</button>
-      <button class="b" data-act="save">Speichern</button>
+      <button class="b" data-act="time" data-value="day">☀️ Tag</button>
+      <button class="b" data-act="time" data-value="night">🌙 Nacht</button>
+      <button class="b" data-act="weather-clear">🌤 Wetter klar</button>
+      <button class="b" data-act="save">💾 Speichern</button>
     </div>
   </section>
   <section class="card">
@@ -94,13 +203,14 @@
     <div id="console"></div>
     <form class="row" id="cmdForm" style="margin-top:8px"><input class="t" id="cmd" placeholder="Befehl, z.B. list" style="flex:1"><button class="b">Senden</button></form>
   </section>
+  <p class="mut small"><a href="/mehr" style="color:var(--acc)">Alte Seite</a> (3D-Ansicht, Daueraufträge, Agenten, slayer)</p>
 </main>
 <div id="toast"></div>
 
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
-// Text only through textContent: names, chat and events come from players.
+// Text reaches the page through textContent only: names, chat and events come from players.
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -111,6 +221,7 @@ function el(tag, props = {}, ...kids) {
   for (const c of kids.flat()) if (c != null && c !== false) e.append(c instanceof Node ? c : String(c));
   return e;
 }
+const store = {get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
 let toastTimer;
 function say(text, bad) {
   const t = $('toast');
@@ -126,132 +237,110 @@ async function post(url, body) {
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
-const job = (bots, type, args = {}) => post('/api/job', {bots, type, args, replace: true})
-  .then((j) => say(j.unreached?.length ? `${type}: ${j.unreached.join(', ')} gerade nicht erreichbar` : `gesendet: ${type}`), (e) => say(e.message, true));
+const sendJob = (bots, type, args = {}, label = type) => post('/api/job', {bots, type, args, replace: true})
+  .then((j) => say(j.unreached?.length ? `${label}: ${j.unreached.join(', ')} gerade nicht erreichbar` : `${label} → ${bots.join(', ')}`), (e) => say(e.message, true));
 
-try { $('me').value = localStorage.getItem('me') || ''; } catch {}
-$('me').oninput = () => { try { localStorage.setItem('me', $('me').value.trim()); } catch {} };
+$('me').value = store.get('me2', null) ?? (() => { try { return localStorage.getItem('me') || ''; } catch { return ''; } })();
+$('me').oninput = () => store.set('me2', $('me').value.trim());
 const me = () => $('me').value.trim();
 
-// ---- tabs ----
-function tab(name) {
-  $('pageMain').hidden = name !== 'main';
-  $('pageServer').hidden = name !== 'server';
-  $('tabMain').classList.toggle('cur', name === 'main');
-  $('tabServer').classList.toggle('cur', name === 'server');
-  if (name === 'server') loadServer();
-}
-$('tabMain').onclick = () => tab('main');
-$('tabServer').onclick = () => tab('server');
-
-// ---- bots ----
-const JOB = {schematic: 'Baut', produce: 'Produziert', mine: 'Baut ab', chop: 'Fällt Bäume', come: 'Kommt', follow: 'Folgt', guard: 'Hält Wache',
-  deposit: 'Lagert ein', withdraw: 'Holt aus Kiste', craft: 'Craftet', smelt: 'Schmilzt', grave: 'Holt sein Grab', rearm: 'Rüstet sich aus',
-  tidy: 'Räumt auf', goto: 'Läuft', build: 'Baut', shift: 'Schicht', hunt: 'Jagt', bed: 'Schläft', treefarm: 'Baumfarm', wheatfarm: 'Weizenfarm'};
+// ---- German texts ----
+const ITEM = {hopper: 'Trichter', chest: 'Kiste', stone: 'Stein', comparator: 'Komparator', redstone: 'Redstone', repeater: 'Verstärker', observer: 'Beobachter',
+  dropper: 'Spender', dispenser: 'Werfer', powered_rail: 'Antriebsschiene', activator_rail: 'Aktivierungsschiene', rail: 'Schiene', target: 'Zielblock', barrel: 'Fass',
+  composter: 'Komposter', sticky_piston: 'Klebriger Kolben', piston: 'Kolben', redstone_lamp: 'Redstone-Lampe', redstone_torch: 'Redstone-Fackel', redstone_block: 'Redstone-Block',
+  stone_slab: 'Steinstufe', smooth_stone_slab: 'Glatte Steinstufe', glass: 'Glas', dirt: 'Erde', shears: 'Schere', snowball: 'Schneeball', egg: 'Ei', iron_ore: 'Eisenerz',
+  coal_ore: 'Kohleerz', copper_ore: 'Kupfererz', gold_ore: 'Golderz', redstone_ore: 'Redstone-Erz', diamond_ore: 'Diamanterz', raw_iron: 'Roheisen', raw_gold: 'Rohgold',
+  iron_ingot: 'Eisenbarren', coal: 'Kohle', oak_log: 'Eichenstamm', oak_planks: 'Eichenbretter', cobblestone: 'Bruchstein', quartz: 'Netherquarz', slime_ball: 'Schleimball',
+  shulker_shell: 'Shulkerschale', shulker_box: 'Shulkerkiste', glowstone: 'Glowstone', glowstone_dust: 'Glowstonestaub', black_wool: 'Schwarze Wolle', black_banner: 'Schwarzes Banner',
+  fern: 'Farn', powder_snow_bucket: 'Pulverschnee-Eimer', bread: 'Brot', torch: 'Fackel', sand: 'Sand', gravel: 'Kies', snow_block: 'Schneeblock', iron_trapdoor: 'Eisenfalltür',
+  iron_nugget: 'Eisennugget', note_block: 'Notenblock', stone_button: 'Steinknopf', hopper_minecart: 'Trichterlore', spider_eye: 'Spinnenauge', rotten_flesh: 'Verrottetes Fleisch',
+  diamond: 'Diamant', string: 'Faden', bone: 'Knochen', arrow: 'Pfeil', stick: 'Stock', furnace: 'Ofen', crafting_table: 'Werkbank', logs: 'Holz'};
+const item = (n) => ITEM[n] || String(n).replace(/^minecraft:/, '').replace(/_/g, ' ');
+const items = (s) => String(s).replace(/(\d+) more kinds/, '$1 weitere Sorten').replace(/\b[a-z]+(?:_[a-z]+)*\b/g, (w) => ITEM[w] || w);
+// A production step's label: "mine iron_ore for 10 raw_iron", "craft 24 oak_planks", "smelt 10 raw_iron into iron_ingot".
+const step = (s) => {
+  let m;
+  if ((m = /^mine (\S+) for (\d+) (\S+)$/.exec(s))) return `${item(m[1])} abbauen für ${m[2]} ${item(m[3])}`;
+  if ((m = /^chop (\S+) for (\d+) (\S+)$/.exec(s))) return `${m[2]} ${item(m[3])} fällen`;
+  if ((m = /^craft (\d+) (\S+)$/.exec(s))) return `${m[1]} ${item(m[2])} craften`;
+  if ((m = /^smelt (\d+) (\S+) into (\S+)$/.exec(s))) return `${m[1]} ${item(m[2])} zu ${item(m[3])} schmelzen`;
+  return items(s);
+};
+const DOING = [
+  [/^walking to the material chest at (.+) for (.+)$/, (m) => `geht zur Materialkiste (${m[1]}) für ${item(m[2])}`],
+  [/^walking to fill (\S+) at (.+)$/, (m) => `geht ${item(m[1])} befüllen (${m[2]})`],
+  [/^walking to place (\S+) at (.+)$/, (m) => `geht ${item(m[1])} setzen (${m[2]})`],
+  [/^walking to (.+) to deposit$/, (m) => `geht einlagern (${m[1]})`],
+  [/^walking to (?:the )?(\S+) near (\S+ \S+ \S+).*$/, (m) => `geht zu ${item(m[1])} (${m[2]})`],
+  [/^walking up to the chest at (.+)$/, (m) => `geht an die Kiste (${m[1]})`],
+  [/^walking to the build site.*$/, () => 'geht zum Bauplatz'],
+  [/^walking to (.+)$/, (m) => `läuft zu ${m[1]}`],
+  [/^taking (\d+) (\S+) (?:for the build|to fill .+|to climb .+|to reshape a rail)$/, (m) => `holt ${m[1]} ${item(m[2])}`],
+  [/^taking (\S+) from (.+)$/, (m) => `nimmt ${item(m[1])} aus ${m[2]}`],
+  [/^placing (\S+) at (.+)$/, (m) => `setzt ${item(m[1])} (${m[2]})`],
+  [/^filling (\S+) at (.+)$/, (m) => `befüllt ${item(m[1])} (${m[2]})`],
+  [/^looking into (\S+) at (.+)$/, (m) => `schaut in ${item(m[1])} (${m[2]})`],
+  [/^making room.*$/, () => 'räumt sein Inventar aus'],
+  [/^depositing at (.+)$/, (m) => `lagert ein (${m[1]})`],
+  [/^clearing (\S+) at (\S+ \S+ \S+).*$/, (m) => `räumt ${item(m[1])} weg (${m[2]})`],
+  [/^taking out (\S+) at (.+) to place it again$/, (m) => `setzt ${item(m[1])} neu (${m[2]})`],
+  [/^reshaping (\S+) at (.+?) to .+$/, (m) => `richtet ${item(m[1])} aus (${m[2]})`],
+  [/^waiting for material: (.+)$/, (m) => `wartet auf Material: ${m[1].split(', ').map(item).join(', ')}`],
+  [/^waiting: (.+)$/, (m) => `wartet: ${items(m[1])}`],
+  [/^climbing to Y (-?\d+).*$/, (m) => `klettert auf Höhe ${m[1]}`],
+  [/^mining (\S+)(?: \d+\/\d+)? near (.+)$/, (m) => `baut ${item(m[1])} ab (${m[2]})`],
+  [/^digging down to Y (-?\d+) for (\S+).*$/, (m) => `gräbt runter auf Höhe ${m[1]} für ${item(m[2])}`],
+  [/^fighting (.+)$/, (m) => `kämpft gegen ${m[1]}`],
+  [/^producing: (.+)$/, (m) => `besorgt Material: ${step(m[1])}`],
+  [/^counting the chest at (.+)$/, (m) => `zählt die Kiste (${m[1]})`],
+  [/^picking up the drops$/, () => 'sammelt Drops auf'],
+  [/^crafting (.+)$/, (m) => `craftet ${items(m[1])}`],
+  [/^(?:smelting|smelts?) (.+)$/, (m) => `schmilzt ${items(m[1])}`],
+  [/^leaving the build site$/, () => 'verlässt den Bauplatz'],
+  [/^in the way: (.+)$/, (m) => `im Weg: ${items(m[1])}`],
+  [/^(\d+) cells left that this bot cannot place or reach$/, (m) => `${m[1]} Zellen, an die er nicht herankommt`],
+  [/^no progress for (\d+) s: (.+)$/, (m) => `${Math.round(m[1] / 60)} min kein Fortschritt: ${doing(m[2])}`],
+  [/^could not reach (.+?): No path.*$/, (m) => `kommt nicht hin (${m[1]})`],
+  [/^could not reach (.+)$/, (m) => `kommt nicht hin (${m[1]})`],
+  [/^idle.*$/, () => 'frei'],
+];
+const EVENT = [
+  [/^joined the game$/, () => 'ist im Spiel'],
+  [/^left the game.*$/, () => 'hat das Spiel verlassen'],
+  [/^resumed after restart: (\S+)$/, (m) => `macht nach dem Neustart weiter (${JOB[m[1]] || m[1]})`],
+  [/^started: (\S+)(.*)$/, (m) => `startet: ${JOB[m[1]] || m[1]}${/(\S+)\.litematic/.exec(m[2]) ? ' ' + /(\S+)\.litematic/.exec(m[2])[1] : ''}`],
+  [/^finished: (\S+).*$/, (m) => `fertig: ${JOB[m[1]] || m[1]}`],
+  [/^failed: (\S+).*? - (.+)$/, (m) => `abgebrochen (${JOB[m[1]] || m[1]}): ${doing(m[2])}`],
+  [/^stopped: (\S+).*$/, (m) => `angehalten (${JOB[m[1]] || m[1]})`],
+  [/^died(?: at (-?\d+ -?\d+ -?\d+))?:? ?(.*)$/, (m) => `gestorben${m[1] ? ' bei ' + m[1] : ''}${m[2] ? ': ' + m[2] : ''}`],
+  [/^deposited (.+) at (.+)$/, (m) => `hat eingelagert: ${items(m[1])}`],
+  [/^produce: done (.+)$/, (m) => `fertig: ${step(m[1])}`],
+  [/^produce: (.+?) failed, resting it 10 min: (.+)$/, (m) => `klappt nicht (${step(m[1])}), Pause 10 min: ${doing(m[2])}`],
+  [/^produce: (.+)$/, (m) => `besorgt Material: ${step(m[1])}`],
+  [/^schematic done(.*)$/, (m) => `Bau fertig${items(m[1])}`],
+];
+const eventText = (s) => { for (const [re, f] of EVENT) { const m = re.exec(s); if (m) return f(m); } return doing(s); };
+const doing = (s) => { if (!s) return ''; for (const [re, f] of DOING) { const m = re.exec(s); if (m) return f(m); } return s; };
+const JOB = {schematic: 'baut', produce: 'besorgt Material', mine: 'baut ab', chop: 'fällt Bäume', come: 'kommt', follow: 'folgt', guard: 'hält Wache',
+  deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin'};
 const PROJECT = new Set(['schematic', 'produce']);
 const pct = (a, b) => (b ? Math.max(0, Math.min(100, Math.round((100 * a) / b))) : 0);
-const jobText = (j) => {
-  if (!j) return 'frei';
-  const what = JOB[j.type] || j.type;
-  const file = /^(\S+)\.litematic/.exec(j.label || '')?.[1];
-  return `${what}${file ? ' ' + file : ''}${j.total ? ` (${j.done}/${j.total})` : j.progress ? ` (${j.progress})` : ''}`;
-};
-const cards = new Map();
-function botCard(b) {
-  let c = cards.get(b.name);
-  if (c) return c;
-  c = {name: el('b'), role: el('span', {class: 'badge'}), state: el('span', {class: 'small'}), hp: el('i'), food: el('i'),
-    job: el('div'), jobBar: el('i'), act: el('div', {class: 'mut small'}), pos: el('div', {class: 'mut small'}), inv: el('div', {class: 'chips'}),
-    err: el('div', {class: 'err small'}), proj: el('div', {class: 'row'})};
-  c.jobBarBox = el('div', {class: 'bar prog'}, c.jobBar);
-  const need = (f) => () => (me() ? f(me()) : say('Trag oben deinen Spielernamen ein', true));
-  c.root = el('div', {class: 'bot'},
-    el('div', {class: 'row between'}, el('div', {class: 'row'}, c.name, c.role), c.state),
-    el('div', {class: 'row'}, el('span', {class: 'lbl'}, 'Leben'), el('div', {class: 'bar hp'}, c.hp)),
-    el('div', {class: 'row'}, el('span', {class: 'lbl'}, 'Essen'), el('div', {class: 'bar food'}, c.food)),
-    el('div', {style: 'margin-top:8px'}, c.job), c.jobBarBox, c.act, c.pos, el('div', {style: 'margin:8px 0'}, c.inv), c.err,
-    el('div', {class: 'row', style: 'margin-top:8px'},
-      el('button', {class: 'b', onclick: need((p) => job([b.name], 'come', {player: p}))}, 'Komm'),
-      el('button', {class: 'b', onclick: need((p) => job([b.name], 'follow', {player: p}))}, 'Folge'),
-      el('button', {class: 'b', onclick: need((p) => job([b.name], 'guard', {player: p, radius: 16}))}, 'Wache'),
-      el('button', {class: 'b stop', onclick: () => job([b.name], 'stop')}, 'Stopp')),
-    c.proj);
-  cards.set(b.name, c);
-  $('bots').append(c.root);
-  return c;
-}
-function renderBots(m) {
-  for (const b of m.bots) {
-    const c = botCard(b);
-    c.name.textContent = b.name;
-    c.role.textContent = b.role || '';
-    c.role.hidden = !b.role;
-    c.state.textContent = !b.online ? 'offline' : b.dead ? 'tot' : b.combat ? 'kämpft' : '';
-    c.state.className = 'small ' + (!b.online || b.dead ? 'err' : 'mut');
-    c.hp.style.width = pct(b.health || 0, 20) + '%';
-    c.food.style.width = pct(b.food || 0, 20) + '%';
-    c.job.textContent = jobText(b.job) + (b.queue?.length ? ` · danach: ${b.queue.length}` : '');
-    c.jobBarBox.hidden = !b.job?.total;
-    c.jobBar.style.width = pct(b.job?.done, b.job?.total) + '%';
-    c.act.textContent = b.activity || '';
-    c.pos.textContent = b.pos ? `${b.pos.join(' ')} · ${b.dimension || ''}` : '';
-    const inv = (b.inventory || []).map((s) => /^(\S+) x(\d+)$/.exec(s)).filter(Boolean).map((m2) => [m2[1], +m2[2]])
-      .filter(([n]) => !/_(pickaxe|axe|shovel|sword|hoe)$/.test(n)).sort((a, z) => z[1] - a[1]).slice(0, 8);
-    c.inv.replaceChildren(...inv.map(([n, k]) => el('span', {class: 'chip'}, `${k} ${n.replace(/_/g, ' ')}`)));
-    c.err.textContent = b.lastError && b.lastErrorAgoS != null && b.lastErrorAgoS < 900 ? b.lastError.slice(0, 160) : '';
-    // A project this bot works on (or paused): pause it, or take it up again.
-    const st = (m.projects || {})[b.name], running = b.job && PROJECT.has(b.job.type);
-    const act = (action, okText) => () => post('/api/project', {bot: b.name, action}).then(() => say(okText), (e) => say(e.message, true));
-    c.proj.replaceChildren(...(running ? [el('button', {class: 'b', onclick: act('pause', `${b.name}: Projekt pausiert`)}, 'Projekt pausieren')]
-      : st && PROJECT.has(st.type) ? [el('button', {class: 'b go', onclick: act('resume', `${b.name}: Projekt geht weiter`)}, 'Projekt fortsetzen')] : []));
-  }
-}
+const ago = (s) => (s == null ? '' : s < 90 ? 'gerade eben' : s < 5400 ? `vor ${Math.round(s / 60)} min` : `vor ${Math.round(s / 3600)} h`);
 
-// ---- project ----
-let materials = null;
-async function loadMaterials() {
-  try { materials = await (await fetch('/api/materials')).json(); } catch { materials = null; }
+// ---- tabs ----
+let curTab = store.get('tab', 'home');
+function tab(name) {
+  curTab = name;
+  store.set('tab', name);
+  for (const m of document.querySelectorAll('main[data-page]')) m.hidden = m.dataset.page !== name;
+  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('cur', b.dataset.tab === name);
+  if (name === 'server') loadServer();
+  if (name === 'chests') loadChests();
+  if (name === 'project') loadSchematics();
+  if (name === 'map') requestAnimationFrame(drawMap);
 }
-function renderProject(m) {
-  const crew = m.bots.filter((b) => b.job && PROJECT.has(b.job.type));
-  const paused = Object.entries(m.projects || {}).filter(([, p]) => PROJECT.has(p.type));
-  $('project').hidden = !crew.length && !paused.length;
-  if ($('project').hidden) return;
-  const builders = crew.filter((b) => b.job.type === 'schematic' && b.job.total);
-  const lead = builders.sort((a, z) => z.job.done - a.job.done)[0];
-  const file = materials?.file || /^(\S+?)\.litematic/.exec((crew[0]?.job.label) || paused[0]?.[1].summary || '')?.[1] || 'Schematic';
-  $('projTitle').textContent = `Projekt: ${String(file).replace(/\.litematic$/, '')}`;
-  $('projCrew').textContent = crew.length ? crew.map((b) => `${b.name} ${b.job.type === 'produce' ? '(Material)' : '(Bau)'}`).join(', ') : 'pausiert';
-  const total = lead?.job.total || materials?.cells || 0, done = lead?.job.done || 0;
-  $('projBar').style.width = pct(done, total) + '%';
-  $('projNum').textContent = total ? `${done}/${total} · ${pct(done, total)} %` : '';
-  const prod = crew.find((b) => b.job.type === 'produce');
-  $('projPhase').textContent = [lead && `Bau: ${lead.activity || ''}`, prod && `Material: ${prod.job.progress || prod.activity || ''}`].filter(Boolean).join(' · ');
-  const lack = Object.entries(materials?.lacking || {}).sort((a, z) => z[1] - a[1]).slice(0, 14);
-  $('projNeedBox').hidden = !lack.length;
-  $('projNeed').replaceChildren(...lack.map(([n, k]) => el('span', {class: 'chip need'}, `${k} ${n.replace(/_/g, ' ')}`)));
-  const owner = Object.entries(materials?.owner || {});
-  $('projOwnerBox').hidden = !owner.length;
-  $('projOwner').replaceChildren(...owner.map(([n, k]) => el('span', {class: 'chip owner'}, `${k} ${n.replace(/_/g, ' ')}`)));
-  $('projNote').textContent = !materials ? 'Die Materialliste erscheint, sobald ein Bot dieses Rechners am Bauplatz ist.'
-    : materials.counted < materials.chests ? `Kisten gezählt: ${materials.counted} von ${materials.chests} (der Rest beim nächsten Besuch).` : '';
-}
-
-// ---- events ----
-let evLast = 0;
-const events = [];
-const QUIET = /make room|claim|skipped: another bot|missing material to fill/;
-async function loadEvents() {
-  try {
-    const j = await (await fetch('/api/events?since=' + evLast)).json();
-    evLast = j.lastId;
-    for (const e of j.events) if (e.kind !== 'claim' && !QUIET.test(e.text)) events.push(e);
-    events.splice(0, Math.max(0, events.length - 40));
-    $('events').replaceChildren(...events.slice().reverse().map((e) => el('div', {class: 'ev ' + e.kind},
-      el('span', {class: 'mut'}, new Date(e.t).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})),
-      el('b', {}, e.bot), el('span', {}, e.text))));
-  } catch {}
-}
+for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => tab(b.dataset.tab);
+for (const a of document.querySelectorAll('[data-goto-tab]')) a.onclick = (e) => { e.preventDefault(); tab(a.dataset.gotoTab); };
 
 // ---- live state ----
 let last = null;
@@ -260,13 +349,338 @@ function connect() {
   ws.onopen = () => $('conn').classList.add('on');
   ws.onmessage = (e) => {
     last = JSON.parse(e.data);
-    renderBots(last);
-    renderProject(last);
+    renderBots();
+    renderPicks();
+    renderProject();
+    if (curTab === 'map') drawMap();
     if (last.lastEventId !== evLast) loadEvents();
   };
   ws.onclose = () => { $('conn').classList.remove('on'); setTimeout(connect, 2000); };
 }
-$('stopAll').onclick = () => last && confirm('Alle Bots stoppen?') && job(last.bots.map((b) => b.name), 'stop');
+$('stopAll').onclick = () => last && confirm('Alle Bots anhalten?') && sendJob(last.bots.map((b) => b.name), 'stop', {}, 'Stopp');
+
+// ---- overview: one row per bot, tap for details ----
+const rows = new Map();
+let open = store.get('openBot', null);
+function renderBots() {
+  for (const b of last.bots) {
+    let r = rows.get(b.name);
+    if (!r) {
+      r = {dot: el('span', {class: 'dot'}), name: el('b'), role: el('span', {class: 'badge'}), hp: el('i'), food: el('i'), what: el('div', {class: 'what'}),
+        detail: el('div', {class: 'detail'}), inv: el('div', {class: 'chips'}), pos: el('div', {class: 'small mut'}), err: el('div', {class: 'small err'}), proj: el('span')};
+      r.root = el('div', {class: 'botrow'},
+        el('div', {class: 'row'}, r.dot, r.name, r.role),
+        el('div', {}),
+        el('div', {class: 'mini', title: 'Leben / Essen'}, el('div', {class: 'bar hp'}, r.hp), el('div', {class: 'bar food'}, r.food)),
+        r.what, r.detail);
+      r.detail.append(r.pos, el('div', {style: 'margin:6px 0'}, r.inv), r.err,
+        el('div', {class: 'row', style: 'margin-top:6px'},
+          el('button', {class: 'b', onclick: (e) => { e.stopPropagation(); quick(b.name, 'come'); }}, '🙋 Komm'),
+          el('button', {class: 'b', onclick: (e) => { e.stopPropagation(); quick(b.name, 'follow'); }}, '👣 Folge'),
+          el('button', {class: 'b stop', onclick: (e) => { e.stopPropagation(); sendJob([b.name], 'stop', {}, 'Stopp'); }}, '⏹ Stopp'),
+          r.proj));
+      r.detail.onclick = (e) => e.stopPropagation();
+      r.root.onclick = () => { open = open === b.name ? null : b.name; store.set('openBot', open); renderBots(); };
+      rows.set(b.name, r);
+      $('botRows').append(r.root);
+    }
+    r.dot.classList.toggle('on', b.online && !b.dead);
+    r.name.textContent = b.name;
+    r.role.textContent = b.role || '';
+    r.role.hidden = !b.role;
+    r.hp.style.width = pct(b.health || 0, 20) + '%';
+    r.food.style.width = pct(b.food || 0, 20) + '%';
+    const j = b.job;
+    const state = !b.online ? 'offline' : b.dead ? 'tot' : b.combat ? `kämpft` : '';
+    const jobTxt = j ? `${JOB[j.type] || j.type}${j.total ? ` ${j.done}/${j.total}` : ''}` : 'frei';
+    r.what.textContent = [state, jobTxt, j ? doing(b.activity) : ''].filter(Boolean).join(' · ');
+    r.detail.hidden = open !== b.name;
+    if (open !== b.name) continue;
+    r.pos.textContent = b.pos ? `Position ${b.pos.join(' ')} · ${b.dimension || ''}` : '';
+    const inv = (b.inventory || []).map((s) => /^(\S+) x(\d+)$/.exec(s)).filter(Boolean).map((m) => [m[1], +m[2]])
+      .filter(([n]) => !/_(pickaxe|axe|shovel|sword|hoe)$/.test(n)).sort((a, z) => z[1] - a[1]).slice(0, 12);
+    r.inv.replaceChildren(...inv.map(([n, k]) => el('span', {class: 'chip'}, `${k} ${item(n)}`)));
+    r.err.textContent = b.lastError && b.lastErrorAgoS != null && b.lastErrorAgoS < 900 ? `Letzter Fehler: ${b.lastError.slice(0, 160)}` : '';
+    const st = (last.projects || {})[b.name], running = j && PROJECT.has(j.type);
+    const act = (action, text) => (e) => { e.stopPropagation(); post('/api/project', {bot: b.name, action}).then(() => say(text), (err) => say(err.message, true)); };
+    r.proj.replaceChildren(...(running ? [el('button', {class: 'b', onclick: act('pause', `${b.name}: Projekt pausiert`)}, '⏸ Projekt')]
+      : st && PROJECT.has(st.type) ? [el('button', {class: 'b go', onclick: act('resume', `${b.name}: Projekt geht weiter`)}, '▶ Projekt')] : []));
+  }
+}
+function quick(bot, type) {
+  if (!me()) return say('Trag oben deinen Spielernamen ein', true);
+  sendJob([bot], type, {player: me()}, type === 'come' ? 'Komm' : 'Folge');
+}
+
+// ---- orders ----
+let picked = new Set(store.get('picked', []));
+function renderPicks() {
+  const box = $('pickBots');
+  const names = last.bots.map((b) => b.name);
+  if (box.dataset.names !== names.join()) {
+    box.dataset.names = names.join();
+    box.replaceChildren(
+      el('button', {class: 'pick', id: 'pickAll', onclick: () => { picked = picked.size === names.length ? new Set() : new Set(names); store.set('picked', [...picked]); renderPicks(); }}, 'Alle'),
+      ...names.map((n) => el('button', {class: 'pick', 'data-bot': n, onclick: () => { picked.has(n) ? picked.delete(n) : picked.add(n); store.set('picked', [...picked]); renderPicks(); }}, n)));
+  }
+  for (const b of box.querySelectorAll('[data-bot]')) {
+    const bot = last.bots.find((x) => x.name === b.dataset.bot);
+    b.classList.toggle('sel', picked.has(b.dataset.bot));
+    b.textContent = `${bot.online ? '' : '⚪ '}${bot.name}`;
+  }
+  $('pickAll').classList.toggle('sel', picked.size === names.length && names.length > 0);
+}
+const chosen = () => { const p = [...picked].filter((n) => last?.bots.some((b) => b.name === n)); if (!p.length) say('Erst oben unter „Wer?“ Bots antippen', true); return p; };
+for (const b of document.querySelectorAll('[data-order]')) {
+  b.onclick = () => {
+    const bots = chosen();
+    if (!bots.length) return;
+    const t = b.dataset.order, sc = last.supplyChest;
+    if ((t === 'come' || t === 'follow' || t === 'guard') && !me()) return say('Trag oben deinen Spielernamen ein', true);
+    if ((t === 'rearm' || t === 'deposit') && !sc) return say('Keine Vorratskiste eingestellt', true);
+    const args = {come: {player: me()}, follow: {player: me()}, guard: {player: me(), radius: 16}, rearm: sc, deposit: sc, tidy: sc ? {...sc, radius: 16} : {radius: 16}, stop: {}}[t];
+    sendJob(bots, t, args, b.textContent.replace(/^\S+/, '').trim());
+  };
+}
+const GATHER = [['iron_ore', '⛏️', 'Eisen'], ['coal_ore', '⚫', 'Kohle'], ['copper_ore', '🟠', 'Kupfer'], ['gold_ore', '🟡', 'Gold'], ['redstone_ore', '🔴', 'Redstone'],
+  ['diamond_ore', '💎', 'Diamant'], ['logs', '🪵', 'Holz'], ['stone', '🪨', 'Stein'], ['sand', '🏖️', 'Sand'], ['dirt', '🟫', 'Erde'], ['gravel', '⚪', 'Kies'], ['snow_block', '❄️', 'Schnee']];
+let gItem = store.get('gItem', 'iron_ore'), gCount = store.get('gCount', 32);
+$('gatherItems').replaceChildren(...GATHER.map(([id, icon, label]) => el('button', {class: 'b', 'data-g': id, onclick: () => { gItem = id; store.set('gItem', id); paintGather(); }}, el('b', {}, icon), label)));
+$('gatherCounts').replaceChildren(...[16, 32, 64, 128, 256].map((n) => el('button', {class: 'pick', 'data-n': n, onclick: () => { gCount = n; store.set('gCount', n); paintGather(); }}, String(n))));
+function paintGather() {
+  for (const b of $('gatherItems').children) b.classList.toggle('sel', b.dataset.g === gItem);
+  for (const b of $('gatherCounts').children) b.classList.toggle('sel', +b.dataset.n === gCount);
+  const lbl = GATHER.find((g) => g[0] === gItem)?.[2];
+  $('gatherHint').textContent = `${gCount} ${lbl}${picked.size > 1 ? ', jeder Bot' : ''}`;
+}
+paintGather();
+$('gatherGo').onclick = () => {
+  const bots = chosen();
+  if (!bots.length) return;
+  const lbl = GATHER.find((g) => g[0] === gItem)?.[2];
+  if (gItem === 'logs') sendJob(bots, 'chop', {count: gCount}, `${gCount} ${lbl}`);
+  else sendJob(bots, 'mine', {block: gItem, count: gCount}, `${gCount} ${lbl}`);
+};
+
+// ---- map ----
+const cv = $('map'), g = cv.getContext('2d');
+let view = store.get('view', null), drag = null, pick = null;
+const COLORS = ['#60a5fa', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c'];
+function ownerPos() { return last?.world?.players?.find((p) => p.name?.toLowerCase() === me().toLowerCase()) || null; }
+function centreOn(x, z, scale) { view = {x, z, s: scale || view?.s || 3}; store.set('view', view); drawMap(); }
+function siteBox() { return materials?.lo ? {x1: materials.lo.x, z1: materials.lo.z, x2: materials.hi.x, z2: materials.hi.z} : null; }
+function drawMap() {
+  if (!last || $('map').closest('main').hidden) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!view) {
+    const o = ownerPos(), b = last.bots.find((x) => x.pos);
+    view = {x: o ? o.x : b ? b.pos[0] : 0, z: o ? o.z : b ? b.pos[2] : 0, s: 3};
+  }
+  const sx = (x) => (x - view.x) * view.s + w / 2, sz = (z) => (z - view.z) * view.s + h / 2;
+  g.fillStyle = '#0b0d10';
+  g.fillRect(0, 0, w, h);
+  // chunk grid
+  const step = view.s >= 2 ? 16 : view.s >= 0.5 ? 64 : 256;
+  g.strokeStyle = '#1b1f25';
+  g.lineWidth = 1;
+  for (let x = Math.floor((view.x - w / 2 / view.s) / step) * step; sx(x) < w; x += step) { g.beginPath(); g.moveTo(sx(x), 0); g.lineTo(sx(x), h); g.stroke(); }
+  for (let z = Math.floor((view.z - h / 2 / view.s) / step) * step; sz(z) < h; z += step) { g.beginPath(); g.moveTo(0, sz(z)); g.lineTo(w, sz(z)); g.stroke(); }
+  const box = (b, color, label) => {
+    g.strokeStyle = color; g.lineWidth = 2;
+    g.strokeRect(sx(b.x1), sz(b.z1), (b.x2 - b.x1 + 1) * view.s, (b.z2 - b.z1 + 1) * view.s);
+    if (label) { g.fillStyle = color; g.font = '12px system-ui'; g.fillText(label, sx(b.x1) + 3, sz(b.z1) - 4); }
+  };
+  for (const a of last.protectedAreas || []) box({x1: a[0], z1: a[1], x2: a[2], z2: a[3]}, '#7f1d1d', 'geschützt');
+  for (const p of last.places || []) {
+    if (p.box) box(p.box, '#475569', p.name);
+    else { g.fillStyle = '#94a3b8'; g.fillRect(sx(p.x) - 3, sz(p.z) - 3, 6, 6); g.font = '11px system-ui'; g.fillText(p.name, sx(p.x) + 5, sz(p.z) + 4); }
+  }
+  const site = siteBox();
+  if (site) box(site, '#22c55e', 'Bauplatz');
+  if (last.supplyChest) { const c = last.supplyChest; g.fillStyle = '#facc15'; g.fillRect(sx(c.x) - 4, sz(c.z) - 4, 8, 8); }
+  for (const m of last.world?.mobs || []) { g.fillStyle = '#b91c1c'; g.fillRect(sx(m.x) - 1.5, sz(m.z) - 1.5, 3, 3); }
+  const dot = (x, z, color, label, r = 6) => {
+    g.fillStyle = color; g.beginPath(); g.arc(sx(x), sz(z), r, 0, 7); g.fill();
+    g.font = 'bold 12px system-ui'; g.fillStyle = '#e8e8e8'; g.fillText(label, sx(x) + r + 3, sz(z) + 4);
+  };
+  last.bots.forEach((b, i) => { if (b.pos && b.online) dot(b.pos[0], b.pos[2], COLORS[i % COLORS.length], b.name, picked.has(b.name) ? 8 : 6); });
+  for (const p of last.world?.players || []) if (!/^bot\d+$/.test(p.name)) dot(p.x, p.z, '#ffffff', p.name, 7);
+  if (pick) { g.strokeStyle = '#60a5fa'; g.lineWidth = 3; g.beginPath(); g.arc(sx(pick.x), sz(pick.z), 10, 0, 7); g.stroke(); }
+}
+const toWorld = (ev) => { const r = cv.getBoundingClientRect(); return {x: Math.floor(view.x + (ev.clientX - r.left - r.width / 2) / view.s), z: Math.floor(view.z + (ev.clientY - r.top - r.height / 2) / view.s)}; };
+cv.onpointerdown = (e) => { drag = {x: e.clientX, y: e.clientY, vx: view.x, vz: view.z, moved: false}; cv.setPointerCapture(e.pointerId); };
+cv.onpointermove = (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
+  if (drag.moved) { view.x = drag.vx - dx / view.s; view.z = drag.vz - dy / view.s; drawMap(); }
+};
+cv.onpointerup = (e) => {
+  if (drag && !drag.moved) {
+    pick = toWorld(e);
+    $('mapPick').hidden = false;
+    $('mapPickText').textContent = `Ort ${pick.x} / ${pick.z}`;
+    drawMap();
+  }
+  drag = null;
+  store.set('view', view);
+};
+cv.onwheel = (e) => { e.preventDefault(); view.s = Math.max(0.1, Math.min(16, view.s * (e.deltaY < 0 ? 1.25 : 0.8))); store.set('view', view); drawMap(); };
+$('zoomIn').onclick = () => { view.s = Math.min(16, view.s * 1.5); store.set('view', view); drawMap(); };
+$('zoomOut').onclick = () => { view.s = Math.max(0.1, view.s / 1.5); store.set('view', view); drawMap(); };
+$('mapMe').onclick = () => { const o = ownerPos(); o ? centreOn(o.x, o.z) : say(me() ? 'Deine Position ist gerade nicht bekannt (BlueMap)' : 'Trag oben deinen Spielernamen ein', true); };
+$('mapSite').onclick = () => { const s = siteBox(); s ? centreOn((s.x1 + s.x2) / 2, (s.z1 + s.z2) / 2, 6) : say('Gerade kein Bauplatz', true); };
+$('mapBots').onclick = () => {
+  const ps = last.bots.filter((b) => b.pos && b.online).map((b) => b.pos);
+  if (!ps.length) return say('Kein Bot online', true);
+  centreOn(ps.reduce((a, p) => a + p[0], 0) / ps.length, ps.reduce((a, p) => a + p[2], 0) / ps.length);
+};
+$('mapCancel').onclick = () => { pick = null; $('mapPick').hidden = true; drawMap(); };
+$('mapSend').onclick = () => {
+  const bots = chosen();
+  if (!bots.length || !pick) return;
+  sendJob(bots, 'goto', {x: pick.x, z: pick.z}, `Hin zu ${pick.x} / ${pick.z}`);
+  pick = null; $('mapPick').hidden = true; drawMap();
+};
+window.addEventListener('resize', () => curTab === 'map' && drawMap());
+
+// ---- chests ----
+let chests = [];
+async function loadChests() {
+  try { chests = await (await fetch('/api/chests')).json(); } catch { chests = []; }
+  renderChests();
+}
+const KIND = {lager: 'Lager', vorrat: 'Vorratskiste', projekt: 'Projektkiste'};
+function renderChests() {
+  const q = $('chestSearch').value.trim().toLowerCase();
+  // a search finds the item names and their German names
+  const hit = (n) => !q || n.includes(q.replace(/ /g, '_')) || item(n).toLowerCase().includes(q);
+  const list = chests.map((c) => ({...c, shown: Object.entries(c.items || {}).filter(([n]) => hit(n)).sort((a, z) => z[1] - a[1])})).filter((c) => !q || c.shown.length);
+  const total = {};
+  for (const c of list) for (const [n, k] of c.shown) total[n] = (total[n] || 0) + k;
+  $('chestSum').textContent = q ? (Object.keys(total).length ? 'Gesamt: ' + Object.entries(total).sort((a, z) => z[1] - a[1]).slice(0, 6).map(([n, k]) => `${k} ${item(n)}`).join(', ') : 'Nichts gefunden (nur Kisten, die ein Bot geöffnet hat)') : `${chests.length} Kisten, die die Bots kennen`;
+  $('chestList').replaceChildren(...list.slice(0, 80).map((c) => el('div', {class: 'chest'},
+    el('div', {class: 'row between'}, el('b', {}, `${KIND[c.kind] || c.kind} ${c.x} ${c.y} ${c.z}`), el('span', {class: 'small mut'}, ago(c.ageS))),
+    el('div', {class: 'chips', style: 'margin-top:6px'}, ...(c.shown.length ? c.shown.slice(0, q ? 20 : 10).map(([n, k]) => el('span', {class: 'chip' + (q ? ' hit' : '')}, `${k} ${item(n)}`)) : [el('span', {class: 'small mut'}, 'leer')])))));
+}
+$('chestSearch').oninput = renderChests;
+$('chestReload').onclick = loadChests;
+
+// ---- project ----
+let materials = null;
+async function loadMaterials() { try { materials = await (await fetch('/api/materials')).json(); } catch { materials = null; } }
+function renderProject() {
+  const crew = last.bots.filter((b) => b.job && PROJECT.has(b.job.type));
+  const paused = Object.entries(last.projects || {}).filter(([, p]) => PROJECT.has(p.type));
+  const any = crew.length || paused.length;
+  $('projMini').hidden = !any;
+  const lead = crew.filter((b) => b.job.type === 'schematic' && b.job.total).sort((a, z) => z.job.done - a.job.done)[0];
+  const file = String(materials?.file || /^(\S+?)\.litematic/.exec(crew[0]?.job.label || paused[0]?.[1].summary || '')?.[1] || '').replace(/\.litematic$/, '');
+  const total = lead?.job.total || materials?.cells || 0, done = lead?.job.done || 0;
+  const prod = crew.find((b) => b.job.type === 'produce');
+  const owner = Object.entries(materials?.owner || {});
+  $('projMiniTitle').textContent = `🏗️ ${file || 'Projekt'}`;
+  $('projMiniNum').textContent = total ? `${done}/${total} · ${pct(done, total)} %` : crew.length ? '' : 'pausiert';
+  $('projMiniBar').style.width = pct(done, total) + '%';
+  $('projMiniInfo').textContent = owner.length ? `Von dir gebraucht: ${owner.map(([n, k]) => `${k} ${item(n)}`).join(', ')}` : lead ? doing(lead.activity) : '';
+  $('projCard').hidden = !any;
+  if (!any) return;
+  $('projTitle').textContent = `Projekt: ${file || '?'}`;
+  $('projCrew').textContent = crew.length ? crew.map((b) => `${b.name} (${b.job.type === 'produce' ? 'Material' : 'Bau'})`).join(', ') : 'pausiert';
+  $('projBar').style.width = pct(done, total) + '%';
+  $('projNum').textContent = total ? `${done}/${total} · ${pct(done, total)} %` : '';
+  $('projPhase').textContent = [lead && `Bau: ${doing(lead.activity)}`, prod && `Material: ${doing(prod.activity) || items(prod.job.progress || '')}`].filter(Boolean).join(' · ');
+  const chipList = (obj, cls, max = 30) => Object.entries(obj || {}).sort((a, z) => z[1] - a[1]).slice(0, max).map(([n, k]) => el('span', {class: 'chip ' + cls}, `${k} ${item(n)}`));
+  $('projOwnerBox').hidden = !owner.length;
+  $('projOwner').replaceChildren(...owner.map(([n, k]) => el('span', {class: 'chip owner'}, `${k} ${item(n)}`)));
+  $('projNeedBox').hidden = !Object.keys(materials?.lacking || {}).length;
+  $('projNeed').replaceChildren(...chipList(materials?.lacking, 'need'));
+  $('projStockBox').hidden = !Object.keys(materials?.stock || {}).length;
+  $('projStock').replaceChildren(...chipList(materials?.stock, ''));
+  $('projNote').textContent = !materials ? 'Die Materialliste erscheint, sobald ein Bot dieses Rechners am Bauplatz ist.'
+    : materials.counted < materials.chests ? `Kisten gezählt: ${materials.counted} von ${materials.chests}.` : '';
+  const bots = [...new Set([...crew.map((b) => b.name), ...paused.map(([n]) => n)])];
+  const all = (action, text) => () => Promise.all(bots.map((bot) => post('/api/project', {bot, action}))).then(() => say(text), (e) => say(e.message, true));
+  if ($('projCtl').dataset.state !== `${crew.length}/${bots.length}`) {
+    $('projCtl').dataset.state = `${crew.length}/${bots.length}`;
+    $('projCtl').replaceChildren(
+      crew.length ? el('button', {class: 'b', onclick: all('pause', 'Projekt pausiert')}, '⏸ Pausieren') : el('button', {class: 'b go', onclick: all('resume', 'Projekt geht weiter')}, '▶ Fortsetzen'),
+      el('button', {class: 'b stop', onclick: () => confirm('Projekt ganz beenden? (Pausieren behält es zum Fortsetzen)') && all('stop', 'Projekt beendet')()}, '⏹ Beenden'));
+  }
+}
+let schematics = [];
+async function loadSchematics() {
+  try { schematics = await (await fetch('/api/schematics')).json(); } catch { schematics = []; }
+  const sel = $('npFile'), was = sel.value;
+  sel.replaceChildren(...schematics.map((s) => el('option', {value: s.file}, s.error ? `${s.file} (defekt)` : `${s.file.replace(/\.litematic$/, '')} · ${s.size?.x}×${s.size?.y}×${s.size?.z}, ${s.blocks} Blöcke`)));
+  if (was) sel.value = was;
+  npInfo();
+  const names = last ? last.bots.map((b) => b.name) : [];
+  for (const [id, key] of [['npBuild', 'npBuild'], ['npProduce', 'npProduce']]) {
+    const keep = new Set(store.get(key, []));
+    $(id).replaceChildren(...names.map((n) => el('button', {class: 'pick' + (keep.has(n) ? ' sel' : ''), 'data-bot': n, onclick: (e) => { e.target.classList.toggle('sel'); store.set(key, [...$(id).querySelectorAll('.sel')].map((x) => x.dataset.bot)); }}, n)));
+  }
+}
+function npInfo() {
+  const s = schematics.find((x) => x.file === $('npFile').value);
+  $('npInfo').textContent = !s ? 'Noch kein Schematic hochgeladen.' : s.error ? s.error : `Material: ${Object.entries(s.items || {}).sort((a, z) => z[1] - a[1]).slice(0, 8).map(([n, k]) => `${k} ${item(n)}`).join(', ')} …`;
+}
+$('npFile').onchange = npInfo;
+$('npUpload').onchange = async () => {
+  const f = $('npUpload').files[0];
+  if (!f) return;
+  try {
+    const r = await fetch('/api/schematic?name=' + encodeURIComponent(f.name), {method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: f});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    say(`${j.file} hochgeladen (${j.blocks} Blöcke)`);
+    await loadSchematics();
+    $('npFile').value = j.file;
+    npInfo();
+  } catch (e) { say('Hochladen ging nicht: ' + e.message, true); }
+  $('npUpload').value = '';
+};
+$('npHere').onclick = () => {
+  const o = ownerPos();
+  if (!o) return say(me() ? 'Deine Position ist gerade nicht bekannt (BlueMap)' : 'Trag oben deinen Spielernamen ein', true);
+  $('npX').value = Math.floor(o.x); $('npY').value = Math.floor(o.y); $('npZ').value = Math.floor(o.z);
+};
+for (const id of ['npX', 'npY', 'npZ', 'npChests', 'npRot']) {
+  $(id).value = store.get(id, $(id).value);
+  $(id).onchange = () => store.set(id, $(id).value);
+}
+$('npStart').onclick = async () => {
+  const file = $('npFile').value;
+  const origin = {x: +$('npX').value, y: +$('npY').value, z: +$('npZ').value};
+  const list = $('npChests').value.split('\n').map((l) => l.trim().split(/[\s,]+/).map(Number)).filter((p) => p.length === 3 && p.every(Number.isFinite)).map(([x, y, z]) => ({x, y, z}));
+  const build = [...$('npBuild').querySelectorAll('.sel')].map((b) => b.dataset.bot), produce = [...$('npProduce').querySelectorAll('.sel')].map((b) => b.dataset.bot);
+  if (!file) return say('Erst ein Schematic wählen oder hochladen', true);
+  if (![origin.x, origin.y, origin.z].every(Number.isFinite) || $('npX').value === '') return say('Ort fehlt (x y z)', true);
+  if (!list.length) return say('Mindestens eine Projektkiste angeben', true);
+  if (!build.length && !produce.length) return say('Bots für Bau oder Material antippen', true);
+  if (!confirm(`${file} bei ${origin.x} ${origin.y} ${origin.z} starten?\nBau: ${build.join(', ') || '-'} · Material: ${produce.join(', ') || '-'}`)) return;
+  const args = {file, origin, rotation: +$('npRot').value, mirror: 'none', chests: list};
+  if (build.length) await sendJob(build, 'schematic', args, 'Bau gestartet');
+  if (produce.length) await sendJob(produce, 'produce', {...args, store: list[0]}, 'Material besorgen gestartet');
+};
+
+// ---- events ----
+let evLast = 0;
+const events = [];
+const QUIET = /make room|claim|skipped: another bot|missing material to fill|standing on/;
+async function loadEvents() {
+  try {
+    const j = await (await fetch('/api/events?since=' + evLast)).json();
+    evLast = j.lastId;
+    for (const e of j.events) if (e.kind !== 'claim' && !QUIET.test(e.text)) events.push(e);
+    events.splice(0, Math.max(0, events.length - 40));
+    $('events').replaceChildren(...events.slice().reverse().map((e) => el('div', {class: 'ev ' + e.kind},
+      el('span', {class: 'mut'}, new Date(e.t).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})),
+      el('b', {}, e.bot), el('span', {}, eventText(e.text)))));
+  } catch {}
+}
 
 // ---- server ----
 let conLast = 0, conTimer = null;
@@ -279,7 +693,7 @@ async function loadServer() {
     $('players').replaceChildren(...s.players.map((p) => el('span', {class: 'chip'}, p.name + (p.bot ? ' (Bot)' : ''))));
   } catch (e) { $('srvStatus').textContent = 'Server-Status nicht erreichbar: ' + e.message; }
   clearInterval(conTimer);
-  conTimer = setInterval(() => ($('pageServer').hidden ? clearInterval(conTimer) : loadConsole()), 2000);
+  conTimer = setInterval(() => (curTab !== 'server' ? clearInterval(conTimer) : loadConsole()), 2000);
   loadConsole();
 }
 async function loadConsole() {
@@ -287,13 +701,13 @@ async function loadConsole() {
     const j = await (await fetch('/api/admin/console?since=' + conLast)).json();
     conLast = j.lastId;
     const box = $('console');
-    for (const e of j.entries || []) box.append(el('div', {}, `${e.cmd ? '> ' + e.cmd + '\n' : ''}${e.reply ?? e.text ?? ''}`));
+    for (const e of j.entries || []) box.append(el('div', {}, `${e.cmd ? '> ' + e.cmd + '\n' : ''}${e.reply ?? ''}`));
     box.scrollTop = box.scrollHeight;
   } catch {}
 }
-$('refresh').onclick = loadServer;
+$('srvReload').onclick = loadServer;
 for (const b of document.querySelectorAll('[data-act]')) {
-  b.onclick = () => post('/api/admin/action', {action: b.dataset.act, value: b.dataset.value}).then(() => { say('erledigt: ' + b.textContent); loadConsole(); }, (e) => say(e.message, true));
+  b.onclick = () => post('/api/admin/action', {action: b.dataset.act, value: b.dataset.value}).then(() => { say('erledigt: ' + b.textContent.trim()); loadConsole(); }, (e) => say(e.message, true));
 }
 $('cmdForm').onsubmit = (e) => {
   e.preventDefault();
@@ -306,6 +720,7 @@ connect();
 loadEvents();
 loadMaterials();
 setInterval(loadMaterials, 15000);
+tab(curTab);
 </script>
 </body>
 </html>

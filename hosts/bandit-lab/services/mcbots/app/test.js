@@ -124,6 +124,7 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', DASHBOARD_HOST: '0.0.0.0'}));
 assert.ok(loadConfig({BOT_NAMES: 'bot1', DASHBOARD_HOST: '0.0.0.0', ALLOWED_TS_LOGINS: 'a@github'}).allowed.length);
 assert.deepStrictEqual(VALIDATE.goto({x: '1', y: 64, z: -3}), {x: 1, y: 64, z: -3});
 assert.throws(() => VALIDATE.goto({x: 'a', y: 1, z: 1}));
+assert.deepStrictEqual(VALIDATE.goto({x: 5, z: -7}), {x: 5, z: -7}, 'a spot tapped on the map has no height');
 assert.throws(() => VALIDATE.say({text: '/op me'}));
 assert.throws(() => VALIDATE.mine({block: 'Iron Ore'}));
 assert.throws(() => VALIDATE.mine({block: 'torch'}), /placed block/);

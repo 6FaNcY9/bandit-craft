@@ -5,7 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {WebSocketServer} = require('ws');
 const {loadConfig} = require('./config');
-const {BotRunner, keptOf, VALIDATE, projectMaterials} = require('./bots');
+const {BotRunner, keptOf, VALIDATE, projectMaterials, SCHEMATIC_DIR} = require('./bots');
+const buildLib = require('./build');
+const schematicLib = require('./schematic');
 const {WorldModel, startBlueMap} = require('./world');
 const {WINDOW_MS} = require('./debug');
 const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
@@ -178,6 +180,46 @@ const sameOrigin = (req) => {
 };
 const state = () => ({now: Date.now(), lastEventId: events.lastId, keeper: keeper?.state() || null, plan: plan?.state() || null, bots: [...runners.values()].map((r) => ({...r.snapshot(), settings: settings.get(r.name)})), world: world.snapshot(), protectedAreas: cfg.protectedAreas, supplyChest, places: places.list, projects: projects.view(), chest: supplyStock() && {warnings: chestWarnings(supplyStock().items, supplyStock().free)}});
 
+// A schematic upload: the raw .litematic, at most 4 MB.
+function readBytes(req, max = 4 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const parts = [];
+    let n = 0;
+    req.on('data', (c) => {
+      n += c.length;
+      if (n > max) {
+        reject(new Error('file too large (4 MB at most)'));
+        req.destroy();
+      } else parts.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(parts)));
+    req.on('error', reject);
+  });
+}
+// The schematics in the state volume with their size and block count (parsed once per file version).
+const schematicInfo = new Map(); // file -> {mtime, info}
+async function listSchematics() {
+  const out = [];
+  let files = [];
+  try { files = fs.readdirSync(SCHEMATIC_DIR).filter((f) => buildLib.SCHEMATIC_RE.test(f)); } catch {}
+  for (const file of files) {
+    const st = fs.statSync(path.join(SCHEMATIC_DIR, file));
+    let c = schematicInfo.get(file);
+    if (!c || c.mtime !== st.mtimeMs) {
+      try {
+        const s = await schematicLib.parseLitematic(fs.readFileSync(path.join(SCHEMATIC_DIR, file)));
+        const bom = schematicLib.billOfMaterials(s.blocks);
+        c = {mtime: st.mtimeMs, info: {file, name: s.name, size: s.size, blocks: s.blocks.length, items: bom.items}};
+      } catch (e) {
+        c = {mtime: st.mtimeMs, info: {file, error: e.message.slice(0, 120)}};
+      }
+      schematicInfo.set(file, c);
+    }
+    out.push(c.info);
+  }
+  return out;
+}
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -234,6 +276,33 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/') return send(200, 'text/html; charset=utf-8', page);
   if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(200, state());
+  if (req.method === 'GET' && url.pathname === '/api/schematics') return json(200, await listSchematics());
+  if (req.method === 'POST' && url.pathname === '/api/schematic') {
+    if (!sameOrigin(req) || req.headers['content-type'] !== 'application/octet-stream') return json(403, {error: 'bad origin'});
+    try {
+      const file = String(url.searchParams.get('name') || '').replace(/\.litematic$/i, '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) + '.litematic';
+      if (!buildLib.SCHEMATIC_RE.test(file) || file === '.litematic') throw new Error('name: letters, digits, - and _');
+      const bytes = await readBytes(req);
+      const s = await schematicLib.parseLitematic(bytes); // refuse anything that is not a litematic
+      fs.mkdirSync(SCHEMATIC_DIR, {recursive: true});
+      fs.writeFileSync(path.join(SCHEMATIC_DIR, file), bytes);
+      events.add('dashboard', 'info', `schematic ${file} uploaded (${s.blocks.length} blocks)`);
+      return json(200, {file, blocks: s.blocks.length, size: s.size});
+    } catch (e) {
+      return json(400, {error: e.message.slice(0, 200)});
+    }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/chests') {
+    // Every chest the bots counted: the storage index, the supply chest's last deposit, the projects' chests.
+    const now = Date.now(), out = [];
+    for (const [k, c] of world.chests) {
+      const [x, y, z] = k.split(',').map(Number);
+      out.push({kind: 'lager', dim: 'overworld', x, y, z, items: c.items, free: c.free, ageS: Math.round((now - c.t) / 1000)});
+    }
+    for (const st of world.stocks.values()) if (st.chest) out.push({kind: 'vorrat', dim: 'overworld', ...st.chest, items: st.items, free: st.free, ageS: Math.round((now - st.t) / 1000)});
+    for (const c of buildLib.stockList()) out.push({kind: 'projekt', ...c, ageS: Math.round((now - c.t) / 1000)});
+    return json(200, out);
+  }
   if (req.method === 'GET' && url.pathname === '/api/materials') {
     // The first bot of this process that runs a schematic project and sees its site (workers' bots are not here).
     for (const r of runners.values()) {

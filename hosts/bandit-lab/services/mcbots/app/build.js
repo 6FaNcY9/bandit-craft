@@ -426,6 +426,12 @@ async function readStock(r, job, chests, {goNear, guard}) {
 }
 const forgetChest = (dim, c) => CHEST_STOCK.delete(chestKey(dim, c));
 const chestStock = (dim, c) => CHEST_STOCK.get(chestKey(dim, c))?.items || null; // Map(item -> count) as last seen, or null
+// Every chest a crew counted, for the dashboard: [{dim, x, y, z, items: {name: count}, t}].
+const stockList = () => [...CHEST_STOCK].map(([k, st]) => {
+  const [dim, xyz] = k.split(':');
+  const [x, y, z] = xyz.split(',').map(Number);
+  return {dim, x, y, z, items: Object.fromEntries(st.items), t: st.t};
+});
 
 // Turn to `look` and click `way` (placing.js) on the cell `t` while sneaking, so a chest or hopper clicked
 // is placed against instead of opened. mineflayer 4.39: look(force=true) never sends the turn, and look()
@@ -1233,4 +1239,4 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
 }
 
 module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
-  makeSchematic, schematicPlan, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock};
+  makeSchematic, schematicPlan, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList};

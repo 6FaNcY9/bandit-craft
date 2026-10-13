@@ -85,7 +85,8 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 // Normalise and validate job arguments (throws on bad input).
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
 const VALIDATE = {
-  goto: xyz,
+  // Without y (a spot tapped on the dashboard's map): walk there in x and z only.
+  goto: (a) => (a.y === undefined || a.y === null ? {x: num(a.x, -3e7, 3e7, 'x'), z: num(a.z, -3e7, 3e7, 'z')} : xyz(a)),
   follow: player,
   come: player,
   // Guard a spot (x,y,z) or a player: fight every hostile within radius of it.
@@ -794,13 +795,14 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
       await goLeg(r, job, p.x, up, p.z, 2, {...opts, goal: new goals.GoalY(up), doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
     }
   };
-  await climb(covered);
-  for (let i = 0; i < 20 && !opts.goal && r.bot?.entity; i++) {
+  if (!opts.xz) await climb(covered);
+  for (let i = 0; i < 20 && (!opts.goal || opts.xz) && r.bot?.entity; i++) {
     const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
     if (d <= LEG + 16) break;
     const lx = p.x + ((x - p.x) * LEG) / d, lz = p.z + ((z - p.z) * LEG) / d;
     await goLeg(r, job, lx, y, lz, 4, {...opts, goal: new goals.GoalNearXZ(lx, lz, 4), doing: opts.doing || `walking to ${at({x, y, z})}`});
   }
+  if (opts.xz) return goLeg(r, job, x, y, z, dist, {...opts, goal: new goals.GoalNearXZ(x, z, dist)});
   try {
     return await goLeg(r, job, x, y, z, dist, opts);
   } catch (e) {
@@ -1825,7 +1827,7 @@ async function projectMaterials(r) {
   const p = planMaterials(lacking, {have: stock});
   const cannot = [...p.unknown, ...p.gather.filter((g) => !productionLib.gatherJob(g.how, 1)).map((g) => g.item)];
   const owner = rawUnknown(Object.fromEntries(cannot.map((n) => [n, lacking[n] || p.gather.find((g) => g.item === n)?.count || 1])), {have: stock});
-  return {file: job.args.file, origin: job.args.origin, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
+  return {file: job.args.file, origin: job.args.origin, lo: plan.lo, hi: plan.hi, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
 }
 async function produce(r, job) {
   const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
@@ -1965,7 +1967,9 @@ const JOBS = {
   seal,
   hunt,
   bed,
-  goto: (r, job) => goNear(r, job, job.args.x, job.args.y, job.args.z, 1),
+  goto: (r, job) => (job.args.y === undefined
+    ? goNear(r, job, job.args.x, r.bot.entity.position.y, job.args.z, 2, {xz: true, doing: `walking to ${job.args.x} ${job.args.z}`})
+    : goNear(r, job, job.args.x, job.args.y, job.args.z, 1)),
 
   // Walks to the player (live entity when tracked, else the BlueMap position)
   // and is done within 3 blocks.
@@ -2538,4 +2542,4 @@ const JOBS = {
   },
 };
 
-module.exports = {projectMaterials, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {projectMaterials, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
