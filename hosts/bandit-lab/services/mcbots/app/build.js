@@ -494,7 +494,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const free = (name) => REPLACEABLE.has(name) || /water|lava/.test(name);
     const placed = recordOf(dim, {blocks: plan.targets.map(keyOf)}); // ours: may be dug again to repair
     const ours = (k, name) => placed.has(k) && plan.byKey.get(k)?.p.item === placing.itemOf(name);
-    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || (name === GLASS && !plan.cells.has(k));
+    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS; // glass where the schematic wants another block is our scaffolding, and it drops nothing
     // Whether a drop at x,y,z comes to rest in a hopper: in the world now, or (`final`) in the finished build,
     // where a support decides its material.
     const landsInHopper = (x, y, z, final) => {
