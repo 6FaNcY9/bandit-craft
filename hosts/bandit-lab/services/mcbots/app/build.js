@@ -643,10 +643,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const freeSlots = () => 36 - bot.inventory.items().length - RESERVE_SLOTS;
     // Into the first chest with room: the material chest filled up and took 18 of 96 shears (one a slot).
     const fullUntil = new Map(); // chest key -> until: a deposit found it full or out of reach
-    async function makeRoom() {
+    async function makeRoom(slots = 8) {
       const spare = new Set(bot.inventory.items().map((it) => it.name).filter((n) => FILLS.has(n)));
       for (const only of [...spare, null]) {
-        if (only === null && freeSlots() >= 8) break; // the build blocks it carries stay when that made room
+        if (only === null && freeSlots() >= slots) break; // the build blocks it carries stay when that made room
         for (const c of chests.filter((q) => (fullUntil.get(ckOf(q)) || 0) < Date.now()).slice(0, 8)) {
           try {
             await deposit(r, job, c, only);
@@ -735,9 +735,11 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       const stackOf = (item) => bot.registry.itemsByName[item]?.stackSize || 64;
       const slots = [...want].reduce((sum, [item, n]) => sum + Math.ceil(Math.max(0, n - (count()[item] || 0)) / stackOf(item)), 0);
       // All of them, the wanted ones too: 32 shears for a chest of 27 left no slot for the dirt.
+      // Room for all of it, build blocks stowed too: with them a trip carried 12-15 shears, and every chest high in
+      // the build took two climbs (the climb costs more than taking the blocks again).
       if (freeSlots() < slots + 1 && chests.length) {
         job.t.doing = `making room to fill ${t.name} at ${k}`;
-        await makeRoom();
+        await makeRoom(slots + 1);
       }
       // Dirt first: the chest may stand high in the build, and without it the walk cannot climb there
       // (six chests 11 up "No path" for every bot). Then the contents, as many as fit beside the reserve.
