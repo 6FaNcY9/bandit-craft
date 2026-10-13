@@ -536,7 +536,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     };
     const mv = bot.pathfinder.movements;
     const scaffold = mv.scafoldingBlocks;
-    const avoidIds = ['comparator', 'repeater'].map((n) => bot.registry.blocksByName[n]?.id).filter((id) => id != null && !mv.blocksToAvoid.has(id));
+    const avoidSet = mv.blocksToAvoid;
+    const avoidIds = ['comparator', 'repeater'].map((n) => bot.registry.blocksByName[n]?.id).filter((id) => id != null && !avoidSet.has(id));
     const skip = new Map(); // key -> until
     const tries = new Map(); // key -> repairs done
     const asIs = new Set(); // rails over a hopper in another shape: not dug (the drop would go into the machine)
@@ -844,9 +845,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       // Climb and bridge with dirt only, never the build's material: dirt in an air cell comes out at the end, while
       // the cobblestone the pathfinder also uses stayed in the sorter's air cells as the owner's (sandbox 2026-10-13).
       mv.scafoldingBlocks = [bot.registry.itemsByName[SCAFFOLD].id].filter((id) => !wanted.has(id));
-      // Never onto a comparator or repeater: from inside such a low cell the pathfinder finds no move, and the
-      // bot took the same comparator out three times in five minutes (sandbox 2026-10-13).
-      for (const id of avoidIds) mv.blocksToAvoid.add(id);
+      // Not onto a comparator or repeater: from inside such a low cell the pathfinder finds no move, and the bot
+      // took the same comparator out three times in five minutes (sandbox 2026-10-13). Only while a way is found:
+      // at the sorter's far end the only way led over comparators, and the whole crew gave up there.
+      mv.blocksToAvoid = {has: (id) => avoidSet.has(id) || (noPath < 2 && avoidIds.includes(id)), add: (id) => avoidSet.add(id), delete: (id) => avoidSet.delete(id)};
       for (;;) {
         await new Promise((res) => setImmediate(res)); // let packets in: a loop whose awaits all resolve at once starves them
         guard(job);
@@ -1189,7 +1191,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         if (i >= 0) list.splice(i, 1);
       }
       mv.scafoldingBlocks = scaffold;
-      for (const id of avoidIds) mv.blocksToAvoid.delete(id);
+      mv.blocksToAvoid = avoidSet;
       bot.setControlState('sneak', false);
       bot.removeListener('blockUpdate', dropState);
       bot.removeListener('chunkColumnLoad', dropStates);
