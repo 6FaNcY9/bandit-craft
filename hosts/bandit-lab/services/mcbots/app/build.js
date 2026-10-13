@@ -341,6 +341,11 @@ const RESERVE_SLOTS = 4; // inventory slots a restock leaves free (drops, a tool
 // click) get a pillar of this under them, in cells that are air in the schematic; dirt, so the clear pass
 // takes it out again at the end, and after a restart, when the record of the pillars is gone.
 const SCAFFOLD = 'dirt';
+// A support whose drop would land in a hopper is glass, which drops nothing: dirt and rails fell into the sorter's
+// hoppers and went round it into 30 of its containers (sandbox 2026-10-13).
+const GLASS = 'glass';
+// What a dropped item falls through (no collision box): it comes to rest on the first block below with one.
+const FALL_THROUGH = /(^|_)(rail|redstone_wire|torch|button|lever|pressure_plate|sapling|tripwire)$|^(air|cave_air|light|short_grass|tall_grass|fern)$/;
 const SCAFFOLD_MAX = 32; // the highest pillar the build puts up (the sorter needs 14 for a hopper at its edge)
 const BELOW = {against: [0, -1, 0], face: [0, 1, 0], cursor: null, look: null};
 // What does not keep a chest below it shut (vanilla: only a full solid block on top does, isRedstoneConductor).
@@ -362,9 +367,15 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none'}) {
       const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
       for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
       const targets = order.map((t) => ({...t, p: placing.placement(t.name, t.props), late: deferred.has(keyOf(t))}));
+      // Containers filled: kept in the state directory, merged with what other processes wrote (the lab runs
+      // bot1 and bot2-3 in two), so a restart does not send the crew to every chest again.
+      const filledFile = path.join(dir, `.filled-${file}-${origin.x},${origin.y},${origin.z}-${rotation}-${mirror}.json`);
+      const readFilled = () => { try { return JSON.parse(fs.readFileSync(filledFile, 'utf8')); } catch { return []; } };
+      const filled = new Set(readFilled());
+      const saveFilled = () => { try { fs.writeFileSync(filledFile, JSON.stringify([...new Set([...readFilled(), ...filled])])); } catch {} };
       // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
       // both for the whole crew, until the end
-      return {targets, byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set()};
+      return {targets, byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
     })().catch((e) => {
       SCHEMATIC_PLANS.delete(k);
       throw e;
@@ -463,7 +474,17 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const free = (name) => REPLACEABLE.has(name) || /water|lava/.test(name);
     const placed = recordOf(dim, {blocks: plan.targets.map(keyOf)}); // ours: may be dug again to repair
     const ours = (k, name) => placed.has(k) && plan.byKey.get(k)?.p.item === placing.itemOf(name);
-    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name);
+    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k);
+    // Whether a drop at x,y,z comes to rest in a hopper: in the world now, or (`final`) in the finished build,
+    // where a support decides its material.
+    const landsInHopper = (x, y, z, final) => {
+      for (let b = y - 1; b >= lo.y - 2; b--) {
+        const name = final && b >= lo.y ? (plan.byKey.get(`${x},${b},${z}`)?.name ?? 'air') : stateAt(x, b, z)?.name;
+        if (name === 'hopper') return true;
+        if (!name || !FALL_THROUGH.test(name)) return false;
+      }
+      return false;
+    };
     // The pathfinder may neither break nor place in a cell of the schematic, nor dig under the site or through
     // a support; in the site's air cells it may climb on dirt (19 high: the bots could not get up, 2026-10-13).
     const inSite = (p) => p.x >= lo.x && p.x <= hi.x && p.z >= lo.z && p.z <= hi.z;
@@ -478,7 +499,13 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       if (!plan.cells.has(k)) return 0;
       return noPath >= 2 && PLAIN.test(blk.name) ? 0 : 100;
     };
-    const vetoPlace = (blk) => (inSite(blk.position) && plan.cells.has(keyOf(blk.position)) ? 100 : 0);
+    // Nor on a material chest (it then stays shut: "did not open"), nor where dirt would later fall into a hopper.
+    const lidCells = new Set(chests.flatMap((c) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => `${c.x + dx},${c.y + 1},${c.z + dz}`)));
+    const vetoPlace = (blk) => {
+      const p = blk.position, k = keyOf(p);
+      if (lidCells.has(k)) return 100;
+      return inSite(p) && (plan.cells.has(k) || landsInHopper(p.x, p.y, p.z, true)) ? 100 : 0;
+    };
     // Standing on a low block inside its own cell (a comparator): the pathfinder plans from that cell, finds
     // no move and "moves" until its deadline (two bots stood on one for minutes). After a failed walk the
     // bot takes that block out (picking it up) and the build places it again.
@@ -493,6 +520,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const scaffold = mv.scafoldingBlocks;
     const skip = new Map(); // key -> until
     const tries = new Map(); // key -> repairs done
+    const asIs = new Set(); // rails over a hopper in another shape: not dug (the drop would go into the machine)
     const lacking = new Map(); // item -> until: not in any chest, looked again after 5 min
     const stuck = new Map(); // key -> what is in the way that the bot may not dig
     const pillars = recordOf(dim, {blocks: ['scaffold', ...plan.targets.map(keyOf)]}); // cells holding a support pillar
@@ -624,7 +652,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         stacks += more;
         need.set(t.p.item, n);
       }
-      if (!need.has(want)) need.set(want, 1);
+      if (!need.has(want)) need.set(want, want === GLASS ? 16 : 1);
       if ((count()[SCAFFOLD] || 0) < 32) need.set(SCAFFOLD, Math.max(need.get(SCAFFOLD) || 0, 64)); // to climb and to prop
       for (const [item, n] of need) {
         await take(item, n, (left) => `taking ${left} ${item} for the build`);
@@ -637,7 +665,18 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // and the rest at the end, once the redstone that locks them stands (else they pass the items on).
     // A double chest is filled for both halves: the window shows both.
     const CW = {north: 'east', east: 'south', south: 'west', west: 'north'}, CCW = {north: 'west', west: 'south', south: 'east', east: 'north'};
-    const filled = new Set();
+    const {filled} = plan;
+    const seen = new Map(); // container key -> {item: count} when a bot of this process last had it open
+    const contents = (win) => {
+      const c = {};
+      for (const it of win.containerItems()) c[it.name] = (c[it.name] || 0) + it.count;
+      return c;
+    };
+    const reach = async (t, k) => {
+      const eye = bot.entity.position.offset(0, 1.62, 0);
+      if (eye.distanceTo(v(t).offset(0.5, 0.5, 0.5)) > 4.5) await goNear(r, job, t.x, t.y, t.z, 4, {goal: new GoalBeside(t, 4), doing: `walking to fill ${t.name} at ${k}`});
+      guard(job);
+    };
     async function fill(t) {
       const k = keyOf(t);
       const want = new Map();
@@ -646,6 +685,21 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       const side = {left: CW, right: CCW}[t.props.type]?.[t.props.facing];
       const partner = side && plan.byKey.get(keyOf(v(t).offset(...placing.DIRS[side])));
       if (partner && stateAt(partner.x, partner.y, partner.z)?.props?.type === t.props.type) add(partner.items);
+      // A container this process did not place may be full already (filled before a restart, or by a bot of the
+      // other process): a look first, instead of fetching 27 shears for it.
+      if (!seen.has(k) && !placed.has(k)) {
+        await reach(t, k);
+        job.t.doing = `looking into ${t.name} at ${k}`;
+        const win = await bot.openContainer(bot.blockAt(v(t)));
+        try { seen.set(k, contents(win)); } finally { win.close(); }
+      }
+      for (const [item, n] of want) want.set(item, Math.max(0, n - (seen.get(k)?.[item] || 0)));
+      for (const [item, n] of want) if (!n) want.delete(item);
+      if (!want.size) {
+        filled.add(k);
+        plan.saveFilled();
+        return;
+      }
       // Room first: 27 shears are 27 slots, and a bot full of build blocks carried 9 a trip.
       const stackOf = (item) => bot.registry.itemsByName[item]?.stackSize || 64;
       const slots = [...want].reduce((sum, [item, n]) => sum + Math.ceil(Math.max(0, n - (count()[item] || 0)) / stackOf(item)), 0);
@@ -661,19 +715,20 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         const fits = Math.min(n, (count()[item] || 0) + Math.max(0, freeSlots()) * stackOf(item));
         if (fits > 0) await take(item, fits, (left) => `taking ${left} ${item} to fill ${t.name} at ${k}`);
       }
-      const eye = bot.entity.position.offset(0, 1.62, 0);
-      if (eye.distanceTo(v(t).offset(0.5, 0.5, 0.5)) > 4.5) await goNear(r, job, t.x, t.y, t.z, 4, {goal: new GoalBeside(t, 4), doing: `walking to fill ${t.name} at ${k}`});
-      guard(job);
+      await reach(t, k);
       job.t.doing = `filling ${t.name} at ${k}`;
       const win = await bot.openContainer(bot.blockAt(v(t)));
       const missing = [];
       try {
+        // `want` is net of what was in it at the last look; the window counts again (another bot may have filled).
+        const had = seen.get(k) || {};
         for (const [item, n] of want) {
-          const have = win.containerItems().filter((i) => i.name === item).reduce((a, i) => a + i.count, 0);
+          const have = (contents(win)[item] || 0) - (had[item] || 0);
           const give = Math.min(n - have, count()[item] || 0);
           if (give > 0) await win.deposit(bot.registry.itemsByName[item].id, null, give);
           if (n - have - give > 0) missing.push(`${n - have - give} ${item}`);
         }
+        seen.set(k, contents(win));
       } finally {
         win.close();
       }
@@ -682,15 +737,80 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         throw new Error(`missing material to fill ${t.name} at ${k}: ${missing.join(', ')}`);
       }
       filled.add(k);
+      plan.saveFilled();
       lastProgress = Date.now();
     }
     const fillsNow = (t) => /(^|_)chest$|shulker_box$/.test(t.name);
+
+    // A rail takes its shape from the rails beside it when it is placed, and keeps it when they go (vanilla
+    // RailState, checked with setblock in the sandbox 2026-10-13); a rail placed later beside it bends it, if it
+    // has a free end. The sorter's curves stand in straight lines with air on their curved side, so a plain
+    // repair placed them straight again. Here: the rails on its other sides come out, a temporary rail stands on
+    // each wanted side without one, the rail goes in, the others go back while the temporaries still stand,
+    // then the temporaries come out. One bot does it all, holding the cells.
+    const SIDES = {north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0]};
+    const railAt = (p) => /rail$/.test(stateAt(p.x, p.y, p.z)?.name || '');
+    async function put(c) {
+      const w = c.p.ways.find((q) => solid(stateAt(c.x + q.against[0], c.y + q.against[1], c.z + q.against[2])?.name));
+      if (!w) throw new Error(`nothing to click for ${c.name} at ${keyOf(c)}`);
+      if (!count()[c.p.item]) await take(c.p.item, 2, (left) => `taking ${left} ${c.p.item} to reshape a rail`);
+      const item = bot.inventory.items().find((i) => i.name === c.p.item);
+      if (!item) throw new Error(`missing material to reshape a rail: ${c.p.item}`);
+      const eye = bot.entity.position.offset(0, 1.62, 0);
+      if (eye.distanceTo(v(c).offset(w.against[0] + 0.5, w.against[1] + 0.5, w.against[2] + 0.5)) > 4.5) {
+        await goNear(r, job, c.x, c.y, c.z, 4, {goal: new GoalBeside(c, 4), doing: `walking to place ${c.name} at ${keyOf(c)}`});
+      }
+      guard(job);
+      await bot.equip(item, 'hand');
+      guard(job);
+      await clickFace(bot, v(c), w, sleep);
+      for (let i = 0; i < 10 && stateAt(c.x, c.y, c.z)?.name !== c.name; i++) await sleep(100);
+      if (stateAt(c.x, c.y, c.z)?.name !== c.name) throw new Error(`placing ${c.name} at ${keyOf(c)} did not take`);
+    }
+    // -> true reshaped, null not now (cells held, a step failed: tried again later), false not this way.
+    async function reshapeRail(t) {
+      const want = String(t.props.shape || '').split('_');
+      if (want.length !== 2 || !want.every((d) => SIDES[d])) return false; // ascending: the plain repair
+      const side = (d) => v(t).offset(...SIDES[d]);
+      const others = Object.keys(SIDES).filter((d) => !want.includes(d) && railAt(side(d))).map((d) => plan.byKey.get(keyOf(side(d))));
+      if (others.some((o) => !o)) return false; // a rail that is not the build's
+      if ([t, ...others].some((c) => landsInHopper(c.x, c.y, c.z, false))) return false;
+      const temps = [], lift = []; // lift: build blocks standing where a temporary rail must go, placed again later
+      for (const d of want.filter((d) => !railAt(side(d)))) {
+        const p = side(d), h = stateAt(p.x, p.y, p.z);
+        if (bot.blockAt(p.offset(0, -1, 0))?.boundingBox !== 'block' || landsInHopper(p.x, p.y, p.z, false)) return false; // a full block under it, not a hopper
+        if (h && !free(h.name)) {
+          if (!ours(keyOf(p), h.name) || landsInHopper(p.x, p.y, p.z, false)) return false;
+          lift.push(p);
+        }
+        temps.push({x: p.x, y: p.y, z: p.z, name: 'rail', props: {}, p: placing.placement('rail', {shape: 'north_south'})});
+      }
+      const cells = [t, ...others, ...temps];
+      const keys = cells.map(ckey);
+      const held = [];
+      try {
+        for (const k of keys) {
+          if (r.world && !(await r.world.claim(r.name, k))) return null;
+          held.push(k);
+        }
+        job.t.doing = `reshaping ${t.name} at ${keyOf(t)} to ${t.props.shape}`;
+        for (const c of [...others, t]) await digAt(r, job, v(c), (n) => n === c.name);
+        for (const p of lift) await digAt(r, job, p, null);
+        for (const c of [...temps, t, ...others]) await put(c);
+        return placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?'}, {final: true}) || null;
+      } finally {
+        for (const c of temps) if (railAt(c)) await digAt(r, job, v(c), (n) => n === 'rail').catch(() => guard(job));
+        for (const k of held) r.world?.release(r.name, k);
+      }
+    }
 
     try {
       mv.exclusionAreasBreak.push(vetoBreak);
       mv.exclusionAreasPlace.push(vetoPlace);
       const wanted = new Set(plan.targets.map((t) => bot.registry.itemsByName[t.p.item]?.id));
-      mv.scafoldingBlocks = scaffold.filter((id) => !wanted.has(id)); // never pillar with the build's material
+      // Climb and bridge with dirt only, never the build's material: dirt in an air cell comes out at the end, while
+      // the cobblestone the pathfinder also uses stayed in the sorter's air cells as the owner's (sandbox 2026-10-13).
+      mv.scafoldingBlocks = [bot.registry.itemsByName[SCAFFOLD].id].filter((id) => !wanted.has(id));
       for (;;) {
         guard(job);
         const now = Date.now();
@@ -728,6 +848,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               if (pillars.has(k) && !allPlaced && !(reqT && placing.matches(reqT, stateAt(reqT.x, reqT.y, reqT.z) || {name: '?'}))) continue;
               if (!t && h.name === SCAFFOLD && !allPlaced) continue; // dirt in an air cell: a support or a climb, out at the end
               if (!clearable(k, h.name)) { stuck.set(k, h.name); continue; }
+              if (h.name !== GLASS && landsInHopper(x, y, z, false)) { stuck.set(k, `${h.name} over a hopper`); continue; }
               // A cell with a free side first: an inner cell shows only its top, which the walk cannot reach
               // from below and ran into its timeout for every block. The rest opens up from the edges.
               const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => free(stateAt(x + dx, y, z + dz)?.name ?? 'stone'));
@@ -814,7 +935,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         for (const t of plan.targets) {
           const k = keyOf(t);
           const h = stateAt(t.x, t.y, t.z);
-          if (h && placing.matches(t, h, {final})) continue;
+          if (h && (placing.matches(t, h, {final}) || (asIs.has(k) && h.name === t.name))) continue;
           open++;
           if (!h || stuck.has(k)) continue;
           if (skip.has(k)) { held++; continue; }
@@ -874,12 +995,13 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             }
           }
           if (best?.real) return best.real;
-          return best && {t: {x: best.x, y: best.y, z: best.z, name: SCAFFOLD, props: {}, p: {item: SCAFFOLD, check: [], ways: [best.w]}, pillar: true, for: best.for}, w: best.w};
+          const item = best && landsInHopper(best.x, best.y, best.z, true) ? GLASS : SCAFFOLD;
+          return best && {t: {x: best.x, y: best.y, z: best.z, name: item, props: {}, p: {item, check: [], ways: [best.w]}, pillar: true, for: best.for}, w: best.w};
         };
         next ??= pillarFor(false) || above || pillarFor(false, false) || late || pillarFor(true, false);
-        if (next?.t.pillar && !count()[SCAFFOLD]) {
-          await restock(SCAFFOLD);
-          if (!count()[SCAFFOLD]) { waiting.add(SCAFFOLD); next = null; }
+        if (next?.t.pillar && !count()[next.t.p.item]) {
+          await restock(next.t.p.item);
+          if (!count()[next.t.p.item]) { waiting.add(next.t.p.item); next = null; }
         }
         allPlaced = !open;
         idle = !next && !repair;
@@ -903,13 +1025,33 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             continue;
           }
           job.noop = first;
+          if (asIs.size) r.emit?.('info', `schematic done; ${asIs.size} rails over hoppers keep another shape (no cart runs there): ${[...asIs].slice(0, 4).join(' ')}`);
           if (stuck.size) r.emit?.('info', `schematic done; ${stuck.size} cells in the way were left (not ours): ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}`);
           return;
         }
         first = false;
         if (!next && repair) {
           const k = keyOf(repair);
+          if (landsInHopper(repair.x, repair.y, repair.z, false)) { // its drop (and contents) would go round the machine
+            // A rail there carries no cart (the sorter's covers on its hoppers): left in its shape and reported, so the
+            // build goes on to its end fills. Anything else stays wrong for the final check to name.
+            if (/rail$/.test(repair.name)) asIs.add(k);
+            else tries.set(k, 3);
+            r.emit?.('info', `not repairing ${repair.name} at ${k}: it stands over a hopper, its drop would go into the machine`);
+            continue;
+          }
           tries.set(k, (tries.get(k) || 0) + 1);
+          if (/rail$/.test(repair.name)) {
+            const ok = await reshapeRail(repair).catch((e) => {
+              guard(job);
+              if (!/could not reach|unsafe|aborted|needs a tool|missing material|did not take|nothing to click/.test(e.message)) throw e;
+              r.emit?.('info', `reshaping ${repair.name} at ${k}: ${e.message.slice(0, 120)}`);
+              return null;
+            });
+            if (ok) lastProgress = Date.now();
+            else if (ok === null) skip.set(k, Date.now() + 30000);
+            if (ok !== false) continue;
+          }
           job.t.doing = `taking out ${repair.name} at ${k} to place it again`;
           if (await digAt(r, job, v(repair)).catch((e) => { guard(job); if (!/could not reach|unsafe|aborted|needs a tool/.test(e.message)) throw e; return false; })) lastProgress = Date.now();
           else skip.set(k, Date.now() + 30000);
@@ -917,7 +1059,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         }
         if (!next) {
           if (final && !held) {
-            const left = plan.targets.filter((t) => !placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?'}, {final: true}));
+            const left = plan.targets.filter((t) => !asIs.has(keyOf(t)) && !placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?'}, {final: true}));
             throw new Error(`${left.length} cells are still not as in the schematic, e.g. ${left.slice(0, 3).map((t) => `${t.name} ${JSON.stringify(t.props)} at ${keyOf(t)}`).join('; ')}`);
           }
           const why = waiting.size ? `waiting for material: ${[...waiting].join(', ')}` : stuck.size ? `in the way: ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}` : `${open} cells left that this bot cannot place or reach`;
@@ -974,7 +1116,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           }
           const h = stateAt(t.x, t.y, t.z);
           if (t.pillar) {
-            if (h?.name === SCAFFOLD) {
+            if (h?.name === t.name) {
               pillars.add(k);
               if (plan.byKey.has(k)) tempFor.set(k, t.for);
               lastProgress = Date.now();
