@@ -859,6 +859,13 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         await new Promise((res) => setImmediate(res)); // let packets in: a loop whose awaits all resolve at once starves them
         guard(job);
         glassCarried = count()[GLASS] || 0;
+        // Cells someone stands in (feet and head): placing there fails again and again.
+        const occupied = new Set();
+        for (const e of Object.values(bot.entities)) {
+          if (e === bot.entity || !e.position || (e.type !== 'player' && e.type !== 'mob' && e.type !== 'hostile' && e.type !== 'animal')) continue;
+          const f = e.position.floored();
+          occupied.add(keyOf(f)).add(`${f.x},${f.y + 1},${f.z}`);
+        }
         const now = Date.now();
         for (const [k, until] of skip) if (until < now) skip.delete(k);
         // Far away (after a respawn at world spawn): walk to the site first, it is not even loaded.
@@ -990,6 +997,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             continue;
           }
           if (!free(h.name) || (lids.has(k) && !OPEN_LID.test(t.name))) continue;
+          if (occupied.has(k)) { held++; continue; } // someone stands there
           if (t.late && held) continue; // power last: not while an ordinary cell is only held by another bot
           if ((lacking.get(t.p.item) || 0) > Date.now()) { waiting.add(t.p.item); continue; }
           const w = t.p.ways.find((w) => solid(stateAt(t.x + w.against[0], t.y + w.against[1], t.z + w.against[2])?.name));
@@ -1178,7 +1186,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             lastProgress = Date.now();
             // a chest with contents is filled by the next loop (2a), before anything goes on top
           }
-          else skip.set(k, Date.now() + 30000); // try the others, then again (or dig it out: the repair)
+          else {
+            skip.set(k, Date.now() + 30000); // try the others, then again (or dig it out: the repair)
+            stalled(`placing ${t.name} at ${k} did not take`);
+          }
         } catch (e) {
           guard(job);
           // Nothing in hand at the click (eaten, or a fight took the slot): that cell again later.
@@ -1192,6 +1203,20 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           r.world?.release(r.name, ck);
         }
       }
+    } catch (e) {
+      // A bot that gives up must not stay in a cell of the build: bot53 stood in a comparator's cell for 40 minutes
+      // while bot51 kept placing it (sandbox 2026-10-13). Not on a stop: then it stands still at once.
+      const f = bot.entity?.position.floored();
+      if (!job.cancelled && f && f.x >= lo.x && f.x <= hi.x && f.z >= lo.z && f.z <= hi.z && f.y >= lo.y && f.y <= hi.y + 1) {
+        const leave = {
+          heuristic: (n) => Math.max(0, Math.min(n.x - lo.x + 2, hi.x + 2 - n.x, n.z - lo.z + 2, hi.z + 2 - n.z)),
+          isEnd: (n) => n.x < lo.x - 1 || n.x > hi.x + 1 || n.z < lo.z - 1 || n.z > hi.z + 1,
+          hasChanged: () => false,
+          isValid: () => true,
+        };
+        await goNear(r, job, f.x, f.y, f.z, 0, {goal: leave, doing: 'leaving the build site'}).catch(() => {});
+      }
+      throw e;
     } finally {
       for (const [list, veto] of [[mv.exclusionAreasBreak, vetoBreak], [mv.exclusionAreasPlace, vetoPlace]]) {
         const i = list.indexOf(veto);
