@@ -1798,7 +1798,7 @@ const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, na
 // A step one bot works on is left to the others (this process's bots); a failed step rests 10 minutes.
 const productionLib = require('./production');
 const PRODUCING = new Map(); // step key -> {by, until}
-const SUPPORT_STOCK = {glass: 64, dirt: 128};
+const SUPPORT_STOCK = {glass: 320, dirt: 128}; // the crew climbs on glass over hoppers: some hundred a sorter
 async function produce(r, job) {
   const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
   const {store} = job.args;

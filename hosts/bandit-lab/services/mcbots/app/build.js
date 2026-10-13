@@ -488,7 +488,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const free = (name) => REPLACEABLE.has(name) || /water|lava/.test(name);
     const placed = recordOf(dim, {blocks: plan.targets.map(keyOf)}); // ours: may be dug again to repair
     const ours = (k, name) => placed.has(k) && plan.byKey.get(k)?.p.item === placing.itemOf(name);
-    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k);
+    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || (name === GLASS && !plan.cells.has(k));
     // Whether a drop at x,y,z comes to rest in a hopper: in the world now, or (`final`) in the finished build,
     // where a support decides its material.
     const landsInHopper = (x, y, z, final) => {
@@ -505,6 +505,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // A bot that found no path twice (walled in by the build, sandbox 2026-10-13) may dig out through plain
     // blocks of the build; the repair puts them back. Never containers, redstone parts or what hangs on them.
     let noPath = 0;
+    let glassCarried = 0; // counted each loop: the pathfinder asks vetoPlace for thousands of cells
     const PLAIN = /^(stone|cobblestone|glass|target|redstone_lamp|note_block|dirt|stone_slab|smooth_stone_slab|stone_bricks)$/;
     const vetoBreak = (blk) => {
       const k = keyOf(blk.position);
@@ -518,7 +519,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const vetoPlace = (blk) => {
       const p = blk.position, k = keyOf(p);
       if (lidCells.has(k)) return 100;
-      return inSite(p) && (plan.cells.has(k) || landsInHopper(p.x, p.y, p.z, true)) ? 100 : 0;
+      // Over a hopper only while the bot carries glass, which the pathfinder then places (dirt would fall in later).
+      return inSite(p) && (plan.cells.has(k) || (glassCarried < 8 && landsInHopper(p.x, p.y, p.z, true))) ? 100 : 0;
     };
     // Standing on a low block inside its own cell (a comparator): the pathfinder plans from that cell, finds
     // no move and "moves" until its deadline (two bots stood on one for minutes). After a failed walk the
@@ -686,6 +688,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       }
       if (!need.has(want)) need.set(want, want === GLASS ? 16 : 1);
       if ((count()[SCAFFOLD] || 0) < 32) need.set(SCAFFOLD, Math.max(need.get(SCAFFOLD) || 0, 64)); // to climb and to prop
+      if ((count()[GLASS] || 0) < 16) need.set(GLASS, Math.max(need.get(GLASS) || 0, 64)); // to climb over hoppers
       for (const [item, n] of need) {
         await take(item, n, (left) => `taking ${left} ${item} for the build`);
         if (!count()[item]) lacking.set(item, Date.now() + 300000);
@@ -844,7 +847,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       const wanted = new Set(plan.targets.map((t) => bot.registry.itemsByName[t.p.item]?.id));
       // Climb and bridge with dirt only, never the build's material: dirt in an air cell comes out at the end, while
       // the cobblestone the pathfinder also uses stayed in the sorter's air cells as the owner's (sandbox 2026-10-13).
-      mv.scafoldingBlocks = [bot.registry.itemsByName[SCAFFOLD].id].filter((id) => !wanted.has(id));
+      // Glass first (it drops nothing when broken, so it may stand over a hopper), dirt when the glass is out.
+      mv.scafoldingBlocks = [bot.registry.itemsByName[GLASS].id, ...[bot.registry.itemsByName[SCAFFOLD].id].filter((id) => !wanted.has(id))];
       // Not onto a comparator or repeater: from inside such a low cell the pathfinder finds no move, and the bot
       // took the same comparator out three times in five minutes (sandbox 2026-10-13). Only while a way is found:
       // at the sorter's far end the only way led over comparators, and the whole crew gave up there.
@@ -852,6 +856,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       for (;;) {
         await new Promise((res) => setImmediate(res)); // let packets in: a loop whose awaits all resolve at once starves them
         guard(job);
+        glassCarried = count()[GLASS] || 0;
         const now = Date.now();
         for (const [k, until] of skip) if (until < now) skip.delete(k);
         // Far away (after a respawn at world spawn): walk to the site first, it is not even loaded.
@@ -885,7 +890,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               // needed it stands (then the real block goes there).
               const req = tempFor.get(k), reqT = req && plan.byKey.get(req);
               if (pillars.has(k) && !allPlaced && !(reqT && placing.matches(reqT, stateAt(reqT.x, reqT.y, reqT.z) || {name: '?'}))) continue;
-              if (!t && h.name === SCAFFOLD && !allPlaced) continue; // dirt in an air cell: a support or a climb, out at the end
+              if (!t && (h.name === SCAFFOLD || h.name === GLASS) && !allPlaced) continue; // a support or a climb in an air cell, out at the end
               if (!clearable(k, h.name)) { stuck.set(k, h.name); continue; }
               if (h.name !== GLASS && landsInHopper(x, y, z, false)) { stuck.set(k, `${h.name} over a hopper`); continue; }
               // A cell with a free side first: an inner cell shows only its top, which the walk cannot reach
