@@ -1799,6 +1799,34 @@ const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, na
 const productionLib = require('./production');
 const PRODUCING = new Map(); // step key -> {by, until}
 const SUPPORT_STOCK = {glass: 320, dirt: 128}; // the crew climbs on glass over hoppers: some hundred a sorter
+
+// For the dashboard: what a bot's schematic project still needs, what its chests hold (as the crew last counted
+// them) and what the bots cannot make (the owner's part). Null unless the bot runs the project and sees its site.
+async function projectMaterials(r) {
+  const job = r.current;
+  if (!job || !/^(schematic|produce)$/.test(job.type) || !r.bot?.entity) return null;
+  const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
+  const {Vec3} = require('vec3');
+  if (!r.bot.blockAt(new Vec3(Math.floor((plan.lo.x + plan.hi.x) / 2), plan.lo.y, Math.floor((plan.lo.z + plan.hi.z) / 2)))) return null;
+  const dim = normDim(r.bot.game?.dimension);
+  const need = buildJob.stillNeeded(r.bot, plan);
+  const chests = [job.args.store, ...(job.args.chests || [])].filter(Boolean);
+  const stock = {};
+  let counted = 0;
+  for (const c of chests) {
+    const s = buildJob.chestStock(dim, c);
+    if (!s) continue;
+    counted++;
+    for (const [n, k] of s) stock[n] = (stock[n] || 0) + k;
+  }
+  const lacking = {};
+  for (const [n, k] of Object.entries(need)) if (k > (stock[n] || 0)) lacking[n] = k - (stock[n] || 0);
+  const {planMaterials, rawUnknown} = require('./recipes');
+  const p = planMaterials(lacking, {have: stock});
+  const cannot = [...p.unknown, ...p.gather.filter((g) => !productionLib.gatherJob(g.how, 1)).map((g) => g.item)];
+  const owner = rawUnknown(Object.fromEntries(cannot.map((n) => [n, lacking[n] || p.gather.find((g) => g.item === n)?.count || 1])), {have: stock});
+  return {file: job.args.file, origin: job.args.origin, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
+}
 async function produce(r, job) {
   const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
   const {store} = job.args;
@@ -2510,4 +2538,4 @@ const JOBS = {
   },
 };
 
-module.exports = {goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {projectMaterials, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

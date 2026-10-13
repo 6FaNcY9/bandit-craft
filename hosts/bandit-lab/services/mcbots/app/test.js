@@ -34,7 +34,7 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.deepStrictEqual(A.agentStatus({agent: 'bot1', goal: 'g'.repeat(1200), workers: ['bot2'], role: 'lead'}, sp), {agent: 'bot1', goal: 'g'.repeat(1000), workers: ['bot2'], role: 'lead'});
   for (const bad of [{agent: 'bot9', goal: '', workers: []}, {agent: 'bot1', goal: 1, workers: []}, {agent: 'bot1', goal: '', workers: 'bot2'}, {agent: 'bot1', goal: '', workers: ['a b']}, {agent: 'bot1', goal: '', workers: Array(13).fill('w')}, {agent: 'bot1', goal: '', workers: ['bot999']}]) assert.ok(A.agentStatus(bad, sp).error, JSON.stringify(bad));
   { // the dashboard keeps one row per worker of the current crew, not one per name ever seen (Codex R4-6)
-    const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/index.html'), 'utf8');
+    const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/legacy.html'), 'utf8');
     const body = html.slice(html.indexOf('function renderAgents() {'), html.indexOf('async function pollAgents'));
     const stub = () => ({append() {}, replaceChildren() {}, getBoundingClientRect: () => ({}), set textContent(v) {}});
     const cards = new Map();
@@ -559,7 +559,7 @@ require('./crafting');
   assert.ok(A.agentEndpoint('GET', '/api/crews'));
   for (const [m, u] of [['POST', '/api/crews'], ['POST', '/api/project'], ['GET', '/api/project'], ['POST', '/api/settings']]) assert.ok(!A.agentEndpoint(m, u), `${m} ${u}`);
   // the page's job picker only offers jobs the server validates, and its quick actions exist
-  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/index.html'), 'utf8');
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/legacy.html'), 'utf8');
   const picker = /const PICKER = \[([^\]]*)\]/.exec(html);
   assert.ok(picker, 'job picker list');
   for (const t of picker[1].match(/'(\w+)'/g).map((q) => q.slice(1, -1))) assert.ok(VALIDATE[t], `picker offers ${t}`);
@@ -4547,7 +4547,7 @@ require('./crafting');
     assert.strictEqual(world.claimedByOther('bot2', key), false);
   }
   { // R6-7: the 3D panel's level order is one the server accepts, or says why not
-    const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/index.html'), 'utf8');
+    const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/legacy.html'), 'utf8');
     const body = html.slice(html.indexOf('function boxJob('), html.indexOf('const VJOBS'));
     const boxJob = new Function(`${body}; return boxJob;`)();
     const box = (y1, y2) => ({x1: 0, z1: 0, x2: 8, z2: 8, y1, y2});
@@ -5429,6 +5429,10 @@ require('./crafting');
   assert.deepStrictEqual(gather.chain[1], ['deposit', {...store, only: gather.key.slice(7)}]);
   assert.deepStrictEqual(nextChain({need: {oak_planks: 4}, store}).chain[0], ['mine', {block: 'oak_log', count: 1}], 'oak stays oak');
   assert.deepStrictEqual(nextChain({need: {snowball: 64}, store}).chain[0], ['mine', {block: 'snow_block', count: 16}], 'four snowballs a snow block');
+  const {rawUnknown} = require('./recipes');
+  assert.deepStrictEqual(rawUnknown({comparator: 5, sticky_piston: 2, shulker_box: 1}), {quartz: 5, slime_ball: 2, shulker_shell: 2}, 'the raw items the owner brings');
+  assert.deepStrictEqual(rawUnknown({comparator: 5}, {have: {quartz: 3}}), {quartz: 2}, 'net of what the chests hold');
+  assert.deepStrictEqual(rawUnknown({sticky_piston: 22}), {slime_ball: 22}, 'not round the slime block');
   assert.deepStrictEqual(nextChain({need: {hopper: 1}, stock: {iron_ingot: 5, chest: 1}, store, taken: new Set(['craft:hopper'])}), {idle: 'the other bots have the open steps'});
   assert.deepStrictEqual(nextChain({need: {}, store}), {idle: 'the project has all it needs'});
   assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool'});

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {WebSocketServer} = require('ws');
 const {loadConfig} = require('./config');
-const {BotRunner, keptOf, VALIDATE} = require('./bots');
+const {BotRunner, keptOf, VALIDATE, projectMaterials} = require('./bots');
 const {WorldModel, startBlueMap} = require('./world');
 const {WINDOW_MS} = require('./debug');
 const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
@@ -50,6 +50,7 @@ const projects = new Projects(process.env.STATE_DIR || '');
 const crews = new Crews(process.env.STATE_DIR || '', {agentBots: cfg.agentBots, bots: cfg.names});
 for (const r of runners.values()) r.getSettings = () => settings.get(r.name);
 const page = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
+const legacy = fs.readFileSync(path.join(__dirname, 'public', 'legacy.html')); // the old page, under "Mehr"
 const three = fs.readFileSync(path.join(__dirname, 'public', 'vendor', 'three.min.js')); // three.js r159 (MIT), the last release with a classic-script build
 // The page is one file with inline script and style: allow exactly those two
 // bodies by hash, plus this server's own files ('self': the vendored three.js of the 3D map);
@@ -231,7 +232,28 @@ const server = http.createServer(async (req, res) => {
     return json(403, {error: 'forbidden'});
   }
   if (req.method === 'GET' && url.pathname === '/') return send(200, 'text/html; charset=utf-8', page);
+  if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(200, state());
+  if (req.method === 'GET' && url.pathname === '/api/materials') {
+    // The first bot of this process that runs a schematic project and sees its site (workers' bots are not here).
+    for (const r of runners.values()) {
+      if (r instanceof RemoteRunner) continue;
+      const m = await projectMaterials(r).catch(() => null);
+      if (!m) continue;
+      // What the crew carries is not missing either (workers' bots count too: their snapshots carry the inventory).
+      for (const x of runners.values()) {
+        const s = x.snapshot();
+        if (!['schematic', 'produce'].includes(s.job?.type)) continue;
+        for (const it of s.inventory || []) {
+          const [, name, n] = /^(\S+) x(\d+)$/.exec(it) || [];
+          if (m.lacking[name]) m.lacking[name] = Math.max(0, m.lacking[name] - Number(n));
+          if (m.lacking[name] === 0) delete m.lacking[name];
+        }
+      }
+      return json(200, {...m, bot: r.name});
+    }
+    return json(200, null);
+  }
   if (req.method === 'GET' && url.pathname === '/vendor/three.min.js') {
     res.writeHead(200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'});
     return res.end(three);

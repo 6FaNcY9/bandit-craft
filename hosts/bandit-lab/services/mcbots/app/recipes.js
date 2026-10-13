@@ -108,4 +108,37 @@ function planMaterials(items, {version = '26.1', have = {}} = {}) {
   return {gather, smelt: smelt.reverse(), craft: craft.reverse(), fuel, unknown: unknown.sort()};
 }
 
-module.exports = {planMaterials};
+// The raw items behind what planMaterials cannot make: a comparator stands for its nether quartz, a sticky
+// piston for its slime ball. What the owner has to bring, net of `have`.
+function rawUnknown(items, {version = '26.1', have = {}} = {}) {
+  const data = mcData(version);
+  const out = {};
+  const walk = (item, n, depth) => {
+    const recipe = (data.recipes[data.itemsByName[item]?.id] || [])[0];
+    const ing = {};
+    for (const id of (recipe ? (recipe.inShape ? recipe.inShape.flat() : recipe.ingredients || []) : []).filter((x) => x != null)) {
+      const name = data.items[id]?.name;
+      if (name) ing[name] = (ing[name] || 0) + 1;
+    }
+    // No recipe, or only a pack/unpack one (slime ball <- slime block <- slime ball): this is the raw item.
+    if (Object.keys(ing).length < 2 || depth > 4) {
+      out[item] = (out[item] || 0) + n;
+      return;
+    }
+    // Back to the raw item only when exactly one ingredient is out of the bots' reach (a banner stays a banner).
+    const missing = Object.keys(ing).filter((name) => planMaterials({[name]: 1}, {version}).unknown.length);
+    if (missing.length !== 1) {
+      out[item] = (out[item] || 0) + n;
+      return;
+    }
+    walk(missing[0], ing[missing[0]] * Math.ceil(n / (recipe.result?.count || 1)), depth + 1);
+  };
+  for (const [item, n] of Object.entries(items)) walk(item, n, 0);
+  for (const [item, n] of Object.entries(out)) {
+    if (n - (have[item] || 0) > 0) out[item] = n - (have[item] || 0);
+    else delete out[item];
+  }
+  return out;
+}
+
+module.exports = {planMaterials, rawUnknown};
