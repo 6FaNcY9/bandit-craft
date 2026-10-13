@@ -977,7 +977,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         }
         // 2. The next cell to place: in build order, with something to click and the item at hand or in a
         // chest. The deferred ones (power, observers, pistons) wait while an earlier cell is merely held.
-        let open = 0, held = 0, next = null, above = null, late = null, repair = null, nextScore = Infinity;
+        let open = 0, pushed = 0, held = 0, next = null, above = null, late = null, repair = null, nextScore = Infinity;
         const me2 = bot.entity.position;
         const carried = count();
         for (const item of Object.keys(carried)) lacking.delete(item); // handed over or brought by the crew: not missing
@@ -997,6 +997,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           const h = stateAt(t.x, t.y, t.z);
           if (h && (placing.matches(t, h, {final}) || (asIs.has(k) && h.name === t.name))) continue;
           open++;
+          if (h?.name === 'piston_head') pushed++;
           if (!h || stuck.has(k)) continue;
           if (skip.has(k)) { held++; continue; }
           if (h.name === t.name) { // the right block in a wrong state (facing, rail shape): dig it, then place it again
@@ -1064,7 +1065,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           await restock(next.t.p.item);
           if (!count()[next.t.p.item]) { waiting.add(next.t.p.item); next = null; }
         }
-        allPlaced = !open;
+        // A piston head in a cell does not hold the supports back: a dirt support beside a piston carried power
+        // from a redstone dot and kept it out, while the supports waited for that last cell (sandbox
+        // 2026-10-13). Taking them out cuts the power and updates the piston: it retracts, a sticky one with its block.
+        allPlaced = open === pushed;
         idle = !next && !repair;
         if (total - open !== lastDone) { lastDone = total - open; lastProgress = Date.now(); } // the crew's progress counts, not just this bot's
         job.t.total = total;
