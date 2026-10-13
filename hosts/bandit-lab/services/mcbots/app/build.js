@@ -506,7 +506,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // blocks of the build; the repair puts them back. Never containers, redstone parts or what hangs on them.
     let noPath = 0;
     let glassCarried = 0; // counted each loop: the pathfinder asks vetoPlace for thousands of cells
-    const PLAIN = /^(stone|cobblestone|glass|target|redstone_lamp|note_block|dirt|stone_slab|smooth_stone_slab|stone_bricks)$/;
+    // Only blocks that drop themselves: stone dug this way came back as cobblestone (174 of the sorter's 322 were
+    // lost, sandbox 2026-10-13) and glass as nothing.
+    const PLAIN = /^(cobblestone|target|redstone_lamp|note_block|dirt|stone_slab|smooth_stone_slab|stone_bricks)$/;
     const vetoBreak = (blk) => {
       const k = keyOf(blk.position);
       if (!inSite(blk.position)) return 0;
