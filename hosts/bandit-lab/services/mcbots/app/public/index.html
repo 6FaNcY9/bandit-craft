@@ -256,7 +256,9 @@ const ITEM = {hopper: 'Trichter', chest: 'Kiste', stone: 'Stein', comparator: 'K
   shulker_shell: 'Shulkerschale', shulker_box: 'Shulkerkiste', glowstone: 'Glowstone', glowstone_dust: 'Glowstonestaub', black_wool: 'Schwarze Wolle', black_banner: 'Schwarzes Banner',
   fern: 'Farn', powder_snow_bucket: 'Pulverschnee-Eimer', bread: 'Brot', torch: 'Fackel', sand: 'Sand', gravel: 'Kies', snow_block: 'Schneeblock', iron_trapdoor: 'Eisenfalltür',
   iron_nugget: 'Eisennugget', note_block: 'Notenblock', stone_button: 'Steinknopf', hopper_minecart: 'Trichterlore', spider_eye: 'Spinnenauge', rotten_flesh: 'Verrottetes Fleisch',
-  diamond: 'Diamant', string: 'Faden', bone: 'Knochen', arrow: 'Pfeil', stick: 'Stock', furnace: 'Ofen', crafting_table: 'Werkbank', logs: 'Holz'};
+  diamond: 'Diamant', string: 'Faden', bone: 'Knochen', arrow: 'Pfeil', stick: 'Stock', furnace: 'Ofen', crafting_table: 'Werkbank', logs: 'Holz',
+  andesite: 'Andesit', diorite: 'Diorit', granite: 'Granit', deepslate: 'Tiefenschiefer', tuff: 'Tuff', water: 'Wasser', log: 'Stamm',
+  creeper: 'Creeper', skeleton: 'Skelett', zombie: 'Zombie', spider: 'Spinne', enderman: 'Enderman', witch: 'Hexe'};
 const item = (n) => ITEM[n] || String(n).replace(/^minecraft:/, '').replace(/_/g, ' ');
 const items = (s) => String(s).replace(/(\d+) more kinds/, '$1 weitere Sorten').replace(/\b[a-z]+(?:_[a-z]+)*\b/g, (w) => ITEM[w] || w);
 // A production step's label: "mine iron_ore for 10 raw_iron", "craft 24 oak_planks", "smelt 10 raw_iron into iron_ingot".
@@ -302,8 +304,11 @@ const DOING = [
   [/^in the way: (.+)$/, (m) => `im Weg: ${items(m[1])}`],
   [/^(\d+) cells left that this bot cannot place or reach$/, (m) => `${m[1]} Zellen, an die er nicht herankommt`],
   [/^no progress for (\d+) s: (.+)$/, (m) => `${Math.round(m[1] / 60)} min kein Fortschritt: ${doing(m[2])}`],
-  [/^could not reach (.+?): No path.*$/, (m) => `kommt nicht hin (${m[1]})`],
+  [/^could not reach (-?\d+ -?\d+ -?\d+).*$/, (m) => `kommt nicht hin (${m[1]})`],
   [/^could not reach (.+)$/, (m) => `kommt nicht hin (${m[1]})`],
+  [/^waiting for the trees to grow$/, () => 'wartet, bis die Bäume wachsen'],
+  [/^Digging aborted: (\S+) is not part of the job$/, (m) => `${item(m[1])} gehört nicht zum Auftrag`],
+  [/^waiting: a hostile mob is near the target$/, () => 'wartet: ein Monster ist am Ziel'],
   [/^idle.*$/, () => 'frei'],
 ];
 const EVENT = [
@@ -312,7 +317,7 @@ const EVENT = [
   [/^resumed after restart: (\S+)$/, (m) => `macht nach dem Neustart weiter (${JOB[m[1]] || m[1]})`],
   [/^started: (\S+)(.*)$/, (m) => `startet: ${JOB[m[1]] || m[1]}${/(\S+)\.litematic/.exec(m[2]) ? ' ' + /(\S+)\.litematic/.exec(m[2])[1] : ''}`],
   [/^finished: (\S+).*$/, (m) => `fertig: ${JOB[m[1]] || m[1]}`],
-  [/^failed: (\S+).*? - (.+)$/, (m) => `abgebrochen (${JOB[m[1]] || m[1]}): ${doing(m[2])}`],
+  [/^failed: (\S+).*? - (.+)$/, (m) => `abgebrochen (${JOB[m[1]] || m[1]}): ${eventText(m[2])}`],
   [/^stopped: (\S+).*$/, (m) => `angehalten (${JOB[m[1]] || m[1]})`],
   [/^died(?: at (-?\d+ -?\d+ -?\d+))?:? ?(.*)$/, (m) => `gestorben${m[1] ? ' bei ' + m[1] : ''}${m[2] ? ': ' + m[2] : ''}`],
   [/^deposited (.+) at (.+)$/, (m) => `hat eingelagert: ${items(m[1])}`],
@@ -320,11 +325,25 @@ const EVENT = [
   [/^produce: (.+?) failed, resting it 10 min: (.+)$/, (m) => `klappt nicht (${step(m[1])}), Pause 10 min: ${doing(m[2])}`],
   [/^produce: (.+)$/, (m) => `besorgt Material: ${step(m[1])}`],
   [/^schematic done(.*)$/, (m) => `Bau fertig${items(m[1])}`],
+  [/^tunnel stopped: (.+)$/, (m) => `Tunnel abgebrochen: ${doing(m[1])}`],
+  [/^no logs left in reach: tunnelling (\d+) blocks to (.+)$/, (m) => `kein Holz in Reichweite: gräbt ${m[1]} Blöcke Tunnel nach ${m[2]}`],
+  [/^skipped an? (\S+) block \((.*)\) at (.+)$/, (m) => `${item(m[1])} bei ${m[3]} ausgelassen (${doing(m[2])})`],
+  [/^(?:\S+: )?left an? (\S+)(?: block)? at (-?\d+ -?\d+ -?\d+)(?:: | \()(.+?)\)?$/, (m) => `${item(m[1])} bei ${m[2]} stehen gelassen: ${doing(m[3])}`],
+  [/^no pickaxe for (\S+): making a new one$/, (m) => `keine Spitzhacke für ${item(m[1])}: baut eine neue`],
+  [/^no pickaxe for (\S+) and could not make or fetch one: (.+)$/, (m) => `keine Spitzhacke für ${item(m[1])}, kann keine bauen oder holen: ${doing(m[2])}`],
+  [/^no free logs within (\d+) blocks \(collected (\d+)\/(\d+), searched (\d+) more spots\)$/, (m) => `kein freies Holz im Umkreis von ${m[1]} Blöcken (${m[2]}/${m[3]} gesammelt, ${m[4]} weitere Stellen gesucht)`],
+  [/^sealed water at (.+) with (\S+)$/, (m) => `Wasser bei ${m[1]} mit ${item(m[2])} abgedichtet`],
+  [/^hostile mobs near the base: (.+)$/, (m) => `Monster nahe der Basis: ${items(m[1])}`],
+  [/^night falls: hostile mobs spawn outside$/, () => 'Nacht: draußen erscheinen Monster'],
+  [/^morning: the night mobs burn or leave$/, () => 'Morgen: die Nachtmonster verbrennen oder ziehen ab'],
+  [/^no torch placed: need (\d+) more planks and have no logs.*$/, (m) => `keine Fackel gesetzt: braucht ${m[1]} Bretter und hat kein Holz`],
+  [/^rescued: no path (\d+) times in a row, teleported to the base.*$/, (m) => `gerettet: ${m[1]}× kein Weg, zur Basis teleportiert`],
 ];
 const eventText = (s) => { for (const [re, f] of EVENT) { const m = re.exec(s); if (m) return f(m); } return doing(s); };
 const doing = (s) => { if (!s) return ''; for (const [re, f] of DOING) { const m = re.exec(s); if (m) return f(m); } return s; };
 const JOB = {schematic: 'baut', produce: 'besorgt Material', mine: 'baut ab', chop: 'fällt Bäume', come: 'kommt', follow: 'folgt', guard: 'hält Wache',
-  deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin'};
+  deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin',
+  treefarm: 'Baumfarm', shaft: 'Schacht', shift: 'Schicht'};
 const PROJECT = new Set(['schematic', 'produce']);
 const pct = (a, b) => (b ? Math.max(0, Math.min(100, Math.round((100 * a) / b))) : 0);
 const ago = (s) => (s == null ? '' : s < 90 ? 'gerade eben' : s < 5400 ? `vor ${Math.round(s / 60)} min` : `vor ${Math.round(s / 3600)} h`);
