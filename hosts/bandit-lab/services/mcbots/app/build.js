@@ -611,12 +611,16 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         let full = false;
         try {
           note(c, win);
+          // Counted here: the inventory shows what came out of the chest only once its window is closed, so
+          // the two-stack cap read 0 and one bot took every stack (327 hoppers, 278 chests, sandbox 2026-10-13).
+          let have = count()[item] || 0;
           for (const it of win.containerItems().filter((i) => i.name === item)) {
             guard(job);
-            const k = Math.min(n - (count()[item] || 0), it.count);
+            const k = Math.min(n - have, it.count);
             if (k <= 0) break;
             try {
               await win.withdraw(it.type, it.metadata, k);
+              have += k;
             } catch (e) {
               if (!/full/i.test(e.message)) throw e;
               full = true; // build with what it has, without walking every other chest for nothing
@@ -1071,7 +1075,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           if (/rail$/.test(repair.name)) {
             const ok = await reshapeRail(repair).catch((e) => {
               guard(job);
-              if (!/could not reach|unsafe|aborted|needs a tool|missing material|did not take|nothing to click/.test(e.message)) throw e;
+              if (!/could not reach|unsafe|aborted|needs a tool|missing material|did not take|nothing to click|must be holding an item/.test(e.message)) throw e;
               r.emit?.('info', `reshaping ${repair.name} at ${k}: ${e.message.slice(0, 120)}`);
               return null;
             });
@@ -1125,9 +1129,13 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           if (!free(stateAt(t.x, t.y, t.z)?.name ?? 'stone')) continue; // someone placed something meanwhile
           job.t.doing = `placing ${t.name} at ${k}`;
           await clickFace(bot, v(t), w, sleep);
-          if (t.p.again) {
+          if (t.p.again) { // a double slab: the second half from the next slab, if the first click took the last one
             for (let i = 0; i < 10 && stateAt(t.x, t.y, t.z)?.name !== t.name; i++) await sleep(100);
-            await clickFace(bot, v(t), t.p.again, sleep);
+            const more = bot.inventory.items().find((i) => i.name === t.p.item);
+            if (more) {
+              await bot.equip(more, 'hand');
+              await clickFace(bot, v(t), t.p.again, sleep);
+            }
           }
           for (let i = 0; i < 10 && stateAt(t.x, t.y, t.z)?.name !== t.name; i++) await sleep(100);
           if (t.p.cycle && stateAt(t.x, t.y, t.z)?.name === t.name) {
@@ -1158,6 +1166,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           else skip.set(k, Date.now() + 30000); // try the others, then again (or dig it out: the repair)
         } catch (e) {
           guard(job);
+          // Nothing in hand at the click (eaten, or a fight took the slot): that cell again later.
+          if (/must be holding an item/.test(e.message)) { skip.set(k, Date.now() + 5000); continue; }
           if (!/could not reach/.test(e.message)) throw e;
           noPath++;
           await unstick();
