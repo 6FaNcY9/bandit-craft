@@ -27,6 +27,7 @@ const layout = require('./storage-layout');
 const planConfig = require('./plan-config');
 const gearJob = require('./gear');
 const sealJob = require('./seal');
+const owner = require('./owner');
 
 const NAME_RE = /^bot[0-9]{1,2}$/; // BotGate's pattern (Velocity plugin)
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
@@ -39,9 +40,9 @@ const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podz
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
-const RESUMABLE = new Set(['mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy']);
+const RESUMABLE = new Set(['mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
-const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm']); // a resumed build/excavate skips what is done
+const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
 
@@ -182,6 +183,18 @@ const VALIDATE = {
     const o = plan.origin;
     return {origin: o, blocks: plan.blocks.map((b) => ({x: b.x - o.x, y: b.y - o.y, z: b.z - o.z, block: b.block})), remove: plan.remove};
   },
+  // A Litematica file from STATE_DIR/schematics placed at `origin` (rotation and mirror as Litematica shows
+  // them), material taken from `chests` in this order. Protected areas are checked when the job runs.
+  schematic: (a) => {
+    if (!buildJob.SCHEMATIC_RE.test(a.file || '')) throw new Error('file must be the name of a .litematic file in the schematics folder');
+    if (![0, 90, 180, 270].includes(a.rotation ?? 0)) throw new Error('rotation must be 0, 90, 180 or 270');
+    if (!['none', 'left_right', 'front_back'].includes(a.mirror ?? 'none')) throw new Error('mirror must be none, left_right or front_back');
+    const chests = a.chests ?? [];
+    if (!Array.isArray(chests) || chests.length > 64) throw new Error('chests must be a list of at most 64 x,y,z');
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz)};
+  },
+  // The materials for that schematic build, made into `store` (the build's chests are counted too).
+  produce: (a) => ({...VALIDATE.schematic(a), store: xyz(a.store || {})}),
   // Kill (shear) `count` animals of one kind within `radius` of x,y,z and pick the drops up.
   hunt: (a) => {
     if (!Object.hasOwn(huntJob.ANIMALS, a.animal)) throw new Error(`animal must be one of ${Object.keys(huntJob.ANIMALS).join(', ')}`);
@@ -221,7 +234,7 @@ const place = (r, c) => (r.supplyChest && r.supplyChest.x === c.x && r.supplyChe
 const jobLabel = (j) => `${j.type} ${Object.values(j.args).map((v) => (Array.isArray(v) ? `${v.length} blocks` : v && typeof v === 'object' ? `at ${at(v)}` : v)).join(' ')}`;
 
 class BotRunner {
-  constructor(name, {host, port, log, world, protectedAreas = [], supplyChest = null, loginSeed = null, hostLabel = '', onEvent = null}) {
+  constructor(name, {host, port, log, world, protectedAreas = [], supplyChest = null, loginSeed = null, hostLabel = '', onEvent = null, ownerUuids = [], demoLog = null}) {
     this.name = name;
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
@@ -249,6 +262,13 @@ class BotRunner {
     this.timer = null;
     this.stopped = false; // process shutdown
     this.jobSeq = 0;
+    this.ownerUuids = ownerUuids;
+    this.demoLog = demoLog;
+    this.orders = new Map();
+    this.strangerOrders = 0;
+    this.rolesFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'roles.json') : null;
+    this.role = owner.loadRole(this.rolesFile, name);
+    this.say = owner.makeSayer((text) => { if (this.online) this.bot?.whisper(this.answerTo, text); });
   }
 
   // lastError lives in the trace so the debug panel knows when it happened.
@@ -264,10 +284,61 @@ class BotRunner {
     this.schedule(0);
   }
 
-  emit(kind, text) {
+  emit(kind, text, jobId) {
+    const id = this.orders.get(jobId);
+    if (id && ['done', 'fail', 'stop'].includes(kind)) {
+      this.orders.delete(jobId);
+      try { this.demoLog?.outcome(id, {done: 'finished', fail: 'failed', stop: 'stopped'}[kind], text); }
+      catch (e) { this.log(this.name, `demonstration: ${e.message}`); }
+    }
     try {
-      this.onEvent?.(this.name, kind, text);
+      this.onEvent?.(this.name, kind, text, jobId);
     } catch {}
+  }
+
+  bindOwner(bot) {
+    if (!this.ownerUuids.length) return;
+    bot.on('message', (msg, position, sender, verified) => {
+      if (bot !== this.bot) return;
+      const whisper = msg.translate === 'commands.message.display.incoming';
+      if (!whisper && msg.translate !== 'chat.type.text') return;
+      const text = msg.with?.[1]?.toString();
+      if (text === undefined) return;
+      const order = owner.parseOrder(text, this.name, {whisper});
+      if (!order) return;
+      if (!owner.isOwnerMessage({sender, position, verified}, this.ownerUuids)) { this.strangerOrders++; return; }
+      const player = Object.values(bot.players || {}).find((p) => owner.isOwnerMessage({sender: p.uuid, position: 'chat'}, [sender]));
+      const name = player?.username;
+      if (!name || !/^\w{1,16}$/.test(name)) return;
+      this.answerTo = name;
+      let id, jobId;
+      try {
+        const command = owner.translate(order.words, {owner: name, ownerPos: player.entity?.position || null});
+        id = this.demoLog?.add({bot: this.name, via: whisper ? 'whisper' : 'chat', text, command, state: this.snapshot()});
+        if (command.unknown) { this.say(owner.HELP); this.demoLog?.outcome(id, 'unknown', owner.HELP); return; }
+        if (command.type) {
+          if (!this.online || this.dead) throw new Error(this.dead ? 'bot is dead' : 'bot is offline');
+          VALIDATE[command.type](command.args); // refuse before replacing the active job
+          jobId = this.jobSeq + 1;
+          if (id) this.orders.set(jobId, id);
+          this.enqueue(command.type, command.args, {replace: true});
+        } else if (command.stop) this.enqueue('stop');
+        else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
+        const s = command.status && this.snapshot();
+        const receipt = s ? `Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}` : command.role ? `Rolle ${command.role}` : command.stop ? 'bleibe stehen' : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz'}[command.type];
+        this.say(`ok: ${receipt}`);
+        if (!command.type) this.demoLog?.outcome(id, 'finished', receipt);
+      } catch (e) {
+        this.orders.delete(jobId);
+        this.say(`geht nicht: ${e.message}`);
+        try { if (id) this.demoLog?.outcome(id, 'refused', e.message); } catch (err) { this.log(this.name, `demonstration: ${err.message}`); }
+      }
+    });
+  }
+
+  dropQueue() {
+    for (const j of this.queue) if (this.orders.has(j.id)) this.emit('stop', `stopped: ${jobLabel(j)}`, j.id);
+    this.queue = [];
   }
 
   // Several bots digging one area refuse each other's blocks all the time;
@@ -292,6 +363,7 @@ class BotRunner {
     this.log(this.name, `connecting to ${this.host}:${this.port}`);
     const bot = mineflayer.createBot({host: this.host, port: this.port, username: this.name, auth: 'offline', version: '26.1', hideErrors: true, fakeHost: process.env.MC_VHOST || undefined}); // MC_VHOST: Velocity forced host (the sandbox)
     this.bot = bot;
+    this.bindOwner(bot);
     require('./blocklog').watchBlocks(bot, this.name, (c) => this.world.noteChange?.(c));
     bot.once('spawn', () => guardDigs(this, bot)); // bot.dig exists only once the plugins loaded
     bot.loadPlugin(pathfinder);
@@ -410,7 +482,7 @@ class BotRunner {
   shutdown() {
     this.stopped = true;
     clearTimeout(this.timer);
-    this.queue = [];
+    this.dropQueue();
     this.cancel();
     this.bot?.quit();
   }
@@ -420,12 +492,12 @@ class BotRunner {
   // this now" instead of waiting behind earlier clicks.
   enqueue(type, args = {}, {replace = false} = {}) {
     if (replace && type !== 'stop' && type !== 'remove') {
-      this.queue = [];
+      this.dropQueue();
       this.stoppedAt = Date.now();
       this.cancel();
     }
     if (type === 'stop') {
-      this.queue = [];
+      this.dropQueue();
       this.stoppedAt = Date.now(); // the plan must not count a stopped chain as finished (Codex R6-6)
       this.cancel();
       return;
@@ -460,7 +532,7 @@ class BotRunner {
     j.interrupted = true;
     const n = (j.interruptions || 0) + 1;
     if (n > MAX_INTERRUPTIONS) {
-      this.emit('fail', `gave up: ${jobLabel(j)} (${why} ${n} times)`);
+      this.emit('fail', `gave up: ${jobLabel(j)} (${why} ${n} times)`, j.id);
       return;
     }
     const area = j.t?.area || j.startPos;
@@ -529,9 +601,9 @@ class BotRunner {
     }
     const took = Math.round((Date.now() - job.startedAt) / 1000);
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
-    else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`);
-    else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`);
-    else this.emit('fail', `failed: ${jobLabel(job)} - ${this.lastError.replace(/^\w+: /, '')}`);
+    else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id);
+    else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id);
+    else this.emit('fail', `failed: ${jobLabel(job)} - ${this.lastError.replace(/^\w+: /, '')}`, job.id);
     this.current = null;
     this.digOnly = null;
     this.digBox = null;
@@ -546,6 +618,8 @@ class BotRunner {
     const label = jobLabel;
     return {
       name: this.name,
+      role: this.role,
+      strangerOrders: this.strangerOrders,
       host: this.hostLabel,
       lastSeen: this.online ? Date.now() : this.lastSeen,
       online: this.online,
@@ -687,10 +761,11 @@ async function waitCalm(r, job) {
 
 // Another bot reported a hostile within 8 blocks of where we are headed:
 // give it up to 10 s to move on or die (reports expire), then go anyway. A bot that can fight does not wait.
-async function waitSafe(r, job, x, z) {
+async function waitSafe(r, job, x, z, y = null) {
   if (r.combat?.fit?.()) return; // armed and healthy: combat clears the mob when it comes close
   const dim = normDim(r.bot.game?.dimension);
-  for (let i = 0; i < 10 && r.world.hostilesNear(x, z, dim, 8).length; i++) {
+  // Mobs 30 blocks below in the dark under a build held a crew 10 s at every walk (sandbox, 2026-10-13).
+  for (let i = 0; i < 10 && r.world.hostilesNear(x, z, dim, 8, y).length; i++) {
     job.progress = 'waiting: hostile near target';
     job.t.doing = 'waiting: a hostile mob is near the target';
     await waitCalm(r, job);
@@ -787,7 +862,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
     // again instead of failing the job, unless the deadline or a stop hit.
     for (let tries = 0; ; tries++) {
       try {
-        if (!brave) await waitSafe(r, job, x, z);
+        if (!brave) await waitSafe(r, job, x, z, y);
         await r.bot.pathfinder.goto(goal || new goals.GoalNear(x, y, z, dist)); // settledGoto on a live bot
         return;
       } catch (e) {
@@ -942,10 +1017,26 @@ function guardDigs(runner, bot) {
     return why ? Promise.reject(new Error(why)) : nativeDig(block, ...rest);
   };
   // Block and entity activation (bone meal, a bed, shears) look first too; only Stop matters there (R5-1).
+  // mineflayer's openBlock (openContainer) calls activateBlock without awaiting it: a refusal there was an
+  // unhandled rejection and ended the whole process (a schematic job replaced while it opened a chest,
+  // sandbox 2026-10-13). It counts as handled; whoever awaits the promise still gets the error.
   for (const fn of ['activateBlock', 'activateEntity', 'activateEntityAt']) {
     if (!bot[fn]) continue;
     const native = withLook('Activating', bot[fn].bind(bot), () => null);
-    bot[fn] = (...args) => (runner.current?.cancelled ? Promise.reject(new Error('Activating aborted: the job was stopped')) : native(...args));
+    bot[fn] = (...args) => {
+      const p = runner.current?.cancelled ? Promise.reject(new Error('Activating aborted: the job was stopped')) : native(...args);
+      p?.catch?.(() => {});
+      return p;
+    };
+  }
+  // ... and then waits for a window that never opens: give up after 10 s.
+  if (bot.openContainer) {
+    const open = bot.openContainer.bind(bot);
+    bot.openContainer = (...args) => {
+      let timer;
+      return Promise.race([open(...args), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('the container did not open within 10 s')), 10000); })])
+        .finally(() => clearTimeout(timer));
+    };
   }
   const nativePlace = withLook('Placing', placeBlock, placeRefusal);
   bot.placeBlock = (ref, face, ...rest) => {
@@ -968,7 +1059,7 @@ const withinReach = (bot, pos) => bot.entity.position.offset(0, 1.62, 0).distanc
 // true only when this bot dug the block; false when it was gone already, changed, or the dig got
 // no answer. expect(name) says which block may be dug (default: the one there now); it is checked
 // again after every walk and equip, so a block swapped meanwhile (a player's torch) stays.
-async function digAt(r, job, pos, expect = null) {
+async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
   const {bot} = r;
   let block = bot.blockAt(pos);
   if (!block || block.name.endsWith('air')) return false;
@@ -1042,7 +1133,9 @@ async function digAt(r, job, pos, expect = null) {
       return false;
     }
   }
-  // Walk over the drops near the block (items merge and fly a little).
+  // Walk over the drops near the block (items merge and fly a little). A schematic site's ground is left
+  // lying: three bots chased each other's dirt for a minute per block (sandbox, 2026-10-13).
+  if (!pickup) return true;
   await sleep(400);
   const drops = Object.values(bot.entities).filter((e) => e.name === 'item' && e.position.distanceTo(pos) <= 4);
   for (const d of drops) {
@@ -1582,7 +1675,7 @@ async function collect(r, job, matching, count, what) {
     }
     try {
       if (wood) await unpillar(r, job, pos);
-      await waitSafe(r, job, pos.x, pos.z);
+      await waitSafe(r, job, pos.x, pos.z, pos.y);
       if (!(await digAt(r, job, pos))) {
         r.skip.set(key, Date.now() + 300000); // not dug by us: do not count it, try another block
         continue;
@@ -1695,6 +1788,55 @@ const buildContext = (r) => {
   };
 };
 const build = buildJob.makeBuild({goNear, guard, sleep, goals, digAt, withdraw: buildWithdraw, runJob: buildRunJob, gatherContext: buildContext});
+const SCHEMATIC_DIR = require('node:path').join(process.env.STATE_DIR || '.', 'schematics');
+const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
+  dir: SCHEMATIC_DIR,
+  deposit: (r, job, c, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {})}}))});
+
+// Material production for a schematic build (production.js): one short chain at a time (gather, smelt,
+// craft, each into the store), until the store and the build's chests hold what the build still needs.
+// A step one bot works on is left to the others (this process's bots); a failed step rests 10 minutes.
+const productionLib = require('./production');
+const PRODUCING = new Map(); // step key -> {by, until}
+async function produce(r, job) {
+  const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
+  const {store} = job.args;
+  const chests = [store, ...job.args.chests.filter((c) => c.x !== store.x || c.y !== store.y || c.z !== store.z)];
+  const dim = normDim(r.bot.game?.dimension);
+  for (;;) {
+    guard(job);
+    const need = buildJob.stillNeeded(r.bot, plan);
+    const stock = await buildJob.readStock(r, job, chests, {goNear, guard});
+    const now = Date.now();
+    for (const [k, t] of PRODUCING) if (t.until < now || t.by === r.name) PRODUCING.delete(k);
+    const next = productionLib.nextChain({need, stock, taken: new Set(PRODUCING.keys()), store});
+    if (next.idle) {
+      job.progress = next.idle;
+      if (/all it needs/.test(next.idle)) return;
+      job.t.doing = `waiting: ${next.idle}`;
+      await sleep(60000);
+      continue;
+    }
+    PRODUCING.set(next.key, {by: r.name, until: now + 30 * 60000});
+    job.progress = next.label;
+    job.t.doing = `producing: ${next.label}`;
+    r.emit('info', `produce: ${next.label}`);
+    try {
+      for (const [type, args] of next.chain) {
+        guard(job);
+        await JOBS[type](r, child(job, {type, args: VALIDATE[type](args)}));
+      }
+      r.emit('info', `produce: done ${next.label}`);
+    } catch (e) {
+      guard(job);
+      r.emit('info', `produce: ${next.label} failed, resting it 10 min: ${e.message.slice(0, 100)}`);
+      PRODUCING.set(next.key, {by: '-', until: Date.now() + 10 * 60000});
+    } finally {
+      if (PRODUCING.get(next.key)?.by === r.name) PRODUCING.delete(next.key);
+      buildJob.forgetChest(dim, store); // the chain changed what the store holds
+    }
+  }
+}
 
 const {grave} = gravesJob.makeGraves({goNear, guard, sleep, deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: r.supplyChest}))});
 const {hunt, bed} = huntJob.makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at});
@@ -2115,6 +2257,8 @@ const JOBS = {
   },
 
   build: (r, job) => build(r, job),
+  schematic: (r, job) => schematic(r, job),
+  produce: (r, job) => produce(r, job),
   // Dig out a box top-down (an underground room). Only natural ground goes: anything a player or a
   // bot placed (cobblestone walls, chests, torches, planks ...) stays, and so do protected areas.
   async excavate(r, job) {

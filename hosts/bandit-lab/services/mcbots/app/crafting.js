@@ -44,27 +44,42 @@ function nearBlock(bot, name, maxDistance = 24) {
 // Place an item from the inventory on a free spot next to the bot.
 // Grass, flowers and leaf litter count as free: placing replaces them.
 const open = (b) => b && b.boundingBox === 'empty' && !/water|lava/.test(b.name);
+const ROCK = /^(stone|deepslate|tuff|granite|diorite|andesite|dirt|coarse_dirt|grass_block|netherrack)$/; // natural, does not fall
 async function placeNear(bot, itemName, areas = [], check = () => {}) {
   const item = bot.inventory.items().find((i) => i.name === itemName);
   if (!item) throw new Error(`no ${itemName} to place`);
   const me = bot.entity.position.floored();
+  const put = async (ground, spot) => {
+    check();
+    await bot.equip(item, 'hand');
+    check(); // a Stop during the equip places nothing (Codex R3-2)
+    await bot.placeBlock(ground, new Vec3(0, 1, 0)).catch(() => {}); // 26.x may not echo the update in time
+    for (let i = 0; i < 20; i++) {
+      const placed = bot.blockAt(spot.position);
+      if (placed?.name === itemName) return placed;
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    throw new Error(`placing ${itemName} did not take`);
+  };
+  const allowed = (b) => !insideAreas(areas, b.position.x, b.position.z);
   // Same level first, then on top of a neighbouring block (bot in a pit), then one down.
   for (const dy of [-1, 0, -2]) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
       const ground = bot.blockAt(me.offset(dx, dy, dz));
       const spot = bot.blockAt(me.offset(dx, dy + 1, dz));
-      if (ground?.boundingBox === 'block' && open(spot) && !insideAreas(areas, spot.position.x, spot.position.z)) {
-        check();
-        await bot.equip(item, 'hand');
-        check(); // a Stop during the equip places nothing (Codex R3-2)
-        await bot.placeBlock(ground, new Vec3(0, 1, 0)).catch(() => {}); // 26.x may not echo the update in time
-        for (let i = 0; i < 20; i++) {
-          const placed = bot.blockAt(spot.position);
-          if (placed?.name === itemName) return placed;
-          await new Promise((res) => setTimeout(res, 100));
-        }
-        throw new Error(`placing ${itemName} did not take`);
-      }
+      if (ground?.boundingBox === 'block' && open(spot) && allowed(spot)) return put(ground, spot);
+    }
+  }
+  // Walled in (back up its own stair shaft beside the project chest, sandbox 2026-10-13): a niche dug
+  // beside its feet, which keeps the stairs free.
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const ground = bot.blockAt(me.offset(dx, -1, dz));
+    const spot = bot.blockAt(me.offset(dx, 0, dz));
+    if (ground?.boundingBox === 'block' && ROCK.test(spot?.name || '') && allowed(spot)) {
+      check();
+      await bot.tool?.equipForBlock(spot, {}).catch(() => {});
+      await bot.dig(spot, true);
+      return put(ground, spot);
     }
   }
   throw new Error(`no free spot next to the bot to place ${itemName}`);

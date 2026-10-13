@@ -142,7 +142,7 @@ class RemoteWorld extends WorldModel {
 }
 
 class HubClient {
-  constructor({url, token, names, mcHost, mcPort, loginSeed = null, hostLabel, log, makeRunner, wsOptions = {}}) {
+  constructor({url, token, names, mcHost, mcPort, loginSeed = null, hostLabel, log, ownerUuids = [], demoLog = null, makeRunner, wsOptions = {}}) {
     this.url = url;
     this.token = token;
     this.names = names;
@@ -159,7 +159,7 @@ class HubClient {
       this.outEvents.push({bot, kind, text});
       if (this.outEvents.length > 100) this.outEvents.shift();
     };
-    this.makeRunner = makeRunner || ((name, {protectedAreas, supplyChest}) => new BotRunner(name, {host: mcHost, port: mcPort, log, world: this.world, protectedAreas, supplyChest, loginSeed, hostLabel, onEvent}));
+    this.makeRunner = makeRunner || ((name, {protectedAreas, supplyChest}) => new BotRunner(name, {host: mcHost, port: mcPort, log, world: this.world, protectedAreas, supplyChest, loginSeed, hostLabel, ownerUuids, demoLog, onEvent}));
     this.runners = [];
     this.protectedAreas = []; // one array every runner holds; the hub's policy is spliced into it
     this.supplyChest = null;

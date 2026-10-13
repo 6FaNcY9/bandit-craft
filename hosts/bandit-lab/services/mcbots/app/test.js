@@ -56,6 +56,9 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.match(no({bots: ['bot1'], type: 'say', args: {text: 'hi'}}), /not allowed/);
   assert.match(no({bots: ['bot1'], type: 'rearm', args: {}}), /not allowed/);
   for (const type of ['withdraw', 'deposit', 'stock', 'shift']) assert.match(no({bots: ['bot1'], type, args: {x: 9, y: 2, z: 3}}), /supply chest/, type);
+  const building = {...pol, jobOf: (b) => (b === 'bot2' ? {type: 'schematic'} : {type: 'mine'})};
+  assert.match(A.agentJobRefusal({bots: ['bot1', 'bot2'], type: 'stop', args: {}}, building), /bot2 works on the owner's schematic project/);
+  assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, building), null, 'a bot on an ordinary job takes orders');
 }
 { // the problem solver's rules (agentauth.js solverRefusal / solverAction), deny by default
   const A = require('./agentauth');
@@ -2605,6 +2608,21 @@ require('./crafting');
     release();
     await assert.rejects(p, Cancelled);
     assert.strictEqual(placed, 0);
+    // Walled in by stone (a stair shaft): a niche beside the feet is dug and the table goes there.
+    const world = new Map();
+    const at = (p) => world.get(`${p.x},${p.y},${p.z}`) || (p.y === 64 && p.x === 0 && p.z === 0 ? 'air' : p.y === 65 && p.x === 0 && p.z === 0 ? 'air' : 'stone');
+    const walled = {
+      inventory: {items: () => [{name: 'crafting_table'}]},
+      entity: {position: new Vec3(0.5, 64, 0.5)},
+      blockAt: (p) => ({name: at(p), position: p, boundingBox: at(p) === 'stone' ? 'block' : 'empty'}),
+      equip: async () => {},
+      dig: async (b) => { world.set(`${b.position.x},${b.position.y},${b.position.z}`, 'air'); },
+      placeBlock: async (ground) => { world.set(`${ground.position.x},${ground.position.y + 1},${ground.position.z}`, 'crafting_table'); },
+    };
+    const table = await placeNear(walled, 'crafting_table');
+    assert.deepStrictEqual([table.position.x, table.position.y, table.position.z], [1, 64, 0]);
+    walled.blockAt = (p) => ({name: 'oak_planks', position: p, boundingBox: 'block'}); // placed walls are not dug
+    await assert.rejects(placeNear(walled, 'crafting_table'), /no free spot/);
   }
   { // excavate's walking may dig natural ground only: placed walls stay, also for the ascent (Codex R3-1)
     const {safeMovements, guardDigs, BotRunner, NATURAL} = require('./bots');
@@ -4840,3 +4858,590 @@ require('./crafting');
   await new Promise((res) => setImmediate(res));
   assert.strictEqual(sent.length, 2, 'only bot names reach the console');
 })();
+
+(async () => { // litematic: packed states cross longs; signed sizes locate the min corner
+  const nbt = require('prismarine-nbt');
+  const {gzipSync} = require('node:zlib');
+  const {parseLitematic, billOfMaterials} = require('./schematic');
+  const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+  const palette = Array.from({length: 32}, () => ({Name: {type: 'string', value: 'minecraft:stone'}}));
+  for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+  palette[17] = {Name: {type: 'string', value: 'minecraft:oak_log'}, Properties: {type: 'compound', value: {axis: {type: 'string', value: 'z'}}}};
+  const region = (position, size, states) => {
+    // Pack as one integer, then slice longs independently of the reader's two-word extraction.
+    const packed = states.reduce((n, state, i) => n | (BigInt(state) << BigInt(i * 5)), 0n);
+    const longs = Array.from({length: Math.ceil(states.length * 5 / 64)}, (_, i) => {
+      const word = packed >> BigInt(i * 64);
+      return [Number(BigInt.asIntN(32, word >> 32n)), Number(BigInt.asIntN(32, word))];
+    });
+    return {type: 'compound', value: {Position: xyz(position), Size: xyz(size),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: longs}}};
+  };
+  const states = Array(32).fill(0);
+  states[1] = 1; states[2] = 2; states[3] = 3;
+  states[12] = 31; states[25] = 17; states[31] = 31;
+  const neg = Array(12).fill(0); neg[0] = 17; neg[11] = 31;
+  const regions = {
+    positive: region({x: 10, y: 9, z: -5}, {x: 4, y: 2, z: 4}, states),
+    negative: region({x: -4, y: 8, z: 3}, {x: -3, y: -2, z: -2}, neg),
+  };
+  const encode = (value) => gzipSync(nbt.writeUncompressed({type: 'compound', name: '', value}));
+  const root = {Metadata: {type: 'compound', value: {Name: {type: 'string', value: 'packed test'}}}, Regions: {type: 'compound', value: regions}};
+  assert.deepStrictEqual(await parseLitematic(encode(root)), {name: 'packed test', size: {x: 20, y: 4, z: 7}, offset: {x: -6, y: 7, z: -3}, blocks: [
+    {x: 16, y: 2, z: 1, name: 'stone', props: {}},
+    {x: 17, y: 3, z: 0, name: 'oak_log', props: {axis: 'z'}},
+    {x: 19, y: 3, z: 1, name: 'stone', props: {}},
+    {x: 0, y: 0, z: 5, name: 'oak_log', props: {axis: 'z'}},
+    {x: 2, y: 1, z: 6, name: 'stone', props: {}},
+  ]});
+  await assert.rejects(parseLitematic(encode({})), /missing Regions/);
+  const bad = region({x: 0, y: 0, z: 0}, {x: 1, y: 1, z: 1}, [0]);
+  bad.value.BlockStatePalette.value.value = [];
+  await assert.rejects(parseLitematic(encode({Regions: {type: 'compound', value: {bad}}})), /bad palette/);
+  const short = region({x: 0, y: 0, z: 0}, {x: 4, y: 2, z: 4}, states);
+  short.value.BlockStates.value.pop();
+  await assert.rejects(parseLitematic(encode({Regions: {type: 'compound', value: {short}}})), /truncated BlockStates/);
+  const index = region({x: 0, y: 0, z: 0}, {x: 1, y: 1, z: 1}, [31]);
+  index.value.BlockStatePalette.value.value = palette.slice(0, 2);
+  await assert.rejects(parseLitematic(encode({Regions: {type: 'compound', value: {index}}})), /bad palette index/);
+  const empty = region({x: 0, y: 0, z: 0}, {x: 1, y: 1, z: 1}, [0]);
+  assert.deepStrictEqual(await parseLitematic(encode({Regions: {type: 'compound', value: {empty}}})), {name: '', size: {x: 0, y: 0, z: 0}, offset: {x: 0, y: 0, z: 0}, blocks: []});
+
+  const b = (name, props = {}) => ({name, props});
+  const bom = billOfMaterials([
+    b('oak_door', {half: 'lower'}), b('oak_door', {half: 'upper'}),
+    b('red_bed', {part: 'foot'}), b('red_bed', {part: 'head'}), b('stone_slab', {type: 'double'}),
+    b('wall_torch'), b('potted_poppy'), b('candle', {candles: '4'}), b('not_a_block'), b('not_a_block'),
+    b('sunflower', {half: 'upper'}),
+  ]);
+  assert.deepStrictEqual(bom, {items: {candle: 4, stone_slab: 2, flower_pot: 1, oak_door: 1, poppy: 1, red_bed: 1, torch: 1}, unknown: ['not_a_block']});
+  assert.deepStrictEqual(Object.values(bom.items), [4, 2, 1, 1, 1, 1, 1]);
+  assert.deepStrictEqual(billOfMaterials([
+    b('soul_wall_torch'), b('redstone_wall_torch'), b('oak_wall_sign'), b('oak_wall_hanging_sign'),
+    b('white_wall_banner'), b('player_wall_head'), b('skeleton_wall_skull'), b('redstone_wire'), b('tripwire'),
+    b('sea_pickle', {pickles: '3'}), b('turtle_egg', {eggs: '2'}), b('snow', {layers: '8'}),
+    ...['water', 'lava', 'fire', 'soul_fire', 'bubble_column', 'piston_head', 'moving_piston', 'frosted_ice', 'light'].map((name) => b(name)),
+  ]), {items: {snow: 8, sea_pickle: 3, turtle_egg: 2, oak_hanging_sign: 1, oak_sign: 1, player_head: 1, redstone: 1,
+    redstone_torch: 1, skeleton_skull: 1, soul_torch: 1, string: 1, white_banner: 1}, unknown: []});
+  assert.deepStrictEqual(billOfMaterials([b('zzz'), b('aaa'), b('zzz')]).unknown, ['zzz', 'aaa']);
+  console.log('schematic: packed regions and bill of materials ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Material plans merge needs before rounding shared intermediates.
+{
+  const assert = require('node:assert/strict');
+  const {planMaterials: plan} = require('./recipes');
+  const gathered = (p) => Object.fromEntries(p.gather.map(({item, count}) => [item, count]));
+  const c = (item, count, crafts, ingredients, table = false) => ({item, count, crafts, ingredients, table});
+  const s = (item, count, from) => ({item, count, from, per: 1});
+  const emptyFuel = {item: 'coal', count: 0};
+
+  const torch = plan({torch: 8});
+  assert.deepStrictEqual(gathered(torch), {oak_log: 1, coal: 2});
+  assert.deepStrictEqual(torch.craft, [c('oak_planks', 2, 1, {oak_log: 1}),
+    c('stick', 2, 1, {oak_planks: 2}), c('torch', 8, 2, {coal: 2, stick: 2})]);
+  assert.deepStrictEqual(torch.smelt, []);
+  assert.deepStrictEqual(torch.fuel, emptyFuel);
+  assert.deepStrictEqual(torch.unknown, []);
+  assert.deepStrictEqual(torch.gather.map(({how}) => how), ['chop oak_log', 'mine coal_ore']);
+
+  for (const items of [{oak_stairs: 8, oak_planks: 5}, {oak_planks: 5, oak_stairs: 8}]) {
+    const p = plan(items);
+    assert.deepStrictEqual(gathered(p), {oak_log: 5});
+    assert.deepStrictEqual(p.craft, [c('oak_planks', 17, 5, {oak_log: 5}), c('oak_stairs', 8, 2, {oak_planks: 12}, true)]);
+  }
+  const glass = plan({glass: 12});
+  assert.deepStrictEqual(gathered(glass), {sand: 12, coal: 2});
+  assert.deepStrictEqual(glass.smelt, [s('glass', 12, 'sand')]);
+  assert.deepStrictEqual(glass.craft, []);
+  assert.deepStrictEqual(glass.fuel, {item: 'coal', count: 2});
+
+  const bricks = plan({stone_bricks: 8});
+  assert.deepStrictEqual(gathered(bricks), {cobblestone: 8, coal: 1});
+  assert.deepStrictEqual(bricks.smelt, [s('stone', 8, 'cobblestone')]);
+  assert.deepStrictEqual(bricks.craft, [c('stone_bricks', 8, 2, {stone: 8})]);
+  assert.deepStrictEqual(bricks.fuel, {item: 'coal', count: 1});
+
+  const iron = plan({iron_block: 1});
+  assert.deepStrictEqual(gathered(iron), {raw_iron: 9, coal: 2});
+  assert.deepStrictEqual(iron.smelt, [s('iron_ingot', 9, 'raw_iron')]);
+  assert.deepStrictEqual(iron.craft, [c('iron_block', 1, 1, {iron_ingot: 9}, true)]);
+  const chest = plan({chest: 2});
+  assert.deepStrictEqual(gathered(chest), {oak_log: 4});
+  assert.deepStrictEqual(chest.craft, [c('oak_planks', 16, 4, {oak_log: 4}), c('chest', 2, 2, {oak_planks: 16}, true)]);
+  assert.deepStrictEqual(plan({white_wool: 1}), {gather: [], smelt: [], craft: [], fuel: emptyFuel, unknown: ['white_wool']});
+
+  const stocked = plan({oak_stairs: 8, oak_planks: 5}, {have: {oak_planks: 5, oak_log: 1}});
+  assert.deepStrictEqual(gathered(stocked), {oak_log: 2});
+  assert.deepStrictEqual(stocked.craft, [c('oak_planks', 12, 3, {oak_log: 3}), c('oak_stairs', 8, 2, {oak_planks: 12}, true)]);
+  assert.deepStrictEqual(gathered(plan({glass: 12}, {have: {glass: 4, sand: 3, coal: 1}})), {sand: 5});
+  assert.deepStrictEqual(plan({white_wool: 1}, {have: {string: 4}}).craft, [c('white_wool', 1, 1, {string: 4})]);
+  const shared = plan({oak_stairs: 8, torch: 8});
+  assert.deepStrictEqual(gathered(shared), {oak_log: 4, coal: 2});
+  assert.strictEqual(shared.craft.filter(({item}) => item === 'oak_planks').length, 1);
+  assert.deepStrictEqual(shared.craft[0], c('oak_planks', 14, 4, {oak_log: 4}));
+
+  for (const items of [{iron_ingot: 9, iron_block: 1}, {iron_block: 1, iron_ingot: 9}]) {
+    const p = plan(items);
+    assert.deepStrictEqual(gathered(p), {raw_iron: 18, coal: 3});
+    assert.deepStrictEqual(p.smelt, [s('iron_ingot', 18, 'raw_iron')]);
+    assert.deepStrictEqual(p.craft, [c('iron_block', 1, 1, {iron_ingot: 9}, true)]);
+    assert.deepStrictEqual(p.unknown, []);
+  }
+  const smooth = plan({smooth_stone: 8});
+  assert.deepStrictEqual(gathered(smooth), {cobblestone: 8, coal: 2});
+  assert.deepStrictEqual(smooth.smelt, [s('stone', 8, 'cobblestone'), s('smooth_stone', 8, 'stone')]);
+  assert.deepStrictEqual(plan({spruce_log: 2}).gather, [{item: 'spruce_log', count: 2, how: 'chop spruce_log'}]);
+  // Mined deepslate drops cobbled_deepslate; stripped logs come from an axe, not a tree.
+  assert.deepStrictEqual(plan({deepslate: 2}).gather, [{item: 'cobbled_deepslate', count: 2, how: 'mine deepslate'}, {item: 'coal', count: 1, how: 'mine coal_ore'}]);
+  assert.deepStrictEqual(plan({stripped_oak_log: 1}).unknown, ['stripped_oak_log']);
+  assert.deepStrictEqual(plan({}), {gather: [], smelt: [], craft: [], fuel: emptyFuel, unknown: []});
+  // Unpacking only when nothing else makes the item: nuggets from ingots, but never ingots from blocks.
+  assert.deepStrictEqual(gathered(plan({iron_nugget: 25})), {raw_iron: 3, coal: 1});
+  assert.deepStrictEqual(plan({iron_nugget: 25}).craft, [c('iron_nugget', 27, 3, {iron_ingot: 3})].map((x) => ({...x, count: 25})));
+  assert.throws(() => plan({}, {version: 'not-a-version'}), /unsupported Minecraft version/);
+  console.log('recipes: material plans ok');
+}
+
+{
+  const assert = require('node:assert/strict');
+  const placing = require('./placing');
+  const {placement, skip, matches, itemOf, YAW, DIRS} = placing;
+  assert.deepStrictEqual(Object.keys(placing).sort(), ['DIRS', 'YAW', 'itemOf', 'matches', 'placement', 'skip']);
+  assert.deepStrictEqual(YAW, {north: 0, west: Math.PI / 2, south: Math.PI, east: 3 * Math.PI / 2});
+  assert.deepStrictEqual(DIRS, {north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0], up: [0, 1, 0], down: [0, -1, 0]});
+  const all = [
+    {against: [0, -1, 0], face: [0, 1, 0], cursor: null, look: null},
+    {against: [1, 0, 0], face: [-1, 0, 0], cursor: null, look: null},
+    {against: [-1, 0, 0], face: [1, 0, 0], cursor: null, look: null},
+    {against: [0, 0, 1], face: [0, 0, -1], cursor: null, look: null},
+    {against: [0, 0, -1], face: [0, 0, 1], cursor: null, look: null},
+    {against: [0, 1, 0], face: [0, -1, 0], cursor: null, look: null},
+  ];
+  const bottom = [all[0],
+    {...all[1], cursor: [0, 0.25, 0.5]}, {...all[2], cursor: [1, 0.25, 0.5]},
+    {...all[3], cursor: [0.5, 0.25, 0]}, {...all[4], cursor: [0.5, 0.25, 1]},
+  ];
+  const top = [
+    {...all[1], cursor: [0, 0.75, 0.5]}, {...all[2], cursor: [1, 0.75, 0.5]},
+    {...all[3], cursor: [0.5, 0.75, 0]}, {...all[4], cursor: [0.5, 0.75, 1]}, all[5],
+  ];
+  const looking = (ways, look) => ways.map((w) => ({...w, look}));
+  const again = {against: [0, 0, 0], face: [0, 1, 0], cursor: null, look: null};
+  const cases = [
+    ['oak_log', {axis: 'x'}, ['axis'], [all[1], all[2]]],
+    ['oak_log', {axis: 'y'}, ['axis'], [all[0], all[5]]],
+    ['oak_log', {axis: 'z'}, ['axis'], [all[3], all[4]]],
+    ['oak_slab', {type: 'bottom'}, ['type'], bottom],
+    ['oak_slab', {type: 'top'}, ['type'], top],
+    ['oak_slab', {type: 'double'}, ['type'], bottom, again],
+    ['oak_trapdoor', {facing: 'north', half: 'top'}, ['facing', 'half'],
+      [{...all[3], cursor: [0.5, 0.75, 0]}, {...all[5], look: 'south'}]],
+    ['oak_trapdoor', {facing: 'east', half: 'bottom'}, ['facing', 'half'],
+      [{...all[0], look: 'west'}, {...all[2], cursor: [1, 0.25, 0.5]}]],
+    ['furnace', {facing: 'east', lit: 'true'}, ['facing'], looking(all, 'west')],
+    ['barrel', {facing: 'up'}, ['facing'], looking(all, 'down')],
+    ['barrel', {facing: 'down'}, ['facing'], looking(all, 'up')],
+    ['oak_fence_gate', {facing: 'south'}, ['facing'], looking(all, 'south')],
+    ['campfire', {facing: 'west'}, ['facing'], looking(all, 'west')],
+    ['soul_campfire', {facing: 'east'}, ['facing'], looking(all, 'east')],
+    ['red_bed', {part: 'foot', facing: 'north'}, ['facing'], looking([all[0]], 'north')],
+    ['wall_torch', {facing: 'west'}, ['facing'], [all[1]]],
+    ['soul_wall_torch', {facing: 'north'}, ['facing'], [all[3]]],
+    ['redstone_wall_torch', {facing: 'east', lit: 'false'}, ['facing'], [all[2]]],
+    ['torch', {}, [], [all[0]]], ['soul_torch', {}, [], [all[0]]], ['redstone_torch', {lit: 'true'}, [], [all[0]]],
+    ['lantern', {hanging: 'true'}, ['hanging'], [all[5]]],
+    ['lantern', {hanging: 'false'}, ['hanging'], [all[0]]],
+    ['soul_lantern', {hanging: 'true'}, ['hanging'], [all[5]]],
+    ['ladder', {facing: 'south'}, ['facing'], [all[4]]],
+    ['white_carpet', {}, [], [all[0]]], ['oak_pressure_plate', {powered: 'true'}, [], [all[0]]],
+    ['flower_pot', {}, [], [all[0]]], ['glass', {}, [], all],
+    ['oak_fence', {north: 'true', south: 'false', east: 'false', west: 'true', waterlogged: 'false'}, [], all],
+    ['oak_leaves', {persistent: 'true', distance: '1'}, [], all],
+  ];
+  for (const facing of ['north', 'south', 'east', 'west']) for (const half of ['bottom', 'top']) {
+    cases.push(['oak_stairs', {facing, half, shape: 'straight', waterlogged: 'false'}, ['facing', 'half'], looking(half === 'top' ? top : bottom, facing)]);
+  }
+  for (const [facing, left, right] of [
+    ['north', [0.25, 1, 0.5], [0.75, 1, 0.5]], ['south', [0.75, 1, 0.5], [0.25, 1, 0.5]],
+    ['east', [0.5, 1, 0.25], [0.5, 1, 0.75]], ['west', [0.5, 1, 0.75], [0.5, 1, 0.25]],
+  ]) for (const [hinge, cursor] of [['left', left], ['right', right]]) {
+    cases.push(['oak_door', {facing, half: 'lower', hinge}, ['facing', 'half'], [{...all[0], cursor, look: facing}]]);
+  }
+  for (const name of ['smoker', 'blast_furnace', 'chest', 'trapped_chest', 'ender_chest', 'carved_pumpkin',
+    'jack_o_lantern', 'loom', 'stonecutter', 'lectern', 'beehive', 'bee_nest', 'chiseled_bookshelf',
+    'end_portal_frame', 'blue_glazed_terracotta']) cases.push([name, {facing: 'north'}, ['facing'], looking(all, 'south')]);
+  for (const [name, props, check, ways, second] of cases) {
+    const expected = {item: itemOf(name), check, ways, ...(second ? {again: second} : {})};
+    assert.deepStrictEqual(placement(name, props), expected, `${name} ${JSON.stringify(props)}`);
+    assert.deepStrictEqual(placement(`minecraft:${name}`, props), expected);
+    for (const w of ways) {
+      assert.ok(w.cursor === null || w.cursor.every((v) => v >= 0 && v <= 1));
+      assert.deepStrictEqual(w.face, w.against.map((v) => v ? -v : 0));
+    }
+  }
+  for (const [name, props] of [
+    ['oak_sign', {rotation: '0'}], ['stone_button', {face: 'wall', facing: 'up'}],
+    ['repeater', {facing: 'north', delay: '5'}], ['rail', {}], ['hopper', {facing: 'up'}],
+    ['white_shulker_box', {}], ['note_block', {note: '25'}], ['candle', {}], ['sea_pickle', {}], ['stone', {candles: '2'}],
+    ['stone', {pickles: '2'}], ['stone', {rotation: '0'}], ['bell', {attachment: 'floor'}],
+    ['comparator', {}], ['piston', {}], ['sticky_piston', {}], ['observer', {}],
+    ['dispenser', {}], ['dropper', {}], ['crafter', {}], ['powered_rail', {}], ['oak_wall_sign', {}],
+    ['white_banner', {}], ['vine', {}], ['scaffolding', {}], ['anvil', {}], ['chipped_anvil', {}],
+    ['damaged_anvil', {}], ['stone', {facing: 'north'}], ['stone', {half: 'bottom'}],
+    ['stone', {type: 'left'}], ['stone', {hinge: 'left'}], ['stone', {part: 'foot'}],
+    ['oak_log', {axis: 'bad'}], ['oak_stairs', {facing: 'up', half: 'bottom'}],
+  ]) assert.strictEqual(placement(name, props), null, name);
+  // Redstone parts, rails, buttons, shulker boxes, double chests (vanilla rules; tools/mcbots-placetest checks them live).
+  const w = (against, look = null, cursor = null) => ({against, face: against.map((v) => v ? -v : 0), cursor, look});
+  const six = (look) => [[0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]].map((a) => w(a, look));
+  const cyc = (prop, values) => ({cycle: {prop, values}});
+  assert.deepStrictEqual(placement('hopper', {facing: 'east', enabled: 'true'}), {item: 'hopper', check: ['facing'], ways: [w([1, 0, 0])]});
+  assert.deepStrictEqual(placement('hopper', {facing: 'down'}).ways, [w([0, -1, 0]), w([0, 1, 0])]);
+  assert.deepStrictEqual(placement('repeater', {facing: 'north', delay: '3'}), {item: 'repeater', check: ['facing', 'delay'], ways: [w([0, -1, 0], 'south')], ...cyc('delay', ['1', '2', '3', '4'])});
+  assert.deepStrictEqual(placement('comparator', {facing: 'west', mode: 'subtract'}).ways, [w([0, -1, 0], 'east')]);
+  assert.deepStrictEqual(placement('dropper', {facing: 'up'}).ways, six('down'));
+  assert.deepStrictEqual(placement('sticky_piston', {facing: 'north', extended: 'true'}).ways, six('south'));
+  assert.deepStrictEqual(placement('observer', {facing: 'down'}).ways, six('down'));
+  assert.deepStrictEqual(placement('note_block', {note: '7', instrument: 'harp'}).cycle.values.length, 25);
+  assert.deepStrictEqual(placement('white_shulker_box', {facing: 'west'}).ways, [w([1, 0, 0])]);
+  assert.deepStrictEqual(placement('powered_rail', {shape: 'ascending_south', powered: 'false'}), {item: 'powered_rail', check: [], ways: [w([0, -1, 0], 'north')], final: ['shape']});
+  assert.strictEqual(placement('rail', {shape: 'north_east'}).ways[0].look, null);
+  assert.deepStrictEqual(placement('redstone_wire', {north: 'side', power: '0'}).ways, [w([0, -1, 0])]);
+  assert.deepStrictEqual(placement('stone_button', {face: 'wall', facing: 'north'}).ways, [w([0, 0, 1])]);
+  assert.deepStrictEqual(placement('lever', {face: 'ceiling', facing: 'east'}).ways, [w([0, 1, 0], 'east')]);
+  const chest = placement('chest', {facing: 'north', type: 'left'});
+  assert.deepStrictEqual([chest.check, chest.final, chest.ways[0]], [['facing'], ['type'], w([1, 0, 0], 'south')]); // partner east of a north chest
+  assert.deepStrictEqual(placement('chest', {facing: 'south', type: 'right'}).ways[0], w([1, 0, 0], 'north'));
+  assert.deepStrictEqual(placement('chest', {facing: 'east', type: 'single'}).ways, six('west'));
+  assert.ok(matches({name: 'repeater', props: {facing: 'north', delay: '1'}}, {name: 'repeater', props: {facing: 'north', delay: 1, powered: true}}));
+  assert.ok(!matches({name: 'repeater', props: {facing: 'north', delay: '2'}}, {name: 'repeater', props: {facing: 'north', delay: 1}}));
+  assert.ok(matches({name: 'repeater', props: {facing: 'north'}}, {name: 'repeater', props: {facing: 'north', delay: 1}}));
+  assert.ok(matches({name: 'rail', props: {shape: 'north_east'}}, {name: 'rail', props: {shape: 'east_west'}}));
+  assert.ok(!matches({name: 'rail', props: {shape: 'north_east'}}, {name: 'rail', props: {shape: 'east_west'}}, {final: true}));
+  assert.ok(matches({name: 'chest', props: {facing: 'north', type: 'left'}}, {name: 'chest', props: {facing: 'north', type: 'left'}}, {final: true}));
+  for (const name of ['piston_head', 'moving_piston']) assert.ok(skip(name, {}));
+  for (const [name, props] of [['oak_door', {half: 'upper'}], ['red_bed', {part: 'head'}], ['tall_grass', {half: 'upper'}]]) {
+    assert.strictEqual(skip(name, props), true);
+    assert.strictEqual(skip(`minecraft:${name}`, props), true);
+    assert.strictEqual(placement(name, props), null);
+  }
+  for (const [name, props] of [['oak_door', {half: 'lower'}], ['red_bed', {part: 'foot'}], ['glass', {}]]) assert.strictEqual(skip(name, props), false);
+  assert.strictEqual(skip('stone'), false);
+  assert.deepStrictEqual(placement('glass'), {item: 'glass', check: [], ways: all});
+  const b = (name, props = {}) => ({name, props});
+  for (const [want, have] of [
+    [b('oak_stairs', {facing: 'north', half: 'bottom', shape: 'straight'}), b('oak_stairs', {facing: 'north', half: 'bottom', shape: 'inner_left', waterlogged: 'true'})],
+    [b('oak_fence', {north: 'true'}), b('minecraft:oak_fence', {north: 'false'})],
+    [b('minecraft:glass', {waterlogged: 'false'}), b('glass', {waterlogged: 'true'})],
+    [b('lantern', {hanging: 'true'}), b('lantern', {hanging: true})],
+    [b('oak_door', {facing: 'east', half: 'lower', hinge: 'left'}), b('oak_door', {facing: 'east', half: 'lower', hinge: 'right'})],
+  ]) assert.strictEqual(matches(want, have), true);
+  for (const [want, have] of [
+    [b('oak_log', {axis: 'x'}), b('oak_log', {axis: 'z'})],
+    [b('oak_slab', {type: 'double'}), b('oak_slab', {type: 'bottom'})],
+    [b('oak_stairs', {facing: 'north', half: 'bottom'}), b('oak_stairs', {facing: 'south', half: 'bottom'})],
+    [b('oak_stairs', {facing: 'north', half: 'bottom'}), b('oak_stairs', {facing: 'north', half: 'top'})],
+    [b('lantern', {hanging: 'true'}), b('lantern', {hanging: 'false'})],
+    [b('glass'), b('stone')], [b('oak_sign', {rotation: '0'}), b('oak_sign', {rotation: '0'})],
+  ]) assert.strictEqual(matches(want, have), false);
+  for (const [name, item] of [['wall_torch', 'torch'], ['soul_wall_torch', 'soul_torch'], ['oak_wall_sign', 'oak_sign'],
+    ['oak_wall_hanging_sign', 'oak_hanging_sign'], ['white_wall_banner', 'white_banner'],
+    ['player_wall_head', 'player_head'], ['skeleton_wall_skull', 'skeleton_skull'],
+    ['redstone_wire', 'redstone'], ['tripwire', 'string'], ['stone', 'stone']]) {
+    assert.strictEqual(itemOf(name), item);
+    assert.strictEqual(itemOf(`minecraft:${name}`), item);
+  }
+  console.log('placing: block states ok');
+}
+
+(async () => {
+  const assert = require('node:assert/strict');
+  const {placeSchematic, buildOrder, parseLitematic} = require('./schematic');
+  const b = (x, y, z, name, props = {}) => ({x, y, z, name, props});
+  const parsed = {offset: {x: -2, y: 3, z: 1}, blocks: [
+    b(0, 0, 0, 'oak_stairs', {facing: 'north', half: 'bottom', shape: 'inner_left'}),
+    b(2, 0, 1, 'oak_log', {axis: 'x'}), b(1, 1, 2, 'rail', {shape: 'north_east'}),
+    b(3, 1, 0, 'observer', {facing: 'up'}),
+  ]};
+  const snapshot = JSON.stringify(parsed), origin = {x: 10, y: 20, z: 30};
+  const positions = [
+    ['none', 0, [[8, 23, 31], [10, 23, 32], [11, 24, 31], [9, 24, 33]]],
+    ['none', 90, [[8, 23, 30], [9, 23, 28], [7, 24, 29], [9, 24, 31]]],
+    ['none', 180, [[10, 23, 28], [12, 23, 29], [11, 24, 27], [9, 24, 29]]],
+    ['none', 270, [[11, 23, 32], [12, 23, 30], [11, 24, 29], [13, 24, 31]]],
+    ['left_right', 0, [[10, 23, 28], [8, 23, 29], [9, 24, 27], [11, 24, 29]]],
+    ['left_right', 90, [[11, 23, 28], [12, 23, 30], [13, 24, 29], [11, 24, 31]]],
+    ['left_right', 180, [[12, 23, 31], [10, 23, 32], [9, 24, 31], [11, 24, 33]]],
+    ['left_right', 270, [[8, 23, 30], [9, 23, 32], [9, 24, 29], [7, 24, 31]]],
+    ['front_back', 0, [[12, 23, 31], [10, 23, 32], [9, 24, 31], [11, 24, 33]]],
+    ['front_back', 90, [[8, 23, 30], [9, 23, 32], [9, 24, 29], [7, 24, 31]]],
+    ['front_back', 180, [[10, 23, 28], [8, 23, 29], [9, 24, 27], [11, 24, 29]]],
+    ['front_back', 270, [[11, 23, 28], [12, 23, 30], [13, 24, 29], [11, 24, 31]]],
+  ];
+  for (const [mirror, rotation, expected] of positions) {
+    const placed = placeSchematic(parsed, {origin, mirror, rotation});
+    assert.deepStrictEqual(placed.map(({x, y, z}) => [x, y, z]), expected.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0]), `${mirror} ${rotation}`);
+    assert.deepStrictEqual(placed.map(({name}) => name).sort(), parsed.blocks.map(({name}) => name).sort());
+    assert.strictEqual(placed.find(({name}) => name === 'observer').props.facing, 'up');
+  }
+  assert.deepStrictEqual(placeSchematic(parsed, {origin}), placeSchematic(parsed, {origin, rotation: 0, mirror: 'none'}));
+  const state = (name, props, rotation = 0, mirror = 'none') => placeSchematic({offset: {x: 0, y: 0, z: 0}, blocks: [b(0, 0, 0, name, props)]}, {origin, rotation, mirror})[0].props;
+  assert.strictEqual(state('oak_stairs', {facing: 'north'}, 90).facing, 'east');
+  assert.strictEqual(state('oak_log', {axis: 'x'}, 90).axis, 'z');
+  assert.strictEqual(state('oak_log', {axis: 'y'}, 270).axis, 'y');
+  assert.strictEqual(state('rail', {shape: 'north_east'}, 90).shape, 'south_east');
+  assert.strictEqual(state('rail', {shape: 'north_east'}, 0, 'left_right').shape, 'south_east');
+  assert.strictEqual(state('rail', {shape: 'ascending_north'}, 180).shape, 'ascending_south');
+  assert.strictEqual(state('rail', {shape: 'north_south'}, 270).shape, 'east_west');
+  assert.strictEqual(state('rail', {shape: 'east_west'}, 90).shape, 'north_south');
+  assert.deepStrictEqual(state('chest', {facing: 'east', type: 'left'}, 0, 'front_back'), {facing: 'west', type: 'right'});
+  assert.strictEqual(state('chest', {type: 'left'}, 90).type, 'left');
+  assert.strictEqual(state('oak_door', {hinge: 'left'}, 0, 'left_right').hinge, 'right');
+  assert.strictEqual(state('oak_door', {hinge: 'right'}, 90, 'front_back').hinge, 'left');
+  assert.strictEqual(state('oak_door', {hinge: 'left'}, 90).hinge, 'left');
+  for (const shape of ['inner_left', 'outer_right']) for (const mirror of ['left_right', 'front_back']) {
+    assert.strictEqual(state('oak_stairs', {shape}, 90, mirror).shape, shape === 'inner_left' ? 'inner_right' : 'outer_left');
+  }
+  const sides = {north: 'side', east: 'up', south: 'none', west: 'side', power: '0'};
+  assert.deepStrictEqual(state('redstone_wire', sides, 90), {east: 'side', south: 'up', west: 'none', north: 'side', power: '0'});
+  assert.deepStrictEqual(state('redstone_wire', sides, 90, 'left_right'), {west: 'side', south: 'up', east: 'none', north: 'side', power: '0'});
+  assert.deepStrictEqual(state('oak_fence', {north: 'true', west: 'false'}, 0, 'front_back'), {north: 'true', east: 'false'});
+  assert.strictEqual(state('oak_sign', {rotation: '3'}, 90).rotation, '7');
+  assert.strictEqual(state('oak_sign', {rotation: '3'}, 0, 'left_right').rotation, '13');
+  assert.strictEqual(state('oak_sign', {rotation: '3'}, 90, 'left_right').rotation, '1');
+  assert.strictEqual(state('oak_sign', {rotation: '3'}, 270, 'front_back').rotation, '1');
+  for (const rotation of [45, -90, 360, '90', null]) assert.throws(() => placeSchematic(parsed, {origin, rotation}), /invalid rotation/);
+  assert.throws(() => placeSchematic(parsed, {origin, mirror: 'bad'}), /invalid mirror/);
+  assert.strictEqual(JSON.stringify(parsed), snapshot);
+
+  const targets = [b(0, 1, 0, 'redstone_torch'), b(0, 1, 1, 'redstone_wire'),
+    b(1, 0, 0, 'observer', {facing: 'up'}), b(1, 1, 0, 'repeater', {facing: 'north'}),
+    b(2, 1, 0, 'oak_door', {half: 'upper'}), b(2, 0, 0, 'oak_door', {half: 'lower', facing: 'north', hinge: 'left'}),
+    b(3, 0, 0, 'oak_sign', {rotation: '3'}), b(0, 0, 1, 'hopper', {facing: 'down'}), b(0, 0, 0, 'stone')];
+  const before = JSON.stringify(targets);
+  assert.deepStrictEqual(buildOrder(targets), {order: [targets[8], targets[5], targets[7], targets[3], targets[1], targets[2], targets[0]],
+    deferred: new Set(['1,0,0', '0,1,0']), unsupported: [{x: 3, y: 0, z: 0, name: 'oak_sign'}], skipped: 1});
+  assert.strictEqual(JSON.stringify(targets), before);
+  assert.deepStrictEqual(buildOrder([]), {order: [], deferred: new Set(), unsupported: [], skipped: 0});
+  const extras = [b(1, 0, 0, 'minecraft:oak_pressure_plate'), b(0, 0, 0, 'redstone_block'),
+    b(0, 1, 0, 'oak_sign'), b(0, 0, 1, 'crafter'), b(2, 0, 0, 'red_bed', {part: 'head'}), b(3, 0, 0, 'piston_head')];
+  assert.deepStrictEqual(buildOrder(extras), {order: [extras[1], extras[0]], deferred: new Set(['0,0,0', '1,0,0']),
+    unsupported: [{x: 0, y: 0, z: 1, name: 'crafter'}, {x: 0, y: 1, z: 0, name: 'oak_sign'}], skipped: 2});
+  const attached = [b(0, 0, 0, 'rail', {shape: 'north_south'}), b(1, 0, 0, 'stone_button', {face: 'floor', facing: 'north'}),
+    b(2, 0, 0, 'white_carpet'), b(3, 0, 0, 'oak_trapdoor', {facing: 'north', half: 'bottom'}), b(4, 0, 0, 'stone')];
+  assert.deepStrictEqual(buildOrder(attached).order, [attached[4], ...attached.slice(0, 4)]);
+
+  // Rebuild the packed-region fixture above, whose helpers are scoped to its test block.
+  const nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+  const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+  const palette = Array.from({length: 32}, () => ({Name: {type: 'string', value: 'minecraft:stone'}}));
+  for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+  palette[17] = {Name: {type: 'string', value: 'minecraft:oak_log'}, Properties: {type: 'compound', value: {axis: {type: 'string', value: 'z'}}}};
+  const region = (position, size, states) => {
+    const packed = states.reduce((n, state, i) => n | (BigInt(state) << BigInt(i * 5)), 0n);
+    const longs = Array.from({length: Math.ceil(states.length * 5 / 64)}, (_, i) => {
+      const word = packed >> BigInt(i * 64);
+      return [Number(BigInt.asIntN(32, word >> 32n)), Number(BigInt.asIntN(32, word))];
+    });
+    return {type: 'compound', value: {Position: xyz(position), Size: xyz(size),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: longs}}};
+  };
+  const states = Array(32).fill(0); states[1] = 1; states[2] = 2; states[3] = 3; states[12] = 31; states[25] = 17; states[31] = 31;
+  const neg = Array(12).fill(0); neg[0] = 17; neg[11] = 31;
+  const fixture = await parseLitematic(gzipSync(nbt.writeUncompressed({type: 'compound', name: '', value: {
+    Metadata: {type: 'compound', value: {Name: {type: 'string', value: 'packed test'}}},
+    Regions: {type: 'compound', value: {
+      positive: region({x: 10, y: 9, z: -5}, {x: 4, y: 2, z: 4}, states),
+      negative: region({x: -4, y: 8, z: 3}, {x: -3, y: -2, z: -2}, neg),
+    }},
+  }})));
+  assert.deepStrictEqual(buildOrder(fixture.blocks), {order: [fixture.blocks[3], fixture.blocks[4], fixture.blocks[0], fixture.blocks[1], fixture.blocks[2]],
+    deferred: new Set(), unsupported: [], skipped: 0});
+  console.log('schematic: placement and build order ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Container contents ride on their block, sorted by slot, and count in the bill of materials.
+(async () => {
+  const assert = require('node:assert/strict');
+  const nbt = require('prismarine-nbt');
+  const {gzipSync} = require('node:zlib');
+  const {parseLitematic, billOfMaterials, placeSchematic} = require('./schematic');
+  const c = (value) => ({type: 'compound', value});
+  const item = (slot, id, count) => ({Slot: {type: 'byte', value: slot}, id: {type: 'string', value: id}, Count: {type: 'byte', value: count}});
+  const region = c({
+    Position: c({x: {type: 'int', value: 0}, y: {type: 'int', value: 0}, z: {type: 'int', value: 0}}),
+    Size: c({x: {type: 'int', value: 2}, y: {type: 'int', value: 1}, z: {type: 'int', value: 1}}),
+    BlockStatePalette: {type: 'list', value: {type: 'compound', value: [{Name: {type: 'string', value: 'minecraft:air'}}, {Name: {type: 'string', value: 'minecraft:hopper'}}]}},
+    BlockStates: {type: 'longArray', value: [[0, 4]]}, // cell 0 air, cell 1 hopper (2 bits each)
+    TileEntities: {type: 'list', value: {type: 'compound', value: [
+      {x: {type: 'int', value: 1}, y: {type: 'int', value: 0}, z: {type: 'int', value: 0}, Items: {type: 'list', value: {type: 'compound', value: [item(1, 'minecraft:shears', 1), item(0, 'minecraft:snowball', 2)]}}},
+      {x: {type: 'int', value: 0}, y: {type: 'int', value: 0}, z: {type: 'int', value: 0}, Items: {type: 'list', value: {type: 'compound', value: []}}},
+    ]}},
+  });
+  const buf = gzipSync(nbt.writeUncompressed({type: 'compound', name: '', value: {Regions: c({r: region})}}));
+  const s = await parseLitematic(buf);
+  const want = [{slot: 0, name: 'snowball', count: 2}, {slot: 1, name: 'shears', count: 1}];
+  assert.deepStrictEqual(s.blocks, [{x: 0, y: 0, z: 0, name: 'hopper', props: {}, items: want}]);
+  assert.deepStrictEqual(billOfMaterials(s.blocks).items, {snowball: 2, hopper: 1, shears: 1});
+  assert.deepStrictEqual(placeSchematic(s, {origin: {x: 5, y: 6, z: 7}})[0].items, want);
+  console.log('schematic: container contents ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// guardDigs: mineflayer's openContainer calls activateBlock without awaiting it; a refusal for a stopped
+// job must not be an unhandled rejection (it ended the whole process, sandbox 2026-10-13).
+(async () => {
+  const assert = require('node:assert/strict');
+  const {guardDigs} = require('./bots');
+  const {Vec3} = require('vec3');
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on('unhandledRejection', onUnhandled);
+  const bot = {dig: async () => {}, equip: async () => {}, placeBlock: async () => {}, entity: {position: new Vec3(0, 62, 0)},
+    blockAt: () => null, activateBlock: async () => 'clicked', openContainer: async () => 'window'};
+  const runner = {current: {cancelled: false}, protectedAreas: []};
+  guardDigs(runner, bot);
+  assert.strictEqual(await bot.activateBlock({}), 'clicked');
+  assert.strictEqual(await bot.openContainer({}), 'window');
+  runner.current.cancelled = true;
+  bot.activateBlock({}); // not awaited, as mineflayer's openBlock does
+  await assert.rejects(bot.activateBlock({}), /Activating aborted/); // an awaiting caller still sees it
+  await new Promise((r) => setImmediate(r));
+  process.off('unhandledRejection', onUnhandled);
+  assert.deepStrictEqual(unhandled, []);
+  console.log('guardDigs: refused activations are handled');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Owner orders use packet identity and structured chat, never text pattern events.
+(async () => {
+  const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
+  const {EventEmitter} = require('node:events');
+  const {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole} = require('./owner');
+  const {BotRunner} = require('./bots');
+  const {loadConfig, loadWorkerConfig} = require('./config');
+  const uuid = '623c7ee4-71ca-487a-b92a-a4564e43fbb9', other = '123c7ee4-71ca-487a-b92a-a4564e43fbb9';
+  assert.equal(isOwnerMessage({sender: uuid.replace(/-/g, '').toUpperCase(), position: 'chat'}, [uuid]), true);
+  for (const m of [{sender: null, position: 'system'}, {sender: uuid, position: 'system'}, {sender: other, position: 'chat'},
+    {sender: other, position: 'chat', text: '[fancy8869 -> bot1] stopp'}, {sender: null, position: 'chat'}, {sender: 'bad', position: 'chat'}]) assert.equal(isOwnerMessage(m, [uuid]), false);
+  assert.equal(isOwnerMessage({sender: uuid, position: 'chat'}, []), false);
+  assert.deepEqual(parseOrder('BOT1 KOMM', 'bot1', {}), {all: false, words: ['KOMM']});
+  assert.deepEqual(parseOrder('alle stopp', 'bot1', {}), {all: true, words: ['stopp']});
+  assert.deepEqual(parseOrder('komm', 'bot1', {whisper: true}), {all: false, words: ['komm']});
+  for (const s of ['komm', 'bot12 komm', '[fancy8869 -> bot1] stopp', 'bot1komm']) assert.equal(parseOrder(s, 'bot1', {}), null);
+  const ctx = {owner: 'fancy8869', ownerPos: {x: 1.9, y: 64.5, z: -2.1}}, tr = (s, c = ctx) => translate(s.split(' '), c);
+  for (const [word, type] of [['KOMM', 'come'], ['folge', 'follow']]) assert.deepEqual(tr(word), {type, args: {player: ctx.owner}});
+  for (const word of ['stopp', 'bleib', 'fertig']) assert.deepEqual(tr(word), {stop: true});
+  assert.deepEqual(tr('status'), {status: true});
+  assert.deepEqual(tr('wache'), {type: 'guard', args: {player: ctx.owner, radius: 16}});
+  assert.deepEqual(tr('wache hier'), {type: 'guard', args: {x: 1, y: 64, z: -3, radius: 16}});
+  assert.deepEqual(tr('wache hier', {...ctx, ownerPos: null}), {unknown: true});
+  for (const role of ['helfer', 'sammler', 'farmer', 'wache']) assert.deepEqual(tr(`ROLLE ${role.toUpperCase()}`), {role});
+  for (const [word, block] of [['eisen', 'iron_ore'], ['kohle', 'coal_ore'], ['stein', 'stone'], ['diamond_ore', 'diamond_ore']]) assert.deepEqual(tr(`hol 16 ${word}`), {type: 'mine', args: {block, count: 16}});
+  assert.deepEqual(tr('hol 256 holz'), {type: 'chop', args: {count: 256}});
+  assert.deepEqual(tr('hol 1 stein'), {type: 'mine', args: {block: 'stone', count: 1}});
+  for (const text of ['', 'rolle chef', 'rolle', 'komm jetzt', 'wache dort', 'hol 0 eisen', 'hol 257 eisen', 'hol -1 eisen', 'hol 1.5 eisen', 'hol NaN eisen', 'hol 1 eisen extra', 'hol 1 stone/../', 'nonsense']) assert.deepEqual(tr(text), {unknown: true});
+  const sent = [], say = makeSayer((text) => sent.push({text, t: Date.now()}), {gapMs: 40, max: 4});
+  say('abcdef'); say('old'); say('newest');
+  assert.deepEqual(sent.map((s) => s.text), ['abcd']);
+  await new Promise((r) => setTimeout(r, 65));
+  assert.deepEqual(sent.map((s) => s.text), ['abcd', 'newe']);
+  assert.ok(sent[1].t - sent[0].t >= 40);
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mcbots-owner-'));
+  try {
+    const file = path.join(dir, 'demo.jsonl'), log = makeDemoLog(file);
+    const entry = {bot: 'bot1', via: 'whisper', text: 'komm', command: tr('komm'), state: {health: 20}};
+    const id = log.add(entry);
+    assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 1);
+    log.outcome(id, 'finished', 'finished: come');
+    const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.deepEqual(lines[0], {...entry, id, t: lines[0].t, outcome: null});
+    assert.ok(Number.isFinite(Date.parse(lines[0].t)));
+    assert.deepEqual(lines[1], {id, outcome: {t: lines[1].outcome.t, result: 'finished', text: 'finished: come'}});
+    const rotated = path.join(dir, 'rotate.jsonl'), small = makeDemoLog(rotated, {maxBytes: 1});
+    small.add(entry); assert.ok(fs.existsSync(`${rotated}.1`)); assert.equal(fs.existsSync(rotated), false);
+    small.add({...entry, text: 'folge'});
+    assert.equal(JSON.parse(fs.readFileSync(`${rotated}.1`, 'utf8')).text, 'folge');
+    const noop = makeDemoLog(null); noop.outcome(noop.add(entry), 'finished', 'ok');
+    const roles = path.join(dir, 'roles.json');
+    assert.equal(loadRole(roles, 'bot2'), 'sammler');
+    saveRole(roles, 'bot1', 'wache'); saveRole(roles, 'bot2', 'farmer');
+    assert.equal(loadRole(roles, 'bot1'), 'wache'); assert.equal(loadRole(roles, 'bot2'), 'farmer');
+    const bot = new EventEmitter(), whispers = [];
+    bot.players = {fancy8869: {uuid, username: 'fancy8869', entity: {position: ctx.ownerPos}}};
+    bot.whisper = (name, text) => whispers.push({name, text});
+    const outcomes = [], orders = [];
+    const runner = new BotRunner('bot1', {log: () => {}, ownerUuids: [uuid], demoLog: {add: (e) => { orders.push(e); return String(orders.length); }, outcome: (...a) => outcomes.push(a)}});
+    runner.bot = bot; runner.online = true;
+    runner.snapshot = () => ({health: 20, food: 18, job: null, role: runner.role, strangerOrders: runner.strangerOrders});
+    runner.pump = () => {}; // keep the real enqueue/validation; no Minecraft work
+    runner.bindOwner(bot);
+    const enqueued = [], enqueue = runner.enqueue.bind(runner);
+    runner.enqueue = (...args) => { enqueued.push(args); return enqueue(...args); };
+    const msg = (text, incoming = false) => ({translate: incoming ? 'commands.message.display.incoming' : 'chat.type.text', with: [{toString: () => 'fancy8869'}, {toString: () => text}]});
+    bot.emit('message', msg('bot1 komm'), 'chat', uuid, true);
+    assert.deepEqual(enqueued[0], ['come', {player: 'fancy8869'}, {replace: true}]);
+    assert.deepEqual(whispers, [{name: 'fancy8869', text: 'ok: komme'}]);
+    bot.emit('message', msg('bot1 stopp'), 'chat', other, true);
+    assert.equal(runner.snapshot().strangerOrders, 1); assert.equal(whispers.length, 1); assert.equal(enqueued.length, 1);
+    bot.emit('message', msg('[fancy8869 -> bot1] stopp'), 'system', null);
+    assert.equal(enqueued.length, 1);
+    const job = runner.queue[0];
+    runner.emit('done', 'finished: come', job.id + 1); assert.equal(outcomes.length, 0);
+    runner.emit('done', 'finished: come', job.id); assert.deepEqual(outcomes[0], ['1', 'finished', 'finished: come']);
+    runner.emit('done', 'finished: come', job.id); assert.equal(outcomes.length, 1);
+    runner.say = (text) => bot.whisper('fancy8869', text);
+    runner.rolesFile = roles;
+    bot.emit('message', msg('rolle sammler', true), 'chat', uuid);
+    assert.equal(runner.role, 'sammler'); assert.equal(loadRole(roles, 'bot1'), 'sammler');
+    bot.emit('message', msg('status', true), 'chat', uuid);
+    assert.match(whispers.at(-1).text, /Leben 20, Essen 18, frei, Rolle sammler/);
+    bot.emit('message', msg('folge', true), 'chat', uuid);
+    assert.equal(runner.queue[0].type, 'follow');
+    bot.emit('message', msg('hol 1 torch', true), 'chat', uuid);
+    assert.match(whispers.at(-1).text, /^geht nicht:/); assert.equal(runner.queue[0].type, 'follow');
+    bot.emit('message', msg('stopp', true), 'chat', uuid);
+    assert.equal(runner.queue.length, 0); assert.ok(outcomes.some((o) => o[1] === 'stopped'));
+    const disabled = new BotRunner('bot1', {log: () => {}}); disabled.bindOwner(bot);
+    const env = {BOT_NAMES: 'bot1', BOT_PASSWORD_SEED: 'test', OWNER_UUIDS: uuid};
+    assert.deepEqual(loadConfig(env).ownerUuids, [uuid]);
+    assert.throws(() => loadConfig({...env, OWNER_UUIDS: 'bad'}), /OWNER_UUIDS/);
+    assert.deepEqual(loadWorkerConfig({...env, HUB_URL: 'ws://localhost/worker', HUB_TOKEN: 'test', MC_HOST: 'localhost'}, ['bot1']).ownerUuids, [uuid]);
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  console.log('owner: in-game orders ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Production: the next chain for a project, crafts with ingredients in the store first, then smelts, then gathering.
+{
+  const assert = require('node:assert/strict');
+  const {nextChain} = require('./production');
+  const store = {x: 1, y: 64, z: 2};
+  const craft = nextChain({need: {hopper: 10}, stock: {iron_ingot: 20, chest: 10}, store});
+  assert.deepStrictEqual(craft, {key: 'craft:hopper', label: 'craft 4 hopper', chain: [
+    ['withdraw', {item: 'iron_ingot', count: 20, ...store}], ['withdraw', {item: 'chest', count: 4, ...store}],
+    ['craft', {item: 'hopper', count: 4}], ['deposit', {...store, only: 'hopper'}]]});
+  const smelt = nextChain({need: {hopper: 2}, stock: {raw_iron: 10, coal: 2}, store});
+  assert.deepStrictEqual(smelt.chain, [['withdraw', {item: 'raw_iron', count: 10, ...store}], ['withdraw', {item: 'coal', count: 2, ...store}],
+    ['smelt', {item: 'raw_iron', count: 10}], ['deposit', {...store, only: 'iron_ingot'}]]);
+  assert.strictEqual(nextChain({need: {stone: 200}, stock: {cobblestone: 200, coal: 25}, store}).chain[2][1].count, 64, 'a smelt takes 64 at most');
+  assert.strictEqual(nextChain({need: {stone: 200}, stock: {cobblestone: 200, coal: 2}, store}).chain[2][1].count, 16, 'no more than the fuel lasts');
+  const gather = nextChain({need: {hopper: 2}, store});
+  assert.match(gather.key, /^gather:/);
+  assert.deepStrictEqual(gather.chain[1], ['deposit', {...store, only: gather.key.slice(7)}]);
+  assert.deepStrictEqual(nextChain({need: {oak_planks: 4}, store}).chain[0], ['mine', {block: 'oak_log', count: 1}], 'oak stays oak');
+  assert.deepStrictEqual(nextChain({need: {hopper: 1}, stock: {iron_ingot: 5, chest: 1}, store, taken: new Set(['craft:hopper'])}), {idle: 'the other bots have the open steps'});
+  assert.deepStrictEqual(nextChain({need: {}, store}), {idle: 'the project has all it needs'});
+  assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool'});
+  console.log('production: next chains ok');
+}
+
+// hostilesNear with a height: a mob in a cave far below the target is not near it.
+{
+  const assert = require('node:assert/strict');
+  const {WorldModel} = require('./world');
+  const w = new WorldModel();
+  w.mobs.set('overworld:1', {id: 1, type: 'zombie', x: 0, y: 64, z: 0, dim: 'overworld', t: w.now()});
+  w.mobs.set('overworld:2', {id: 2, type: 'zombie', x: 3, y: 30, z: 0, dim: 'overworld', t: w.now()});
+  assert.strictEqual(w.hostilesNear(0, 0, 'overworld', 8).length, 2, 'without a height as before');
+  assert.deepStrictEqual(w.hostilesNear(0, 0, 'overworld', 8, 66).map((m) => m.id), [1]);
+  console.log('world: hostiles near a height ok');
+}

@@ -27,6 +27,7 @@
   # token required, published on loopback and exposed by Tailscale Serve.
   workerPort = "8096";
   workerServePort = toString repoConfig.lab.mcbotsWorkerServePort;
+  ownerUuids = "623c7ee4-71ca-487a-b92a-a4564e43fbb9"; # fancy8869
   # Few but smart (owner 2026-10-12, docs/specs/2026-10-12-in-game-bot-control.md): only the three
   # agent bots play; bot4, bot10 and bot16-18 are retired. A Node process uses one core, so bot2 and
   # bot3 run in a worker container; the dashboard process keeps bot1. New names must be ones VeloAuth
@@ -48,9 +49,8 @@
       environment = {
         HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
         MC_HOST = "10.250.77.2"; # Velocity on the mcbots network (see --add-host above)
-        MC_VHOST = "sandbox.bots"; # Velocity's forced host: straight into the sandbox world (../minecraft/sandbox.nix)
-        GRAVES = "none"; # no AxGraves in the sandbox: death loot lies on the ground
         MC_PORT = "25565";
+        OWNER_UUIDS = ownerUuids;
         HOST_LABEL = w.label;
         NODE_OPTIONS = "--max-old-space-size=768";
       };
@@ -77,10 +77,12 @@ in {
           imageFile = image;
           environment = {
             BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
+            # No MC_VHOST: the three helpers play on the main server next to the owner (spec 2026-10-12, step 3);
+            # test bots join the sandbox with the virtual host sandbox.bots (../minecraft/sandbox.nix).
             MC_HOST = "velocity";
-            MC_VHOST = "sandbox.bots"; # Velocity's forced host: the bots live in the sandbox world (../minecraft/sandbox.nix), the real server is bot-free
-            GRAVES = "none"; # ... and no AxGraves: a bot picks its death loot up from the ground
             MC_PORT = "25565";
+            # Only the owner's in-game orders count (owner.js): the sender UUID of a player chat line.
+            OWNER_UUIDS = ownerUuids;
             DASHBOARD_HOST = "0.0.0.0"; # inside the container; published on loopback only
             DASHBOARD_PORT = dashboardPort;
             WORKER_HOST = "0.0.0.0"; # inside the container; published on loopback only
@@ -131,8 +133,8 @@ in {
             RCON_HOST = "minecraft";
             # Rescue of stranded bots (app/rescue.js) over the sandbox's own console; password in seed.env.
             SANDBOX_RCON_HOST = "minecraft-sandbox";
-            # Block log overlay export (app/blocklog.js, BLOCKLOG_EXPORT_DIR=/bluemap-overlay) is off while the
-            # bots play in the sandbox: its changes must not show on the real BlueMap. The mount stays.
+            # What the bots changed in the world, as a BlueMap overlay (app/blocklog.js).
+            BLOCKLOG_EXPORT_DIR = "/bluemap-overlay";
           };
           # Named state volume, plus BlueMap's mcbots/ web directory (owner 1000, made by minecraft-plugins,
           # readable by the minecraft container) for the block-log overlay.

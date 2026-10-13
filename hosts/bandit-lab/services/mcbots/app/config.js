@@ -3,6 +3,12 @@
 const {NAME_RE} = require('./bots');
 const {parseQuotas} = require('./keeper');
 
+const ownerUuids = (env) => {
+  const ids = (env.OWNER_UUIDS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.some((s) => !require('./owner').UUID_RE.test(s))) throw new Error('OWNER_UUIDS must be a comma list of UUIDs');
+  return ids;
+};
+
 // Laptop runs have no BOT_PASSWORD_SEED: keep a random one in
 // $XDG_STATE_HOME/mcbots/seed so a bot name keeps its VeloAuth password.
 function localSeed(env) {
@@ -115,6 +121,7 @@ function loadConfig(env = process.env) {
   }
   return {
     names,
+    ownerUuids: ownerUuids(env),
     mcHost: env.MC_HOST || 'localhost',
     mcPort: Number(env.MC_PORT || 25565),
     host,
@@ -177,7 +184,7 @@ function loadWorkerConfig(env = process.env, argv = []) {
   checkBotAuth(env);
   const mcPort = Number(env.MC_PORT || 25565);
   if (!env.MC_HOST) throw new Error('MC_HOST is required (the Velocity address bots join)');
-  return {names, hubUrl, token, mcHost: env.MC_HOST, mcPort, loginSeed: env.BOT_PASSWORD_SEED || localSeed(env), hostLabel: (env.HOST_LABEL || require('node:os').hostname()).replace(/[^\w.-]/g, '-').slice(0, 40) || 'worker'};
+  return {names, ownerUuids: ownerUuids(env), hubUrl, token, mcHost: env.MC_HOST, mcPort, loginSeed: env.BOT_PASSWORD_SEED || localSeed(env), hostLabel: (env.HOST_LABEL || require('node:os').hostname()).replace(/[^\w.-]/g, '-').slice(0, 40) || 'worker'};
 }
 
 module.exports = {loadConfig, loadWorkerConfig};

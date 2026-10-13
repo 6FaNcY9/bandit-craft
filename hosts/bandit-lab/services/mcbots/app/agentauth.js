@@ -87,12 +87,16 @@ function solverAction({action, bot, text, objective}, {agentBots, roster = [], b
 }
 
 // Why the agent may not send this job, or null.
+const OWNER_PROJECTS = new Set(['schematic', 'produce']);
 function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const {agentBots, supplyChest} = policy;
   if (solver === true && Array.isArray(bots) && bots.length === 1 && !agentBots.includes(bots[0])) return solverRefusal({bots, type, args, replace}, policy);
   if (!Array.isArray(bots) || !bots.length) return 'agents must name their bots';
   const other = bots.find((b) => !agentBots.includes(b));
   if (other !== undefined) return `${other} is not an agent bot`;
+  // The owner's schematic build: an agent's order would replace or stop it, so only the owner ends it.
+  const busy = bots.find((b) => OWNER_PROJECTS.has(policy.jobOf?.(b)?.type));
+  if (busy !== undefined) return `${busy} works on the owner's ${policy.jobOf(busy).type} project: only the owner stops it`;
   if (!AGENT_JOBS.has(type)) return `job ${type} is not allowed for agents`;
   if (CHEST_JOBS.has(type)) {
     const a = args || {};

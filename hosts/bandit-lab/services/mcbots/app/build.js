@@ -326,4 +326,688 @@ function makeBuild({goNear, guard, sleep, goals, digAt, withdraw, runJob, gather
   };
 }
 
-module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS};
+
+// ---- Schematic builds (the owner's Litematica files, BOTS.md "Schematic builds"): any size, block
+// states and redstone, materials from chests. The world is the progress: a restart resumes where it is.
+const fs = require('node:fs');
+const path = require('node:path');
+const schematicLib = require('./schematic');
+const placing = require('./placing');
+
+const SCHEMATIC_RE = /^[\w.-]{1,64}\.litematic$/;
+const VEGETATION = /_(log|leaves|wood)$|^(vine|snow|sweet_berry_bush|bamboo|sugar_cane|cactus)$/; // cleared from the site like ground
+const RESERVE_SLOTS = 4; // inventory slots a restock leaves free (drops, a tool)
+// Floating parts (most of the owner's sorter hangs in the air, 1522 of 1770 cells had no neighbour to
+// click) get a pillar of this under them, in cells that are air in the schematic; dirt, so the clear pass
+// takes it out again at the end, and after a restart, when the record of the pillars is gone.
+const SCAFFOLD = 'dirt';
+const SCAFFOLD_MAX = 32; // the highest pillar the build puts up (the sorter needs 14 for a hopper at its edge)
+const BELOW = {against: [0, -1, 0], face: [0, 1, 0], cursor: null, look: null};
+// What does not keep a chest below it shut (vanilla: only a full solid block on top does, isRedstoneConductor).
+const OPEN_LID = /hopper|glass|slab|chest|stairs|trapdoor|fence|wall|pane|leaves|composter|lantern|torch|rail|redstone_wire|repeater|comparator|carpet|button|lever|shulker_box/;
+// Blocks that pop off when the block they stand on or hang from goes: never propped by a temporary block
+// in a schematic cell (taking it out would drop them; a comparator stood on dirt in an observer's cell).
+const ATTACHED = /(^|_)(redstone_wire|repeater|comparator|rail|torch|button|lever|carpet|pressure_plate|door|ladder|lantern|bed)$/;
+
+// One parse per file and placement, shared by the bots of this process; so is what they saw in the chests.
+const SCHEMATIC_PLANS = new Map();
+const CHEST_STOCK = new Map(); // "dim:x,y,z" -> {items: Map(name -> count), t}
+function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none'}) {
+  const k = JSON.stringify([file, origin, rotation, mirror]);
+  if (!SCHEMATIC_PLANS.has(k)) {
+    SCHEMATIC_PLANS.set(k, (async () => {
+      const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
+      const cells = schematicLib.placeSchematic(parsed, {origin, rotation, mirror});
+      const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
+      const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
+      for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
+      const targets = order.map((t) => ({...t, p: placing.placement(t.name, t.props), late: deferred.has(keyOf(t))}));
+      // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
+      // both for the whole crew, until the end
+      return {targets, byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set()};
+    })().catch((e) => {
+      SCHEMATIC_PLANS.delete(k);
+      throw e;
+    }));
+  }
+  return SCHEMATIC_PLANS.get(k);
+}
+
+const chestKey = (dim, c) => `${dim}:${c.x},${c.y},${c.z}`;
+function noteChest(dim, c, win) {
+  const items = new Map();
+  for (const it of win.containerItems()) items.set(it.name, (items.get(it.name) || 0) + it.count);
+  CHEST_STOCK.set(chestKey(dim, c), {items, t: Date.now()});
+}
+
+// What a schematic build still needs, {item: count}: the block of every cell not yet as in the schematic
+// (two for a double slab) and the contents of a container not yet placed.
+function stillNeeded(bot, plan) {
+  const need = {};
+  const add = (item, n) => { need[item] = (need[item] || 0) + n; };
+  for (const t of plan.targets) {
+    const b = bot.blockAt(new Vec3(t.x, t.y, t.z));
+    if (b && placing.matches(t, {name: b.name, props: b.getProperties()})) continue;
+    add(t.p.item, t.p.again ? 2 : 1);
+    for (const it of t.items || []) add(it.name, it.count);
+  }
+  return need;
+}
+
+// The summed contents of chests, from what bots saw in the last 10 minutes; a chest not seen is opened.
+async function readStock(r, job, chests, {goNear, guard}) {
+  const dim = normDim(r.bot.game?.dimension);
+  const total = {};
+  for (const c of chests) {
+    let s = CHEST_STOCK.get(chestKey(dim, c));
+    if (!s || Date.now() - s.t > 600000) {
+      await goNear(r, job, c.x, c.y, c.z, 3, {doing: `counting the chest at ${c.x} ${c.y} ${c.z}`});
+      guard(job);
+      const block = r.bot.blockAt(new Vec3(c.x, c.y, c.z));
+      if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z}`);
+      const win = await r.bot.openContainer(block);
+      try { noteChest(dim, c, win); } finally { win.close(); }
+      s = CHEST_STOCK.get(chestKey(dim, c));
+    }
+    for (const [n, k] of s.items) total[n] = (total[n] || 0) + k;
+  }
+  return total;
+}
+const forgetChest = (dim, c) => CHEST_STOCK.delete(chestKey(dim, c));
+
+// Turn to `look` and click `way` (placing.js) on the cell `t` while sneaking, so a chest or hopper clicked
+// is placed against instead of opened. mineflayer 4.39: look(force=true) never sends the turn, and look()
+// resolves on the yaw while the pitch follows at 0.15 rad per tick (tools/mcbots-placetest found both).
+async function clickFace(bot, t, w, sleep) {
+  const ref = bot.blockAt(t.offset(...w.against));
+  if (!ref) throw new Error('the block to place against is not loaded');
+  const pitch = w.look === 'up' ? Math.PI / 2 : w.look === 'down' ? -Math.PI / 2 : 0;
+  const dp = Math.abs(pitch - bot.entity.pitch);
+  await bot.look(w.look ? placing.YAW[w.look] ?? bot.entity.yaw : bot.entity.yaw, pitch);
+  await bot.waitForTicks(Math.ceil(dp / 0.15) + 2);
+  bot.setControlState('sneak', true);
+  try {
+    await sleep(150);
+    await bot._genericPlace(ref, new Vec3(...w.face), {delta: w.cursor ? new Vec3(...w.cursor) : undefined, forceLook: 'ignore'});
+    await sleep(150);
+  } finally {
+    bot.setControlState('sneak', false);
+  }
+}
+
+function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS}) {
+  // Near enough to click the cell, never standing in it or under it.
+  class GoalBeside extends goals.GoalNear {
+    constructor(t, range) {
+      super(t.x, t.y, t.z, range);
+      this.t = t;
+    }
+    isEnd(node) {
+      return super.isEnd(node) && !(node.x === this.t.x && node.z === this.t.z && (node.y === this.t.y || node.y === this.t.y - 1));
+    }
+  }
+  return async function schematic(r, job) {
+    const {bot} = r;
+    const plan = await schematicPlan(dir, job.args);
+    if (plan.unsupported.length) throw new Error(`cannot place ${plan.unsupported.length} blocks yet: ${[...new Set(plan.unsupported.map((u) => u.name))].join(', ')}`);
+    for (const t of plan.targets) if (insideAreas(r.protectedAreas, t.x, t.z)) throw new Error(`${t.x} ${t.z} is inside a protected area`);
+    const {lo, hi} = plan;
+    const chests = job.args.chests || [];
+    const dim = normDim(bot.game?.dimension);
+    const ckey = (p) => `${dim}:${p.x},${p.y},${p.z}`;
+    const v = (p) => new Vec3(p.x, p.y, p.z);
+    const stateAt = (x, y, z) => {
+      const b = bot.blockAt(new Vec3(x, y, z));
+      return b ? {name: b.name, props: b.getProperties()} : null;
+    };
+    const free = (name) => REPLACEABLE.has(name) || /water|lava/.test(name);
+    const placed = recordOf(dim, {blocks: plan.targets.map(keyOf)}); // ours: may be dug again to repair
+    const ours = (k, name) => placed.has(k) && plan.byKey.get(k)?.p.item === placing.itemOf(name);
+    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name);
+    // The pathfinder may neither break nor place in a cell of the schematic, nor dig under the site or through
+    // a support; in the site's air cells it may climb on dirt (19 high: the bots could not get up, 2026-10-13).
+    const inSite = (p) => p.x >= lo.x && p.x <= hi.x && p.z >= lo.z && p.z <= hi.z;
+    // A bot that found no path twice (walled in by the build, sandbox 2026-10-13) may dig out through plain
+    // blocks of the build; the repair puts them back. Never containers, redstone parts or what hangs on them.
+    let noPath = 0;
+    const PLAIN = /^(stone|cobblestone|glass|target|redstone_lamp|note_block|dirt|stone_slab|smooth_stone_slab|stone_bricks)$/;
+    const vetoBreak = (blk) => {
+      const k = keyOf(blk.position);
+      if (!inSite(blk.position)) return 0;
+      if (blk.position.y < lo.y || pillars.has(k)) return 100;
+      if (!plan.cells.has(k)) return 0;
+      return noPath >= 2 && PLAIN.test(blk.name) ? 0 : 100;
+    };
+    const vetoPlace = (blk) => (inSite(blk.position) && plan.cells.has(keyOf(blk.position)) ? 100 : 0);
+    // Standing on a low block inside its own cell (a comparator): the pathfinder plans from that cell, finds
+    // no move and "moves" until its deadline (two bots stood on one for minutes). After a failed walk the
+    // bot takes that block out (picking it up) and the build places it again.
+    const unstick = async () => {
+      const f = bot.entity.position.floored();
+      const b = bot.blockAt(f);
+      if (!b || b.boundingBox === 'empty' || !plan.byKey.has(keyOf(f))) return;
+      r.emit?.('info', `standing on ${b.name} at ${keyOf(f)}: taking it out to get moving`);
+      await digAt(r, job, f, (n) => n === b.name).catch(() => guard(job));
+    };
+    const mv = bot.pathfinder.movements;
+    const scaffold = mv.scafoldingBlocks;
+    const skip = new Map(); // key -> until
+    const tries = new Map(); // key -> repairs done
+    const lacking = new Map(); // item -> until: not in any chest, looked again after 5 min
+    const stuck = new Map(); // key -> what is in the way that the bot may not dig
+    const pillars = recordOf(dim, {blocks: ['scaffold', ...plan.targets.map(keyOf)]}); // cells holding a support pillar
+    const tempFor = new Map(); // a support in a cell of the schematic (a hopper loop) -> the cell that needed it
+    let allPlaced = false; // last loop found every cell placed: the pillars come out
+    let idle = false; // last loop found nothing to place: the cells left to clear are tried again
+    const total = plan.targets.length;
+    let lastProgress = Date.now(), lastDone = -1, first = true, final = false;
+    const stalled = (what) => {
+      if (Date.now() - lastProgress > waitMs) throw new Error(`no progress for ${Math.round(waitMs / 1000)} s: ${what}`);
+    };
+    const count = () => {
+      const have = {};
+      for (const it of bot.inventory.items()) have[it.name] = (have[it.name] || 0) + it.count;
+      return have;
+    };
+
+    // Take up to n of an item from the material chests. Every chest opened is read whole, so the bot goes
+    // to chests known to hold the item first, then to ones not seen for 10 minutes (a crew restocks), and
+    // never to one seen without it (three bots walked all 57 filler chests for one item, sandbox 2026-10-13).
+    const stock = CHEST_STOCK;
+    const ckOf = (c) => chestKey(dim, c);
+    const forgetChestHere = (c) => CHEST_STOCK.delete(ckOf(c));
+    const note = (c, win) => noteChest(dim, c, win);
+    const holds = (c, item) => {
+      const s = stock.get(ckOf(c));
+      return !s || Date.now() - s.t > 600000 ? 0.5 : (s.items.get(item) || 0) > 0 ? 1 : 0;
+    };
+    async function take(item, n, doing) {
+      for (const c of chests.filter((c) => holds(c, item) > 0).sort((a, b) => holds(b, item) - holds(a, item))) {
+        if (n - (count()[item] || 0) <= 0) return;
+        job.t.doing = doing(n - (count()[item] || 0));
+        const block = bot.blockAt(new Vec3(c.x, c.y, c.z));
+        if (!block) continue;
+        if (!/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z} (found ${block.name})`);
+        try {
+          if (bot.entity.position.offset(0, 1.62, 0).distanceTo(new Vec3(c.x + 0.5, c.y + 0.5, c.z + 0.5)) > 4.5) {
+            await goNear(r, job, c.x, c.y, c.z, 3, {doing: `walking to the material chest at ${c.x} ${c.y} ${c.z} for ${item}`});
+          }
+        } catch (e) {
+          guard(job);
+          // A chest the bot finds no way to (high up in the build) is tried again later, from elsewhere.
+          if (/could not reach/.test(e.message)) {
+            noPath++;
+            r.emit?.('info', `${e.message.slice(0, 100)}: building on with what it has`);
+            await unstick();
+            return;
+          }
+          throw e;
+        }
+        noPath = 0;
+        guard(job);
+        let win;
+        try {
+          win = await bot.openContainer(block);
+        } catch (e) {
+          guard(job);
+          if (!/did not open/.test(e.message)) throw e;
+          r.emit?.('info', `the chest at ${c.x} ${c.y} ${c.z} did not open: trying the next one`);
+          continue;
+        }
+        let full = false;
+        try {
+          note(c, win);
+          for (const it of win.containerItems().filter((i) => i.name === item)) {
+            guard(job);
+            const k = Math.min(n - (count()[item] || 0), it.count);
+            if (k <= 0) break;
+            try {
+              await win.withdraw(it.type, it.metadata, k);
+            } catch (e) {
+              if (!/full/i.test(e.message)) throw e;
+              full = true; // build with what it has, without walking every other chest for nothing
+              break;
+            }
+          }
+          note(c, win);
+        } finally {
+          win.close();
+        }
+        if (full) return;
+      }
+    }
+
+    // Room in the inventory: first the container contents, then the rest. Shears
+    // count as a tool, so a plain deposit kept them: three bots each held 32 (one a slot) for chests they
+    // could not reach and had no slot left for blocks or dirt (sandbox 2026-10-13).
+    const FILLS = new Set(plan.targets.flatMap((t) => (t.items || []).map((it) => it.name)));
+    const freeSlots = () => 36 - bot.inventory.items().length - RESERVE_SLOTS;
+    // Into the first chest with room: the material chest filled up and took 18 of 96 shears (one a slot).
+    const fullUntil = new Map(); // chest key -> until: a deposit found it full or out of reach
+    async function makeRoom() {
+      const spare = new Set(bot.inventory.items().map((it) => it.name).filter((n) => FILLS.has(n)));
+      for (const only of [...spare, null]) {
+        if (only === null && freeSlots() >= 8) break; // the build blocks it carries stay when that made room
+        for (const c of chests.filter((q) => (fullUntil.get(ckOf(q)) || 0) < Date.now()).slice(0, 8)) {
+          try {
+            await deposit(r, job, c, only);
+            break;
+          } catch (e) {
+            guard(job);
+            fullUntil.set(ckOf(c), Date.now() + 600000);
+            r.emit?.('info', `could not make room at ${c.x} ${c.y} ${c.z}: ${e.message.slice(0, 80)}`);
+          } finally {
+            forgetChestHere(c);
+          }
+        }
+      }
+    }
+
+    // Fill the inventory with what the next open cells take, from the material chests in order.
+    async function restock(want) {
+      let slots = freeSlots();
+      if (slots < 2 && chests.length) {
+        await makeRoom();
+        slots = freeSlots();
+      }
+      const need = new Map();
+      let stacks = 0;
+      for (const t of plan.targets) {
+        const h = stateAt(t.x, t.y, t.z);
+        if (!h || placing.matches(t, h) || (lacking.get(t.p.item) || 0) > Date.now()) continue;
+        const stack = bot.registry.itemsByName[t.p.item]?.stackSize || 64;
+        // At most two stacks of a kind: a crew shares the chests (one bot took 268 of 334 chests, the
+        // others then walked all 57 filler chests for one).
+        const was = need.get(t.p.item) || 0, n = Math.min(was + (t.p.again ? 2 : 1), 2 * stack);
+        const more = Math.ceil(n / stack) - Math.ceil(was / stack);
+        if (stacks + more > slots) break;
+        stacks += more;
+        need.set(t.p.item, n);
+      }
+      if (!need.has(want)) need.set(want, 1);
+      if ((count()[SCAFFOLD] || 0) < 32) need.set(SCAFFOLD, Math.max(need.get(SCAFFOLD) || 0, 64)); // to climb and to prop
+      for (const [item, n] of need) {
+        await take(item, n, (left) => `taking ${left} ${item} for the build`);
+        if (!count()[item]) lacking.set(item, Date.now() + 300000);
+      }
+    }
+
+    // Put a container's schematic contents in (a sorter's filter items), what is missing by item. Chests and
+    // shulker boxes right after they are placed (a solid block on top keeps a chest shut), hoppers, droppers
+    // and the rest at the end, once the redstone that locks them stands (else they pass the items on).
+    // A double chest is filled for both halves: the window shows both.
+    const CW = {north: 'east', east: 'south', south: 'west', west: 'north'}, CCW = {north: 'west', west: 'south', south: 'east', east: 'north'};
+    const filled = new Set();
+    async function fill(t) {
+      const k = keyOf(t);
+      const want = new Map();
+      const add = (items) => { for (const it of items || []) want.set(it.name, (want.get(it.name) || 0) + it.count); };
+      add(t.items);
+      const side = {left: CW, right: CCW}[t.props.type]?.[t.props.facing];
+      const partner = side && plan.byKey.get(keyOf(v(t).offset(...placing.DIRS[side])));
+      if (partner && stateAt(partner.x, partner.y, partner.z)?.props?.type === t.props.type) add(partner.items);
+      // Room first: 27 shears are 27 slots, and a bot full of build blocks carried 9 a trip.
+      const stackOf = (item) => bot.registry.itemsByName[item]?.stackSize || 64;
+      const slots = [...want].reduce((sum, [item, n]) => sum + Math.ceil(Math.max(0, n - (count()[item] || 0)) / stackOf(item)), 0);
+      // All of them, the wanted ones too: 32 shears for a chest of 27 left no slot for the dirt.
+      if (freeSlots() < slots + 1 && chests.length) {
+        job.t.doing = `making room to fill ${t.name} at ${k}`;
+        await makeRoom();
+      }
+      // Dirt first: the chest may stand high in the build, and without it the walk cannot climb there
+      // (six chests 11 up "No path" for every bot). Then the contents, as many as fit beside the reserve.
+      if ((count()[SCAFFOLD] || 0) < 16) await take(SCAFFOLD, 32, (left) => `taking ${left} ${SCAFFOLD} to climb to ${t.name} at ${k}`);
+      for (const [item, n] of want) {
+        const fits = Math.min(n, (count()[item] || 0) + Math.max(0, freeSlots()) * stackOf(item));
+        if (fits > 0) await take(item, fits, (left) => `taking ${left} ${item} to fill ${t.name} at ${k}`);
+      }
+      const eye = bot.entity.position.offset(0, 1.62, 0);
+      if (eye.distanceTo(v(t).offset(0.5, 0.5, 0.5)) > 4.5) await goNear(r, job, t.x, t.y, t.z, 4, {goal: new GoalBeside(t, 4), doing: `walking to fill ${t.name} at ${k}`});
+      guard(job);
+      job.t.doing = `filling ${t.name} at ${k}`;
+      const win = await bot.openContainer(bot.blockAt(v(t)));
+      const missing = [];
+      try {
+        for (const [item, n] of want) {
+          const have = win.containerItems().filter((i) => i.name === item).reduce((a, i) => a + i.count, 0);
+          const give = Math.min(n - have, count()[item] || 0);
+          if (give > 0) await win.deposit(bot.registry.itemsByName[item].id, null, give);
+          if (n - have - give > 0) missing.push(`${n - have - give} ${item}`);
+        }
+      } finally {
+        win.close();
+      }
+      if (missing.length) {
+        lacking.set(missing[0].split(' ')[1], Date.now() + 300000);
+        throw new Error(`missing material to fill ${t.name} at ${k}: ${missing.join(', ')}`);
+      }
+      filled.add(k);
+      lastProgress = Date.now();
+    }
+    const fillsNow = (t) => /(^|_)chest$|shulker_box$/.test(t.name);
+
+    try {
+      mv.exclusionAreasBreak.push(vetoBreak);
+      mv.exclusionAreasPlace.push(vetoPlace);
+      const wanted = new Set(plan.targets.map((t) => bot.registry.itemsByName[t.p.item]?.id));
+      mv.scafoldingBlocks = scaffold.filter((id) => !wanted.has(id)); // never pillar with the build's material
+      for (;;) {
+        guard(job);
+        const now = Date.now();
+        for (const [k, until] of skip) if (until < now) skip.delete(k);
+        // Far away (after a respawn at world spawn): walk to the site first, it is not even loaded.
+        const cx = Math.floor((lo.x + hi.x) / 2), cz = Math.floor((lo.z + hi.z) / 2);
+        if (!bot.blockAt(new Vec3(cx, lo.y, cz))) {
+          await goNear(r, job, cx, lo.y, cz, 8, {doing: `walking to the build site at ${cx} ${lo.y} ${cz}`}).catch((e) => {
+            guard(job);
+            if (!/could not reach/.test(e.message)) throw e; // a long way goes in legs: the next loop walks on
+          });
+          continue;
+        }
+        // 1. The site, top down: ground, trees and wrong blocks of ours come out of cells that are air
+        // in the schematic or hold another block there. Anything else is the owner's: reported, never dug.
+        // Each bot takes the cell of the top layer nearest to it, so a crew spreads out (in scan order all
+        // three queued for the same block and cleared 2-3 a minute, sandbox 2026-10-13).
+        let clear = null;
+        stuck.clear();
+        const me = bot.entity.position;
+        for (let y = hi.y; y >= lo.y - 1 && !clear; y--) {
+          let best = Infinity;
+          for (let z = lo.z - 1; z <= hi.z + 1; z++) {
+            for (let x = lo.x - 1; x <= hi.x + 1; x++) {
+              const k = `${x},${y},${z}`;
+              // Next to the site and under it only the build's own supports come out, at the end.
+              if ((!inSite({x, z}) || y < lo.y) && !(allPlaced && pillars.has(k))) continue;
+              const h = stateAt(x, y, z);
+              if (!h || free(h.name) || skip.has(k) || (plan.leave.has(k) && !allPlaced && !idle)) continue;
+              const t = plan.byKey.get(k);
+              if (t ? h.name === t.name : plan.cells.has(k)) continue; // the right block (its state is the build's job), a piston head
+              // A pillar stays until all is placed; a support in a cell of the schematic only until the cell that
+              // needed it stands (then the real block goes there).
+              const req = tempFor.get(k), reqT = req && plan.byKey.get(req);
+              if (pillars.has(k) && !allPlaced && !(reqT && placing.matches(reqT, stateAt(reqT.x, reqT.y, reqT.z) || {name: '?'}))) continue;
+              if (!t && h.name === SCAFFOLD && !allPlaced) continue; // dirt in an air cell: a support or a climb, out at the end
+              if (!clearable(k, h.name)) { stuck.set(k, h.name); continue; }
+              // A cell with a free side first: an inner cell shows only its top, which the walk cannot reach
+              // from below and ran into its timeout for every block. The rest opens up from the edges.
+              const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => free(stateAt(x + dx, y, z + dz)?.name ?? 'stone'));
+              const d = (x + 0.5 - me.x) ** 2 + (y + 0.5 - me.y) ** 2 + (z + 0.5 - me.z) ** 2 + (side ? 0 : 1e6);
+              if (d < best) { best = d; clear = {x, y, z, name: h.name, k}; }
+            }
+          }
+        }
+        if (clear) {
+          const k = ckey(clear);
+          if (r.world && !(await r.world.claim(r.name, k))) { skip.set(clear.k, now + 5000); continue; }
+          try {
+            job.t.doing = `clearing ${clear.name} at ${clear.x} ${clear.y} ${clear.z} from the build site`;
+            // A support taken out of a schematic cell may drop what it held: those drops are picked up.
+            if (await digAt(r, job, v(clear), (n) => n === clear.name, {pickup: plan.byKey.has(clear.k)})) { placed.delete(clear.k); pillars.delete(clear.k); tempFor.delete(clear.k); lastProgress = Date.now(); }
+            else skip.set(clear.k, Date.now() + 30000);
+          } catch (e) {
+            guard(job);
+            if (!/^unsafe: |could not reach|Digging aborted|needs a tool/.test(e.message)) throw e;
+            // Three failed tries: left until the end (walled in by the build, it searched for minutes).
+            const n = (tries.get(clear.k) || 0) + 1;
+            tries.set(clear.k, n);
+            skip.set(clear.k, Date.now() + 30000);
+            if (n >= 3) plan.leave.add(clear.k);
+            stalled(`could not clear ${clear.name} at ${clear.x} ${clear.y} ${clear.z}: ${e.message.slice(0, 80)}`);
+          } finally {
+            r.world?.release(r.name, k);
+          }
+          continue;
+        }
+        // 2a. A placed chest still to fill comes first, over several trips when the bot cannot carry it all
+        // (27 shears take 27 slots); nothing goes on top of it meanwhile (it would keep the chest shut).
+        const lids = new Set();
+        let pending = null;
+        for (const t of plan.targets) {
+          if (!t.items || !fillsNow(t) || filled.has(keyOf(t))) continue;
+          const h = stateAt(t.x, t.y, t.z);
+          if (!h || !placing.matches(t, h)) continue;
+          lids.add(`${t.x},${t.y + 1},${t.z}`);
+          if (!pending && !skip.has(keyOf(t)) && (!plan.later.has(keyOf(t)) || idle)) pending = t;
+        }
+        if (pending) {
+          const fk = `fill:${keyOf(pending)}`; // one bot per chest (two would both put in what is missing); the hub's key format
+          if (r.world && !(await r.world.claim(r.name, fk))) {
+            skip.set(keyOf(pending), Date.now() + 5000);
+            continue;
+          }
+          try {
+            await fill(pending);
+          } catch (e) {
+            guard(job);
+            if (!/^missing material|could not reach|did not open/.test(e.message)) throw e;
+            if (/could not reach/.test(e.message)) {
+              noPath++;
+              await unstick();
+              // Three times out of reach: left until the end, when the crew has nothing else to do.
+              const n = (tries.get(fk) || 0) + 1;
+              tries.set(fk, n);
+              if (n >= 3) plan.later.add(keyOf(pending));
+            }
+            skip.set(keyOf(pending), Date.now() + 60000);
+            r.emit?.('info', e.message.slice(0, 160));
+          } finally {
+            r.world?.release(r.name, fk);
+          }
+          continue;
+        }
+        // 2. The next cell to place: in build order, with something to click and the item at hand or in a
+        // chest. The deferred ones (power, observers, pistons) wait while an earlier cell is merely held.
+        let open = 0, held = 0, next = null, above = null, late = null, repair = null, nextScore = Infinity;
+        const me2 = bot.entity.position;
+        const carried = count();
+        const waiting = new Set();
+        // Layer by layer: only the lowest open layer and the two above it, with supports for them before
+        // anything higher, so the crew grows up with the build (it built a dropper tower to y 17 first and
+        // then searched minutes for a way up from the chests, sandbox 2026-10-13).
+        let low = Infinity;
+        for (const t of plan.targets) {
+          if (t.y >= low || t.late || skip.has(keyOf(t)) || stuck.has(keyOf(t)) || (lacking.get(t.p.item) || 0) > Date.now()) continue;
+          const h = stateAt(t.x, t.y, t.z);
+          if (h && !placing.matches(t, h, {final})) low = t.y;
+        }
+        const band = (t) => t.y <= low + 2;
+        for (const t of plan.targets) {
+          const k = keyOf(t);
+          const h = stateAt(t.x, t.y, t.z);
+          if (h && placing.matches(t, h, {final})) continue;
+          open++;
+          if (!h || stuck.has(k)) continue;
+          if (skip.has(k)) { held++; continue; }
+          if (h.name === t.name) { // the right block in a wrong state (facing, rail shape): dig it, then place it again
+            if (!repair && (tries.get(k) || 0) < 3) repair = t;
+            continue;
+          }
+          if (!free(h.name) || (lids.has(k) && !OPEN_LID.test(t.name))) continue;
+          if (t.late && held) continue; // power last: not while an ordinary cell is only held by another bot
+          if ((lacking.get(t.p.item) || 0) > Date.now()) { waiting.add(t.p.item); continue; }
+          const w = t.p.ways.find((w) => solid(stateAt(t.x + w.against[0], t.y + w.against[1], t.z + w.against[2])?.name));
+          // The lowest layer first, in it a cell whose block the bot carries, the nearest (less walking and
+          // fetching, and a crew spreads out).
+          const score = t.y * 1e5 + (carried[t.p.item] ? 0 : 5e4) + (t.x - me2.x) ** 2 + (t.y - me2.y) ** 2 + (t.z - me2.z) ** 2;
+          if (w && t.late) late ??= {t, w};
+          else if (w && band(t) && score < nextScore) { next = {t, w}; nextScore = score; }
+          else if (w && !band(t)) above ??= {t, w};
+        }
+        // 3. No ordinary cell to click: a pillar under the open cell that needs the shortest one (only cells
+        // that can be placed on the block below, only through air cells of the schematic, down to a solid
+        // block). Power sources, observers and pistons come after that, and get pillars last.
+        // How to make an air cell of the schematic solid with dirt: one block against a solid neighbour, else
+        // a pillar from the solid block below it. {x, y, z, w, height} of the first dirt block, or null.
+        const airCell = (x, y, z) => !plan.cells.has(`${x},${y},${z}`) && free(stateAt(x, y, z)?.name ?? 'stone');
+        // In a cell of the schematic not yet placed only one block against a neighbour, and only when nothing
+        // else helps (a closed hopper loop: each hopper needs the next one standing).
+        const supportAt = (x, y, z) => {
+          const inPlan = plan.byKey.has(`${x},${y},${z}`) && free(stateAt(x, y, z)?.name ?? 'stone');
+          if (!airCell(x, y, z) && !inPlan) return null;
+          for (const f of FACES) {
+            if (solid(stateAt(x + f[0], y + f[1], z + f[2])?.name)) return {x, y, z, w: {against: f, face: f.map((n) => -n), cursor: null, look: null}, height: inPlan ? 50 : 1};
+          }
+          if (inPlan) return null;
+          let b = y - 1;
+          while (b > y - SCAFFOLD_MAX && airCell(x, b, z)) b--;
+          return solid(stateAt(x, b, z)?.name) ? {x, y: b + 1, z, w: BELOW, height: y - b} : null;
+        };
+        const pillarFor = (lateOnes, inBand = true) => {
+          let best = null;
+          for (const t of plan.targets) {
+            const k = keyOf(t);
+            if (t.late !== lateOnes || stuck.has(k) || skip.has(k) || (inBand && !band(t))) continue;
+            const h = stateAt(t.x, t.y, t.z);
+            if (!h || placing.matches(t, h, {final}) || !free(h.name)) continue;
+            for (const w of t.p.ways) {
+              const c = {x: t.x + w.against[0], y: t.y + w.against[1], z: t.z + w.against[2]};
+              // The block to click is a deferred cell (an observer under a comparator): place it now instead.
+              const ct = plan.byKey.get(keyOf(c));
+              if (ct?.late && !skip.has(keyOf(c)) && free(stateAt(c.x, c.y, c.z)?.name ?? 'stone')) {
+                const cw = ct.p.ways.find((u) => solid(stateAt(c.x + u.against[0], c.y + u.against[1], c.z + u.against[2])?.name));
+                if (cw && (!best || best.height > 0)) best = {real: {t: ct, w: cw}, height: 0};
+                continue;
+              }
+              if (ct && ATTACHED.test(t.name)) continue;
+              const sup = supportAt(c.x, c.y, c.z);
+              if (sup && !skip.has(`${sup.x},${sup.y},${sup.z}`) && (!best || sup.height < best.height)) best = {...sup, for: k};
+            }
+          }
+          if (best?.real) return best.real;
+          return best && {t: {x: best.x, y: best.y, z: best.z, name: SCAFFOLD, props: {}, p: {item: SCAFFOLD, check: [], ways: [best.w]}, pillar: true, for: best.for}, w: best.w};
+        };
+        next ??= pillarFor(false) || above || pillarFor(false, false) || late || pillarFor(true, false);
+        if (next?.t.pillar && !count()[SCAFFOLD]) {
+          await restock(SCAFFOLD);
+          if (!count()[SCAFFOLD]) { waiting.add(SCAFFOLD); next = null; }
+        }
+        allPlaced = !open;
+        idle = !next && !repair;
+        if (total - open !== lastDone) { lastDone = total - open; lastProgress = Date.now(); } // the crew's progress counts, not just this bot's
+        job.t.total = total;
+        job.t.done = total - open;
+        job.progress = `placed ${total - open}/${total}${final ? ' (final check)' : ''}`;
+        if (!open) {
+          if (!final) { final = true; continue; } // all placed: check rail shapes and double chests once more
+          const unfilled = plan.targets.filter((t) => t.items && !filled.has(keyOf(t)) && !skip.has(keyOf(t)));
+          if (unfilled.length) {
+            const t = unfilled.find((u) => !fillsNow(u)) || unfilled[0];
+            try {
+              await fill(t);
+            } catch (e) {
+              guard(job);
+              skip.set(keyOf(t), Date.now() + 60000);
+              r.emit?.('info', e.message.slice(0, 160));
+              stalled(e.message); // a chest no bot reaches ends the job too, not only missing material
+            }
+            continue;
+          }
+          job.noop = first;
+          if (stuck.size) r.emit?.('info', `schematic done; ${stuck.size} cells in the way were left (not ours): ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}`);
+          return;
+        }
+        first = false;
+        if (!next && repair) {
+          const k = keyOf(repair);
+          tries.set(k, (tries.get(k) || 0) + 1);
+          job.t.doing = `taking out ${repair.name} at ${k} to place it again`;
+          if (await digAt(r, job, v(repair)).catch((e) => { guard(job); if (!/could not reach|unsafe|aborted|needs a tool/.test(e.message)) throw e; return false; })) lastProgress = Date.now();
+          else skip.set(k, Date.now() + 30000);
+          continue;
+        }
+        if (!next) {
+          if (final && !held) {
+            const left = plan.targets.filter((t) => !placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?'}, {final: true}));
+            throw new Error(`${left.length} cells are still not as in the schematic, e.g. ${left.slice(0, 3).map((t) => `${t.name} ${JSON.stringify(t.props)} at ${keyOf(t)}`).join('; ')}`);
+          }
+          const why = waiting.size ? `waiting for material: ${[...waiting].join(', ')}` : stuck.size ? `in the way: ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}` : `${open} cells left that this bot cannot place or reach`;
+          job.t.doing = why;
+          stalled(why);
+          await sleep(1000);
+          continue;
+        }
+        const {t, w} = next;
+        const k = keyOf(t);
+        if (!bot.inventory.items().some((i) => i.name === t.p.item)) {
+          await restock(t.p.item);
+          continue; // what is open may have changed during the walk
+        }
+        const ck = ckey(t);
+        if (r.world && !(await r.world.claim(r.name, ck))) {
+          r.conflict?.();
+          skip.set(k, now + 5000);
+          continue;
+        }
+        try {
+          // The server takes a click up to its reach (4.5) plus a margin from the eyes: no walk when the block to
+          // click is that near (the walk into a dense site searched for minutes, sandbox 2026-10-13).
+          const feet = bot.entity.position.floored();
+          const inCell = feet.x === t.x && feet.z === t.z && (feet.y === t.y || feet.y === t.y - 1);
+          const eye = bot.entity.position.offset(0, 1.62, 0);
+          if (inCell || eye.distanceTo(v(t).offset(w.against[0] + 0.5, w.against[1] + 0.5, w.against[2] + 0.5)) > 4.5) {
+            await goNear(r, job, t.x, t.y, t.z, 4, {goal: new GoalBeside(t, 4), doing: `walking to place ${t.name} at ${k}`});
+            noPath = 0;
+          }
+          guard(job);
+          const item = bot.inventory.items().find((i) => i.name === t.p.item);
+          if (!item) continue;
+          await bot.equip(item, 'hand');
+          guard(job); // a Stop during the walk or the equip must not place anything
+          if (!free(stateAt(t.x, t.y, t.z)?.name ?? 'stone')) continue; // someone placed something meanwhile
+          job.t.doing = `placing ${t.name} at ${k}`;
+          await clickFace(bot, v(t), w, sleep);
+          if (t.p.again) {
+            for (let i = 0; i < 10 && stateAt(t.x, t.y, t.z)?.name !== t.name; i++) await sleep(100);
+            await clickFace(bot, v(t), t.p.again, sleep);
+          }
+          for (let i = 0; i < 10 && stateAt(t.x, t.y, t.z)?.name !== t.name; i++) await sleep(100);
+          if (t.p.cycle && stateAt(t.x, t.y, t.z)?.name === t.name) {
+            const {prop, values} = t.p.cycle;
+            const goal = values.indexOf(String(t.props[prop] ?? values[0]));
+            for (let i = 0; i < values.length; i++) {
+              const cur = values.indexOf(String(stateAt(t.x, t.y, t.z)?.props?.[prop]));
+              if (cur < 0 || cur === goal) break;
+              guard(job);
+              await bot.activateBlock(bot.blockAt(v(t)));
+              await sleep(250);
+            }
+          }
+          const h = stateAt(t.x, t.y, t.z);
+          if (t.pillar) {
+            if (h?.name === SCAFFOLD) {
+              pillars.add(k);
+              if (plan.byKey.has(k)) tempFor.set(k, t.for);
+              lastProgress = Date.now();
+            } else skip.set(k, Date.now() + 30000);
+            continue;
+          }
+          if (h?.name === t.name) placed.add(k);
+          if (h && placing.matches(t, h)) {
+            lastProgress = Date.now();
+            // a chest with contents is filled by the next loop (2a), before anything goes on top
+          }
+          else skip.set(k, Date.now() + 30000); // try the others, then again (or dig it out: the repair)
+        } catch (e) {
+          guard(job);
+          if (!/could not reach/.test(e.message)) throw e;
+          noPath++;
+          await unstick();
+          skip.set(k, Date.now() + 30000);
+          stalled(`could not reach ${k}`);
+        } finally {
+          r.world?.release(r.name, ck);
+        }
+      }
+    } finally {
+      for (const [list, veto] of [[mv.exclusionAreasBreak, vetoBreak], [mv.exclusionAreasPlace, vetoPlace]]) {
+        const i = list.indexOf(veto);
+        if (i >= 0) list.splice(i, 1);
+      }
+      mv.scafoldingBlocks = scaffold;
+      bot.setControlState('sneak', false);
+    }
+  };
+}
+
+module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
+  makeSchematic, schematicPlan, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest};

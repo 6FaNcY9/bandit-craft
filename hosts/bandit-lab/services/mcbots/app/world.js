@@ -233,9 +233,10 @@ class WorldModel {
     for (const [k, c] of this.claims) if (t - c.t >= CLAIM_TTL_MS) this.claims.delete(k);
   }
 
-  hostilesNear(x, z, dim, r) {
+  // y: only mobs within 8 blocks of that height (a cave or a dark space under a build is not near).
+  hostilesNear(x, z, dim, r, y = null) {
     this.prune();
-    return [...this.mobs.values()].filter((m) => m.dim === dim && Math.hypot(m.x - x, m.z - z) <= r);
+    return [...this.mobs.values()].filter((m) => m.dim === dim && Math.hypot(m.x - x, m.z - z) <= r && (y == null || m.y == null || Math.abs(m.y - y) <= 8));
   }
 
   snapshot() {

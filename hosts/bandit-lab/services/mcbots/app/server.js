@@ -43,7 +43,8 @@ const slayer = new Slayer({url: cfg.slayerUrl, cmd: cfg.slayerStatusCmd, decisio
 const admin = cfg.rcon ? new Admin({call: queued(cfg.rcon), events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()]}) : null;
 const agentStatuses = new Map(); // agent -> its last POST /api/agentstatus (goal, workers, role, t)
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
-const runners = new Map(cfg.names.map((n) => [n, new BotRunner(n, {host: cfg.mcHost, port: cfg.mcPort, log, world, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, loginSeed: cfg.loginSeed, hostLabel: cfg.hostLabel, onEvent: (b, k, t) => events.add(b, k, t)})]));
+const demoLog = require('./owner').makeDemoLog(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'demonstrations.jsonl') : null);
+const runners = new Map(cfg.names.map((n) => [n, new BotRunner(n, {host: cfg.mcHost, port: cfg.mcPort, log, world, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, loginSeed: cfg.loginSeed, hostLabel: cfg.hostLabel, ownerUuids: cfg.ownerUuids, demoLog, onEvent: (b, k, t) => events.add(b, k, t)})]));
 const settings = new Settings(process.env.STATE_DIR || '');
 const projects = new Projects(process.env.STATE_DIR || '');
 const crews = new Crews(process.env.STATE_DIR || '', {agentBots: cfg.agentBots, bots: cfg.names});
