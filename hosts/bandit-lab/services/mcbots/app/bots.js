@@ -1798,14 +1798,42 @@ const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, na
 // A step one bot works on is left to the others (this process's bots); a failed step rests 10 minutes.
 const productionLib = require('./production');
 const PRODUCING = new Map(); // step key -> {by, until}
+const SUPPORT_STOCK = {glass: 64, dirt: 128};
 async function produce(r, job) {
   const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
   const {store} = job.args;
   const chests = [store, ...job.args.chests.filter((c) => c.x !== store.x || c.y !== store.y || c.z !== store.z)];
   const dim = normDim(r.bot.game?.dimension);
+  // The project's chests together are its store (one double chest holds 54 stacks, a sorter needs some 9000
+  // items): a withdraw takes from each in turn, a deposit goes into the first with room.
+  const viaChests = async (type, args) => {
+    const have = () => r.bot.inventory.items().filter((i) => i.name === args.item).reduce((a, i) => a + i.count, 0);
+    const before = type === 'withdraw' ? have() : 0;
+    // As last counted: a withdraw skips the chests without the item, a deposit tops up a stack of it first.
+    const n = (c) => buildJob.chestStock(dim, c)?.get(args.item ?? args.only) ?? null;
+    const order = type === 'withdraw' ? chests.filter((c) => n(c) !== 0) : [...chests].sort((a, b) => (n(b) ? 1 : 0) - (n(a) ? 1 : 0));
+    for (const c of order) {
+      const a = {...args, x: c.x, y: c.y, z: c.z};
+      if (type === 'withdraw') a.count = args.count - (have() - before);
+      if (type === 'withdraw' && a.count <= 0) return;
+      try {
+        await JOBS[type](r, child(job, {type, args: VALIDATE[type](a)}));
+        if (type === 'deposit') return;
+      } catch (e) {
+        guard(job);
+        if (!/full|^no .* in the chest/.test(e.message)) throw e;
+      } finally {
+        buildJob.forgetChest(dim, c);
+      }
+    }
+    if (type === 'deposit') throw new Error(`the project's chests are full (${args.only})`);
+    if (have() - before < 1) throw new Error(`no ${args.item} in the project's chests`);
+  };
   for (;;) {
     guard(job);
     const need = buildJob.stillNeeded(r.bot, plan);
+    // Supports: glass over hoppers (it drops nothing), dirt elsewhere; used up as the build goes.
+    if (Object.keys(need).length) for (const [item, n] of Object.entries(SUPPORT_STOCK)) need[item] = (need[item] || 0) + n;
     const stock = await buildJob.readStock(r, job, chests, {goNear, guard});
     const now = Date.now();
     for (const [k, t] of PRODUCING) if (t.until < now || t.by === r.name) PRODUCING.delete(k);
@@ -1824,7 +1852,8 @@ async function produce(r, job) {
     try {
       for (const [type, args] of next.chain) {
         guard(job);
-        await JOBS[type](r, child(job, {type, args: VALIDATE[type](args)}));
+        if (type === 'deposit' || type === 'withdraw') await viaChests(type, args);
+        else await JOBS[type](r, child(job, {type, args: VALIDATE[type](args)}));
       }
       r.emit('info', `produce: done ${next.label}`);
     } catch (e) {
@@ -1833,7 +1862,7 @@ async function produce(r, job) {
       PRODUCING.set(next.key, {by: '-', until: Date.now() + 10 * 60000});
     } finally {
       if (PRODUCING.get(next.key)?.by === r.name) PRODUCING.delete(next.key);
-      buildJob.forgetChest(dim, store); // the chain changed what the store holds
+      for (const c of chests) buildJob.forgetChest(dim, c); // the chain changed what the chests hold
     }
   }
 }

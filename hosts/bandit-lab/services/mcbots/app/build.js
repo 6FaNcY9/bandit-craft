@@ -425,6 +425,7 @@ async function readStock(r, job, chests, {goNear, guard}) {
   return total;
 }
 const forgetChest = (dim, c) => CHEST_STOCK.delete(chestKey(dim, c));
+const chestStock = (dim, c) => CHEST_STOCK.get(chestKey(dim, c))?.items || null; // Map(item -> count) as last seen, or null
 
 // Turn to `look` and click `way` (placing.js) on the cell `t` while sneaking, so a chest or hopper clicked
 // is placed against instead of opened. mineflayer 4.39: look(force=true) never sends the turn, and look()
@@ -587,11 +588,19 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         noPath = 0;
         guard(job);
         let win;
-        try {
-          win = await bot.openContainer(block);
-        } catch (e) {
-          guard(job);
-          if (!/did not open/.test(e.message)) throw e;
+        for (let tries = 0; !win; tries++) {
+          try {
+            win = await bot.openContainer(block);
+          } catch (e) {
+            guard(job);
+            if (!/did not open/.test(e.message)) throw e;
+            // Opened from the edge of reach it sometimes stays shut (the sorter's main material chest, again and
+            // again, sandbox 2026-10-13): once more from next to it, then the next chest.
+            if (tries) break;
+            await goNear(r, job, c.x, c.y, c.z, 2, {doing: `walking up to the chest at ${c.x} ${c.y} ${c.z}`}).catch(() => guard(job));
+          }
+        }
+        if (!win) {
           r.emit?.('info', `the chest at ${c.x} ${c.y} ${c.z} did not open: trying the next one`);
           continue;
         }
@@ -1169,4 +1178,4 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
 }
 
 module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
-  makeSchematic, schematicPlan, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest};
+  makeSchematic, schematicPlan, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock};

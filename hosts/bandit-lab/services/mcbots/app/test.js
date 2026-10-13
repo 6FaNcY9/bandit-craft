@@ -5428,6 +5428,7 @@ require('./crafting');
   assert.match(gather.key, /^gather:/);
   assert.deepStrictEqual(gather.chain[1], ['deposit', {...store, only: gather.key.slice(7)}]);
   assert.deepStrictEqual(nextChain({need: {oak_planks: 4}, store}).chain[0], ['mine', {block: 'oak_log', count: 1}], 'oak stays oak');
+  assert.deepStrictEqual(nextChain({need: {snowball: 64}, store}).chain[0], ['mine', {block: 'snow_block', count: 16}], 'four snowballs a snow block');
   assert.deepStrictEqual(nextChain({need: {hopper: 1}, stock: {iron_ingot: 5, chest: 1}, store, taken: new Set(['craft:hopper'])}), {idle: 'the other bots have the open steps'});
   assert.deepStrictEqual(nextChain({need: {}, store}), {idle: 'the project has all it needs'});
   assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool'});

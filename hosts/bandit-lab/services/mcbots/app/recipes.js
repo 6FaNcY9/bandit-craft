@@ -12,6 +12,7 @@ const GATHER = {
   cobblestone: 'mine stone', cobbled_deepslate: 'mine deepslate', clay_ball: 'mine clay',
   coal: 'mine coal_ore', raw_iron: 'mine iron_ore', raw_copper: 'mine copper_ore', raw_gold: 'mine gold_ore',
   redstone: 'mine redstone_ore', lapis_lazuli: 'mine lapis_ore', diamond: 'mine diamond_ore', flint: 'mine gravel',
+  snowball: 'mine snow_block', // a snowy biome's snow blocks, 4 snowballs each with a shovel
 };
 for (const item of ['dirt', 'sand', 'red_sand', 'gravel', 'netherrack', 'cactus', 'sugar_cane',
   'andesite', 'diorite', 'granite', 'tuff', 'calcite', 'obsidian', 'end_stone', 'blackstone', 'basalt']) GATHER[item] = `mine ${item}`;
