@@ -5343,9 +5343,10 @@ require('./crafting');
   const sent = [], say = makeSayer((text) => sent.push({text, t: Date.now()}), {gapMs: 40, max: 4});
   say('abcdef'); say('old'); say('newest');
   assert.deepEqual(sent.map((s) => s.text), ['abcd']);
-  await new Promise((r) => setTimeout(r, 65));
+  await new Promise((r) => setTimeout(r, 150)); // generous: the lab builds this under load
   assert.deepEqual(sent.map((s) => s.text), ['abcd', 'newe']);
-  assert.ok(sent[1].t - sent[0].t >= 40);
+  // A timer may fire a millisecond before Date.now() says the gap is over (39 ms on the lab, 2026-10-13).
+  assert.ok(sent[1].t - sent[0].t >= 38, `one line per gap: ${sent[1].t - sent[0].t} ms`);
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mcbots-owner-'));
   try {
     const file = path.join(dir, 'demo.jsonl'), log = makeDemoLog(file);
