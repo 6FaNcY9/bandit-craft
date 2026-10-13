@@ -467,9 +467,22 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const dim = normDim(bot.game?.dimension);
     const ckey = (p) => `${dim}:${p.x},${p.y},${p.z}`;
     const v = (p) => new Vec3(p.x, p.y, p.z);
+    // Every loop reads the site's block states hundreds of thousands of times; uncached, three bots in one process
+    // kept the event loop busy until the server dropped them (keepAliveError, sandbox 2026-10-13). The cache
+    // follows the world: a block update drops its cell, a chunk (un)load all. Unloaded cells are not cached.
+    const states = new Map();
+    const dropState = (o, n) => states.delete(`${(n || o).position.x},${(n || o).position.y},${(n || o).position.z}`);
+    const dropStates = () => states.clear();
+    bot.on('blockUpdate', dropState);
+    bot.on('chunkColumnLoad', dropStates);
+    bot.on('chunkColumnUnload', dropStates);
     const stateAt = (x, y, z) => {
+      const k = `${x},${y},${z}`;
+      if (states.has(k)) return states.get(k);
       const b = bot.blockAt(new Vec3(x, y, z));
-      return b ? {name: b.name, props: b.getProperties()} : null;
+      const st = b ? {name: b.name, props: b.getProperties()} : null;
+      if (st) states.set(k, st);
+      return st;
     };
     const free = (name) => REPLACEABLE.has(name) || /water|lava/.test(name);
     const placed = recordOf(dim, {blocks: plan.targets.map(keyOf)}); // ours: may be dug again to repair
@@ -812,6 +825,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       // the cobblestone the pathfinder also uses stayed in the sorter's air cells as the owner's (sandbox 2026-10-13).
       mv.scafoldingBlocks = [bot.registry.itemsByName[SCAFFOLD].id].filter((id) => !wanted.has(id));
       for (;;) {
+        await new Promise((res) => setImmediate(res)); // let packets in: a loop whose awaits all resolve at once starves them
         guard(job);
         const now = Date.now();
         for (const [k, until] of skip) if (until < now) skip.delete(k);
@@ -1147,6 +1161,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       }
       mv.scafoldingBlocks = scaffold;
       bot.setControlState('sneak', false);
+      bot.removeListener('blockUpdate', dropState);
+      bot.removeListener('chunkColumnLoad', dropStates);
+      bot.removeListener('chunkColumnUnload', dropStates);
     }
   };
 }
