@@ -79,3 +79,26 @@ every 5 minutes.
   now digs a niche in natural rock beside its feet.
 - Night: a creeper killed a bot, it lost its inventory and respawned 3200 blocks away. On the main server
   the crew needs a bed next to the site and light, and the material lost on death has to be gathered again.
+
+## What the second run taught (2026-10-13, the first complete sorter)
+
+- All 1770 cells stood, but dirt from removed supports and rails dug out for repair fell into hoppers and
+  went round the machine (dirt in 19 containers, rails in 11): in a sorter that jams the filters. A drop's
+  fall path is followed before every dig (through rails, wire, torches); nothing is dug whose drop would come
+  to rest in a hopper. Supports over a hopper's fall path are glass (it drops nothing); the pathfinder may
+  not put dirt there and climbs and bridges with dirt only (its cobblestone stayed in air cells).
+- Rails: a rail takes its shape from the rails beside it when placed and keeps it afterwards; one placed
+  later beside it bends it if it has a free end (vanilla RailState, checked with setblock). A wrong rail is
+  reshaped (its other-side rails out, temporary rails on its wanted sides, the rail, the others back, the
+  temporaries out). The sorter's curves over hoppers (rows of curves pointing into each other) cannot be
+  made without power at placement; no cart runs there, so they keep their shape and are reported.
+- Containers filled are kept in the state directory (`.filled-*.json`), and a bot looks into a container it
+  did not place before fetching its contents: a restart, or bot1 beside bot2-3 in another process, no
+  longer sends the crew to every chest with 27 shears.
+- Performance: the job read block states some 200 000 times a loop; three bots in one process starved the
+  connection and were dropped (keepAliveError). States are cached (block updates keep the cache true) and
+  each loop yields once.
+- The inventory shows what came out of a chest only once its window is closed: the two-stack cap read 0 and
+  one bot took 327 hoppers while the others waited. take() counts what it withdrew.
+- Unstick only takes out a low block (a comparator), never a chest the bot merely stands on (it spilled the
+  contents). A double slab's second click re-equips; an empty hand skips the cell instead of ending the job.
