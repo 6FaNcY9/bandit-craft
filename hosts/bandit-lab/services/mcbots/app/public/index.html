@@ -65,6 +65,8 @@
   #console { background: #0b0d10; border-radius: 8px; padding: 8px; height: 260px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
   #map { width: 100%; height: 62vh; min-height: 320px; background: #0b0d10; border-radius: 10px; touch-action: none; display: block; }
   .chest { padding: 10px 0; border-bottom: 1px solid #23272d; }
+  .my8 { margin: 8px 0; } .mt6 { margin-top: 6px; } .mt8 { margin-top: 8px; } .mt10 { margin-top: 10px; } .mt12 { margin-top: 12px; } .mb8 { margin-bottom: 8px; }
+  .grow { flex: 1; } .full { width: 100%; display: block; } a.acc { color: var(--acc); }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -88,7 +90,7 @@
 <main data-page="home">
   <section class="card" id="projMini" hidden>
     <div class="row between"><b id="projMiniTitle"></b><span class="mut small" id="projMiniNum"></span></div>
-    <div class="bar big" style="margin:8px 0"><i id="projMiniBar"></i></div>
+    <div class="my8 bar big"><i id="projMiniBar"></i></div>
     <div class="small mut" id="projMiniInfo"></div>
   </section>
   <section class="card"><h2>Bots</h2><div id="botRows"></div></section>
@@ -118,15 +120,15 @@
     <div class="tiles" id="gatherItems"></div>
     <h3>Menge</h3>
     <div class="row" id="gatherCounts"></div>
-    <div class="row" style="margin-top:12px"><button class="b go" id="gatherGo">Sammeln schicken</button><span class="mut small" id="gatherHint"></span></div>
+    <div class="mt12 row"><button class="b go" id="gatherGo">Sammeln schicken</button><span class="mut small" id="gatherHint"></span></div>
   </section>
-  <p class="mut small">Hinschicken: auf der <a href="#" data-goto-tab="map" style="color:var(--acc)">Karte</a> eine Stelle antippen.</p>
+  <p class="mut small">Hinschicken: auf der <a href="#" data-goto-tab="map" class="acc">Karte</a> eine Stelle antippen.</p>
 </main>
 
 <!-- Karte -->
 <main data-page="map" hidden>
   <section class="card">
-    <div class="row between" style="margin-bottom:8px">
+    <div class="mb8 row between">
       <div class="row">
         <button class="b" id="mapMe">Zu mir</button>
         <button class="b" id="mapSite">Bauplatz</button>
@@ -135,7 +137,7 @@
       <div class="row"><button class="b" id="zoomOut">−</button><button class="b" id="zoomIn">+</button></div>
     </div>
     <canvas id="map"></canvas>
-    <div class="row between" id="mapPick" hidden style="margin-top:10px">
+    <div class="mt10 row between" id="mapPick" hidden>
       <span id="mapPickText"></span>
       <div class="row"><button class="b go" id="mapSend">Ausgewählte Bots hierher</button><button class="b" id="mapCancel">Abbrechen</button></div>
     </div>
@@ -147,7 +149,7 @@
 <main data-page="chests" hidden>
   <section class="card">
     <div class="row between"><h2>Kisten</h2><button class="b" id="chestReload">Aktualisieren</button></div>
-    <input class="t" id="chestSearch" placeholder="Suchen, z.B. Redstone, Eisen, Kiste" style="width:100%;display:block;margin-top:6px">
+    <input class="full mt6 t" id="chestSearch" placeholder="Suchen, z.B. Redstone, Eisen, Kiste">
     <p class="small" id="chestSum"></p>
     <div id="chestList"></div>
   </section>
@@ -163,12 +165,12 @@
     <div id="projNeedBox" hidden><h3>Fehlt noch (die Bots besorgen es)</h3><div class="chips" id="projNeed"></div></div>
     <div id="projStockBox" hidden><h3>In den Projektkisten</h3><div class="chips" id="projStock"></div></div>
     <p class="mut small" id="projNote"></p>
-    <div class="row" style="margin-top:10px" id="projCtl"></div>
+    <div class="mt10 row" id="projCtl"></div>
   </section>
   <section class="card">
     <h2>Neues Projekt</h2>
     <h3>1. Schematic</h3>
-    <div class="row"><select class="t" id="npFile" style="flex:1"></select><label class="b">⬆ Hochladen<input type="file" id="npUpload" accept=".litematic" hidden></label></div>
+    <div class="row"><select class="grow t" id="npFile"></select><label class="b">⬆ Hochladen<input type="file" id="npUpload" accept=".litematic" hidden></label></div>
     <p class="small mut" id="npInfo"></p>
     <h3>2. Ort (untere Ecke des Schematics)</h3>
     <div class="row">
@@ -180,8 +182,8 @@
     <textarea class="t" id="npChests" placeholder="-310 111 8&#10;-310 111 10"></textarea>
     <h3>4. Bots</h3>
     <div class="small mut">Bauen:</div><div class="row" id="npBuild"></div>
-    <div class="small mut" style="margin-top:6px">Material besorgen:</div><div class="row" id="npProduce"></div>
-    <div class="row" style="margin-top:12px"><button class="b go" id="npStart">Projekt starten</button><span class="small mut" id="npHint"></span></div>
+    <div class="mt6 small mut">Material besorgen:</div><div class="row" id="npProduce"></div>
+    <div class="mt12 row"><button class="b go" id="npStart">Projekt starten</button><span class="small mut" id="npHint"></span></div>
   </section>
 </main>
 
@@ -191,7 +193,7 @@
     <div class="row between"><h2>Server</h2><button class="b" id="srvReload">Aktualisieren</button></div>
     <p id="srvStatus" class="mut">…</p>
     <div class="chips" id="players"></div>
-    <div class="row" style="margin-top:12px">
+    <div class="mt12 row">
       <button class="b" data-act="time" data-value="day">☀️ Tag</button>
       <button class="b" data-act="time" data-value="night">🌙 Nacht</button>
       <button class="b" data-act="weather-clear">🌤 Wetter klar</button>
@@ -201,9 +203,9 @@
   <section class="card">
     <h2>Konsole</h2>
     <div id="console"></div>
-    <form class="row" id="cmdForm" style="margin-top:8px"><input class="t" id="cmd" placeholder="Befehl, z.B. list" style="flex:1"><button class="b">Senden</button></form>
+    <form class="mt8 row" id="cmdForm"><input class="grow t" id="cmd" placeholder="Befehl, z.B. list"><button class="b">Senden</button></form>
   </section>
-  <p class="mut small"><a href="/mehr" style="color:var(--acc)">Alte Seite</a> (3D-Ansicht, Daueraufträge, Agenten, slayer)</p>
+  <p class="mut small"><a href="/mehr" class="acc">Alte Seite</a> (3D-Ansicht, Daueraufträge, Agenten, slayer)</p>
 </main>
 <div id="toast"></div>
 

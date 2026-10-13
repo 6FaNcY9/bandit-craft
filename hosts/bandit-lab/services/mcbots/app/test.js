@@ -2140,6 +2140,15 @@ require('./crafting');
   // A: keeper on, saved jobs waiting for offline bots, a worker that joined and left
   let a = await launch(dirA);
   try {
+    // Each page gets a CSP with its own inline script and style; the new one has no style attributes (blocked)
+    for (const [pth, file] of [['/', 'index.html'], ['/mehr', 'legacy.html']]) {
+      const policy = (await fetch(`http://127.0.0.1:${a.port}${pth}`, {headers: H})).headers.get('content-security-policy');
+      const html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8');
+      for (const re of [/<script>([\s\S]*?)<\/script>/, /<style>([\s\S]*?)<\/style>/]) {
+        assert.ok(policy.includes(require('node:crypto').createHash('sha256').update(html.match(re)[1]).digest('base64')), `${pth} allows its own ${re.source.slice(1, 6)}`);
+      }
+      if (pth === '/') assert.ok(!/<[^>]*\sstyle="/.test(html), 'no style attributes on the new page');
+    }
     assert.strictEqual((await (await a.call('/api/keeper', {enabled: true})).json()).enabled, true);
     assert.strictEqual((await a.get('/api/state')).plan.enabled, false, 'the plan is available but off');
     assert.strictEqual((await a.call('/api/plan', {skip: 'nope'})).status, 400);

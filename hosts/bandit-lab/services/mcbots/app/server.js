@@ -57,8 +57,9 @@ const three = fs.readFileSync(path.join(__dirname, 'public', 'vendor', 'three.mi
 // The page is one file with inline script and style: allow exactly those two
 // bodies by hash, plus this server's own files ('self': the vendored three.js of the 3D map);
 // no CDN, no eval, no other origin.
-const sha = (re) => `'sha256-${require('node:crypto').createHash('sha256').update(String(page).match(re)?.[1] ?? '').digest('base64')}'`;
-const CSP = `default-src 'none'; script-src 'self' ${sha(/<script>([\s\S]*?)<\/script>/)}; style-src ${sha(/<style>([\s\S]*?)<\/style>/)}; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const sha = (html, re) => `'sha256-${require('node:crypto').createHash('sha256').update(String(html).match(re)?.[1] ?? '').digest('base64')}'`;
+const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<script>([\s\S]*?)<\/script>/)}; style-src ${sha(html, /<style>([\s\S]*?)<\/style>/)}; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const CSP = csp(page), LEGACY_CSP = csp(legacy); // each page allows its own bodies only
 // Remote workers register themselves in `runners` (see hub.js), so the
 // dashboard, /api/state and /api/debug list them next to the lab's bots.
 const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, events, settings}) : null;
@@ -259,8 +260,8 @@ async function tile(rel) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const send = (code, type, body) => {
-    res.writeHead(code, {'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': CSP, 'Referrer-Policy': 'no-referrer'});
+  const send = (code, type, body, policy = CSP) => {
+    res.writeHead(code, {'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': policy, 'Referrer-Policy': 'no-referrer'});
     res.end(body);
   };
   const json = (code, obj) => send(code, 'application/json', JSON.stringify(obj));
@@ -274,7 +275,7 @@ const server = http.createServer(async (req, res) => {
     return json(403, {error: 'forbidden'});
   }
   if (req.method === 'GET' && url.pathname === '/') return send(200, 'text/html; charset=utf-8', page);
-  if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy);
+  if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy, LEGACY_CSP);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(200, state());
   if (req.method === 'GET' && url.pathname === '/api/schematics') return json(200, await listSchematics());
   if (req.method === 'POST' && url.pathname === '/api/schematic') {
