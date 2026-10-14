@@ -193,7 +193,8 @@ const VALIDATE = {
     if (!['none', 'left_right', 'front_back'].includes(a.mirror ?? 'none')) throw new Error('mirror must be none, left_right or front_back');
     const chests = a.chests ?? [];
     if (!Array.isArray(chests) || chests.length > 64) throw new Error('chests must be a list of at most 64 x,y,z');
-    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz)};
+    // clearAll (the owner's choice for a site): anything in the site box may be dug, except containers.
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.clearAll === true ? {clearAll: true} : {})};
   },
   // The materials for that schematic build, made into `store` (the build's chests are counted too).
   produce: (a) => ({...VALIDATE.schematic(a), store: xyz(a.store || {})}),

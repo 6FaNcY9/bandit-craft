@@ -180,6 +180,7 @@
     </div>
     <h3>3. Projektkisten (eine pro Zeile: x y z, die erste ist das Lager der Produktion)</h3>
     <textarea class="t" id="npChests" placeholder="-310 111 8&#10;-310 111 10"></textarea>
+    <label class="mt6 row small"><input type="checkbox" id="npClear"> Alles im Bauplatz darf weg (auch Gebautes, nur Kisten und andere Behälter bleiben)</label>
     <h3>4. Bots</h3>
     <div class="small mut">Bauen:</div><div class="row" id="npBuild"></div>
     <div class="mt6 small mut">Material besorgen:</div><div class="row" id="npProduce"></div>
@@ -681,8 +682,9 @@ $('npStart').onclick = async () => {
   if (![origin.x, origin.y, origin.z].every(Number.isFinite) || $('npX').value === '') return say('Ort fehlt (x y z)', true);
   if (!list.length) return say('Mindestens eine Projektkiste angeben', true);
   if (!build.length && !produce.length) return say('Bots für Bau oder Material antippen', true);
-  if (!confirm(`${file} bei ${origin.x} ${origin.y} ${origin.z} starten?\nBau: ${build.join(', ') || '-'} · Material: ${produce.join(', ') || '-'}`)) return;
-  const args = {file, origin, rotation: +$('npRot').value, mirror: 'none', chests: list};
+  const clearAll = $('npClear').checked;
+  if (!confirm(`${file} bei ${origin.x} ${origin.y} ${origin.z} starten?\nBau: ${build.join(', ') || '-'} · Material: ${produce.join(', ') || '-'}${clearAll ? '\nAlles im Bauplatz wird abgebaut (außer Behältern).' : ''}`)) return;
+  const args = {file, origin, rotation: +$('npRot').value, mirror: 'none', chests: list, ...(clearAll ? {clearAll} : {})};
   if (build.length) await sendJob(build, 'schematic', args, 'Bau gestartet');
   if (produce.length) await sendJob(produce, 'produce', {...args, store: list[0]}, 'Material besorgen gestartet');
 };

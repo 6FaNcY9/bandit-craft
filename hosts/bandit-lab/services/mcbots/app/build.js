@@ -335,6 +335,7 @@ const schematicLib = require('./schematic');
 const placing = require('./placing');
 
 const SCHEMATIC_RE = /^[\w.-]{1,64}\.litematic$/;
+const CONTAINER = /chest|barrel|shulker_box|hopper|dropper|dispenser|furnace|smoker|brewing_stand|lectern|crafter|decorated_pot|bookshelf|jukebox/; // never cleared: they hold items
 const VEGETATION = /_(log|leaves|wood)$|^(vine|snow|sweet_berry_bush|bamboo|sugar_cane|cactus)$/; // cleared from the site like ground
 const RESERVE_SLOTS = 4; // inventory slots a restock leaves free (drops, a tool)
 // Floating parts (most of the owner's sorter hangs in the air, 1522 of 1770 cells had no neighbour to
@@ -494,7 +495,11 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const free = (name) => REPLACEABLE.has(name) || /water|lava/.test(name);
     const placed = recordOf(dim, {blocks: plan.targets.map(keyOf)}); // ours: may be dug again to repair
     const ours = (k, name) => placed.has(k) && plan.byKey.get(k)?.p.item === placing.itemOf(name);
-    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS; // glass where the schematic wants another block is our scaffolding, and it drops nothing
+    // Glass where the schematic wants another block is our scaffolding, and it drops nothing. The owner may give a
+    // site free (a scaffold stood in the sorter's site on the main server, 2026-10-14): then anything but a
+    // container comes out, so nothing of theirs spills.
+    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS ||
+      (job.args.clearAll === true && !CONTAINER.test(name));
     // Whether a drop at x,y,z comes to rest in a hopper: in the world now, or (`final`) in the finished build,
     // where a support decides its material.
     const landsInHopper = (x, y, z, final) => {

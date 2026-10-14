@@ -126,6 +126,13 @@ assert.deepStrictEqual(VALIDATE.goto({x: '1', y: 64, z: -3}), {x: 1, y: 64, z: -
 assert.throws(() => VALIDATE.goto({x: 'a', y: 1, z: 1}));
 assert.deepStrictEqual(VALIDATE.goto({x: 5, z: -7}), {x: 5, z: -7}, 'a spot tapped on the map has no height');
 assert.throws(() => VALIDATE.say({text: '/op me'}));
+// A site given free by the owner (clearAll) is a plain true, else not set at all (2026-10-14).
+{
+  const base = {file: 'sorter.litematic', origin: {x: 1, y: 2, z: 3}, chests: [{x: 1, y: 2, z: 4}]};
+  assert.strictEqual(VALIDATE.schematic({...base, clearAll: true}).clearAll, true);
+  assert.ok(!('clearAll' in VALIDATE.schematic(base)) && !('clearAll' in VALIDATE.schematic({...base, clearAll: 'yes'})));
+  assert.strictEqual(VALIDATE.produce({...base, clearAll: true, store: {x: 1, y: 2, z: 4}}).clearAll, true);
+}
 assert.throws(() => VALIDATE.mine({block: 'Iron Ore'}));
 assert.throws(() => VALIDATE.mine({block: 'torch'}), /placed block/);
 assert.throws(() => VALIDATE.mine({block: 'white_bed'}), /placed block/);
