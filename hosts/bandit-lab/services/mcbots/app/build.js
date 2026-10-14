@@ -355,6 +355,21 @@ const OPEN_LID = /hopper|glass|slab|chest|stairs|trapdoor|fence|wall|pane|leaves
 // in a schematic cell (taking it out would drop them; a comparator stood on dirt in an observer's cell).
 const ATTACHED = /(^|_)(redstone_wire|repeater|comparator|rail|torch|button|lever|carpet|pressure_plate|door|ladder|lantern|bed)$/;
 
+// A double chest cut in half by the schematic's edge (the sorter's right half at 3303 100 3000 in the sandbox,
+// its left half one block outside the region): Minecraft makes a lone half single, so the crew dug and placed
+// it three times and the final check failed (2026-10-14). A half without its partner is planned single.
+const HALF = {left: {north: 'east', east: 'south', south: 'west', west: 'north'}, right: {north: 'west', west: 'south', south: 'east', east: 'north'}};
+function loneChests(cells) {
+  const at = new Map(cells.map((c) => [keyOf(c), c]));
+  return cells.map((c) => {
+    const side = /(^|_)chest$/.test(c.name) && HALF[c.props?.type]?.[c.props.facing];
+    if (!side) return c;
+    const d = placing.DIRS[side], o = at.get(keyOf({x: c.x + d[0], y: c.y + d[1], z: c.z + d[2]}));
+    const paired = o && o.name === c.name && o.props?.facing === c.props.facing && o.props?.type === (c.props.type === 'left' ? 'right' : 'left');
+    return paired ? c : {...c, props: {...c.props, type: 'single'}};
+  });
+}
+
 // One parse per file and placement, shared by the bots of this process; so is what they saw in the chests.
 const SCHEMATIC_PLANS = new Map();
 const CHEST_STOCK = new Map(); // "dim:x,y,z" -> {items: Map(name -> count), t}
@@ -363,7 +378,7 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none'}) {
   if (!SCHEMATIC_PLANS.has(k)) {
     SCHEMATIC_PLANS.set(k, (async () => {
       const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
-      const cells = schematicLib.placeSchematic(parsed, {origin, rotation, mirror});
+      const cells = loneChests(schematicLib.placeSchematic(parsed, {origin, rotation, mirror}));
       const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
       const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
       for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
@@ -1255,4 +1270,4 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
 }
 
 module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
-  makeSchematic, schematicPlan, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList};
+  makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList};

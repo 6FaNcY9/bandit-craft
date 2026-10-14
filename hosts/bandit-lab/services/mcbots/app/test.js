@@ -241,6 +241,15 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '1,2,3'}));
 // ---- build job: blueprint validation, order, next block (fake world) ----
 {
   const B = require('./build');
+  { // a double chest half whose partner lies outside the schematic is planned single (sandbox sorter, 2026-10-14)
+    const c = (z, type, facing = 'east') => ({x: 0, y: 0, z, name: 'chest', props: {facing, type, waterlogged: 'false'}});
+    const types = (cells) => B.loneChests(cells).map((x) => x.props.type);
+    assert.deepStrictEqual(types([c(0, 'left'), c(1, 'right')]), ['left', 'right'], 'a whole pair stays');
+    assert.deepStrictEqual(types([c(0, 'right')]), ['single'], 'a lone half');
+    assert.deepStrictEqual(types([c(0, 'right'), c(1, 'left')]), ['single', 'single'], 'two halves that do not face each other');
+    assert.deepStrictEqual(types([c(0, 'left'), c(1, 'right', 'west')]), ['single', 'single'], 'a different facing is no partner');
+    assert.deepStrictEqual(types([c(0, 'single')]), ['single']);
+  }
   const cube = (n, block = 'cobblestone') => Array.from({length: n}, (_, i) => ({x: i % 3, y: Math.floor(i / 9), z: Math.floor(i / 3) % 3, block}));
   const bp = {origin: {x: 100, y: 64, z: 100}, blocks: cube(18).reverse()};
   const plan = B.validate(bp);
