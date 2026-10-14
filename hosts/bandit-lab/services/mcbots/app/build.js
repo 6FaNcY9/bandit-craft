@@ -556,6 +556,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const pillars = recordOf(dim, {blocks: ['scaffold', ...plan.targets.map(keyOf)]}); // cells holding a support pillar
     const tempFor = new Map(); // a support in a cell of the schematic (a hopper loop) -> the cell that needed it
     let allPlaced = false; // last loop found every cell placed: the pillars come out
+    const unreached = new Set(); // what could not be cleared at the end, for the report
     let idle = false; // last loop found nothing to place: the cells left to clear are tried again
     const total = plan.targets.length;
     let lastProgress = Date.now(), lastDone = -1, first = true, final = false;
@@ -932,7 +933,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             tries.set(clear.k, n);
             skip.set(clear.k, Date.now() + 30000);
             if (n >= 3) plan.leave.add(clear.k);
-            stalled(`could not clear ${clear.name} at ${clear.x} ${clear.y} ${clear.z}: ${e.message.slice(0, 80)}`);
+            // At the end such a cell is reported, not tried until the job gives up: a support walled in by the
+            // finished machine kept the crew from the final check and the fills (sandbox 2026-10-13).
+            if (n >= 3 && allPlaced) { skip.set(clear.k, Infinity); unreached.add(`${clear.name} at ${clear.k}`); }
+            else if (!allPlaced) stalled(`could not clear ${clear.name} at ${clear.x} ${clear.y} ${clear.z}: ${e.message.slice(0, 80)}`);
           } finally {
             r.world?.release(r.name, k);
           }
@@ -1092,6 +1096,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           job.noop = first;
           if (asIs.size) r.emit?.('info', `schematic done; ${asIs.size} rails over hoppers keep another shape (no cart runs there): ${[...asIs].slice(0, 4).join(' ')}`);
           if (stuck.size) r.emit?.('info', `schematic done; ${stuck.size} cells in the way were left (not ours): ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}`);
+          if (unreached.size) r.emit?.('info', `schematic done; ${unreached.size} supports no bot reached were left: ${[...unreached].slice(0, 3).join(', ')}`);
           return;
         }
         first = false;
