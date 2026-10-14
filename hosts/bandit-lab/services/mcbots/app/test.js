@@ -370,6 +370,34 @@ assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
     assert.ok(Date.now() - c.lastFight < 1000);
   });
 }
+(async () => {
+  // A mob behind a wall: bot3 retreated for 6 h at 6.8 health and food 17 (no regeneration, no eating), bot1
+  // hunted for 14 h (lab 2026-10-13). The retreat eats, a mode ends after its cap, the mob is then ignored.
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const goals = [], ate = [], logs = [];
+  const zombie = {id: 7, type: 'hostile', name: 'zombie', position: new Vec3(10, 64, 0), height: 1.9};
+  const bot = {health: 6.8, food: 17, entity: {position: new Vec3(0, 64, 0)}, entities: {7: zombie}, game: {dimension: 'overworld'},
+    pathfinder: {setGoal: (g) => goals.push(g)}, registry: {foodsByName: {bread: {foodPoints: 5}}}, currentWindow: null,
+    inventory: {items: () => [{name: 'bread'}]}, equip: async () => {}, consume: async () => ate.push('bread'), lookAt: async () => {}};
+  const c = new Combat({bot, online: true, inventoryBusy: 0, name: 'bot3', world: {noteMob() {}}, log: (n, m) => logs.push(m), getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 16, eatBelow: 14})});
+  c.stop();
+  await c.tick();
+  assert.strictEqual(c.mode, 'retreat');
+  await c.tick();
+  assert.deepStrictEqual(ate, ['bread'], 'a retreating bot eats');
+  c.since -= 31000;
+  await c.tick();
+  assert.strictEqual(c.mode, null, 'a retreat that does not resolve ends');
+  assert.ok(logs.some((m) => /gave up on zombie/.test(m)));
+  await c.tick();
+  assert.strictEqual(c.mode, null, 'the mob is ignored for a while');
+  zombie.position = new Vec3(2, 64, 0);
+  let hit = false;
+  c.fight = async () => { hit = true; };
+  await c.tick();
+  assert.ok(hit, 'an ignored mob is still fought at arm\'s length');
+})();
 assert.ok(W.isHostile({type: 'hostile', name: 'zombie'}));
 assert.ok(W.isHostile({type: 'mob', category: 'Hostile mobs', name: 'phantom'}));
 assert.ok(!W.isHostile({type: 'player', name: 'x'}) && !W.isHostile({type: 'animal', name: 'wolf'}) && !W.isHostile(null));
@@ -417,6 +445,20 @@ assert.deepStrictEqual(VALIDATE.rearm({x: 1, y: 2, z: 3}), {x: 1, y: 2, z: 3});
 const {BotRunner} = require('./bots');
 const runner = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: [], supplyChest: {x: 1, y: 2, z: 3}});
 assert.deepStrictEqual(runner.supplyChest, {x: 1, y: 2, z: 3});
+{
+  // The same shaft ordered again while it runs or waits is not queued twice; another job is (lab 2026-10-13).
+  const q = new BotRunner('bot2', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: []});
+  q.pump = () => {};
+  const shaft = {x1: -291, z1: -222, x2: -276, z2: -207, top: 80, bottom: -59};
+  q.enqueue('shaft', shaft);
+  q.current = q.queue.shift();
+  q.enqueue('shaft', shaft);
+  q.enqueue('mine', {block: 'stone', count: 5});
+  q.enqueue('mine', {block: 'stone', count: 5});
+  q.enqueue('shaft', {...shaft, bottom: -40});
+  q.enqueue('shaft', {...shaft, bottom: -40});
+  assert.deepStrictEqual(q.queue.map((j) => `${j.type} ${j.args.bottom ?? ''}`), ['mine ', 'mine ', 'shaft -40']);
+}
 // Block claims: a second bot cannot take a block the first one holds.
 const {WorldModel} = require('./world');
 const claims = new WorldModel();

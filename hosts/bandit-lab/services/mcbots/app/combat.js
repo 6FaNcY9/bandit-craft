@@ -24,6 +24,11 @@ const deathCause = (name, msg) => {
   return DEATH_PHRASE.test(rest) ? rest : null;
 };
 const FIGHT_RANGE = 4;
+// A mode that has not resolved by then ends, and its mob is left alone for IGNORE_MS (it still gets hit
+// at arm's length): a mob behind a wall kept bot1 hunting and bot3 retreating for hours while their
+// jobs waited for calm (lab, 2026-10-13).
+const MODE_MAX_MS = {hunt: 20000, retreat: 30000, creeper: 15000};
+const IGNORE_MS = 120000;
 const SEE_RANGE = 24;
 const SCAN_EVERY = 20; // ticks between notable-block scans (10 s)
 const MATERIALS = ['wooden', 'golden', 'stone', 'iron', 'diamond', 'netherite'];
@@ -42,7 +47,8 @@ class Combat {
     this.r = runner;
     this.epoch = 0;
     this.busy = false; // retreating or backing off a creeper
-    this.mode = null; // 'retreat' | 'creeper'
+    this.mode = null; // 'hunt' | 'retreat' | 'creeper'
+    this.ignore = new Map(); // mob entity id -> until: a mode about it did not resolve
     this.eating = false;
     this.lastAttack = 0;
     this.ticks = 0;
@@ -70,6 +76,8 @@ class Combat {
   takeover(mode, target, dist) {
     if (this.mode === mode) return;
     this.mode = mode;
+    this.target = target;
+    this.since = Date.now();
     this.busy = true;
     this.epoch++;
     this.r.log(this.r.name, `${mode}: away from ${target.name}`);
@@ -87,6 +95,7 @@ class Combat {
   hunt(target) {
     this.mode = 'hunt';
     this.target = target;
+    this.since = Date.now();
     this.busy = true;
     this.epoch++;
     this.r.bot.pathfinder.setGoal(new goals.GoalFollow(target, 2), true);
@@ -115,12 +124,22 @@ class Combat {
     // Only mobs that actually threaten the bot drive retreat/back-off/attack;
     // endermen, piglins and the like are seen and shared but left alone.
     const s = this.settings();
-    const near = seen.filter(shouldFight).sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me))[0];
+    const now = Date.now();
+    for (const [id, until] of this.ignore) if (until < now) this.ignore.delete(id);
+    const threats = seen.filter(shouldFight).sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me));
+    const close = threats[0], closeDist = close ? close.position.distanceTo(me) : Infinity;
+    const near = threats.find((e) => !this.ignore.has(e.id));
     const dist = near ? near.position.distanceTo(me) : Infinity;
 
-    // Retreat until healthy again or nothing hostile is close.
+    if (this.mode && now - this.since > MODE_MAX_MS[this.mode]) {
+      if (this.target) this.ignore.set(this.target.id, now + IGNORE_MS);
+      r.log(r.name, `${this.mode}: gave up on ${this.target?.name || 'a mob'} after ${Math.round((now - this.since) / 1000)} s`);
+      return this.release(); // the next tick sees the mob ignored
+    }
+    // Retreat until healthy again or nothing hostile is close, eating meanwhile (health only comes back at food 18+).
     if (this.mode === 'retreat') {
       if (bot.health >= Math.min(20, s.retreatHealth + 4) || dist > 16) this.release();
+      else if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
       return;
     }
     if (near && bot.health < s.retreatHealth && dist <= 16) return this.takeover('retreat', near, 20);
@@ -129,7 +148,7 @@ class Combat {
     if (this.mode === 'creeper' && (!near || near.name !== 'creeper' || dist > 8)) this.release();
 
     if (near && near.name === 'creeper' && dist < 6) return this.takeover('creeper', near, 8);
-    if (near && s.defend && dist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(near);
+    if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
     if (near && s.defend && dist <= s.fightRange && !this.busy && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
     if (!this.busy && !near && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();
   }
