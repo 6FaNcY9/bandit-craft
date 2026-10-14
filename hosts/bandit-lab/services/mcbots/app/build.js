@@ -355,7 +355,7 @@ const OPEN_LID = /hopper|glass|slab|chest|stairs|trapdoor|fence|wall|pane|leaves
 // in a schematic cell (taking it out would drop them; a comparator stood on dirt in an observer's cell).
 const ATTACHED = /(^|_)(redstone_wire|repeater|comparator|rail|torch|button|lever|carpet|pressure_plate|door|ladder|lantern|bed)$/;
 
-// A double chest cut in half by the schematic's edge (the sorter's right half at 3303 100 3000 in the sandbox,
+// A double chest cut in half by the schematic's edge (a right half on the sorter's z edge in the sandbox,
 // its left half one block outside the region): Minecraft makes a lone half single, so the crew dug and placed
 // it three times and the final check failed (2026-10-14). A half without its partner is planned single.
 const HALF = {left: {north: 'east', east: 'south', south: 'west', west: 'north'}, right: {north: 'west', west: 'south', south: 'east', east: 'north'}};
