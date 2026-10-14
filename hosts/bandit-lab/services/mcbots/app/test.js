@@ -3165,6 +3165,17 @@ require('./crafting');
     await explore({bot, name: 'bot17', protectedAreas: [], emit: (k, m) => said.push(m), world: {hostilesNear: () => []}}, {t: {}, cancelled: false, type: 'chop', args: {}}, 'logs', 1, 192, true);
     assert.deepStrictEqual(goals.map((g) => g.constructor.name), ['GoalNearXZ']);
     assert.ok(/walking 32 blocks/.test(said[0]), said[0]);
+    // Over ground it keeps its heading (it walked a square round the base before, 2026-10-14); a stopped walk turns it.
+    const walker = {bot, name: 'bot17', protectedAreas: [], emit() {}, world: {hostilesNear: () => []}};
+    goals.length = 0;
+    for (const n of [1, 2, 3]) await explore(walker, {t: {}, cancelled: false, type: 'chop', args: {}}, 'logs', n, 192, true);
+    assert.deepStrictEqual(goals.map((g) => `${g.x} ${g.z}`), ['0 -32', '0 -32', '0 -32'], 'bot17 heads north three times (the fake bot stays at 0 0)');
+    walker.bot = {...bot, pathfinder: {...bot.pathfinder, goto: async () => { throw new Error('No path to the goal!'); }}};
+    await explore(walker, {t: {}, cancelled: false, type: 'chop', args: {}}, 'logs', 4, 192, true);
+    walker.bot = bot;
+    goals.length = 0;
+    await explore(walker, {t: {}, cancelled: false, type: 'chop', args: {}}, 'logs', 5, 192, true);
+    assert.deepStrictEqual(goals.map((g) => `${g.x} ${g.z}`), ['32 0'], 'east after the blocked walk');
   }
   { // night outside: three blocks down, a lid on top, out in the morning; nothing by day, under a roof, without a lid
     const {nightShelter} = require('./bots');

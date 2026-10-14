@@ -1643,9 +1643,13 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
     const x = Math.floor(p.x) + dx * EXPLORE_STEP, z = Math.floor(p.z) + dz * EXPLORE_STEP;
     return !insideAreas(r.protectedAreas, x, z) && !(job.type === 'shift' && Math.hypot(x - job.args.x, z - job.args.z) > leash); // shifts stay near the chest
   };
-  const start = n + (r.name.charCodeAt(r.name.length - 1) || 0);
+  // Underground a new direction each time. Over ground the bot keeps its heading until the leash or a wall
+  // turns it: turning every 32 blocks walked it in a square round the main base, never to the forest
+  // 150 blocks south (2026-10-14). The heading survives the job, so the next search goes on from there.
+  const start = surface ? (r.heading ??= (r.name.charCodeAt(r.name.length - 1) || 0) % 4) : n + (r.name.charCodeAt(r.name.length - 1) || 0);
   const dir = [0, 1, 2, 3].map((i) => dirs[(start + i) % 4]).find(ok);
   if (!dir) return;
+  if (surface) r.heading = dirs.indexOf(dir);
   const [dx, dz] = dir;
   const x = Math.floor(p.x) + dx * EXPLORE_STEP, z = Math.floor(p.z) + dz * EXPLORE_STEP;
   r.emit('info', surface ? `no ${what} left in reach: walking ${EXPLORE_STEP} blocks to ${x} ${z}` : `no ${what} left in reach: tunnelling ${EXPLORE_STEP} blocks to ${x} ${Math.floor(p.y)} ${z}`);
@@ -1653,6 +1657,7 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
   await goNear(r, job, x, Math.floor(p.y), z, 3, walk).catch((e) => {
     guard(job);
     r.emit('info', `${surface ? 'walk' : 'tunnel'} stopped: ${e.message.slice(0, 80)}`);
+    if (surface) r.heading = (r.heading + 1) % 4; // a wall or water that way: turn
   });
 }
 
