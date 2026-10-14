@@ -84,6 +84,7 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 
 // Normalise and validate job arguments (throws on bad input).
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
+const AREA_JOBS = new Set(['shaft', 'excavate', 'rim', 'treefarm', 'wheatfarm']); // one run covers the area
 const VALIDATE = {
   // Without y (a spot tapped on the dashboard's map): walk there in x and z only.
   goto: (a) => (a.y === undefined || a.y === null ? {x: num(a.x, -3e7, 3e7, 'x'), z: num(a.z, -3e7, 3e7, 'z')} : xyz(a)),
@@ -509,6 +510,10 @@ class BotRunner {
     }
     if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
     const job = {id: ++this.jobSeq, type, args: VALIDATE[type](args), status: 'queued'};
+    // An area job the bot already runs or has queued is not queued again: bot2's agent ordered the same shaft
+    // four more times while the first one ran, and every run walks all its layers again (lab, 2026-10-13).
+    const same = (j) => j && j.type === type && JSON.stringify(j.args) === JSON.stringify(job.args);
+    if (AREA_JOBS.has(type) && (same(this.current) || this.queue.some(same))) return;
     this.queue.push(job);
     this.pump();
   }
