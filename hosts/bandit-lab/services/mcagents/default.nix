@@ -46,9 +46,10 @@ in {
     enable = lib.mkEnableOption "the Andy-4.2 lead agent and its workers" // {default = true;};
     offlineHosts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      # slayer thinks for the live agents again (overflow behind the lab GPU, owner 2026-10-14); albert keeps the
-      # replays, the judge and training, never live traffic (it must stay quiet).
-      default = ["albert"];
+      # slayer replays and grades too (owner 2026-10-15, overnight): the lab GPU alone carried the live agents
+      # (85 decisions in 40 min), slayer sat idle as overflow, and albert is often off. albert never gets live
+      # traffic (it must stay quiet). ["albert"] puts slayer back on live overflow.
+      default = ["albert" "slayer"];
       description = "Inference hosts kept for idle replays, the judge and training; they never get live agent or solver traffic.";
     };
     exportJudged = lib.mkEnableOption "judge-graded decisions (source judged) in the daily SFT export";
