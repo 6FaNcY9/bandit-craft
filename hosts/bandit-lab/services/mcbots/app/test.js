@@ -2955,6 +2955,16 @@ require('./crafting');
       await assert.rejects(JOBS.excavate({...r, bot: far, emit: (kind, text) => infos.push(text)}, {...job, t: {}}), /1 blocks of the room were not dug/);
       assert.deepStrictEqual(order, ['stone@60', 'iron_ore@58'], 'the layers below the unreachable block are still dug');
       assert.ok(infos.some((t) => /left a dirt block at 0 59 0: could not reach/.test(t)), infos.join('\n'));
+      // A shaft's later passes skip what had no way to it: bot2 walked to each such block three times (2026-10-14).
+      let walks = 0;
+      const counting = {...far, pathfinder: {...far.pathfinder, goto: async (g) => { if (g?.pos?.y === 59) { walks++; throw new Error('No path to the goal!'); } }}};
+      const pass = (unreachable) => Object.assign({...job, t: {}}, {unreachable});
+      const seen = new Set();
+      await assert.rejects(JOBS.excavate({...r, bot: counting, emit() {}}, pass(seen)), /were not dug/);
+      const first = walks;
+      assert.deepStrictEqual([...seen], ['overworld:0,59,0']);
+      await assert.rejects(JOBS.excavate({...r, bot: counting, emit() {}}, pass(seen)), /1 blocks of the room were not dug/);
+      assert.strictEqual(walks, first, 'no walk to it in the next pass');
     }
   }
   { // shaft: 1-high excavate layers top-down, one stair step per layer spiralling along the walls

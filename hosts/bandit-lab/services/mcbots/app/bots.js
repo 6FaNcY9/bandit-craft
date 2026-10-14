@@ -2366,6 +2366,7 @@ const JOBS = {
           if (!b) { left++; continue; } // not loaded is not dug (a shaft resumed right after login "finished" in 0 s)
           if (b.boundingBox === 'empty' || !NATURAL.test(b.name)) continue;
           const k = `${dim}:${x},${y},${z}`;
+          if (job.unreachable?.has(k)) { left++; continue; } // no way there in an earlier pass of this layer
           if (r.world && !(await r.world.claim(r.name, k))) {
             left++;
             continue;
@@ -2381,6 +2382,7 @@ const JOBS = {
             guard(job);
             if (!/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
             left++;
+            if (/No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
             r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);
           } finally {
             r.world?.release(r.name, k);
@@ -2423,9 +2425,13 @@ const JOBS = {
       for (let y = top; y >= bottom; y--) {
         const keep = ring[(top - y) % ring.length];
         let dugHere = false;
+        // Passes 2 and 3 are for blocks another bot held or that were not loaded: a block with no way to it
+        // cost bot2 three walk timeouts each, half an hour a layer, 16 h for a shaft (main server, 2026-10-14).
+        const unreachable = new Set();
         for (let pass = 1; ; pass++) {
           guard(job);
           const layer = child(job, {type: 'excavate', args: {x1, y1: y, z1, x2, y2: y, z2, keep, corner}});
+          layer.unreachable = unreachable;
           try {
             await JOBS.excavate(r, layer);
             dugHere ||= !layer.noop;
@@ -2433,6 +2439,7 @@ const JOBS = {
           } catch (e) {
             guard(job);
             if (!/were not dug/.test(e.message)) throw e;
+            if (unreachable.size * 2 > (x2 - x1 + 1) * (z2 - z1 + 1)) throw new Error(`the shaft is blocked at y ${y}: ${unreachable.size} blocks of the layer have no way to them (water, a cave or a drop below?)`);
             if (pass === 3) { skipped += Number(e.message.split(' ')[0]) || 0; break; }
             await sleep(2000);
           }
