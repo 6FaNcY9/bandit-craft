@@ -3129,6 +3129,12 @@ require('./crafting');
     await explore({bot, name: 'bot17', protectedAreas: [[20, -10, 40, 10]], emit() {}, world: {hostilesNear: () => []}}, {t: {}, cancelled: false, type: 'chop', args: {}}, 'logs', 1);
     assert.ok(goals.length >= 1, 'it still walks somewhere');
     assert.ok(!goals.some((g) => g.x === 32 && g.z === 0), 'not into the protected area');
+    // A wood search walks over the ground to the next spot instead of tunnelling at its height (2026-10-14).
+    goals.length = 0;
+    const said = [];
+    await explore({bot, name: 'bot17', protectedAreas: [], emit: (k, m) => said.push(m), world: {hostilesNear: () => []}}, {t: {}, cancelled: false, type: 'chop', args: {}}, 'logs', 1, 192, true);
+    assert.deepStrictEqual(goals.map((g) => g.constructor.name), ['GoalNearXZ']);
+    assert.ok(/walking 32 blocks/.test(said[0]), said[0]);
   }
   { // digAt rechecks the block after every walk and equip: a Stop or a swapped block means no dig
     const {digAt, Cancelled} = require('./bots');

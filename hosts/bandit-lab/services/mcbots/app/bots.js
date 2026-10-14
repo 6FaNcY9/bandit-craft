@@ -1573,8 +1573,10 @@ async function toBand(r, job, band, what) {
   }
 }
 
-// Tunnel EXPLORE_STEP blocks sideways at the same height, a new direction each time.
-async function explore(r, job, what, n, leash = LEASH) {
+// Tunnel EXPLORE_STEP blocks sideways at the same height, a new direction each time. Trees grow on the
+// surface: a wood search walks over the ground instead (a tunnel at Y 76 toward the forest ended in
+// "No path" some 60 times on the main server, 2026-10-13).
+async function explore(r, job, what, n, leash = LEASH, surface = false) {
   const {bot} = r;
   const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
   const p = bot.entity.position;
@@ -1589,10 +1591,11 @@ async function explore(r, job, what, n, leash = LEASH) {
   if (!dir) return;
   const [dx, dz] = dir;
   const x = Math.floor(p.x) + dx * EXPLORE_STEP, z = Math.floor(p.z) + dz * EXPLORE_STEP;
-  r.emit('info', `no ${what} left in reach: tunnelling ${EXPLORE_STEP} blocks to ${x} ${Math.floor(p.y)} ${z}`);
-  await goNear(r, job, x, Math.floor(p.y), z, 3, {doing: `tunnelling to new ${what} ground near ${x} ${Math.floor(p.y)} ${z}`}).catch((e) => {
+  r.emit('info', surface ? `no ${what} left in reach: walking ${EXPLORE_STEP} blocks to ${x} ${z}` : `no ${what} left in reach: tunnelling ${EXPLORE_STEP} blocks to ${x} ${Math.floor(p.y)} ${z}`);
+  const walk = surface ? {xz: true, doing: `walking to new ${what} ground near ${x} ${z}`} : {doing: `tunnelling to new ${what} ground near ${x} ${Math.floor(p.y)} ${z}`};
+  await goNear(r, job, x, Math.floor(p.y), z, 3, walk).catch((e) => {
     guard(job);
-    r.emit('info', `tunnel stopped: ${e.message.slice(0, 80)}`);
+    r.emit('info', `${surface ? 'walk' : 'tunnel'} stopped: ${e.message.slice(0, 80)}`);
   });
 }
 
@@ -1601,8 +1604,8 @@ async function explore(r, job, what, n, leash = LEASH) {
 const ORE_BAND = {coal_ore: [40, 130], iron_ore: [0, 40], copper_ore: [30, 70], gold_ore: [-30, -5], lapis_ore: [-15, 15], redstone_ore: [-60, -45], diamond_ore: [-60, -45], emerald_ore: [100, 250]};
 const outside = (band, y) => (band ? Math.max(0, band[0] - y, y - band[1]) : 0);
 const EXPLORE_STEP = 32;
-const LEASH = 64; // blocks a shift may work from its chest (128 for logs: forests thin out)
-const WOOD_LEASH = 128;
+const LEASH = 64; // blocks a shift may work from its chest (more for logs: forests thin out)
+const WOOD_LEASH = 192; // the main base's forest was felled within 128; the next one starts 80-190 blocks south (2026-10-14)
 const EXPLORE_MAX = 6;
 
 // Torches need wood (2 planks, or a log). A deep miner carries coal but never chops, so it runs dry.
@@ -1691,7 +1694,7 @@ async function collect(r, job, matching, count, what) {
       // Mined out around here: tunnel on at the same height and look again.
       if ((ore || wood) && explored < EXPLORE_MAX) {
         explored++;
-        await explore(r, job, what, explored, leash);
+        await explore(r, job, what, explored, leash, wood);
         continue;
       }
       throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''})`);
