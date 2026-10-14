@@ -783,6 +783,8 @@ async function waitSafe(r, job, x, z, y = null) {
 // Long walks (respawn at world spawn -> work site, ~225 blocks) go in legs of
 // LEG blocks: one 90 s deadline and one path search cannot cover that far.
 const LEG = 48;
+const CLIMB_BUDGET = 1500; // search cost for 16 levels of stairs dug by hand (some 70 a level)
+const HAND_LEVEL = 40; // the search's estimate for one level up without a pickaxe (below its true ~70: still finds the stairs)
 async function goNear(r, job, x, y, z, dist, opts = {}) {
   // A goal above (a chest on the surface seen from a mine; 12 levels already failed, bot2 at Y 51 under
   // the chest at Y 63) gets no path in one search, so the
@@ -794,11 +796,24 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     for (let dy = 2; dy <= Math.min(20, y - p.y); dy++) if (r.bot.blockAt(p.offset(0, dy, 0))?.boundingBox === 'block') return true;
     return false;
   };
+  // A stone block dug by hand costs the search some 23 against 3 with a pickaxe: the search budget (searchRadius
+  // is a cost bound) ran out two steps up, and bot3 without tools sat in a cave under the tree farm for hours with
+  // "No path" (main server, 2026-10-14). A climb gets a larger budget, and without a pickaxe a level up is weighed
+  // like the stairs it costs, or the search spreads through the rock around and runs out of time.
   const climb = async (roofed) => {
-    for (let i = 0; i < 8 && r.bot?.entity && y - r.bot.entity.position.y > 4 && roofed(); i++) {
-      const p = r.bot.entity.position;
-      const up = Math.min(Math.floor(y), Math.floor(p.y) + 16);
-      await goLeg(r, job, p.x, up, p.z, 2, {...opts, goal: new goals.GoalY(up), doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
+    const pf = r.bot.pathfinder, budget = pf.searchRadius;
+    const hand = !(r.bot.inventory?.items() || []).some((i) => /_pickaxe$/.test(i.name));
+    pf.searchRadius = budget < 0 ? budget : Math.max(budget, CLIMB_BUDGET);
+    try {
+      for (let i = 0; i < 8 && r.bot?.entity && y - r.bot.entity.position.y > 4 && roofed(); i++) {
+        const p = r.bot.entity.position;
+        const up = Math.min(Math.floor(y), Math.floor(p.y) + 16);
+        const goal = new goals.GoalY(up);
+        if (hand) goal.heuristic = (node) => HAND_LEVEL * Math.abs(up - node.y);
+        await goLeg(r, job, p.x, up, p.z, 2, {...opts, goal, doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
+      }
+    } finally {
+      pf.searchRadius = budget;
     }
   };
   if (!opts.xz) await climb(covered);
