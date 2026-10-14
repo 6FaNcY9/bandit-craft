@@ -59,6 +59,17 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   const building = {...pol, jobOf: (b) => (b === 'bot2' ? {type: 'schematic'} : {type: 'mine'})};
   assert.match(A.agentJobRefusal({bots: ['bot1', 'bot2'], type: 'stop', args: {}}, building), /bot2 works on the owner's schematic project/);
   assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, building), null, 'a bot on an ordinary job takes orders');
+  // Three failed jobs in a row: no agent order for REST_MS after the newest (bot3, main server 2026-10-14).
+  const ev = (kind, t, bot = 'bot1') => ({bot, kind, t, text: `${kind === 'fail' ? 'failed' : 'finished'}: chop 1 - no free logs`});
+  const now = 1e6;
+  assert.strictEqual(A.resting([ev('fail', now - 30000), ev('fail', now - 20000)], 'bot1', now), null, 'two failures are no pattern');
+  assert.match(A.resting([ev('fail', now - 30000), ev('fail', now - 20000), ev('fail', now - 10000)], 'bot1', now), /bot1 failed its last 3 jobs .* rests 110 s/);
+  assert.strictEqual(A.resting([ev('fail', now - 30000), ev('done', now - 20000), ev('fail', now - 10000), ev('fail', now - 5000)], 'bot1', now), null, 'a finished job in between');
+  assert.strictEqual(A.resting([ev('fail', now - 30000), ev('fail', now - 20000), ev('fail', now - 10000)], 'bot1', now + A.REST_MS), null, 'the rest ends');
+  assert.strictEqual(A.resting([ev('fail', now - 3, 'bot2'), ev('fail', now - 2, 'bot2'), ev('fail', now - 1, 'bot2')], 'bot1', now), null, 'another bot');
+  const tired = {...pol, restingOf: (b) => (b === 'bot1' ? 'bot1 failed its last 3 jobs' : null)};
+  assert.match(A.agentJobRefusal({bots: ['bot1'], type: 'chop', args: {count: 1}}, tired), /failed its last 3/);
+  assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, tired), null, 'a stop always goes through');
 }
 { // the problem solver's rules (agentauth.js solverRefusal / solverAction), deny by default
   const A = require('./agentauth');

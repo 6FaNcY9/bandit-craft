@@ -88,6 +88,19 @@ function solverAction({action, bot, text, objective}, {agentBots, roster = [], b
 
 // Why the agent may not send this job, or null.
 const OWNER_PROJECTS = new Set(['schematic', 'produce']);
+// A bot whose last REST_FAILS jobs failed takes no agent order for REST_MS after the newest failure: bot3's agent
+// sent a new order every 3-6 s for hours, each failing at once (trapped where it may not dig, main server
+// 2026-10-14). `events` are the server's job events, oldest first.
+const REST_FAILS = 3;
+const REST_MS = 120000;
+function resting(events, bot, now = Date.now()) {
+  const mine = events.filter((e) => e.bot === bot && (e.kind === 'done' || e.kind === 'fail')).slice(-REST_FAILS);
+  if (mine.length < REST_FAILS || mine.some((e) => e.kind !== 'fail')) return null;
+  const last = mine[mine.length - 1], ago = now - last.t;
+  if (ago > REST_MS) return null;
+  return `${bot} failed its last ${REST_FAILS} jobs (newest: ${last.text.slice(0, 120)}); it rests ${Math.ceil((REST_MS - ago) / 1000)} s more, then try something different`;
+}
+
 function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const {agentBots, supplyChest} = policy;
   if (solver === true && Array.isArray(bots) && bots.length === 1 && !agentBots.includes(bots[0])) return solverRefusal({bots, type, args, replace}, policy);
@@ -98,6 +111,8 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const busy = bots.find((b) => OWNER_PROJECTS.has(policy.jobOf?.(b)?.type));
   if (busy !== undefined) return `${busy} works on the owner's ${policy.jobOf(busy).type} project: only the owner stops it`;
   if (!AGENT_JOBS.has(type)) return `job ${type} is not allowed for agents`;
+  const tired = type === 'stop' ? null : bots.map((b) => policy.restingOf?.(b)).find(Boolean);
+  if (tired) return tired;
   if (CHEST_JOBS.has(type)) {
     const a = args || {};
     if (!supplyChest || a.x !== supplyChest.x || a.y !== supplyChest.y || a.z !== supplyChest.z) return 'agents may only use the supply chest';
@@ -107,4 +122,4 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
 
 const validBackend = (backend) => typeof backend === 'string' && /^[a-zA-Z0-9_.:\[\]-]{1,128}$/.test(backend);
 
-module.exports = {SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS};
+module.exports = {SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
