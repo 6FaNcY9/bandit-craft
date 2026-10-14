@@ -103,3 +103,17 @@ chests; it gave up after 5 minutes before), and an item it carries is never miss
   one bot took 327 hoppers while the others waited. take() counts what it withdrew.
 - Unstick only takes out a low block (a comparator), never a chest the bot merely stands on (it spilled the
   contents). A double slab's second click re-equips; an empty hand skips the cell instead of ending the job.
+
+## What the third run taught (2026-10-14, the end phase)
+
+- A double chest the schematic's region cut in half (a right half at the sorter's z edge, its partner one
+  block outside) cannot stand: Minecraft makes it single, the crew dug and placed it three times and the
+  final check failed. A half without its partner in the schematic is planned single.
+- Hoppers and droppers were filled only after the supports came out: the finished sorter floats, so they had
+  no way in, and bots on top of the machine had no way down (nothing of the build may be dug, the drop is too
+  high). The crew now fills them as soon as every cell stands, while the supports still give a way; then the
+  supports come out, then the final check. A container no bot reaches three times is reported, not waited
+  for; missing fill material is waited for like any material.
+- Still open: a bot standing on the finished floating build has no way down; the last supports should leave a
+  way to the ground or the crew should leave the site before they go. The sandbox filler chests ran out of
+  snowballs (the sorter needs 5693).

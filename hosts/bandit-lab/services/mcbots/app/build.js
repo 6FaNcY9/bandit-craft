@@ -577,6 +577,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const tempFor = new Map(); // a support in a cell of the schematic (a hopper loop) -> the cell that needed it
     let allPlaced = false; // last loop found every cell placed: the pillars come out
     const unreached = new Set(); // what could not be cleared at the end, for the report
+    const fillTries = new Map(), unfillable = new Set(); // containers to fill at the end that no bot reached
     let idle = false; // last loop found nothing to place: the cells left to clear are tried again
     const total = plan.targets.length;
     let lastProgress = Date.now(), lastDone = -1, first = true, final = false;
@@ -1092,28 +1093,44 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         // A piston head in a cell does not hold the supports back: a dirt support beside a piston carried power
         // from a redstone dot and kept it out, while the supports waited for that last cell (sandbox
         // 2026-10-13). Taking them out cuts the power and updates the piston: it retracts, a sticky one with its block.
-        allPlaced = open === pushed;
+        // Hoppers and droppers are filled once every cell stands, while the supports still give a way to them: after
+        // the supports came out, the sorter's floating hoppers had no way in and the crew stopped with 108 of them
+        // empty (sandbox 2026-10-14). Then the supports come out, then the final check.
+        const toFill = open === pushed ? plan.targets.filter((t) => t.items && !filled.has(keyOf(t)) && !unfillable.has(keyOf(t)) && !skip.has(keyOf(t))) : [];
+        const fillsLeft = plan.targets.some((t) => t.items && !filled.has(keyOf(t)) && !unfillable.has(keyOf(t)));
+        allPlaced = open === pushed && !fillsLeft;
         idle = !next && !repair;
         if (total - open !== lastDone) { lastDone = total - open; lastProgress = Date.now(); } // the crew's progress counts, not just this bot's
         job.t.total = total;
         job.t.done = total - open;
         job.progress = `placed ${total - open}/${total}${final ? ' (final check)' : ''}`;
+        if (toFill.length) {
+          const t = toFill.find((u) => !fillsNow(u)) || toFill[0], k = keyOf(t);
+          try {
+            await fill(t);
+            lastProgress = Date.now();
+          } catch (e) {
+            guard(job);
+            skip.set(k, Date.now() + 60000);
+            r.emit?.('info', e.message.slice(0, 160));
+            if (!/^missing material/.test(e.message)) { // material is waited for, like any; no way in three times is reported
+              const n = (fillTries.get(k) || 0) + 1;
+              fillTries.set(k, n);
+              if (n >= 3) unfillable.add(k);
+            }
+          }
+          continue;
+        }
+        if (open === pushed && fillsLeft) { // the rest skipped for a moment: material, another bot, a failed try
+          job.t.doing = 'waiting to fill the last containers';
+          lastProgress = Date.now();
+          await sleep(1000);
+          continue;
+        }
         if (!open) {
           if (!final) { final = true; continue; } // all placed: check rail shapes and double chests once more
-          const unfilled = plan.targets.filter((t) => t.items && !filled.has(keyOf(t)) && !skip.has(keyOf(t)));
-          if (unfilled.length) {
-            const t = unfilled.find((u) => !fillsNow(u)) || unfilled[0];
-            try {
-              await fill(t);
-            } catch (e) {
-              guard(job);
-              skip.set(keyOf(t), Date.now() + 60000);
-              r.emit?.('info', e.message.slice(0, 160));
-              stalled(e.message); // a chest no bot reaches ends the job too, not only missing material
-            }
-            continue;
-          }
           job.noop = first;
+          if (unfillable.size) r.emit?.('info', `schematic done; ${unfillable.size} containers no bot reached were left empty: ${[...unfillable].slice(0, 3).join(', ')}`);
           if (asIs.size) r.emit?.('info', `schematic done; ${asIs.size} rails over hoppers keep another shape (no cart runs there): ${[...asIs].slice(0, 4).join(' ')}`);
           if (stuck.size) r.emit?.('info', `schematic done; ${stuck.size} cells in the way were left (not ours): ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}`);
           if (unreached.size) r.emit?.('info', `schematic done; ${unreached.size} supports no bot reached were left: ${[...unreached].slice(0, 3).join(', ')}`);
