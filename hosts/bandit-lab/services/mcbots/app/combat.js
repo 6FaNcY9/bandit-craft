@@ -142,14 +142,15 @@ class Combat {
       else if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
       return;
     }
-    if (near && bot.health < s.retreatHealth && dist <= 16) return this.takeover('retreat', near, 20);
+    // In a night shelter (bots.js nightShelter) a bot only hits what reaches it: no walk out to hunt or flee.
+    if (near && bot.health < s.retreatHealth && dist <= 16 && !r.sheltered) return this.takeover('retreat', near, 20);
     // Hunt: walk up to a hostile within the fight range (skeletons shoot from afar).
     if (this.mode === 'hunt' && (!near || !s.defend || dist > s.fightRange + 4 || near !== this.target)) this.release();
     if (this.mode === 'creeper' && (!near || near.name !== 'creeper' || dist > 8)) this.release();
 
-    if (near && near.name === 'creeper' && dist < 6) return this.takeover('creeper', near, 8);
+    if (near && near.name === 'creeper' && dist < 6 && !r.sheltered) return this.takeover('creeper', near, 8);
     if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
-    if (near && s.defend && dist <= s.fightRange && !this.busy && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
+    if (near && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
     if (!this.busy && !near && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();
   }
 

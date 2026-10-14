@@ -766,9 +766,56 @@ async function waitCalm(r, job) {
   guard(job);
 }
 
+// Night under the open sky: dig three blocks down, put a block back on top and wait for the morning. bot1 and
+// bot3 died at night in the forest (zombies, an enderman: main server 2026-10-13/14), and the base is dark too.
+// Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
+// Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
+const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (alerts.js)
+const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'level', 'rim', 'tidy']);
+const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
+const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
+async function nightShelter(r, job) {
+  const {bot} = r;
+  if (r.sheltered || !NIGHT_JOBS.has(job.type) || !bot?.entity || !isNight(bot)) return;
+  const feet = bot.entity.position.floored();
+  if ((bot.blockAt(feet.offset(0, 1, 0))?.skyLight ?? 0) < 8 || insideAreas(r.protectedAreas, feet.x, feet.z)) return;
+  const lid = bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name));
+  const at = (dy) => bot.blockAt(feet.offset(0, dy, 0));
+  const walled = (dy) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => bot.blockAt(feet.offset(dx, dy, dz))?.boundingBox === 'block');
+  if (!lid || ![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
+  r.sheltered = true; // combat: no hunting out of the hole
+  try {
+    r.emit('info', `night: sheltering in the ground at ${feet.x} ${feet.y - 3} ${feet.z} until morning`);
+    for (const dy of [-1, -2, -3]) {
+      job.t.doing = 'night: digging a shelter';
+      const b = at(dy);
+      await bot.tool?.equipForBlock?.(b, {}).catch(() => {});
+      guard(job);
+      await bot.dig(b);
+      for (let i = 0; i < 20 && bot.entity.position.y > feet.y + dy + 0.1; i++) await sleep(100); // drop into it
+    }
+    const top = feet.offset(0, -1, 0), wall = bot.blockAt(top.offset(1, 0, 0));
+    await bot.equip(lid, 'hand');
+    await bot.placeBlock(wall, top.minus(wall.position));
+    while (isNight(bot)) {
+      guard(job);
+      job.t.doing = 'night: waiting in a shelter until morning';
+      await sleep(5000);
+    }
+    const cover = bot.blockAt(top);
+    if (cover && cover.boundingBox === 'block') await bot.dig(cover).catch(() => {}); // the walk out climbs from here
+  } catch (e) {
+    guard(job);
+    r.emit('info', `night shelter given up: ${e.message.slice(0, 80)}`);
+  } finally {
+    r.sheltered = false;
+  }
+}
+
 // Another bot reported a hostile within 8 blocks of where we are headed:
 // give it up to 10 s to move on or die (reports expire), then go anyway. A bot that can fight does not wait.
 async function waitSafe(r, job, x, z, y = null) {
+  await nightShelter(r, job);
   if (r.combat?.fit?.()) return; // armed and healthy: combat clears the mob when it comes close
   const dim = normDim(r.bot.game?.dimension);
   // Mobs 30 blocks below in the dark under a build held a crew 10 s at every walk (sandbox, 2026-10-13).
@@ -2573,4 +2620,4 @@ const JOBS = {
   },
 };
 
-module.exports = {projectMaterials, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

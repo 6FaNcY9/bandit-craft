@@ -3157,6 +3157,32 @@ require('./crafting');
     assert.deepStrictEqual(goals.map((g) => g.constructor.name), ['GoalNearXZ']);
     assert.ok(/walking 32 blocks/.test(said[0]), said[0]);
   }
+  { // night outside: three blocks down, a lid on top, out in the morning; nothing by day, under a roof, without a lid
+    const {nightShelter} = require('./bots');
+    const {Vec3} = require('vec3');
+    const mk = ({time = 14000, sky = 15, lid = true, areas = []} = {}) => {
+      const solid = (p) => p.y <= 90 && !(p.x === 0 && p.z === 0 && p.y >= 88 && p.y <= 90 && dug.has(p.y));
+      const dug = new Set(), placed = [];
+      const bot = {time: {timeOfDay: time}, entity: {position: new Vec3(0.5, 91, 0.5)}, inventory: {items: () => (lid ? [{name: 'dirt'}] : [])},
+        blockAt: (p) => (solid(p) ? {name: p.y === 90 ? 'grass_block' : 'dirt', boundingBox: 'block', position: p, skyLight: 0, getProperties: () => ({})} : {name: 'air', boundingBox: 'empty', position: p, skyLight: sky, getProperties: () => ({})}),
+        dig: async (b) => { dug.add(b.position.y); bot.entity.position = new Vec3(0.5, b.position.y, 0.5); },
+        equip: async () => {}, placeBlock: async (ref, face) => { placed.push(ref.position.plus(face).y); dug.delete(ref.position.plus(face).y); bot.time.timeOfDay = 1000; }};
+      return {r: {bot, protectedAreas: areas, emit() {}}, dug, placed};
+    };
+    const job = {type: 'chop', t: {}, cancelled: false};
+    const a = mk();
+    await nightShelter(a.r, job);
+    assert.deepStrictEqual(a.placed, [90], 'a lid at the old ground level');
+    assert.ok(a.dug.has(89) && a.dug.has(88) && a.dug.has(90), 'three down, and the lid dug out again in the morning');
+    for (const [why, o] of [['day', {time: 1000}], ['under a roof', {sky: 0}], ['no lid', {lid: false}], ['protected', {areas: [[-5, -5, 5, 5]]}]]) {
+      const b = mk(o);
+      await nightShelter(b.r, job);
+      assert.strictEqual(b.dug.size, 0, why);
+    }
+    const c = mk();
+    await nightShelter(c.r, {...job, type: 'goto'});
+    assert.strictEqual(c.dug.size, 0, 'an owner\'s walk is not paused');
+  }
   { // digAt rechecks the block after every walk and equip: a Stop or a swapped block means no dig
     const {digAt, Cancelled} = require('./bots');
     const {Vec3} = require('vec3');
