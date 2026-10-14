@@ -594,7 +594,7 @@ const server = http.createServer(async (req, res) => {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {bots, type, args, replace, solver} = await readJson(req);
-      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n), limiter: solverLimiter});
+      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || (runners.get(n)?.snapshot().sheltered ? `${n} shelters in the ground until morning; it takes orders again then` : null), limiter: solverLimiter});
       if (refused) return json(403, {error: refused});
       // "all" skips remote bots whose worker is away, so a Stop reaches every
       // bot that can still hear it; naming an offline bot is an error.

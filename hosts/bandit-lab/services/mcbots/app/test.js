@@ -3191,6 +3191,16 @@ require('./crafting');
     const c = mk();
     await nightShelter(c.r, {...job, type: 'goto'});
     assert.strictEqual(c.dug.size, 0, 'an owner\'s walk is not paused');
+    // An agent's new job replaced the waiting one (main server 2026-10-14): back in tonight's hole it waits on
+    // without digging a new one, and digs only the lid out in the morning.
+    const d = mk({sky: 0});
+    d.r.bot.entity.position = new Vec3(0.5, 88, 0.5);
+    d.r.shelterAt = new Vec3(0, 90, 0);
+    setTimeout(() => { d.r.bot.time.timeOfDay = 1000; }, 50);
+    await nightShelter(d.r, job);
+    assert.deepStrictEqual([...d.dug], [90], 'only the lid came out');
+    assert.deepStrictEqual(d.placed, [], 'no new hole, no new lid');
+    assert.strictEqual(d.r.shelterAt, null);
   }
   { // digAt rechecks the block after every walk and equip: a Stop or a swapped block means no dig
     const {digAt, Cancelled} = require('./bots');

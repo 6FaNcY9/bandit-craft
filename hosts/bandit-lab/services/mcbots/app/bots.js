@@ -635,6 +635,7 @@ class BotRunner {
       pos: this.online && b.entity ? ['x', 'y', 'z'].map((k) => Math.round(b.entity.position[k])) : null,
       dimension: this.online ? normDim(b.game?.dimension) : null,
       combat: this.combat.mode || null,
+      sheltered: !!this.shelterAt && !!b && isNight(b), // in its night shelter (nightShelter): agents leave it alone until morning
       job: this.current && {label: label(this.current), progress: this.current.progress, type: this.current.type, done: this.current.t?.done || 0, total: this.current.t?.total || 0, runningS: Math.round((Date.now() - (this.current.startedAt || Date.now())) / 1000)},
       activity: this.activity(),
       dead: this.dead,
@@ -778,25 +779,33 @@ async function nightShelter(r, job) {
   const {bot} = r;
   if (r.sheltered || !NIGHT_JOBS.has(job.type) || !bot?.entity || !isNight(bot)) return;
   const feet = bot.entity.position.floored();
-  if ((bot.blockAt(feet.offset(0, 1, 0))?.skyLight ?? 0) < 8 || insideAreas(r.protectedAreas, feet.x, feet.z)) return;
-  const lid = bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name));
+  // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.
+  const back = !!r.shelterAt && feet.x === r.shelterAt.x && feet.z === r.shelterAt.z && feet.y === r.shelterAt.y - 2;
   const at = (dy) => bot.blockAt(feet.offset(0, dy, 0));
-  const walled = (dy) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => bot.blockAt(feet.offset(dx, dy, dz))?.boundingBox === 'block');
-  if (!lid || ![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
+  if (!back) {
+    if ((bot.blockAt(feet.offset(0, 1, 0))?.skyLight ?? 0) < 8 || insideAreas(r.protectedAreas, feet.x, feet.z)) return;
+    const walled = (dy) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => bot.blockAt(feet.offset(dx, dy, dz))?.boundingBox === 'block');
+    if (!bot.inventory.items().some((i) => PILLAR_BLOCKS.includes(i.name))) return; // nothing for a lid
+    if (![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
+  }
   r.sheltered = true; // combat: no hunting out of the hole
   try {
-    r.emit('info', `night: sheltering in the ground at ${feet.x} ${feet.y - 3} ${feet.z} until morning`);
-    for (const dy of [-1, -2, -3]) {
-      job.t.doing = 'night: digging a shelter';
-      const b = at(dy);
-      await bot.tool?.equipForBlock?.(b, {}).catch(() => {});
-      guard(job);
-      await bot.dig(b);
-      for (let i = 0; i < 20 && bot.entity.position.y > feet.y + dy + 0.1; i++) await sleep(100); // drop into it
+    if (!back) {
+      r.emit('info', `night: sheltering in the ground at ${feet.x} ${feet.y - 3} ${feet.z} until morning`);
+      for (const dy of [-1, -2, -3]) {
+        job.t.doing = 'night: digging a shelter';
+        const b = at(dy);
+        await bot.tool?.equipForBlock?.(b, {}).catch(() => {});
+        guard(job);
+        await bot.dig(b);
+        for (let i = 0; i < 20 && bot.entity.position.y > feet.y + dy + 0.1; i++) await sleep(100); // drop into it
+      }
+      const lidAt = feet.offset(0, -1, 0), wall = bot.blockAt(lidAt.offset(1, 0, 0));
+      await bot.equip(bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name)), 'hand');
+      await bot.placeBlock(wall, lidAt.minus(wall.position));
+      r.shelterAt = lidAt;
     }
-    const top = feet.offset(0, -1, 0), wall = bot.blockAt(top.offset(1, 0, 0));
-    await bot.equip(lid, 'hand');
-    await bot.placeBlock(wall, top.minus(wall.position));
+    const top = r.shelterAt;
     while (isNight(bot)) {
       guard(job);
       job.t.doing = 'night: waiting in a shelter until morning';
@@ -804,6 +813,7 @@ async function nightShelter(r, job) {
     }
     const cover = bot.blockAt(top);
     if (cover && cover.boundingBox === 'block') await bot.dig(cover).catch(() => {}); // the walk out climbs from here
+    r.shelterAt = null;
   } catch (e) {
     guard(job);
     r.emit('info', `night shelter given up: ${e.message.slice(0, 80)}`);
