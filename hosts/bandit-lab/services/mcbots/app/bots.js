@@ -785,7 +785,9 @@ async function nightShelter(r, job) {
   if (!back) {
     if ((bot.blockAt(feet.offset(0, 1, 0))?.skyLight ?? 0) < 8 || insideAreas(r.protectedAreas, feet.x, feet.z)) return;
     const walled = (dy) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => bot.blockAt(feet.offset(dx, dy, dz))?.boundingBox === 'block');
-    if (!bot.inventory.items().some((i) => PILLAR_BLOCKS.includes(i.name))) return; // nothing for a lid
+    // Nothing for a lid: dirt or grass on top gives one when dug (after a death the inventory is empty, and bot1
+    // died three times in one night without a shelter, main server 2026-10-15).
+    if (!bot.inventory.items().some((i) => PILLAR_BLOCKS.includes(i.name)) && !/^(dirt|grass_block|podzol)$/.test(at(-1)?.name || '')) return;
     if (![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
   }
   r.sheltered = true; // combat: no hunting out of the hole
@@ -801,7 +803,10 @@ async function nightShelter(r, job) {
         for (let i = 0; i < 20 && bot.entity.position.y > feet.y + dy + 0.1; i++) await sleep(100); // drop into it
       }
       const lidAt = feet.offset(0, -1, 0), wall = bot.blockAt(lidAt.offset(1, 0, 0));
-      await bot.equip(bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name)), 'hand');
+      const lidItem = () => bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name));
+      for (let i = 0; i < 20 && !lidItem(); i++) await sleep(100); // the dug dirt drops into the hole
+      if (!lidItem()) throw new Error('no block for the lid');
+      await bot.equip(lidItem(), 'hand');
       await bot.placeBlock(wall, lidAt.minus(wall.position));
       r.shelterAt = lidAt;
     }

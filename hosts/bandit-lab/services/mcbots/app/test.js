@@ -3180,12 +3180,13 @@ require('./crafting');
   { // night outside: three blocks down, a lid on top, out in the morning; nothing by day, under a roof, without a lid
     const {nightShelter} = require('./bots');
     const {Vec3} = require('vec3');
-    const mk = ({time = 14000, sky = 15, lid = true, areas = []} = {}) => {
+    const mk = ({time = 14000, sky = 15, lid = true, areas = [], top = 'grass_block'} = {}) => {
       const solid = (p) => p.y <= 90 && !(p.x === 0 && p.z === 0 && p.y >= 88 && p.y <= 90 && dug.has(p.y));
       const dug = new Set(), placed = [];
-      const bot = {time: {timeOfDay: time}, entity: {position: new Vec3(0.5, 91, 0.5)}, inventory: {items: () => (lid ? [{name: 'dirt'}] : [])},
-        blockAt: (p) => (solid(p) ? {name: p.y === 90 ? 'grass_block' : 'dirt', boundingBox: 'block', position: p, skyLight: 0, getProperties: () => ({})} : {name: 'air', boundingBox: 'empty', position: p, skyLight: sky, getProperties: () => ({})}),
-        dig: async (b) => { dug.add(b.position.y); bot.entity.position = new Vec3(0.5, b.position.y, 0.5); },
+      const inv = lid ? [{name: 'dirt'}] : [];
+      const bot = {time: {timeOfDay: time}, entity: {position: new Vec3(0.5, 91, 0.5)}, inventory: {items: () => inv},
+        blockAt: (p) => (solid(p) ? {name: p.y === 90 ? top : 'dirt', boundingBox: 'block', position: p, skyLight: 0, getProperties: () => ({})} : {name: 'air', boundingBox: 'empty', position: p, skyLight: sky, getProperties: () => ({})}),
+        dig: async (b) => { dug.add(b.position.y); bot.entity.position = new Vec3(0.5, b.position.y, 0.5); if (/dirt|grass/.test(b.name)) inv.push({name: 'dirt'}); },
         equip: async () => {}, placeBlock: async (ref, face) => { placed.push(ref.position.plus(face).y); dug.delete(ref.position.plus(face).y); bot.time.timeOfDay = 1000; }};
       return {r: {bot, protectedAreas: areas, emit() {}}, dug, placed};
     };
@@ -3194,7 +3195,10 @@ require('./crafting');
     await nightShelter(a.r, job);
     assert.deepStrictEqual(a.placed, [90], 'a lid at the old ground level');
     assert.ok(a.dug.has(89) && a.dug.has(88) && a.dug.has(90), 'three down, and the lid dug out again in the morning');
-    for (const [why, o] of [['day', {time: 1000}], ['under a roof', {sky: 0}], ['no lid', {lid: false}], ['protected', {areas: [[-5, -5, 5, 5]]}]]) {
+    const e = mk({lid: false});
+    await nightShelter(e.r, job);
+    assert.deepStrictEqual(e.placed, [90], 'with nothing in hand the dug grass gives the lid (after a death, 2026-10-15)');
+    for (const [why, o] of [['day', {time: 1000}], ['under a roof', {sky: 0}], ['no lid and stone on top', {lid: false, top: 'stone'}], ['protected', {areas: [[-5, -5, 5, 5]]}]]) {
       const b = mk(o);
       await nightShelter(b.r, job);
       assert.strictEqual(b.dug.size, 0, why);
