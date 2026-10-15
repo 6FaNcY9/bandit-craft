@@ -5167,6 +5167,17 @@ require('./crafting');
     const names = new Set(plan.targets.map((t) => t.name));
     assert.ok(names.has('cobblestone') && !names.has('stone') && names.has('oak_log'), [...names].join());
     assert.strictEqual(plan.targets.find((t) => t.name === 'oak_log').props.axis, 'z');
+    // fluids are no build targets (the builders waited on "water"); the sources are kept for a bucket step
+    const str = (value) => ({type: 'string', value});
+    palette[5] = {Name: str('minecraft:water'), Properties: {type: 'compound', value: {level: str('0')}}};
+    palette[6] = {Name: str('minecraft:water'), Properties: {type: 'compound', value: {level: str('3')}}};
+    palette[7] = {Name: str('minecraft:bubble_column'), Properties: {type: 'compound', value: {drag: str('false')}}};
+    palette[8] = {Name: str('minecraft:lava'), Properties: {type: 'compound', value: {level: str('0')}}};
+    const st = [31, 5, 6, 7, 8, 0, 0, 0]; // stone, water source, flowing water, bubble column, lava source
+    fs.writeFileSync(path.join(dir, 'fluids.litematic'), encode({Metadata: root.Metadata, Regions: {type: 'compound', value: {r: region({x: 0, y: 0, z: 0}, {x: 2, y: 2, z: 2}, st)}}}));
+    const wet = await require('./build').schematicPlan(dir, {file: 'fluids.litematic', origin: {x: 0, y: 64, z: 0}});
+    assert.deepStrictEqual(wet.targets.map((t) => t.name), ['stone']);
+    assert.deepStrictEqual(wet.fluids.map((f) => f.name).sort(), ['lava', 'water', 'water'], 'the source, the bubble column and the lava; not the flowing water');
     fs.rmSync(dir, {recursive: true});
   }
   await assert.rejects(parseLitematic(encode({})), /missing Regions/);

@@ -1930,7 +1930,7 @@ const buildContext = (r) => {
   };
 };
 const build = buildJob.makeBuild({goNear, guard, sleep, goals, digAt, withdraw: buildWithdraw, runJob: buildRunJob, gatherContext: buildContext});
-const SCHEMATIC_DIR = require('node:path').join(process.env.STATE_DIR || '.', 'schematics');
+const SCHEMATIC_DIR = process.env.SCHEMATIC_DIR || require('node:path').join(process.env.STATE_DIR || '.', 'schematics'); // a worker has no STATE_DIR, only this
 const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
   dir: SCHEMATIC_DIR,
   deposit: (r, job, c, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {})}}))});

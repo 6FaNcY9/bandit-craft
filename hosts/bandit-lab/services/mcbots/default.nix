@@ -53,10 +53,15 @@
         OWNER_UUIDS = ownerUuids;
         HOST_LABEL = w.label;
         NODE_OPTIONS = "--max-old-space-size=768";
+        # The schematics of the dashboard's projects, from mcbots' own volume: bot2 and bot3 failed every schematic
+        # job with "ENOENT ... schematics/ironfarm.litematic" (2026-10-15). Read-write, as the containers
+        # filled are recorded there (.filled-*.json) and merged across processes.
+        SCHEMATIC_DIR = "/schematics";
       };
       environmentFiles = ["/run/mcbots/worker-${w.label}.env"]; # BOT_PASSWORD_SEED, HUB_TOKEN (this worker's own, R2-6)
       extraOptions = [
         "--network=container:mcbots"
+        "--mount=type=volume,source=mcbots-state,target=/schematics,volume-subpath=schematics"
         "--memory=1g"
         "--cpus=2"
         "--pids-limit=256"

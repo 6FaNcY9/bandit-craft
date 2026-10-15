@@ -378,7 +378,13 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substi
   if (!SCHEMATIC_PLANS.has(k)) {
     SCHEMATIC_PLANS.set(k, (async () => {
       const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
-      const cells = loneChests(schematicLib.placeSchematic(parsed, {origin, rotation, mirror}).map((c) => (substitute[c.name] ? {...c, name: substitute[c.name]} : c)));
+      const placed = schematicLib.placeSchematic(parsed, {origin, rotation, mirror}).map((c) => (substitute[c.name] ? {...c, name: substitute[c.name]} : c));
+      // Water and lava are no blocks to place: the builders waited on 1436 "water" and 9 "lava" for the downloaded
+      // iron farm (2026-10-15). Flowing cells come by themselves; the sources (a bubble column is a water source
+      // over soul sand) are kept apart for a bucket step and are not built.
+      const fluid = (c) => /^(water|lava|bubble_column)$/.test(c.name);
+      const fluids = placed.filter((c) => fluid(c) && (c.name === 'bubble_column' || String(c.props?.level ?? '0') === '0')).map((c) => ({x: c.x, y: c.y, z: c.z, name: c.name === 'lava' ? 'lava' : 'water'}));
+      const cells = loneChests(placed.filter((c) => !fluid(c)));
       const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
       const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
       for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
@@ -391,7 +397,7 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substi
       const saveFilled = () => { try { fs.writeFileSync(filledFile, JSON.stringify([...new Set([...readFilled(), ...filled])])); } catch {} };
       // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
       // both for the whole crew, until the end
-      return {targets, byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
+      return {targets, fluids, byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
     })().catch((e) => {
       SCHEMATIC_PLANS.delete(k);
       throw e;
