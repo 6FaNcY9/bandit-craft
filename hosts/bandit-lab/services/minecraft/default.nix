@@ -428,6 +428,8 @@ in {
       MEMORY = "8G";
       USE_AIKAR_FLAGS = "true";
       MAX_PLAYERS = "12";
+      # The image's default is easy (it rewrites server.properties on every start); the owner wants normal (2026-10-16).
+      DIFFICULTY = "normal";
       OPS = "fancy8869";
       # Authentication happens at the proxy (Mojang, or BotGate for bots); the
       # Velocity forwarding secret is what keeps everyone else out of Paper.
