@@ -445,8 +445,11 @@ in {
     ];
     # The map listens on loopback only; tailscale serve (above) is their
     # sole network path. The game port is published by the proxy, not here.
+    # Simple Voice Chat (UDP 24454) talks to the client directly: its client
+    # dials the address it joined the game on (the proxy's tailnet address).
     ports = [
       "127.0.0.1:${mapPort}:8100"
+      "${repoConfig.lab.tailscaleIp}:24454:24454/udp"
     ];
     volumes = ["/srv/containers/minecraft/data:/data"];
     extraOptions = [

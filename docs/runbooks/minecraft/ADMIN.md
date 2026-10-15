@@ -97,8 +97,10 @@ Ollama only`); every slash command works without one, natural-language chat does
 - Jarvis 0.16.0 failed to enable without Simple Voice Chat
   (`NoClassDefFoundError: de/maxhenkel/voicechat/api/VoicechatPlugin`), although
   `voicechat` is only a soft dependency. 0.17.0 ships no copy of that API either,
-  so the voice chat plugin stays installed. Its UDP port is not published by the
-  container, so it is unreachable from outside.
+  so the voice chat plugin stays installed. Since 2026-10-15 its UDP port 24454 is
+  published on the tailnet address only, and players with the Simple Voice Chat
+  mod (Modrinth; Fabric or NeoForge, the client's game version) talk in game:
+  `V` opens its settings, Caps Lock is push-to-talk.
 - AxMinions 1.0.20 was tried the same day and removed (stationary minions, not
   wanted). Its jar and data are in `~/removed-plugins/` on bandit-lab.
 - Snapshots taken before the changes: `~/mc-backup-pre-axminions-20261008-0511.tar.gz`
