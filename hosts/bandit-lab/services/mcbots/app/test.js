@@ -5758,3 +5758,69 @@ require('./crafting');
   fs.rmSync(dir, {recursive: true});
   console.log('archive: rotation keeps old files ok');
 }
+
+(async () => { // fluids: the sources a schematic leaves out, poured from buckets (the iron farm's 140, 2026-10-15)
+  const assert = require('node:assert/strict');
+  const F = require('./fluids');
+  const {Vec3} = require('vec3');
+  const {Cancelled} = require('./bots');
+  const world = () => {
+    const cells = new Map();
+    const blockAt = (x, y, z) => {
+      const c = cells.get(`${x},${y},${z}`);
+      const name = c ? c.name : y <= 63 ? 'stone' : 'air';
+      return {name, boundingBox: /water|lava|air/.test(name) ? 'empty' : 'block', getProperties: () => ({level: c?.level ?? 0}), position: new Vec3(x, y, z)};
+    };
+    return {cells, blockAt, put: (x, y, z, name, level = 0) => cells.set(`${x},${y},${z}`, {name, level})};
+  };
+  let w = world();
+  const fl = [{x: 0, y: 64, z: 0, name: 'water'}, {x: 1, y: 65, z: 0, name: 'water'}, {x: 2, y: 64, z: 0, name: 'lava'}];
+  assert.deepStrictEqual(F.missing(fl, w.blockAt, {x: 0, z: 0}).map((f) => `${f.name}${f.y}`), ['water64', 'water65', 'lava64'], 'lowest first, lava last');
+  w.put(0, 64, 0, 'water'); w.put(1, 65, 0, 'water', 3);
+  assert.deepStrictEqual(F.missing(fl, w.blockAt, {x: 0, z: 0}).map((f) => `${f.name}${f.y}`), ['water65', 'lava64'], 'a source is done, flowing water is not');
+  assert.deepStrictEqual(F.aim(w.blockAt, {x: 5, y: 64, z: 5}), {x: 5.5, y: 64, z: 5.5}, 'the floor\'s top face');
+  assert.strictEqual(F.aim(w.blockAt, {x: 5, y: 70, z: 5}), null, 'nothing solid around');
+  w.put(6, 70, 5, 'cobblestone');
+  assert.deepStrictEqual(F.aim(w.blockAt, {x: 5, y: 70, z: 5}), {x: 6, y: 70.5, z: 5.5}, 'else a side');
+  w.put(10, 64, 0, 'water'); w.put(11, 64, 0, 'water'); w.put(12, 64, 0, 'water');
+  assert.ok(F.refills(w.blockAt, {x: 11, y: 64, z: 0}) && !F.refills(w.blockAt, {x: 10, y: 64, z: 0}), 'the middle of a row of three refills, its end not');
+  const box1 = {lo: {x: 0, y: 64, z: 0}, hi: {x: 2, y: 64, z: 0}};
+  w.put(0, 65, 0, 'water'); w.put(20, 64, 0, 'water');
+  const ok = F.fillable(w.blockAt, box1, 'water', new Set(['0,65,0']));
+  assert.deepStrictEqual([ok(w.blockAt(0, 65, 0)), ok(w.blockAt(20, 64, 0)), ok(w.blockAt(11, 64, 0))], [false, true, true], 'not a source the build itself needs (above its box), yes a pond or a refilling row');
+
+  // the job: an empty bucket from the chest, filled at the pond outside the build, poured into each missing cell; no
+  // lava anywhere, so the lava cell is left and reported
+  w = world();
+  w.put(30, 64, 0, 'water');
+  const inv = [], infos = [];
+  let looking = null;
+  const bot = {
+    entity: {position: new Vec3(0, 64, 0)},
+    inventory: {items: () => inv},
+    blockAt: (p) => w.blockAt(p.x, p.y, p.z),
+    equip: async () => {},
+    lookAt: async (p) => { looking = p; },
+    activateItem: async () => {
+      const hand = inv.find((i) => /bucket/.test(i.name));
+      if (hand.name === 'bucket') { hand.name = 'water_bucket'; return; }
+      w.put(Math.floor(looking.x), looking.y, Math.floor(looking.z), 'water');
+      hand.name = 'bucket';
+    },
+    findBlocks: ({matching, count}) => [...w.cells.keys()].map((k) => k.split(',').map(Number)).map(([x, y, z]) => w.blockAt(x, y, z)).filter(matching).slice(0, count).map((b) => b.position),
+  };
+  const asked = [];
+  const {fluids} = F.makeFluids({
+    goNear: async (r, j, x, y, z) => { bot.entity.position = new Vec3(x, y, z); },
+    guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
+    sleep: async () => {}, at: (c) => `${c.x} ${c.y} ${c.z}`,
+    plan: async () => ({fluids: [{x: 0, y: 64, z: 0, name: 'water'}, {x: 1, y: 64, z: 0, name: 'water'}, {x: 2, y: 64, z: 0, name: 'lava'}], lo: {x: 0, y: 64, z: 0}, hi: {x: 2, y: 64, z: 0}}),
+    withdraw: async (r, j, item) => { asked.push(item); if (item === 'bucket') inv.push({name: 'bucket', count: 1}); },
+    craft: async () => {},
+  });
+  await fluids({bot, world: {claim: async () => true, release() {}}, emit: (k, t) => infos.push(t)}, {t: {}, args: {}, cancelled: false});
+  assert.ok(F.isSource(w.blockAt(0, 64, 0), 'water') && F.isSource(w.blockAt(1, 64, 0), 'water'), 'both water cells poured');
+  assert.deepStrictEqual(asked, ['bucket'], 'one bucket, refilled at the pond');
+  assert.ok(infos.some((t) => /fluids: 2 poured, 1 left: lava at 2 64 0/.test(t)), infos.join('|'));
+  console.log('fluids: bucket pour ok');
+})();

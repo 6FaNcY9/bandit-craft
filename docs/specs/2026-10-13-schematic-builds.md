@@ -117,3 +117,23 @@ chests; it gave up after 5 minutes before), and an item it carries is never miss
 - Still open: a bot standing on the finished floating build has no way down; the last supports should leave a
   way to the ground or the crew should leave the site before they go. The sandbox filler chests ran out of
   snowballs (the sorter needs 5693).
+
+## Fluids, substitutes and worker bots (2026-10-15)
+
+The second project, a downloaded iron farm (third-party, kept out of the repo like the sorter), showed three gaps:
+
+- **Fluids.** The plan listed every water and lava cell as a block to place (1436 water, 9 lava), so the
+  builders would have waited for them forever. Fluids are no build targets now. Flowing cells come by
+  themselves; the sources (level 0; a bubble column counts as a water source) are kept in `plan.fluids`.
+  The job `fluids` (same arguments as `schematic`, an owner project the agents may not replace, `fluids.js`)
+  pours them once the blocks stand: an empty bucket from the supply chest or crafted, filled at the nearest
+  source that is not one of the build's own cells unless that one refills (two source neighbours and a
+  floor), poured against the floor or a solid side, lowest first, lava last. Sandbox: 3 sources poured in
+  9 s from a 2x2 pond. A bot first refilled from the source it had just poured; the build's own cells are
+  excluded since.
+- **Substitutes.** `substitute: {smooth_stone: "cobblestone", ...}` (at most 16) swaps block names after
+  placement; the block states carry over. The iron farm's 1676 smooth stone were 3352 smelts.
+- **Worker bots.** bot2 and bot3 run in `mcbots-worker-2`, which had no access to the schematics in mcbots'
+  state volume and failed every schematic job with ENOENT. The worker mounts the volume's `schematics/`
+  subpath at `/schematics` (read-write: the filled containers are merged there) and reads it through
+  `SCHEMATIC_DIR`.

@@ -19,6 +19,7 @@ const huntJob = require('./hunt');
 const gravesJob = require('./graves');
 const treeFarmJob = require('./treefarm');
 const wheatFarmJob = require('./wheatfarm');
+const fluidsJob = require('./fluids');
 const homebedJob = require('./homebed');
 const levelJob = require('./level');
 const tidyJob = require('./tidy');
@@ -200,6 +201,8 @@ const VALIDATE = {
     // clearAll (the owner's choice for a site): anything in the site box may be dug, except containers.
     return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
   },
+  // The water and lava sources of that schematic build, poured from buckets once its blocks stand (fluids.js).
+  fluids: (a) => VALIDATE.schematic(a),
   // The materials for that schematic build, made into `store` (the build's chests are counted too).
   produce: (a) => ({...VALIDATE.schematic(a), store: xyz(a.store || {})}),
   // Kill (shear) `count` animals of one kind within `radius` of x,y,z and pick the drops up.
@@ -2054,6 +2057,13 @@ const {treefarm} = treeFarmJob.makeTreeFarm({
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
 });
 
+const {fluids} = fluidsJob.makeFluids({
+  goNear, guard, sleep, at,
+  plan: (a) => buildJob.schematicPlan(SCHEMATIC_DIR, a),
+  withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
+  craft: (r, job, item) => crafting.ensureItem(r, child(job), item, 1),
+});
+
 const {wheatfarm} = wheatFarmJob.makeWheatFarm({
   goNear, guard, sleep, digAt, waitCalm, at, crafting,
   base: planConfig.BASE.chest,
@@ -2100,6 +2110,7 @@ async function fileToHall(r, job, {fill, left, isFood, hall}) {
 const JOBS = {
   tidy,
   wheatfarm,
+  fluids,
   grave,
   treefarm,
   homebed,

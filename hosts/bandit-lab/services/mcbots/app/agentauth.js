@@ -87,7 +87,7 @@ function solverAction({action, bot, text, objective}, {agentBots, roster = [], b
 }
 
 // Why the agent may not send this job, or null.
-const OWNER_PROJECTS = new Set(['schematic', 'produce']);
+const OWNER_PROJECTS = new Set(['schematic', 'produce', 'fluids']);
 // A bot whose last REST_FAILS jobs failed takes no agent order for REST_MS after the newest failure: bot3's agent
 // sent a new order every 3-6 s for hours, each failing at once (trapped where it may not dig, main server
 // 2026-10-14). `events` are the server's job events, oldest first.
