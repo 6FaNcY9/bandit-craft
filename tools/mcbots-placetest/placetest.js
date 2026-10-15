@@ -43,6 +43,7 @@ const CASES = [
   ...SIXD.map((f) => ['barrel', {facing: f}]),
   ...SIXD.map((f) => ['shulker_box', {facing: f}]),
   ...H.map((f) => ['redstone_wall_torch', {facing: f}]),
+  ...H.map((f) => ['oak_wall_sign', {facing: f}]), // the iron farm's water holders (2026-10-15)
   ['redstone_torch', {}], ['torch', {}], ['redstone_wire', {}], ['target', {}], ['redstone_lamp', {}],
   ['redstone_block', {}], ['composter', {}], ['glass', {}], ['stone', {}], ['note_block', {note: '5'}],
   ...['bottom', 'top', 'double'].map((t) => ['stone_slab', {type: t}]), ['smooth_stone_slab', {type: 'bottom'}],

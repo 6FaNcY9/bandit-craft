@@ -5403,6 +5403,8 @@ require('./crafting');
   assert.strictEqual(placement('rail', {shape: 'north_east'}).ways[0].look, null);
   assert.deepStrictEqual(placement('redstone_wire', {north: 'side', power: '0'}).ways, [w([0, -1, 0])]);
   assert.deepStrictEqual(placement('stone_button', {face: 'wall', facing: 'north'}).ways, [w([0, 0, 1])]);
+  assert.deepStrictEqual(placement('oak_wall_sign', {facing: 'north', waterlogged: 'false'}), {item: 'oak_sign', check: ['facing'], ways: [w([0, 0, 1])]});
+  assert.strictEqual(placement('oak_wall_hanging_sign', {facing: 'north'}), null, 'a hanging sign stays out');
   assert.deepStrictEqual(placement('lever', {face: 'ceiling', facing: 'east'}).ways, [w([0, 1, 0], 'east')]);
   const chest = placement('chest', {facing: 'north', type: 'left'});
   assert.deepStrictEqual([chest.check, chest.final, chest.ways[0]], [['facing'], ['type'], w([1, 0, 0], 'south')]); // partner east of a north chest

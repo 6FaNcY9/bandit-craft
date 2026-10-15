@@ -45,7 +45,7 @@ function halfWays(half, look = null) {
 function placement(name, props = {}) {
   name = strip(name);
   if (skip(name, props) || ['rotation', 'attachment', 'candles', 'pickles'].some((p) => Object.hasOwn(props, p)) ||
-    UNSUPPORTED.has(name) || /sign|banner|candle|(?:^|_)anvil$/.test(name)) return null;
+    UNSUPPORTED.has(name) || /(?<!_wall)_sign$|hanging_sign|banner|candle|(?:^|_)anvil$/.test(name)) return null;
   // final: props that settle only once the neighbours stand (rail shapes, double chests), checked after the build.
   const result = (check, ways, final) => ({item: itemOf(name), check, ways, ...(final ? {final} : {}),
     ...(CYCLE[name] ? {cycle: {prop: CYCLE[name][0], values: CYCLE[name][1]}} : {})});
@@ -107,7 +107,8 @@ function placement(name, props = {}) {
     name === 'barrel' && Object.hasOwn(DIRS, f)) ? result(['facing'], FACES.map((v) => way(v, OPP[f]))) : null;
   if (/_fence_gate$/.test(name) || name === 'campfire' || name === 'soul_campfire' || /_bed$/.test(name)) return horizontal ?
     result(['facing'], (/_bed$/.test(name) ? FACES.slice(0, 1) : FACES).map((v) => way(v, f))) : null;
-  if (['wall_torch', 'soul_wall_torch', 'redstone_wall_torch', 'ladder'].includes(name)) return horizontal ?
+  // A wall sign hangs on the block behind it like a wall torch (the iron farm's 9 hold its water, 2026-10-15); its text stays blank.
+  if (['wall_torch', 'soul_wall_torch', 'redstone_wall_torch', 'ladder'].includes(name) || /_wall_sign$/.test(name)) return horizontal ?
     result(['facing'], [way(neg(DIRS[f]))]) : null;
   if (name === 'lantern' || name === 'soul_lantern') return result(['hanging'], [way(FACES[props.hanging === 'true' ? 5 : 0])]);
   if (['torch', 'soul_torch', 'redstone_torch', 'flower_pot'].includes(name) || /_(carpet|pressure_plate)$/.test(name)) return result([], [way(FACES[0])]);
