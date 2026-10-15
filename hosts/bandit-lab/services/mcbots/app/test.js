@@ -143,6 +143,10 @@ assert.throws(() => VALIDATE.say({text: '/op me'}));
   assert.strictEqual(VALIDATE.schematic({...base, clearAll: true}).clearAll, true);
   assert.ok(!('clearAll' in VALIDATE.schematic(base)) && !('clearAll' in VALIDATE.schematic({...base, clearAll: 'yes'})));
   assert.strictEqual(VALIDATE.produce({...base, clearAll: true, store: {x: 1, y: 2, z: 4}}).clearAll, true);
+  // substitute: cheaper blocks of the same shape (the iron farm's smooth stone, 2026-10-15)
+  assert.deepStrictEqual(VALIDATE.schematic({...base, substitute: {smooth_stone: 'cobblestone'}}).substitute, {smooth_stone: 'cobblestone'});
+  assert.ok(!('substitute' in VALIDATE.schematic(base)) && !('substitute' in VALIDATE.schematic({...base, substitute: {}})));
+  for (const bad of [{a: 'B'}, {'../x': 'stone'}, ['stone'], 'stone', Object.fromEntries(Array.from({length: 17}, (_, i) => [`b${'x'.repeat(i)}`, 'stone']))]) assert.throws(() => VALIDATE.schematic({...base, substitute: bad}), JSON.stringify(bad));
 }
 assert.throws(() => VALIDATE.mine({block: 'Iron Ore'}));
 assert.throws(() => VALIDATE.mine({block: 'torch'}), /placed block/);
@@ -1500,6 +1504,7 @@ require('./crafting');
   assert.deepStrictEqual(cleanSnapshot(null).queueIds, []);
   // a worker bot's night shelter reaches the hub, or the agents order it out of its hole (bot2/bot3, 2026-10-15)
   assert.deepStrictEqual([cleanSnapshot({sheltered: true}).sheltered, cleanSnapshot({sheltered: 'yes'}).sheltered], [true, false]);
+  assert.deepStrictEqual([cleanSnapshot({gettingFood: true}).gettingFood, cleanSnapshot({}).gettingFood], [true, false], 'a worker bot fetching food is left alone too');
   assert.deepStrictEqual(cleanSnapshot({armour: ['iron_helmet', null, 5, 'leather_boots', 'x']}).armour, ['iron_helmet', null, '', 'leather_boots']);
   const {RemoteRunner} = require('./hub');
   const sent = [];
@@ -5154,6 +5159,16 @@ require('./crafting');
     {x: 0, y: 0, z: 5, name: 'oak_log', props: {axis: 'z'}},
     {x: 2, y: 1, z: 6, name: 'stone', props: {}},
   ]});
+  { // schematicPlan applies a substitution: stone -> cobblestone, the oak log and its state stay (iron farm, 2026-10-15)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-subst-'));
+    fs.writeFileSync(path.join(dir, 'packed.litematic'), encode(root));
+    const plan = await require('./build').schematicPlan(dir, {file: 'packed.litematic', origin: {x: 0, y: 64, z: 0}, substitute: {stone: 'cobblestone'}});
+    const names = new Set(plan.targets.map((t) => t.name));
+    assert.ok(names.has('cobblestone') && !names.has('stone') && names.has('oak_log'), [...names].join());
+    assert.strictEqual(plan.targets.find((t) => t.name === 'oak_log').props.axis, 'z');
+    fs.rmSync(dir, {recursive: true});
+  }
   await assert.rejects(parseLitematic(encode({})), /missing Regions/);
   const bad = region({x: 0, y: 0, z: 0}, {x: 1, y: 1, z: 1}, [0]);
   bad.value.BlockStatePalette.value.value = [];

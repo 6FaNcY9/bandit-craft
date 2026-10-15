@@ -193,8 +193,12 @@ const VALIDATE = {
     if (!['none', 'left_right', 'front_back'].includes(a.mirror ?? 'none')) throw new Error('mirror must be none, left_right or front_back');
     const chests = a.chests ?? [];
     if (!Array.isArray(chests) || chests.length > 64) throw new Error('chests must be a list of at most 64 x,y,z');
+    // substitute: block -> block of the same shape the bots can make more cheaply, e.g. smooth_stone -> cobblestone
+    // (an iron farm's 1676 smooth stone are 3352 smelts, 2026-10-15). Names only; the block states carry over.
+    const subs = a.substitute ?? {};
+    if (!subs || typeof subs !== 'object' || Array.isArray(subs) || Object.keys(subs).length > 16 || !Object.entries(subs).every(([k, v]) => /^[a-z_]{1,48}$/.test(k) && /^[a-z_]{1,48}$/.test(v))) throw new Error('substitute must map at most 16 block names to block names');
     // clearAll (the owner's choice for a site): anything in the site box may be dug, except containers.
-    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.clearAll === true ? {clearAll: true} : {})};
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
   },
   // The materials for that schematic build, made into `store` (the build's chests are counted too).
   produce: (a) => ({...VALIDATE.schematic(a), store: xyz(a.store || {})}),
@@ -636,6 +640,7 @@ class BotRunner {
       dimension: this.online ? normDim(b.game?.dimension) : null,
       combat: this.combat.mode || null,
       sheltered: !!this.shelterAt && !!b && isNight(b), // in its night shelter (nightShelter): agents leave it alone until morning
+      gettingFood: !!this.gettingFood, // hungry and fetching food (upkeep): agents leave it alone until it has some
       job: this.current && {label: label(this.current), progress: this.current.progress, type: this.current.type, done: this.current.t?.done || 0, total: this.current.t?.total || 0, runningS: Math.round((Date.now() - (this.current.startedAt || Date.now())) / 1000)},
       activity: this.activity(),
       dead: this.dead,
@@ -1564,13 +1569,20 @@ async function upkeep(r, job, ids) {
     if (bot.food < FOOD_BELOW && r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
       r.foodTriedAt = Date.now();
       r.emit('info', `hungry (food ${bot.food}) and no food: fetching some from the supply chest`);
-      await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
-        guard(job);
-        r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
-      });
-      // The chest had none: bread from the wheat field, else hunt. Same 10-minute timer, so at most one try per bot per 10 minutes.
-      if (!bot.inventory.items().some((i) => edible(bot, i)) && r.wheatField) await wheatFood(r, job);
-      if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
+      // Agents take no order while this runs (server.js restingOf): bot1's agent replaced its job right after
+      // "getting bread from the wheat field", and it stayed at food 0 and 4.7 health (2026-10-15).
+      r.gettingFood = true;
+      try {
+        await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
+          guard(job);
+          r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
+        });
+        // The chest had none: bread from the wheat field, else hunt. Same 10-minute timer, so at most one try per bot per 10 minutes.
+        if (!bot.inventory.items().some((i) => edible(bot, i)) && r.wheatField) await wheatFood(r, job);
+        if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
+      } finally {
+        r.gettingFood = false;
+      }
     }
     // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
     // and 4.7 health went on without armour while the iron lay in storage, 2026-10-15).

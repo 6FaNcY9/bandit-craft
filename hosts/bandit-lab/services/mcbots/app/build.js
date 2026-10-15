@@ -373,12 +373,12 @@ function loneChests(cells) {
 // One parse per file and placement, shared by the bots of this process; so is what they saw in the chests.
 const SCHEMATIC_PLANS = new Map();
 const CHEST_STOCK = new Map(); // "dim:x,y,z" -> {items: Map(name -> count), t}
-function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none'}) {
-  const k = JSON.stringify([file, origin, rotation, mirror]);
+function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substitute = {}}) {
+  const k = JSON.stringify([file, origin, rotation, mirror, substitute]);
   if (!SCHEMATIC_PLANS.has(k)) {
     SCHEMATIC_PLANS.set(k, (async () => {
       const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
-      const cells = loneChests(schematicLib.placeSchematic(parsed, {origin, rotation, mirror}));
+      const cells = loneChests(schematicLib.placeSchematic(parsed, {origin, rotation, mirror}).map((c) => (substitute[c.name] ? {...c, name: substitute[c.name]} : c)));
       const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
       const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
       for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
