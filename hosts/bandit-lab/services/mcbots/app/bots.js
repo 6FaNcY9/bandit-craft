@@ -921,6 +921,13 @@ function settledGoto(bot, goal) {
     const update = (res) => {
       if (res.status === 'noPath') done(new Error('No path to the goal!'));
       else if (res.status === 'timeout') done(new Error('Took to long to decide path to goal!'));
+      // On a block lower than a full one (farmland, a dirt path) the search starts one up and finds the goal
+      // reached, but the plugin checks the floored position, one too low, and never says goal_reached: bot50
+      // waited 5 min on farmland to pick up a drop (sandbox wheat field, 2026-10-15). That empty path is an arrival.
+      else if (res.status === 'success' && !res.path.length && bot.entity) {
+        const p = bot.entity.position.floored();
+        if (goal.isEnd(p) || goal.isEnd(p.offset(0, 1, 0))) { done(); bot.pathfinder.setGoal(null); }
+      }
     };
     const changed = (g) => { if (g !== goal) done(new Error('The goal was changed before it could be completed!')); };
     const stopped = () => done(new Error('Path was stopped before it could be completed! Thus, the desired goal was not reached.'));

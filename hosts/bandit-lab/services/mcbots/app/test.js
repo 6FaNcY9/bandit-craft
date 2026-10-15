@@ -4932,6 +4932,27 @@ require('./crafting');
     act(bot);
     await assert.rejects(p, want);
   }
+  { // on farmland (15/16 high) the search starts one up and finds the goal reached, but the plugin checks the
+    // floored position and never says goal_reached: an empty successful path there is an arrival (sandbox wheat field)
+    const {Vec3} = require('vec3');
+    const onFarmland = {isEnd: (p) => p.y === 68};
+    bot = mk();
+    let cleared = false;
+    bot.entity = {position: new Vec3(3301.3, 67.94, 2980.5)};
+    bot.pathfinder.setGoal = (g) => { if (g === null) cleared = true; bot.emit('goal_updated', g, false); };
+    settled = null;
+    settledGoto(bot, onFarmland).then(() => (settled = 'ok'), (e) => (settled = e.message));
+    bot.emit('path_update', {status: 'success', path: []});
+    await tick();
+    assert.deepStrictEqual([settled, cleared], ['ok', true]);
+    bot = mk();
+    bot.entity = {position: new Vec3(0.5, 64, 0.5)};
+    settled = null;
+    settledGoto(bot, onFarmland).then(() => (settled = 'ok'), (e) => (settled = e.message));
+    bot.emit('path_update', {status: 'success', path: []});
+    await tick();
+    assert.strictEqual(settled, null, 'an empty path away from the goal is no arrival');
+  }
   { // the pathfinder plugin arrives after createBot: goto is swapped at spawn
     const {useSettledGoto} = require('./bots');
     const b = new EventEmitter();
