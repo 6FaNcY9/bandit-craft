@@ -5832,3 +5832,73 @@ require('./crafting');
   assert.ok(infos.some((t) => /fluids: 2 poured, 1 left: lava at 2 64 0/.test(t)), infos.join('|'));
   console.log('fluids: bucket pour ok');
 })();
+
+(async () => { // unroof: out of a cave under sand, the column dug from beside (bot1 at -181 58 -218, 2026-10-15)
+  const assert = require('node:assert/strict');
+  const U = require('./unroof');
+  const {Vec3} = require('vec3');
+  const {Cancelled} = require('./bots');
+  const world = () => {
+    const cells = new Map();
+    const name = (x, y, z) => cells.get(`${x},${y},${z}`) ?? (y <= 57 ? 'granite' : 'air');
+    const blockAt = (x, y, z) => ({name: name(x, y, z), boundingBox: /air|water|lava/.test(name(x, y, z)) ? 'empty' : 'block', position: new Vec3(x, y, z)});
+    const put = (x, y, z, n) => cells.set(`${x},${y},${z}`, n);
+    // dig, then let what stands on it fall to the next floor (sand and gravel only)
+    const dig = (x, y, z) => {
+      put(x, y, z, 'air');
+      for (let yy = y + 1; U.GRAVITY.test(name(x, yy, z)); yy++) {
+        const n = name(x, yy, z);
+        put(x, yy, z, 'air');
+        let land = yy - 1;
+        while (blockAt(x, land - 1, z).boundingBox === 'empty') land--;
+        put(x, land, z, n);
+      }
+    };
+    return {cells, blockAt, put, dig};
+  };
+  // bot1's pocket: open to the north, sandstone walls, one sandstone and two sand overhead, sky from 63
+  let w = world();
+  const p = {x: 0, y: 58, z: 0};
+  for (const [x, z] of [[1, 0], [-1, 0], [0, -1]]) for (const y of [58, 59, 60]) w.put(x, y, z, 'sandstone');
+  w.put(0, 60, 0, 'sandstone'); w.put(0, 61, 0, 'sand'); w.put(0, 62, 0, 'sand');
+  assert.ok(U.sandRoof(w.blockAt, p), 'sand in the roof');
+  assert.deepStrictEqual(U.nextDig(w.blockAt, p), {x: 0, y: 60, z: 0}, 'the lowest solid cell first');
+  assert.deepStrictEqual(U.side(w.blockAt, p), {x: 0, y: 58, z: 1, dig: []}, 'the open cell beside');
+  const stone = world();
+  stone.put(0, 60, 0, 'stone'); stone.put(0, 61, 0, 'stone');
+  assert.ok(!U.sandRoof(stone.blockAt, p), 'a stone roof is the walk\'s own business');
+  stone.put(0, 62, 0, 'gravel');
+  assert.ok(U.sandRoof(stone.blockAt, p), 'gravel on the stone roof');
+  const shut = world();
+  for (const [x, z] of [[1, 0], [-1, 0], [0, -1], [0, 1]]) for (const y of [58, 59]) shut.put(x, y, z, 'stone');
+  shut.put(1, 60, 0, 'sand'); // never dig a side with sand on it: it would fall into the bot's own cell
+  assert.deepStrictEqual(U.side(shut.blockAt, p), {x: -1, y: 58, z: 0, dig: [{x: -1, y: 58, z: 0}, {x: -1, y: 59, z: 0}]}, 'a closed side is dug, not the one under sand');
+
+  // the job: steps north, digs the sandstone (the sand falls into the column), digs the sand twice, done
+  const dug = [], infos = [];
+  const bot = {
+    entity: {position: new Vec3(0.5, 58, 0.5)},
+    blockAt: (q) => w.blockAt(q.x, q.y, q.z),
+    dig: async (b) => {
+      const me = bot.entity.position.floored();
+      assert.ok(!(b.position.x === me.x && b.position.z === me.z), `never digs the column it stands in (${b.position})`);
+      dug.push(`${b.name}${b.position.y}`);
+      w.dig(b.position.x, b.position.y, b.position.z);
+    },
+  };
+  const {unroof} = U.makeUnroof({
+    goBlock: async (r, j, c) => { bot.entity.position = new Vec3(c.x + 0.5, c.y, c.z + 0.5); },
+    guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
+    sleep: async () => {}, unsafe: () => null, at: (c) => `${c.x} ${c.y} ${c.z}`,
+  });
+  assert.strictEqual(await unroof({bot, emit: (k, t) => infos.push(t)}, {t: {}, cancelled: false}), true);
+  assert.deepStrictEqual(dug, ['sandstone60', 'sand58', 'sand58'], 'the roof from beside, then the fallen sand');
+  assert.ok(!U.sandRoof(w.blockAt, p) && w.blockAt(0, 58, 0).name === 'air', 'the column is open');
+  assert.ok(infos.some((t) => /dug the sand out of the roof over 0 58 0/.test(t)), infos.join('|'));
+  // a stone roof: nothing to do here
+  bot.entity.position = new Vec3(0.5, 58, 0.5);
+  w = stone;
+  w.put(0, 62, 0, 'stone');
+  assert.strictEqual(await unroof({bot, emit: () => {}}, {t: {}, cancelled: false}), false);
+  console.log('unroof: sand roof dug from beside ok');
+})();

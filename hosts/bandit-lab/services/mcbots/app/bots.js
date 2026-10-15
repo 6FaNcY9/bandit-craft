@@ -20,6 +20,7 @@ const gravesJob = require('./graves');
 const treeFarmJob = require('./treefarm');
 const wheatFarmJob = require('./wheatfarm');
 const fluidsJob = require('./fluids');
+const unroofJob = require('./unroof');
 const homebedJob = require('./homebed');
 const levelJob = require('./level');
 const tidyJob = require('./tidy');
@@ -877,13 +878,21 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     const pf = r.bot.pathfinder, budget = pf.searchRadius;
     const hand = !(r.bot.inventory?.items() || []).some((i) => /_pickaxe$/.test(i.name));
     pf.searchRadius = budget < 0 ? budget : Math.max(budget, CLIMB_BUDGET);
+    let dugOut = 0;
     try {
       for (let i = 0; i < 8 && r.bot?.entity && y - r.bot.entity.position.y > 4 && roofed(); i++) {
         const p = r.bot.entity.position;
         const up = Math.min(Math.floor(y), Math.floor(p.y) + 16);
         const goal = new goals.GoalY(up);
         if (hand) goal.heuristic = (node) => HAND_LEVEL * Math.abs(up - node.y);
-        await goLeg(r, job, p.x, up, p.z, 2, {...opts, goal, doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
+        try {
+          await goLeg(r, job, p.x, up, p.z, 2, {...opts, goal, doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
+        } catch (e) {
+          // Under sand or gravel the search digs no way up at all: open the column from beside, climb again.
+          guard(job);
+          if (dugOut >= 3 || !(await unroof(r, job))) throw e;
+          dugOut++;
+        }
       }
     } finally {
       pf.searchRadius = budget;
@@ -971,7 +980,10 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         return;
       } catch (e) {
         guard(job);
-        const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${e.message}`);
+        // The deadline clears the goal, so its error reads "The goal was changed": name the deadline instead (bot1's
+        // 90 s in a sand-roofed cave looked like a fight in the archive, 2026-10-15).
+        const why = timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : e.message;
+        const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${why}`);
         // A fight takes the pathfinder over ("The goal was changed", 67 failed walks in 4 days): wait it
         // out, it is no failed try; the deadline still bounds the walk. Its end changes the goal too, with busy
         // already false (release), so a changed combat epoch counts as well: bot2's shaft failed 60 times in
@@ -2065,6 +2077,11 @@ const {fluids} = fluidsJob.makeFluids({
   plan: (a) => buildJob.schematicPlan(SCHEMATIC_DIR, a),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
   craft: (r, job, item) => crafting.ensureItem(r, child(job), item, 1),
+});
+
+const {unroof} = unroofJob.makeUnroof({
+  guard, sleep, at, unsafe: unsafeDig,
+  goBlock: (r, job, c) => goLeg(r, job, c.x, c.y, c.z, 0, {brave: true, goal: new goals.GoalBlock(c.x, c.y, c.z), doing: `stepping beside the sand roof to ${at(c)}`}),
 });
 
 const {wheatfarm} = wheatFarmJob.makeWheatFarm({

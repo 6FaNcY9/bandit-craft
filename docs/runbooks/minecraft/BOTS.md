@@ -571,7 +571,13 @@ in `app/bots.js`, checked before every block):
 - **Unreachable block** (`could not reach`): skipped for 5 min; five in a row end
   the job. A dig the server never answers is abandoned after 25 s; a walk that
   never settles is ended by the 90 s deadline (`pathfinder.stop()` alone does not
-  settle a pending `goto`, `setGoal(null)` does).
+  settle a pending `goto`, `setGoal(null)` does); its error reads `no way there within 90 s`.
+- **Under sand or gravel** (`unroof.js`): the pathfinder never digs a block with sand or gravel on
+  top, so a cave under a desert has no way up. A climb that fails there steps beside the column over
+  its feet, digs the roof from the side (the sand falls into the column, not onto the bot), digs the
+  fallen sand again and climbs the open column (up to 3 times a walk; event `dug the sand out of the
+  roof over x y z from beside it`). Sandbox 2026-10-15, bedrock pocket under sandstone and two sand:
+  out in 33 s with full health; without it `No path to the goal!` at once.
 - **Claims** that expired no longer count toward the per-bot cap of 8 and are
   pruned; a remote bot offline for over an hour leaves the list; a wrong token
   earns the guesser a 429 after 20 tries a minute but never locks the real
