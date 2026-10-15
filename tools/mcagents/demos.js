@@ -25,7 +25,7 @@ function labelJob(type, rest) {
     case 'withdraw': return w.length === 5 && nums(1, 5) ? ['withdraw', {x: n[2], y: n[3], z: n[4], item: w[0], count: n[1]}] : null;
     case 'deposit': return (w.length === 3 || w.length === 4) && nums(0, 3) ? ['deposit', {x: n[0], y: n[1], z: n[2], only: w[3] ?? ''}] : null;
     case 'shift': return w.length === 4 && nums(1, 4) ? ['shift', {block: w[0], x: n[1], y: n[2], z: n[3]}] : null;
-    case 'shaft': case 'treefarm': return w.length >= 4 && nums(0, 4) ? [type, {x1: n[0], z1: n[1], x2: n[2], z2: n[3]}] : null;
+    case 'shaft': case 'treefarm': case 'wheatfarm': return w.length >= 4 && nums(0, 4) ? [type, {x1: n[0], z1: n[1], x2: n[2], z2: n[3]}] : null;
     case 'seal': return w.length === 6 && nums(0, 6) ? ['seal', {x1: n[0], z1: n[1], x2: n[2], z2: n[3], y1: n[4], y2: n[5]}] : null;
     case 'goto': return w.length === 3 && nums(0, 3) ? ['goto', {x: n[0], y: n[1], z: n[2]}] : null;
     case 'tidy': return w.length === 4 && nums(0, 4) ? ['tidy', {x: n[0], y: n[1], z: n[2], radius: n[3]}] : null;
@@ -51,6 +51,7 @@ function inverse([type, a], ctx = {}) {
     case 'smelt': return int(a.count, 64) && a.item ? call('smeltItem', arg(a.item), a.count) : null;
     case 'shaft': return call('digShaft', a.x1, a.z1, a.x2, a.z2);
     case 'treefarm': return call('tendTreeFarm', a.x1, a.z1, a.x2, a.z2);
+    case 'wheatfarm': return call('tendWheatField', a.x1, a.z1, a.x2, a.z2);
     case 'seal': return call('sealArea', a.x1, a.z1, a.x2, a.z2, a.y1, a.y2);
     case 'shift': return a.block ? call('startShift', arg(mcBlock(a.block))) : null;
     case 'homebed': return call('setHomeBed');

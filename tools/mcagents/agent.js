@@ -109,6 +109,7 @@ const DOCS = {
   placeBed: ['Make a bed from 3 wool of one colour and 3 planks if you have none, place it with its foot at x, y, z and its head one block towards the facing, and sleep or click it so your respawn point is there. It needs 2 free blocks with solid ground below.', {x: ['number', 'The x coordinate of the foot.'], y: ['number', 'The y coordinate.'], z: ['number', 'The z coordinate of the foot.'], facing: ['string', 'north, south, east or west: where the head of the bed points.']}],
   collectGrave: ['Fetch the loot of a grave (the items a bot dropped by dying) at x, y, z, where the bot died: walks there, sneaks and right-clicks the grave, then puts everything except tools, armour and food into the base chest. Only the owner of a grave can take it.', {x: ['number', 'The x coordinate of the death.'], y: ['number', 'The y coordinate.'], z: ['number', 'The z coordinate.']}],
   tendTreeFarm: ['Run a tree farm in the area from corner x1, z1 to corner x2, z2 (3 to 24 blocks per side): plant saplings on a 3-block grid, chop the grown trees, replant, pick up saplings and apples, and put the logs in the base chest. It never ends by itself; end it with !stop. The base chest needs saplings (oak or birch) to start.', {x1: ['number', 'The x of one corner.'], z1: ['number', 'The z of one corner.'], x2: ['number', 'The x of the opposite corner.'], z2: ['number', 'The z of the opposite corner.']}],
+  tendWheatField: ['Keep a wheat field going in the area from corner x1, z1 to corner x2, z2 (at most 9 blocks per side): harvest the ripe wheat, till, plant, bake bread and put the bread in the base chest, where every bot takes its food from. It never ends by itself; end it with !stop.', {x1: ['number', 'The x of one corner.'], z1: ['number', 'The z of one corner.'], x2: ['number', 'The x of the opposite corner.'], z2: ['number', 'The z of the opposite corner.']}],
   buildBlueprint: ['Build a saved blueprint with its origin at x, y, z (one above the ground). Use this for every structure.', {name: ['string', 'The blueprint name.'], x: ['number', 'The x coordinate.'], y: ['number', 'The y coordinate.'], z: ['number', 'The z coordinate.']}],
   startConversation: ['Start a conversation with a bot. (FOR OTHER BOTS ONLY)', {player_name: ['string', 'The name of the player to send the message to.'], message: ['string', 'The message to send.']}],
   endConversation: ['End the conversation with the given bot. (FOR OTHER BOTS ONLY)', {player_name: ['string', 'The name of the player to end the conversation with.']}],
@@ -124,7 +125,7 @@ const BASE_DOC = ['Get the state of the base: each worker with its job and last 
 const FOREMAN = new Set(['assign', 'baseStatus', 'buildBlueprint', 'digRoom', 'digShaft', 'huntAnimals', 'placeBed', 'setHomeBed', 'placeBlockAt', 'viewChest', 'nearbyBlocks', 'stats', 'inventory', 'goToCoordinates', 'stop', 'startConversation']);
 const GATHERING = new Set(['collectBlocks', 'collectBlock', 'startShift']);
 // Project jobs run until done; the owner decides who works on them (lab 2026-10-10: the lead pulled a worker off the shaft).
-const PROJECTS = {shaft: 'digging the shaft', level: 'mining a level of the shaft', excavate: 'digging a room', build: 'building', grave: 'collecting its grave', homebed: 'setting its bed', treefarm: 'tending the tree farm', rim: 'walling the shaft', seal: 'sealing cave openings'};
+const PROJECTS = {shaft: 'digging the shaft', level: 'mining a level of the shaft', excavate: 'digging a room', build: 'building', grave: 'collecting its grave', homebed: 'setting its bed', treefarm: 'tending the tree farm', wheatfarm: 'tending the wheat field', rim: 'walling the shaft', seal: 'sealing cave openings'};
 const isProject = (job) => !!job && Object.hasOwn(PROJECTS, job.type);
 // The lead is the foreman whose goal is gathering (the builder bot2 has workers too, but may dig). ponytail: keyword test on the goal text, a !goal that avoids these words slips through.
 const leadsGathering = (a) => a.workers.size > 0 && /gather|collect|mine|chop|\blogs?\b|wood|cobble|coal|iron/i.test(a.goal);
@@ -192,7 +193,7 @@ function noteIdle(a, bot, now = Date.now()) {
 }
 
 // Jobs that never end by themselves. A bot running one is busy, not "needs a prompt".
-const ROUTINES = new Set(['shift', 'guard', 'follow', 'treefarm']);
+const ROUTINES = new Set(['shift', 'guard', 'follow', 'treefarm', 'wheatfarm']);
 const isRoutine = (job) => !!job && ROUTINES.has(job.type);
 
 // The shaft the mining levels leave from (the lab's, dug by !digShaft); SHAFT=x1,z1,x2,z2 overrides.
@@ -302,6 +303,13 @@ function translate(cmd, ctx) {
       if (![x1, z1, x2, z2].every(Number.isFinite) || w < 3 || l < 3 || w > 24 || l > 24) return {refuse: 'Use !tendTreeFarm(x1, z1, x2, z2) with sides of 3-24 blocks.'};
       if (!chest) return {refuse: 'There is no base chest yet.'};
       return {job: ['treefarm', {x1, z1, x2, z2}]};
+    }
+    case 'tendWheatField': {
+      const [x1, z1, x2, z2] = a.slice(0, 4).map((v) => Math.round(Number(v)));
+      const [w, l] = [Math.abs(x2 - x1) + 1, Math.abs(z2 - z1) + 1];
+      if (![x1, z1, x2, z2].every(Number.isFinite) || w > 9 || l > 9) return {refuse: 'Use !tendWheatField(x1, z1, x2, z2) with sides of at most 9 blocks.'};
+      if (!chest) return {refuse: 'There is no base chest yet.'};
+      return {job: ['wheatfarm', {x1, z1, x2, z2}]};
     }
     case 'collectGrave':
       if (![a[0], a[1], a[2]].every((v) => Number.isFinite(Number(v)))) return {refuse: 'Use !collectGrave(x, y, z) with the coordinates where the bot died.'};

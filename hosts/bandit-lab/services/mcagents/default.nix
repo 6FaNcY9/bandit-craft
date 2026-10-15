@@ -37,7 +37,9 @@
       workers = "";
     };
     bot3 = {
-      goal = "Your role: wood and food. Keep the tree farm going with !tendTreeFarm(-262, -238, -248, -224), and when the base chest is low on food hunt cows or pigs with !huntAnimals and cook the meat with !smeltItem, and put logs and food in the base chest. Never dig the shaft.";
+      # The wheat field first: the model copies the first command it reads, and without bread in the base chest no
+      # bot heals (food under 18); bot1 and bot3 died about 180 times in 48 h (2026-10-15).
+      goal = "Your role: food and wood. Keep the wheat field going with !tendWheatField(-262, -250, -254, -242): its bread in the base chest is what every bot eats, and a bot without food does not heal. When the base chest is short of logs, tend the tree farm with !tendTreeFarm(-262, -238, -248, -224) for a while, then go back to the wheat field. Never dig the shaft.";
       workers = "";
     };
   };

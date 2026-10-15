@@ -53,6 +53,9 @@ assert.ok(commandDocs([], []).includes('!collectGrave:') && !commandDocs([], ['b
 assert.deepStrictEqual(tr('!tendTreeFarm(-262, -238, -248, -224)'), {job: ['treefarm', {x1: -262, z1: -238, x2: -248, z2: -224}]});
 assert.ok(tr('!tendTreeFarm(0, 0, 30, 5)').refuse && tr('!tendTreeFarm(0, 0, 1, 5)').refuse && tr('!tendTreeFarm(1, 2)').refuse, 'sides 3-24, four numbers');
 assert.ok(translate(parseCommand('!tendTreeFarm(0, 0, 9, 9)'), {pos: null, supplyChest: null}).refuse, 'logs go to the base chest');
+assert.deepStrictEqual(tr('!tendWheatField(-262, -250, -254, -242)'), {job: ['wheatfarm', {x1: -262, z1: -250, x2: -254, z2: -242}]});
+assert.ok(tr('!tendWheatField(0, 0, 9, 3)').refuse && tr('!tendWheatField(1, 2)').refuse, 'at most 9 x 9, four numbers');
+assert.ok(isRoutine({type: 'wheatfarm'}) && commandDocs([], []).includes('!tendWheatField:'), 'the wheat field is a routine the agents can order');
 assert.ok(isRoutine({type: 'treefarm'}) && commandDocs([], []).includes('!tendTreeFarm:') && !commandDocs([], ['bot12']).includes('!tendTreeFarm:'), 'a routine; workers run it');
 assert.ok(tr('!placeBed(1, 2, 3, "up")').refuse && tr('!placeBed(1, 2)').refuse);
 assert.match(tr('!smeltItem("coal_ore", 5)').refuse, /gives coal/);

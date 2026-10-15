@@ -17,7 +17,7 @@ const jobs = [
   ['mine', {block: 'stone', count: 32}], ['mine', {block: 'iron_ore', count: 5}], ['mine', {block: 'coal_ore', count: 16}],
   ['chop', {count: 12}], ['deposit', {...chest, only: 'logs'}], ['withdraw', {item: 'coal', count: 4, ...chest}],
   ['craft', {item: 'torch', count: 8}], ['smelt', {item: 'raw_iron', count: 29}],
-  ['shaft', {x1: -291, z1: -222, x2: -276, z2: -207}], ['treefarm', {x1: -262, z1: -238, x2: -248, z2: -224}],
+  ['shaft', {x1: -291, z1: -222, x2: -276, z2: -207}], ['treefarm', {x1: -262, z1: -238, x2: -248, z2: -224}], ['wheatfarm', {x1: -262, z1: -250, x2: -254, z2: -242}],
   ['seal', {x1: -295, z1: -226, x2: -272, z2: -203, y1: 50, y2: 90}], ['homebed', {}],
   ['shift', {block: 'logs', ...chest}], ['goto', {x: -255, y: 65, z: -231}], ['tidy', {x: -250, y: 65, z: -230, radius: 16}],
 ];
@@ -32,7 +32,7 @@ assert.equal(inverse(jobs[0], ctx), '!collectBlocks("cobblestone", 32)');
 assert.equal(inverse(['chop', {count: 3}], ctx), '!collectBlocks("logs", 3)');
 assert.equal(inverse(['homebed', {}], ctx), '!setHomeBed');
 // no command / not expressible -> null
-for (const j of [['rearm', {...chest}], ['wheatfarm', {x1: 1, z1: 1, x2: 5, z2: 5}], ['stock', chest], ['deposit', {...chest, only: ''}], ['goto', {x: 1, y: 2, z: 3}], ['tidy', {x: 0, y: 65, z: 0, radius: 16}], ['craft', {item: 'torch', count: 99}], ['smelt', {item: 'coal_ore', count: 3}]]) {
+for (const j of [['rearm', {...chest}], ['stock', chest], ['deposit', {...chest, only: ''}], ['goto', {x: 1, y: 2, z: 3}], ['tidy', {x: 0, y: 65, z: 0, radius: 16}], ['craft', {item: 'torch', count: 99}], ['smelt', {item: 'coal_ore', count: 3}]]) {
   assert.equal(commandFor(j, ctx, deps), null, j[0]);
 }
 // ---- labels as the dashboard writes them -> jobs ----
@@ -40,7 +40,7 @@ assert.deepEqual(labelJob('mine', ' stone 32'), ['mine', {block: 'stone', count:
 assert.deepEqual(labelJob('shaft', ' -291 -222 -276 -207 66 -54'), ['shaft', {x1: -291, z1: -222, x2: -276, z2: -207}]);
 assert.deepEqual(labelJob('withdraw', ' logs 4 -271 66 -214'), ['withdraw', {x: -271, y: 66, z: -214, item: 'logs', count: 4}]);
 assert.deepEqual(labelJob('deposit', ' -271 66 -214 logs'), ['deposit', {...chest, only: 'logs'}]);
-assert.equal(labelJob('wheatfarm', ' 1 2 3 4'), null);
+assert.deepEqual(labelJob('wheatfarm', ' 1 2 3 4'), ['wheatfarm', {x1: 1, z1: 2, x2: 3, z2: 4}]);
 assert.equal(labelJob('mine', ' stone'), null);
 
 // ---- recorder ----
@@ -56,7 +56,7 @@ const ev = (bot, kind, text) => ({id: ++id, t: Date.now(), bot, kind, text});
     agents: new Set(['bot1']), isSolverJob: (b) => b === 'bot4',
   });
   const busy = mkState([bot('bot1'), bot('bot3', {job: {label: 'mine stone 32', type: 'mine'}}), bot('bot4')]);
-  await rec.feed([ev('bot3', 'job', 'started: mine stone 32'), ev('bot4', 'job', 'started: chop 12'), ev('bot1', 'job', 'started: chop 3'), ev('bot3', 'job', 'started: wheatfarm 1 2 3 4')], busy, 1000);
+  await rec.feed([ev('bot3', 'job', 'started: mine stone 32'), ev('bot4', 'job', 'started: chop 12'), ev('bot1', 'job', 'started: chop 3'), ev('bot3', 'job', 'started: rearm 1 2 3')], busy, 1000);
   assert.deepEqual(scans.sort(), ['bot3', 'bot4']);
   assert.equal(lines.length, 0, 'nothing before a result');
   const idle = mkState([bot('bot1'), bot('bot3'), bot('bot4')]);
@@ -72,8 +72,8 @@ const ev = (bot, kind, text) => ({id: ++id, t: Date.now(), bot, kind, text});
   assert.match(a.messages[0].content, /Nearby Human Players: None\./, 'no human names in a demo');
   assert.match(a.messages[1].content, /^SYSTEM: Check-in: you are idle.*Base chest \(lowest first\): coal 3, logs 40/);
   assert.equal(a.messages.length, 3);
-  // wheatfarm has no command; failed and stopped jobs write nothing; a start and result in one batch has no usable state
-  await rec.feed([ev('bot3', 'done', 'finished: wheatfarm 1 2 3 4 (3 s)'), ev('bot3', 'job', 'started: craft torch 8'), ev('bot3', 'fail', 'failed: craft torch 8 - no coal')], idle, 6000);
+  // rearm has no command; failed and stopped jobs write nothing; a start and result in one batch has no usable state
+  await rec.feed([ev('bot3', 'done', 'finished: rearm 1 2 3 (3 s)'), ev('bot3', 'job', 'started: craft torch 8'), ev('bot3', 'fail', 'failed: craft torch 8 - no coal')], idle, 6000);
   await rec.feed([ev('bot4', 'job', 'started: chop 5')], idle, 7000);
   await rec.feed([ev('bot4', 'stop', 'stopped: chop 5')], idle, 8000);
   await rec.feed([ev('bot4', 'job', 'started: craft torch 4'), ev('bot4', 'done', 'finished: craft torch 4 (1 s)')], idle, 9000);

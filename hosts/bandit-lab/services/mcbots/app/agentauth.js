@@ -5,7 +5,7 @@
 const crypto = require('node:crypto');
 
 const hash = (s) => crypto.createHash('sha256').update(String(s)).digest();
-const AGENT_JOBS = new Set(['stop', 'come', 'follow', 'goto', 'mine', 'chop', 'shift', 'guard', 'deposit', 'withdraw', 'stock', 'craft', 'smelt', 'place', 'build', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'grave', 'treefarm', 'tidy']);
+const AGENT_JOBS = new Set(['stop', 'come', 'follow', 'goto', 'mine', 'chop', 'shift', 'guard', 'deposit', 'withdraw', 'stock', 'craft', 'smelt', 'place', 'build', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'grave', 'treefarm', 'wheatfarm', 'tidy']);
 const CHEST_JOBS = new Set(['deposit', 'withdraw', 'stock', 'shift']);
 // The problem solver (tools/mcagents/solver.js) may also command the plan's roster bots, with this menu only
 // (mirrored in tools/mcagents/solver.js MENU_JOBS and tested). Chest jobs use the supply chest; goto and seal

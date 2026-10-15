@@ -127,9 +127,9 @@ Demonstrations (`demos.js`): a roster bot's job (plan, keeper or solver) that FI
 agents' own system prompt (stats, inventory, `Around you` scan, the plan objective as goal; no human names) taken when the job
 started (one scan per bot per 30 s), the reply is the inverse of `translate()`, accepted only if `translate()` turns it back into
 the same job: mine/chop -> `!collectBlocks`, deposit -> `!putInChest`, withdraw -> `!takeFromChest`, craft -> `!craftRecipe`,
-smelt -> `!smeltItem`, shaft -> `!digShaft`, treefarm -> `!tendTreeFarm`, seal -> `!sealArea`, shift -> `!startShift`, homebed ->
+smelt -> `!smeltItem`, shaft -> `!digShaft`, treefarm -> `!tendTreeFarm`, wheatfarm -> `!tendWheatField`, seal -> `!sealArea`, shift -> `!startShift`, homebed ->
 `!setHomeBed`, goto a named place -> `!goToRememberedPlace`, tidy where the bot stands -> `!collectDrops`. No command: rearm,
-wheatfarm, stock, place, filechests, a deposit of everything, a goto to bare coordinates. Failed or stopped jobs write nothing;
+stock, place, filechests, a deposit of everything, a goto to bare coordinates. Failed or stopped jobs write nothing;
 the same command in the same coarse state (inventory kinds and count buckets, objective) is written once. `DEMOS=0` switches it off.
 `export-sft.js` adds them as source `demo` (at most `DEMO_RATIO` x the decision rows, default 3, floor 10 decisions, balanced over
 the commands) and counts every source in `stats.json`. It also reads `decisions.jsonl.1`.
