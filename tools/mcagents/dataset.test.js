@@ -62,8 +62,15 @@ for (const content of ['Steve: private chat', 'SYSTEM: (FROM PLAYER) hi', 'SYSTE
 // "Nearby Human Players: None." is what agent.js prints with nobody near: it is not a name (it dropped such rows as privacy).
 const withPlayers = (names) => buildDataset([row(100, goto, {messages: [{role: 'system', content: `${system}\n- Nearby Human Players: ${names}\n- Nearby Bot Players: bot2`}, user('SYSTEM: Idle')]})], [event(1, 110, 'bot1', 'finished: goto 1 64 2')]).stats;
 assert.equal(withPlayers('None.').sft, 1);
-assert.equal(withPlayers('Steve').dropped.privacy, 1);
-assert.equal(withPlayers('bot2, Steve').dropped.privacy, 1);
+// A human nearby (the owner, mostly) becomes "a player": dropping those rows whole left 50 training rows from a week
+// (2026-10-15). A row that names the human anywhere else still stays out.
+assert.equal(withPlayers('Steve').sft, 1);
+assert.equal(withPlayers('bot2, Steve, Alex').sft, 1);
+const humansNear = (names, reply = goto) => buildDataset([row(100, reply, {messages: [{role: 'system', content: `${system}\n- Nearby Human Players: ${names}\n- Nearby Bot Players: bot2`}, user('SYSTEM: Idle')]})], [event(1, 110, 'bot1', 'finished: goto 1 64 2')]);
+const kept = JSON.stringify(humansNear('bot2, Steve').splits);
+assert.ok(!kept.includes('Steve') && kept.includes('Nearby Human Players: bot2, a player'), kept);
+assert.ok(JSON.stringify(humansNear('Steve, Alex').splits).includes('Nearby Human Players: 2 players'));
+assert.equal(humansNear('Steve', '!goToPlayer("Steve", 3)').stats.dropped.privacy, 1, 'named in the reply');
 assert.equal(buildDataset([row(100, goto), row(100, goto)]).stats.dropped.raw_duplicate, 1);
 assert.equal(buildDataset([{}]).stats.dropped.invalid, 1);
 const hostile = buildDataset([row(100, '!__proto__', {agent: '__proto__'})]);

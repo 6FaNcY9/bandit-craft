@@ -71,6 +71,27 @@ function jobFor(row, command) {
   return {bot, label};
 }
 
+// The "Nearby Human Players" line names whoever stood near (the owner, mostly). Rows with a name there were
+// dropped whole, and a week of bots left 50 training rows (2026-10-15). The names become "a player" (or
+// "N players"); a row that names one of them anywhere else stays out. -> the redacted record, or null.
+const NEARBY = /^(.*Nearby Human Players:)(.*)$/;
+function redactHumans(r) {
+  const names = new Set();
+  const messages = r.messages.map((m) => ({...m, content: m.content.split('\n').map((line) => {
+    const hit = NEARBY.exec(line);
+    if (!hit) return line;
+    const humans = hit[2].split(',').map((n) => n.trim()).filter((n) => n && !/^bot\d+$/.test(n) && !/^none\.?$/i.test(n));
+    if (!humans.length) return line;
+    for (const n of humans) names.add(n.toLowerCase());
+    const bots = hit[2].split(',').map((n) => n.trim()).filter((n) => /^bot\d+$/.test(n));
+    return `${hit[1]} ${[...bots, humans.length === 1 ? 'a player' : `${humans.length} players`].join(', ')}`;
+  }).join('\n')}));
+  if (!names.size) return r;
+  const out = {...r, messages};
+  const text = JSON.stringify(out).toLowerCase();
+  return [...names].some((n) => text.includes(n)) ? null : out;
+}
+
 function buildDataset(records, events = [], {cap = 3} = {}) {
   if (!Number.isSafeInteger(cap) || cap < 1) throw new Error('Situation cap must be a positive integer');
   const stats = {input: records.length, dropped: {}, labels: {good: 0, bad: 0, neutral: 0, unknown: 0}, commands: Object.create(null), agents: Object.create(null), sft: 0, splits: {}, episodes: 0, split_groups: 0};
@@ -83,13 +104,17 @@ function buildDataset(records, events = [], {cap = 3} = {}) {
     else if (!outcomes.has(r.id)) outcomes.set(r.id, r);
   }
   stats.outcomes = {records: outcomes.size, labelled: 0};
-  for (const [i, r] of records.entries()) {
+  for (const [i, record] of records.entries()) {
+    let r = record;
     if (['outcome', 'solver', 'demo', 'demo-bad', 'judge'].includes(r?.kind)) continue; // solver, demo and judge rows are not Mindcraft decisions
     const drop = (why) => count(stats.dropped, why);
     if (!r || !Array.isArray(r.messages) || !r.messages.length || typeof r.reply !== 'string' || typeof r.agent !== 'string' || !Number.isFinite(time(r.t)) || (r.ms !== undefined && (!Number.isFinite(r.ms) || r.ms < 0)) || r.messages.some((m) => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string') || r.messages[0].role !== 'system') { drop('invalid'); continue; }
     if (JSON.stringify(sanitize(r)) !== JSON.stringify(r)) { drop('secrets'); continue; }
-    // Human chat must not survive as copied context, including in thinking/replies.
-    if (r.messages.some((m) => m.role === 'user' && !/^SYSTEM:|^bot\d+: \(FROM OTHER BOT\)/.test(m.content)) || /\(FROM (?:PLAYER|HUMAN)\)|(?:player|human) chat\s*:|https?:\/\/|\/(?:home|run|var)\//i.test(JSON.stringify(r)) || r.messages.some((m) => /Nearby Human Players:/.test(m.content) && m.content.split('\n').some((line) => /Nearby Human Players:/.test(line) && line.split(':').slice(1).join(':').split(',').some((name) => name.trim() && !/^bot\d+$/.test(name.trim()) && !/^none\.?$/i.test(name.trim()))))) { drop('privacy'); continue; }
+    // Human chat must not survive as copied context, including in thinking/replies; human names nearby are redacted.
+    if (r.messages.some((m) => m.role === 'user' && !/^SYSTEM:|^bot\d+: \(FROM OTHER BOT\)/.test(m.content)) || /\(FROM (?:PLAYER|HUMAN)\)|(?:player|human) chat\s*:|https?:\/\/|\/(?:home|run|var)\//i.test(JSON.stringify(r))) { drop('privacy'); continue; }
+    const redacted = redactHumans(r);
+    if (!redacted) { drop('privacy'); continue; }
+    if (redacted !== r) { count(stats, 'redacted'); r = redacted; }
     const rawKey = hash([r.agent, r.t, r.messages, r.reply]);
     if (exact.has(rawKey)) { drop('raw_duplicate'); continue; }
     exact.add(rawKey);
