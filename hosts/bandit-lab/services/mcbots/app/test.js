@@ -451,6 +451,25 @@ assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
   await c.tick();
   assert.deepStrictEqual(ate, [], 'not with one 5 blocks off');
 })();
+(async () => {
+  // Rotten flesh only when starving or nearly dead and nothing better is left (bot3, food 0, health 7, 2026-10-16).
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const ate = [];
+  let items = [{name: 'rotten_flesh'}];
+  const bot = {health: 15, food: 12, entity: {position: new Vec3(0, 64, 0)}, entities: {}, registry: {foodsByName: {bread: {foodPoints: 5}, rotten_flesh: {foodPoints: 4}}},
+    inventory: {items: () => items}, equip: async (i) => ate.push(i.name), consume: async () => {}};
+  const c = new Combat({bot, online: true, name: 'bot3', getSettings: () => ({eatBelow: 15})});
+  c.stop();
+  await c.eat();
+  assert.deepStrictEqual(ate, [], 'hungry but well: no rotten flesh');
+  bot.food = 0; bot.health = 7;
+  await c.eat();
+  assert.deepStrictEqual(ate, ['rotten_flesh'], 'starving with nothing else: rotten flesh');
+  ate.length = 0; items = [{name: 'rotten_flesh'}, {name: 'bread'}];
+  await c.eat();
+  assert.deepStrictEqual(ate, ['bread'], 'bread first');
+})();
 assert.ok(W.isHostile({type: 'hostile', name: 'zombie'}));
 assert.ok(W.isHostile({type: 'mob', category: 'Hostile mobs', name: 'phantom'}));
 assert.ok(!W.isHostile({type: 'player', name: 'x'}) && !W.isHostile({type: 'animal', name: 'wolf'}) && !W.isHostile(null));
@@ -5943,5 +5962,15 @@ require('./crafting');
   r.bot.inventory.items = () => []; r.shovelTried = 0;
   await ensureShovel(r, {t: {}, cancelled: false}, {material: 'mineable/shovel'}, async () => { throw new Error('need 1 more cobblestone'); });
   assert.match(infos.at(-1), /^no shovel: need 1 more cobblestone/, 'a failed craft is reported, the dig goes on');
+  // bread from stored wheat (104 hungry bots in 48 h beside 106 stored wheat, 2026-10-16)
+  const {storedBread} = require('./bots');
+  let wheat = 0;
+  const baked = [], said = [];
+  const rb = {bot: {inventory: {items: () => (wheat ? [{name: 'wheat', count: wheat, type: 1}] : [])}, registry: {itemsByName: {wheat: {id: 1}}}}, emit: (k, x) => said.push(x)};
+  await storedBread(rb, {t: {}}, {withdraw: async (rr, j, item, n) => { assert.equal(item, 'wheat'); wheat += Math.min(n, 7); }, bake: async (rr, j, n) => baked.push(n)});
+  assert.deepStrictEqual(baked, [2], 'only 7 in store: 2 bread');
+  wheat = 0; baked.length = 0;
+  await storedBread(rb, {t: {}}, {withdraw: async () => { throw new Error('none'); }, bake: async (rr, j, n) => baked.push(n)});
+  assert.deepStrictEqual(baked, [], 'none in store: nothing baked, no error');
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

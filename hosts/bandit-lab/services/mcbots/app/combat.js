@@ -207,9 +207,12 @@ class Combat {
   async eat() {
     const bot = this.r.bot;
     if (this.eating || !wantsToEat(bot.food, bot.health, (this.r.getSettings?.() || DEFAULTS).eatBelow)) return;
-    const food = bot.inventory.items()
-      .filter((i) => bot.registry.foodsByName[i.name] && !AVOID_FOOD.has(i.name))
+    const best = (ok) => bot.inventory.items()
+      .filter((i) => bot.registry.foodsByName[i.name] && ok(i.name))
       .sort((a, b) => bot.registry.foodsByName[b.name].foodPoints - bot.registry.foodsByName[a.name].foodPoints)[0];
+    // Starving or nearly dead with nothing better (bot3 at food 0 and health 7 with three rotten flesh, main server
+    // 2026-10-16): rotten flesh still gives 4 food, and its hunger effect costs less than no regeneration at all.
+    const food = best((n) => !AVOID_FOOD.has(n)) || (bot.food <= 6 || bot.health <= 8 ? best((n) => n === 'rotten_flesh') : null);
     if (!food) return;
     this.eating = true;
     try {

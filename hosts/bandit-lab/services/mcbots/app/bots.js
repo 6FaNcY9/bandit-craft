@@ -1621,7 +1621,9 @@ async function upkeep(r, job, ids) {
           guard(job);
           r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
         });
-        // The chest had none: bread from the wheat field, else hunt. Same 10-minute timer, so at most one try per bot per 10 minutes.
+        // The chest had none: bread from stored wheat, from the wheat field, else hunt. Same 10-minute timer, so at most
+        // one try per bot per 10 minutes.
+        if (!bot.inventory.items().some((i) => edible(bot, i))) await storedBread(r, job);
         if (!bot.inventory.items().some((i) => edible(bot, i)) && r.wheatField) await wheatFood(r, job);
         if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
       } finally {
@@ -1648,6 +1650,18 @@ async function upkeep(r, job, ids) {
 // the ripe wheat, replants and bakes bread there, and keeps the bread. No food was left anywhere on the main server
 // and it hung on an agent choosing the field (bot1 at food 1, 2026-10-15). One pass: it leaves when nothing is left
 // to do. Its own `t`, so the field never becomes where the interrupted job resumes.
+// Bread baked from stored wheat: 106 wheat lay in storage, and no bread, while the bots went hungry 104 times in
+// 48 h (main server, 2026-10-16). 12 wheat make 4 bread; a short or empty store is no failure.
+const withdrawFrom = (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}));
+async function storedBread(r, job, {withdraw = withdrawFrom, bake = (rr, j, n) => crafting.ensureItem(rr, child(j), 'bread', n)} = {}) {
+  const wheat = () => craftingLib.count(r.bot, 'wheat');
+  if (wheat() < 12) await withdraw(r, job, 'wheat', 12 - wheat()).catch(() => guard(job));
+  const loaves = Math.floor(wheat() / 3);
+  if (!loaves) return;
+  r.emit('info', `hungry: baking ${loaves} bread from stored wheat`);
+  await bake(r, job, loaves).catch((e) => { guard(job); r.emit('info', `no bread baked: ${e.message.slice(0, 80)}`); });
+}
+
 async function wheatFood(r, job) {
   r.emit('info', 'hungry: getting bread from the wheat field');
   await wheatfarm(r, child(job, {type: 'wheatfarm', args: r.wheatField, forFood: true, t: {}}))
@@ -2751,4 +2765,4 @@ const JOBS = {
   },
 };
 
-module.exports = {unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
