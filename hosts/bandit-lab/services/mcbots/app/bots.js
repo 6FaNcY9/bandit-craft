@@ -1181,6 +1181,25 @@ const withinReach = (bot, pos) => bot.entity.position.offset(0, 1.62, 0).distanc
 // true only when this bot dug the block; false when it was gone already, changed, or the dig got
 // no answer. expect(name) says which block may be dug (default: the one there now); it is checked
 // again after every walk and equip, so a block swapped meanwhile (a player's torch) stays.
+// Digging with a sword costs it 2 durability a block, and mineflayer-tool keeps a held sword when nothing digs faster
+// (with no free slot it has no empty hand to offer): hold a plain block instead (bot2's diamond sword, 2026-10-16).
+async function unarm(bot) {
+  if (!/_sword$/.test(bot.heldItem?.name || '')) return;
+  if (bot.inventory.emptySlotCount() > 0) return bot.unequip('hand');
+  const plain = bot.inventory.items().find((i) => !TOOL_RE.test(i.name) && !bot.registry.foodsByName?.[i.name]);
+  if (plain) await bot.equip(plain, 'hand');
+}
+
+// Soil wears out shovels: clearing the iron farm site (800 dirt) used up bot2's diamond and wooden ones, and it dug on
+// with its sword (2026-10-16). A stone shovel costs a cobblestone and two sticks; tried at most once in 10 min.
+async function ensureShovel(r, job, block, make = (rr, j) => crafting.ensureItem(rr, child(j), 'stone_shovel', 1)) {
+  const {bot} = r;
+  if (block.material !== 'mineable/shovel' || bot.inventory.items().some((i) => i.name.endsWith('_shovel'))) return;
+  if (Date.now() - (r.shovelTried || 0) < 600000) return;
+  r.shovelTried = Date.now();
+  await make(r, job).catch((e) => { guard(job); r.emit('info', `no shovel: ${e.message.slice(0, 80)}`); });
+}
+
 async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
   const {bot} = r;
   let block = bot.blockAt(pos);
@@ -1194,6 +1213,8 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
     const names = tools.map((t) => bot.registry.items[t]?.name).filter(Boolean).sort();
     throw new Error(`needs a tool that can harvest ${block.name}: ${names.join(', ') || 'a pickaxe'}`);
   }
+  await ensureShovel(r, job, block);
+  guard(job);
   try {
     await goNear(r, job, pos.x, pos.y, pos.z, 4, {goal: new goals.GoalLookAtBlock(pos, bot.world, {reach: 4}), doing: `walking to ${block.name} near ${at(pos)}${tally(job)}`});
   } catch (e) {
@@ -1216,6 +1237,7 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
   const attempt = async () => {
     for (let tries = 0; ; tries++) {
       await bot.tool.equipForBlock(block, {}).catch(() => {});
+      await unarm(bot).catch(() => {});
       guard(job); // a Stop during the equip must not dig
       block = bot.blockAt(pos);
       if (!block || block.name.endsWith('air') || !want(block.name)) return null;
@@ -2729,4 +2751,4 @@ const JOBS = {
   },
 };
 
-module.exports = {projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

@@ -5910,3 +5910,38 @@ require('./crafting');
   assert.strictEqual(await unroof({bot, emit: () => {}}, {t: {}, cancelled: false}), false);
   console.log('unroof: sand roof dug from beside ok');
 })();
+
+(async () => { // tools: never dig with a sword; a stone shovel for soil when the shovels are worn out (bot2, 2026-10-16)
+  const assert = require('node:assert/strict');
+  const {unarm, ensureShovel} = require('./bots');
+  const item = (name) => ({name});
+  const mk = (held, items, empty) => {
+    const calls = [];
+    return {calls, bot: {heldItem: held && item(held), registry: {foodsByName: {bread: {}}},
+      inventory: {items: () => items.map(item), emptySlotCount: () => empty},
+      unequip: async (d) => calls.push(['unequip', d]), equip: async (it, d) => calls.push(['equip', it.name, d])}};
+  };
+  let t = mk('diamond_sword', ['diamond_sword', 'bread', 'dirt'], 1);
+  await unarm(t.bot); assert.deepStrictEqual(t.calls, [['unequip', 'hand']], 'a free slot: empty hand');
+  t = mk('diamond_sword', ['diamond_sword', 'stone_pickaxe', 'bread', 'dirt'], 0);
+  await unarm(t.bot); assert.deepStrictEqual(t.calls, [['equip', 'dirt', 'hand']], 'full: a plain block, not a tool or food');
+  t = mk('stone_shovel', ['stone_shovel'], 0);
+  await unarm(t.bot); assert.deepStrictEqual(t.calls, [], 'a real tool stays');
+
+  const crafted = [], infos = [];
+  const r = {bot: {inventory: {items: () => [item('cobblestone'), item('stick')]}}, emit: (k, x) => infos.push(x)};
+  const make = async () => { crafted.push('stone_shovel'); };
+  await ensureShovel(r, {t: {}}, {material: 'mineable/pickaxe'}, make);
+  assert.deepStrictEqual(crafted, [], 'stone needs no shovel');
+  await ensureShovel(r, {t: {}}, {material: 'mineable/shovel'}, make);
+  assert.deepStrictEqual(crafted, ['stone_shovel'], 'grass without a shovel: one is made');
+  await ensureShovel(r, {t: {}}, {material: 'mineable/shovel'}, make);
+  assert.equal(crafted.length, 1, 'not again within 10 min');
+  r.shovelTried = 0; r.bot.inventory.items = () => [item('iron_shovel')];
+  await ensureShovel(r, {t: {}}, {material: 'mineable/shovel'}, make);
+  assert.equal(crafted.length, 1, 'a shovel at hand: nothing to make');
+  r.bot.inventory.items = () => []; r.shovelTried = 0;
+  await ensureShovel(r, {t: {}, cancelled: false}, {material: 'mineable/shovel'}, async () => { throw new Error('need 1 more cobblestone'); });
+  assert.match(infos.at(-1), /^no shovel: need 1 more cobblestone/, 'a failed craft is reported, the dig goes on');
+  console.log('tools: no sword digging, shovel replaced ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
