@@ -137,7 +137,7 @@ the commands) and counts every source in `stats.json`. It also reads `decisions.
 Judge (`judge.js`, run by the same timer after the replay): on an offline backend that is free it grades up to `JUDGE_BATCH` (40)
 decisions with an unknown outcome and a valid command good/bad against the logged situation (strict rubric, "when unsure: bad"),
 appending `{kind: 'judge', ref, verdict, reason, model, backend}` to `judgments.jsonl` next to the log. `JUDGED=1` (Nix
-`bandit-lab.mcagents.exportJudged`, off) lets the export add judged-good rows as source `judged` (at most `JUDGED_MAX`, 200); a real
+`bandit-lab.mcagents.exportJudged`, on since 2026-10-15) lets the export add judged-good rows as source `judged` (at most `JUDGED_MAX`, 200); a real
 outcome always wins over a grade. Tests: `node tools/mcagents/demos.test.js` (inverse round trips, recorder, export ratios, judge, routing).
 
 Idle replay (`idle-replay.js`, timer `mcagents-idle-replay` every 2 h): for each offline gaming-PC

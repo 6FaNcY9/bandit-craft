@@ -54,7 +54,9 @@ in {
       default = ["albert" "slayer"];
       description = "Inference hosts kept for idle replays, the judge and training; they never get live agent or solver traffic.";
     };
-    exportJudged = lib.mkEnableOption "judge-graded decisions (source judged) in the daily SFT export";
+    # On (owner 2026-10-15): only 50 training rows came out of a week, and slayer's grades went unused. The rows keep
+    # their own source "judged", so a training run can still leave them out.
+    exportJudged = lib.mkEnableOption "judge-graded decisions (source judged) in the daily SFT export" // {default = true;};
   };
 
   config = lib.mkIf cfg.enable {
