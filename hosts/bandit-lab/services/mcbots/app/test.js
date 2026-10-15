@@ -4005,8 +4005,8 @@ require('./crafting');
         deposit: async () => { calls.deposit++; for (const i of inv) if (/_log$/.test(i.name)) i.count = 0; },
         withdraw: async (r2, j, item, count) => {
           calls.withdraw.push(`${item} ${count}`);
-          if (!chest || item !== 'oak_sapling') throw new Error(`no ${item} in the chest`);
-          inv.push(it('oak_sapling', count));
+          if (!chest || !['oak_sapling', 'dirt'].includes(item)) throw new Error(`no ${item} in the chest`);
+          inv.push(it(item, count));
         },
       });
       const r = {bot, world: {claim: async () => true, release() {}}, combat: {busy: false, epoch: 0}, emit: (k, t) => infos.push(t), protectedAreas: [], supplyChest: {x: -3, y: 65, z: -3}};
@@ -4040,6 +4040,18 @@ require('./crafting');
     f = fake({world: flat()});
     f.r.supplyChest = null;
     await assert.rejects(f.run(), /needs the supply chest/);
+    // a farm mined down to stone (the main base's, 2026-10-15): dirt from the chest on every spot, then saplings
+    const stony = () => { const w2 = flat(); for (let x = 0; x <= 8; x++) for (let z = 0; z <= 8; z++) w2.put(x, 64, z, (x + z) % 2 ? 'stone' : 'andesite'); return w2; };
+    assert.deepStrictEqual([T.cellState(stony().blockAt, {x: 1, z: 1}, 64), T.scan(stony().blockAt, small, 64, []).bare.length], ['bare', 9]);
+    w = stony();
+    f = fake({world: w, inv: [{name: 'oak_sapling', count: 9, type: 1}]});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.withdraw, ['dirt 9'], 'dirt from the chest, once');
+    assert.strictEqual(T.scan(w.blockAt, small, 64, []).bare.length, 0, 'no bare spot left: ' + f.events.join('|'));
+    assert.strictEqual(f.events.filter((e) => e.startsWith('plant oak_sapling')).length, 9, 'and a sapling on each: ' + f.events.join('|'));
+    // no dirt in the chest either: a clear failure, not "nothing to farm"
+    f = fake({world: stony(), chest: false});
+    await assert.rejects(f.run(), /no soil: 9 planting spots are bare stone/);
     // honours the protected area: a protected farm plants nothing
     f = fake({world: flat(), inv: [{name: 'oak_sapling', count: 9, type: 1}]});
     f.r.protectedAreas = [[0, 0, 8, 8]];

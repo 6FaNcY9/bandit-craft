@@ -12,6 +12,9 @@ const MAX_SIDE = 24, STEP = 3;
 // Oak and birch first. No dark_oak or pale_oak (they grow only from a 2x2 of saplings).
 const SAPLINGS = ['oak_sapling', 'birch_sapling', 'spruce_sapling', 'acacia_sapling', 'cherry_sapling', 'jungle_sapling'];
 const SOIL = /^(grass_block|dirt|podzol|coarse_dirt|rooted_dirt)$/;
+// Bare ground a planting spot can get a dirt block on: the bots had mined the main base's tree farm down to
+// stone, and it failed "nothing to farm" 13 times an hour (2026-10-15).
+const BARE = /^(stone|cobblestone|andesite|diorite|granite|tuff|deepslate|cobbled_deepslate|calcite|gravel|sand|red_sand|sandstone)$/;
 const LOG = /^(oak|birch|spruce|jungle|acacia|dark_oak|cherry|mangrove|pale_oak)_log$/; // never stripped_ (a player did that)
 const LEAVES = /_leaves$/;
 const FREE = /^(air|cave_air|short_grass|fern)$/;
@@ -50,18 +53,24 @@ function groundY(blockAt, x, z, y0) {
 }
 
 // 'planted' (a sapling stands there), 'tree' (a log does), 'free' (plantable: soil, free cell, open
-// sky for 4 blocks - leaves allowed) or 'blocked' (anything else, including not loaded).
+// sky for 4 blocks - leaves allowed), 'bare' (stone or the like with room for a dirt block and a tree on it)
+// or 'blocked' (anything else, including not loaded).
 function cellState(blockAt, {x, z}, gy) {
   const base = blockAt(x, gy, z), cell = blockAt(x, gy + 1, z);
   if (!base || !cell) return 'blocked';
   if (/_sapling$/.test(cell.name)) return 'planted';
   if (LOG.test(cell.name)) return 'tree';
+  if (BARE.test(base.name) && FREE.test(cell.name)) return FREE.test(blockAt(x, gy + 2, z)?.name || '') && openSky(blockAt, x, gy + 1, z) ? 'bare' : 'blocked';
   if (!SOIL.test(base.name) || !FREE.test(cell.name)) return 'blocked';
+  return openSky(blockAt, x, gy, z) ? 'free' : 'blocked';
+}
+// Room for a tree on the ground at gy: 4 blocks above the sapling, leaves allowed.
+function openSky(blockAt, x, gy, z) {
   for (let dy = 2; dy <= 5; dy++) {
     const b = blockAt(x, gy + dy, z);
-    if (!b || FLUID.test(b.name) || (b.boundingBox === 'block' && !LEAVES.test(b.name))) return 'blocked';
+    if (!b || FLUID.test(b.name) || (b.boundingBox === 'block' && !LEAVES.test(b.name))) return false;
   }
-  return 'free';
+  return true;
 }
 
 const NEIGHBOURS = [];
@@ -88,7 +97,7 @@ function treeLogs(blockAt, start, box, areas) {
 // group of natural logs whose lowest log stands on soil inside the box and that has leaves next to it
 // (a bare pillar of logs is somebody's build). Cells in protected areas are never listed.
 function scan(blockAt, box, y0, areas) {
-  const out = {trees: [], free: [], planted: []};
+  const out = {trees: [], free: [], planted: [], bare: []};
   const done = new Set();
   const grid = new Set(gridCells(box).map((c) => `${c.x},${c.z}`));
   for (let x = box.x1; x <= box.x2; x++) {
@@ -101,6 +110,7 @@ function scan(blockAt, box, y0, areas) {
         const state = cellState(blockAt, {x, z}, gy);
         if (state === 'free') out.free.push({x, z, gy});
         else if (state === 'planted') out.planted.push({x, z, gy});
+        else if (state === 'bare') out.bare.push({x, z, gy});
       }
       if (!LOG.test(here) || !SOIL.test(blockAt(x, gy, z).name) || done.has(`${x},${gy + 1},${z}`)) continue;
       const logs = treeLogs(blockAt, {x, y: gy + 1, z}, box, areas);
@@ -158,6 +168,22 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
     return /_sapling$/.test(bot.blockAt(new Vec3(c.x, c.gy + 1, c.z))?.name || '');
   }
 
+  // A dirt block on a bare planting spot; the next scan sees soil there.
+  async function soil(r, job, c) {
+    const {bot} = r;
+    const dirt = bot.inventory.items().find((i) => i.name === 'dirt');
+    if (!dirt) return false;
+    if (bot.entity.position.distanceTo(new Vec3(c.x + 0.5, c.gy + 1, c.z + 0.5)) > 4) await goNear(r, job, c.x, c.gy + 1, c.z, 2, {doing: `walking to ${at({x: c.x, y: c.gy + 1, z: c.z})} to lay soil`});
+    guard(job);
+    job.t.doing = `laying dirt at ${at({x: c.x, y: c.gy + 1, z: c.z})}`;
+    await bot.equip(dirt, 'hand');
+    guard(job);
+    await bot.placeBlock(bot.blockAt(new Vec3(c.x, c.gy, c.z)), new Vec3(0, 1, 0)).catch(() => {});
+    for (let i = 0; i < 15 && bot.blockAt(new Vec3(c.x, c.gy + 1, c.z))?.name !== 'dirt'; i++) await sleep(100);
+    guard(job);
+    return bot.blockAt(new Vec3(c.x, c.gy + 1, c.z))?.name === 'dirt';
+  }
+
   async function treefarm(r, job) {
     const {bot} = r;
     const box = job.args;
@@ -167,7 +193,7 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
     const skip = new Map(); // key -> time until which that log, cell or item is left alone
     const skipped = (k) => (skip.get(k) || 0) > Date.now();
     const later = (k) => skip.set(k, Date.now() + RETRY_MS);
-    let cut = job.cut || 0, planted = job.planted || 0, chestTriedAt = 0, chestHadNone = false;
+    let cut = job.cut || 0, planted = job.planted || 0, chestTriedAt = 0, chestHadNone = false, dirtTriedAt = 0, noDirt = false;
     job.t.open = true; // no end: the dashboard shows a count, not a bar
     job.t.area = {x: Math.round((box.x1 + box.x2) / 2), y: y0, z: Math.round((box.z1 + box.z2) / 2)}; // where a resumed job walks back to
     const report = () => {
@@ -257,6 +283,21 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
         }
       }
 
+      // 3b. No soil left to plant on: a dirt block on each bare spot, dirt from the chest.
+      const bare = s.bare.filter((c) => !skipped(`cell:${c.x},${c.z}`)).sort(near);
+      if (!free.length && !trees[0] && bare.length) {
+        if (!held(bot, /^dirt$/) && Date.now() - dirtTriedAt > RETRY_MS) {
+          dirtTriedAt = Date.now();
+          noDirt = false;
+          await withdraw(r, job, 'dirt', Math.min(bare.length, 16)).catch((e) => { guard(job); if (!/no \S+ in the chest/.test(e.message)) throw e; noDirt = true; });
+        }
+        for (const c of bare.slice(0, 6)) {
+          guard(job);
+          if (!held(bot, /^dirt$/)) break;
+          if (await soil(r, job, c)) acted = true; else later(`cell:${c.x},${c.z}`);
+        }
+      }
+
       // 4. Bone meal on the saplings that stand, when the bot has some.
       if (held(bot, /^bone_meal$/) && s.planted.length) {
         for (const c of s.planted.sort(near).slice(0, 3)) {
@@ -274,7 +315,8 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
         await deposit(r, job);
         continue;
       }
-      if (!s.trees.length && !s.planted.length && !s.free.length) throw new Error('nothing to farm: no tree, no sapling and no free soil cell in the area');
+      if (!s.trees.length && !s.planted.length && !s.free.length && s.bare.length && noDirt) throw new Error(`no soil: ${s.bare.length} planting spots are bare stone and the supply chest has no dirt; put dirt in it`);
+      if (!s.trees.length && !s.planted.length && !s.free.length && !s.bare.length) throw new Error('nothing to farm: no tree, no sapling and no free soil cell in the area');
       if (!s.trees.length && !s.planted.length && !pickSapling(bot.inventory.items()) && free.length && chestHadNone) {
         throw new Error('no saplings: none carried, none in the supply chest, no tree or sapling in the area; put saplings in the chest');
       }
