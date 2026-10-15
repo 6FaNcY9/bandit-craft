@@ -37,9 +37,11 @@
       workers = "";
     };
     bot3 = {
+      # The tree farm moved to the meadow east of the iron farm: its old box by the base had been mined into a pit
+      # (stone at y 59, holes below 55) and failed 30 times in 6 h with "No path" (2026-10-15).
       # The wheat field first: the model copies the first command it reads, and without bread in the base chest no
       # bot heals (food under 18); bot1 and bot3 died about 180 times in 48 h (2026-10-15).
-      goal = "Your role: food and wood. Keep the wheat field going with !tendWheatField(-262, -250, -254, -242): its bread in the base chest is what every bot eats, and a bot without food does not heal. When the base chest is short of logs, tend the tree farm with !tendTreeFarm(-262, -238, -248, -224) for a while, then go back to the wheat field. Never dig the shaft.";
+      goal = "Your role: food and wood. Keep the wheat field going with !tendWheatField(-262, -250, -254, -242): its bread in the base chest is what every bot eats, and a bot without food does not heal. When the base chest is short of logs, tend the tree farm with !tendTreeFarm(-323, -163, -309, -149) for a while, then go back to the wheat field. Never dig the shaft.";
       workers = "";
     };
   };
