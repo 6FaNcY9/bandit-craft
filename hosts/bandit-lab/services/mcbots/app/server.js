@@ -12,6 +12,7 @@ const {WorldModel, startBlueMap} = require('./world');
 const {WINDOW_MS} = require('./debug');
 const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
 const {EventLog} = require('./events');
+const archive = require('./archive');
 const {NtfyNotifier} = require('./notify');
 const {Keeper} = require('./keeper');
 const {Plan} = require('./plan');
@@ -36,7 +37,11 @@ const world = new WorldModel();
 if (process.env.STATE_DIR) world.persistChests(path.join(process.env.STATE_DIR, 'chests.json')); // the storage index
 const notifier = new NtfyNotifier();
 let rescue = null; // set below, once the supply chest is known
-const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); }});
+// Every event and, every 30 s, every bot's state go to STATE_DIR/archive for later evaluation and training
+// (archive.js); the 200-entry ring alone lost the night's deaths. SESSION tells server runs apart (dataset.js).
+const ARCHIVE = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'archive') : null;
+const SESSION = Date.now().toString(36);
+const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.
 const decisions = new EventLog();
@@ -51,6 +56,7 @@ const settings = new Settings(process.env.STATE_DIR || '');
 const projects = new Projects(process.env.STATE_DIR || '');
 const crews = new Crews(process.env.STATE_DIR || '', {agentBots: cfg.agentBots, bots: cfg.names});
 for (const r of runners.values()) r.getSettings = () => settings.get(r.name);
+if (ARCHIVE) setInterval(() => { try { archive.append(path.join(ARCHIVE, 'states.jsonl'), {server_session: SESSION, t: Date.now(), bots: [...runners.values()].map((r) => r.snapshot())}); } catch {} }, 30000).unref();
 const page = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 const legacy = fs.readFileSync(path.join(__dirname, 'public', 'legacy.html')); // the old page, under "Mehr"
 const three = fs.readFileSync(path.join(__dirname, 'public', 'vendor', 'three.min.js')); // three.js r159 (MIT), the last release with a classic-script build
@@ -355,6 +361,18 @@ const server = http.createServer(async (req, res) => {
     } finally {
       voxelBusy = false;
     }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/archive') {
+    const names = ARCHIVE ? (await fs.promises.readdir(ARCHIVE).catch(() => [])).filter((n) => archive.ARCHIVE_NAME.test(n)).sort() : [];
+    return json(200, await Promise.all(names.map(async (name) => ({name, bytes: (await fs.promises.stat(path.join(ARCHIVE, name))).size}))));
+  }
+  if (req.method === 'GET' && url.pathname.startsWith('/api/archive/')) {
+    const name = url.pathname.slice('/api/archive/'.length);
+    if (!ARCHIVE || !archive.ARCHIVE_NAME.test(name)) return json(404, {error: 'no such archive file'});
+    const file = fs.createReadStream(path.join(ARCHIVE, name));
+    file.on('error', () => res.headersSent ? res.destroy() : json(404, {error: 'no such archive file'}));
+    file.on('open', () => { res.writeHead(200, {'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': CSP}); file.pipe(res); });
+    return;
   }
   if (req.method === 'GET' && url.pathname === '/api/events') return json(200, {lastId: events.lastId, events: events.since(Number(url.searchParams.get('since')) || 0)});
   if (req.method === 'GET' && url.pathname === '/api/decisions') return json(200, {lastId: decisions.lastId, events: decisions.since(Number(url.searchParams.get('since')) || 0)});

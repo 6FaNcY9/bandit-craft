@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
+const {rotate} = require('./archive');
 const UUID_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const uuid = (s) => typeof s === 'string' && UUID_RE.test(s) ? s.replace(/-/g, '').toLowerCase() : null;
 const ROLES = new Set(['helfer', 'sammler', 'farmer', 'wache']);
@@ -62,7 +63,7 @@ function makeDemoLog(file, {maxBytes = 10 * 1024 * 1024} = {}) {
   const append = (line) => {
     fs.mkdirSync(path.dirname(file), {recursive: true});
     fs.appendFileSync(file, JSON.stringify(line) + '\n', {mode: 0o600});
-    if (fs.statSync(file).size > maxBytes) fs.renameSync(file, `${file}.1`);
+    if (fs.statSync(file).size > maxBytes) rotate(file); // the older FILE.1 is kept (archive.js)
   };
   return {
     add(entry) { const id = randomUUID(); append({...entry, id, t: new Date().toISOString(), outcome: null}); return id; },

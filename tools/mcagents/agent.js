@@ -631,11 +631,15 @@ async function callModel(messages) {
   throw failures[0] || new Error('No healthy model backend');
 }
 
-// Every model call with its full prompt and reply: the data set for a later LoRA fine-tune. Kept at
-// most ~2 x 50 MB (the current file and one rotated copy).
+// Every model call with its full prompt and reply: the data set for a later LoRA fine-tune. At 50 MB the
+// file becomes LOG.1 (eval-set.js and export-sft.js read both); the LOG.1 before it is kept as LOG.<ms>,
+// never deleted (owner 2026-10-15: keep all data for later evaluation and training).
 function logCall(line) {
   try {
-    if (fs.statSync(LOG).size > 50e6) fs.renameSync(LOG, `${LOG}.1`);
+    if (fs.statSync(LOG).size > 50e6) {
+      try { fs.renameSync(`${LOG}.1`, `${LOG}.${Date.now()}`); } catch {} // no LOG.1 yet
+      fs.renameSync(LOG, `${LOG}.1`);
+    }
   } catch {} // no file yet
   fs.appendFileSync(LOG, line);
 }

@@ -253,6 +253,15 @@ with ids above `since`. Workers send theirs with their status frames; the hub
 keeps only events for the worker's own bots, with a known kind and at most 200
 characters.
 
+**Archive** (2026-10-15, for later evaluation and training): every event also goes to
+`STATE_DIR/archive/events.jsonl` as `{server_session, event}`, and every 30 s every bot's `/api/state`
+entry (position, health, food, job, activity, inventory, worn armour) to `states.jsonl` as `{server_session,
+t, bots}`. At 50 MB a file becomes `.1` and the `.1` before it is kept as `.<ms>`; nothing is deleted, as
+with the demonstration and block logs and the agents' `decisions.jsonl`. `GET /api/archive` lists the
+files with their sizes, `GET /api/archive/<name>` returns one (human dashboard path only, never the agent
+bearer), for example
+`curl -s https://bandit-lab.tail7facc9.ts.net:8445/api/archive/events.jsonl > events.jsonl`.
+
 Two event texts are read by the lead agent: a `build` or `excavate` that found nothing to do ends
 `finished: ... - already complete (0 s)`, and a deposit names what went in (`deposited 64
 cobblestone, 12 coal at the supply chest`, biggest four kinds). `/api/state` carries the supply

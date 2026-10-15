@@ -56,6 +56,7 @@ function cleanSnapshot(s) {
     pos: vec(s.pos),
     dimension: optStr(s.dimension, 32),
     combat: optStr(s.combat, 32),
+    sheltered: bool(s.sheltered), // agentauth refuses orders to a sheltered bot (server.js restingOf)
     job: job && {label: str(job.label, 160), progress: str(job.progress, 160), type: str(job.type, 32), done: int(job.done), total: int(job.total), runningS: int(job.runningS)},
     activity: str(s.activity, 200),
     dead: bool(s.dead),
@@ -65,6 +66,7 @@ function cleanSnapshot(s) {
     queueIds: list(s.queueIds, 20, int),
     inventory: list(s.inventory, 80, (q) => str(q, 60)),
     inventoryKinds: int(s.inventoryKinds),
+    armour: list(s.armour, 4, (a) => optStr(a, 48)),
     lastError: str(s.lastError, 300),
     lastErrorAgoS: num(s.lastErrorAgoS),
     stoppedAgoS: num(s.stoppedAgoS),

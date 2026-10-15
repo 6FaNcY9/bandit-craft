@@ -72,7 +72,7 @@ in {
               # agent.js splits AGENTS at ";": a goal holding one became a fourth "agent" and cut bot3's goal (2026-10-11).
               AGENTS = lib.concatStringsSep ";" (lib.mapAttrsToList (bot: a: assert lib.assertMsg (!lib.hasInfix ";" a.goal) "mcagents: the goal of ${bot} must not contain ';'"; "${bot}=${a.goal}") agents);
               # Every model call (prompt + reply) for a later LoRA fine-tune; agent.js
-              # rotates it at 50 MB. The journal gets one line per reply.
+              # rotates it at 50 MB and keeps every older file. The journal gets one line per reply.
               LOG = "/var/lib/mcagents/decisions.jsonl";
               # Fix memory (tools/mcagents/lessons.js): which fix followed which kind of failure and whether it
               # worked, from job results; the solver and the agents see it when the problem comes back.

@@ -247,11 +247,11 @@ existing path; it supplies the agent bearer header without putting a token on
 the command line. Never dump it. If `.1` does not exist, record its absence.
 Copy near rotation can overlap or lose records: dedup overlaps, reject only a
 trailing partial JSON line with an explicit count, and flag continuity gaps.
-For sustained capture, archive both decision files on each rotation and poll
-`/api/events?since=<lastId>` frequently enough to stay inside 200 entries; store
-each returned event as JSONL with a collector `server_session` and capture time.
-Detect ID reset and ring overflow; unmatched periods are unknown, not success.
-Do not change active logging or poll the host as part of this design task.
+Since 2026-10-15 nothing has to be polled: `agent.js` keeps every rotated decision file
+(`decisions.jsonl.<ms>` next to `.1`), and mcbots writes every event in this wrapper format to
+`STATE_DIR/archive/events.jsonl` (`server_session` per server run, no `captured_at`), served by
+`GET /api/archive/events.jsonl` (BOTS.md, "Archive"). Event ids restart with each server run, so dedup by
+`server_session` and id.
 
 Raw event format today is `{id,t,bot,kind,text}` (`t` epoch milliseconds,
 `text` truncated to 200 characters). Archive wrapper example:

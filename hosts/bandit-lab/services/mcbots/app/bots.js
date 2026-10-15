@@ -645,6 +645,7 @@ class BotRunner {
       queueIds: this.queue.map((j) => j.id),
       inventory: top.map(([n, c]) => `${n} x${c}`),
       inventoryKinds: top.length,
+      armour: this.online ? [5, 6, 7, 8].map((i) => b.inventory.slots?.[i]?.name || null) : null, // worn head, torso, legs, feet (the armour slots), for the state archive
       lastError: this.lastError,
       stoppedAgoS: this.stoppedAt ? Math.round((Date.now() - this.stoppedAt) / 1000) : null,
       lastErrorAgoS: this.trace.error ? Math.round((Date.now() - this.trace.error.t) / 1000) : null,

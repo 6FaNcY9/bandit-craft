@@ -1471,6 +1471,9 @@ require('./crafting');
   const cs = cleanSnapshot({...sn, tool: {name: 5, max: -1, left: 'x'}, queueIds: [1, 'a', -3], activity: 'x'.repeat(999)});
   assert.deepStrictEqual([cs.tool, cs.queueIds, cs.activity.length, cs.job.done, cs.job.total], [{name: '', max: 0, left: null}, [1, 0, 0], 200, 2, 8]);
   assert.deepStrictEqual(cleanSnapshot(null).queueIds, []);
+  // a worker bot's night shelter reaches the hub, or the agents order it out of its hole (bot2/bot3, 2026-10-15)
+  assert.deepStrictEqual([cleanSnapshot({sheltered: true}).sheltered, cleanSnapshot({sheltered: 'yes'}).sheltered], [true, false]);
+  assert.deepStrictEqual(cleanSnapshot({armour: ['iron_helmet', null, 5, 'leather_boots', 'x']}).armour, ['iron_helmet', null, '', 'leather_boots']);
   const {RemoteRunner} = require('./hub');
   const sent = [];
   const rr = new RemoteRunner('bot5');
@@ -5596,4 +5599,25 @@ require('./crafting');
   assert.strictEqual(w.hostilesNear(0, 0, 'overworld', 8).length, 2, 'without a height as before');
   assert.deepStrictEqual(w.hostilesNear(0, 0, 'overworld', 8, 66).map((m) => m.id), [1]);
   console.log('world: hostiles near a height ok');
+}
+
+// archive: a full file becomes FILE.1 and the FILE.1 before it is kept, never overwritten; only events and
+// states files are served.
+{
+  const assert = require('node:assert/strict');
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const archive = require('./archive');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-archive-'));
+  const file = path.join(dir, 'sub', 'events.jsonl');
+  archive.append(file, {n: 1}, {maxBytes: 5}); // over the limit at once: FILE.1
+  archive.append(file, {n: 2}, {maxBytes: 5}); // FILE.1 -> FILE.<ms>, FILE -> FILE.1
+  const names = fs.readdirSync(path.dirname(file));
+  const kept = names.find((n) => /^events\.jsonl\.\d{4,}$/.test(n));
+  assert.deepEqual(names.sort(), ['events.jsonl.1', kept].sort());
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(file), kept), 'utf8')), {n: 1});
+  assert.deepEqual(JSON.parse(fs.readFileSync(`${file}.1`, 'utf8')), {n: 2});
+  for (const ok of ['events.jsonl', 'states.jsonl.1', 'states.jsonl.1792026990411']) assert.ok(archive.ARCHIVE_NAME.test(ok), ok);
+  for (const bad of ['../events.jsonl', 'events.jsonl/x', 'chests.json', 'settings.json', 'events.jsonl.1x', '.events.jsonl']) assert.ok(!archive.ARCHIVE_NAME.test(bad), bad);
+  fs.rmSync(dir, {recursive: true});
+  console.log('archive: rotation keeps old files ok');
 }

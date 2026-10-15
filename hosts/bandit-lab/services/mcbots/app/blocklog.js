@@ -4,6 +4,7 @@
 // (../../minecraft/overlay.js). Bots of this process report directly, worker bots through the hub's observe frame.
 const fs = require('node:fs');
 const path = require('node:path');
+const {rotate} = require('./archive');
 
 const AIRS = new Set(['air', 'cave_air', 'void_air']);
 const FLUIDS = new Set(['water', 'lava', 'bubble_column', 'flowing_water', 'flowing_lava']);
@@ -77,7 +78,7 @@ class BlockLog {
     const lines = this.pending.splice(0);
     try {
       fs.appendFileSync(this.file, `${lines.join('\n')}\n`);
-      if (fs.statSync(this.file).size > this.rotateBytes) fs.renameSync(this.file, `${this.file}.1`);
+      if (fs.statSync(this.file).size > this.rotateBytes) rotate(this.file); // the older FILE.1 is kept (archive.js)
     } catch {} // a full or read-only disk must not stop the bots
   }
 }
