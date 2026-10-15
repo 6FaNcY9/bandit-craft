@@ -1490,18 +1490,32 @@ async function getTool(r, job, kind) {
     }
   }
 }
-// Iron the bot carries becomes ingots (coal or charcoal burns; the job's own ore is left for the
-// chest), then the missing iron pickaxe, sword and armour are crafted and worn. One try per 5 min,
-// only when there is something to do; every failure is logged and the job carries on.
+// Iron the bot carries becomes ingots (coal, charcoal, logs or planks burn; the job's own ore is left
+// for the chest), then the missing iron pickaxe, sword and armour are crafted and worn. Iron it lacks
+// comes from storage first, with logs to burn: a bot that died has nothing left, and 39 raw iron sat in
+// the storage hall while bot1 and bot3 died 180 times in 48 h without armour or a sword (2026-10-15).
+// One try per 5 min, only when there is something to do; every failure is logged and the job carries on.
 async function ensureGear(r, job) {
   const {bot} = r;
   const n = (name) => craftingLib.count(bot, name);
-  if ((n('raw_iron') < 3 && !n('iron_ingot')) || Date.now() - (r.gearTriedAt || 0) < 300000) return;
+  if (Date.now() - (r.gearTriedAt || 0) < 300000) return;
   const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
   const owned = [...bot.inventory.items(), ...worn].map((i) => i.name);
   const wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
+  if (wanted - n('raw_iron') >= 3 && r.supplyChest && !jobWants(job, 'iron_ore')) {
+    r.gearTriedAt = Date.now();
+    const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}))
+      .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from storage: ${e.message.slice(0, 80)}`); });
+    await fetch('raw_iron', wanted - n('raw_iron'));
+    // Logs to burn, plus 2 for the sticks of the pickaxe and sword: 20 logs for 29 iron all burned and left
+    // the bot with armour but no sword (sandbox, 2026-10-15).
+    const smelts = Math.min(n('raw_iron'), wanted);
+    const logs = Math.ceil(smelts / 1.5) + 2 - bot.inventory.items().filter((i) => /_log$/.test(i.name)).reduce((s, i) => s + i.count, 0);
+    if (smelts >= 3 && logs > 0 && !['coal', 'charcoal'].some((f) => n(f) >= Math.ceil(smelts / 8))) await fetch('logs', logs);
+  }
+  if (n('raw_iron') < 3 && !n('iron_ingot')) return;
   const smeltN = Math.min(n('raw_iron'), wanted);
-  const canSmelt = smeltN >= 1 && n('raw_iron') >= 3 && !jobWants(job, 'iron_ore') && ['coal', 'charcoal'].some((f) => n(f) >= Math.ceil(smeltN / 8));
+  const canSmelt = smeltN >= 1 && n('raw_iron') >= 3 && !jobWants(job, 'iron_ore') && !!craftingLib.fuelFor(bot, 'raw_iron', smeltN);
   if (!canSmelt && !gearJob.gearPlan(n('iron_ingot'), owned).length) return;
   r.gearTriedAt = Date.now();
   if (canSmelt) {

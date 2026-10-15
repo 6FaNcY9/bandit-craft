@@ -4654,7 +4654,7 @@ require('./crafting');
     const crafting = makeCrafting({goNear: async () => {}, guard});
     const world = new WorldModel();
     const key = 'furnace:0,64,0';
-    const mkFurnace = (log) => ({log, putFuel: async () => log.push('fuel'), putInput: async () => log.push('input'), outputItem: () => ({}), takeOutput: async () => ({count: 3}), close() { log.push('close'); }});
+    const mkFurnace = (log) => ({log, putFuel: async () => log.push('fuel'), putInput: async () => log.push('input'), outputItem: () => ({}), takeOutput: async () => ({count: 3}), inputItem: () => null, fuelItem: () => null, takeInput: async () => log.push('takeInput'), takeFuel: async () => log.push('takeFuel'), close() { log.push('close'); }});
     const mkRunner = (name, furnace, onOpen = () => {}) => ({name, world, inventoryBusy: 0, protectedAreas: [], bot: {
       inventory: {items: () => [{name: 'raw_iron', count: 3}, {name: 'coal', count: 2}]},
       registry: {blocksByName: {furnace: {id: 1}}, itemsByName: {coal: {id: 10}, raw_iron: {id: 11}}},
@@ -4694,6 +4694,18 @@ require('./crafting');
     assert.strictEqual(heldWhile, false, 'bot2 is refused while bot1 smelts');
     assert.deepStrictEqual(log, ['fuel', 'input', 'close']);
     assert.strictEqual(world.claimedByOther('bot2', key), false);
+    // a furnace left with another input refuses ours ("destination full"): that comes out first; the same fuel stays
+    log = [];
+    const f5 = mkFurnace(log);
+    f5.inputItem = () => ({name: 'cobblestone'});
+    f5.fuelItem = () => ({name: 'coal'});
+    await crafting.smelt(mkRunner('bot1', f5), {cancelled: false, t: {}}, 'raw_iron', 3);
+    assert.deepStrictEqual(log, ['takeInput', 'fuel', 'input', 'close']);
+    log = [];
+    const f6 = mkFurnace(log);
+    f6.fuelItem = () => ({name: 'oak_planks'});
+    await crafting.smelt(mkRunner('bot1', f6), {cancelled: false, t: {}}, 'raw_iron', 3);
+    assert.deepStrictEqual(log, ['takeFuel', 'fuel', 'input', 'close'], 'another fuel comes out too');
   }
   { // R6-7: the 3D panel's level order is one the server accepts, or says why not
     const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/legacy.html'), 'utf8');

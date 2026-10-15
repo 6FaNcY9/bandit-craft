@@ -216,6 +216,12 @@ function makeCrafting({goNear, guard, fetch = null}) {
       try {
         // A Stop that lands during any of these awaits must not go on to move items (Codex R6-2).
         guard(job);
+        // A furnace left with another input or fuel, or a full output, refuses ours ("destination full", the
+        // sandbox furnace 2026-10-15): take that out first; it goes into the bot's inventory.
+        if (furnace.outputItem()) await furnace.takeOutput();
+        if (furnace.inputItem() && furnace.inputItem().name !== input) await furnace.takeInput();
+        if (furnace.fuelItem() && furnace.fuelItem().name !== fuel) await furnace.takeFuel();
+        guard(job);
         await furnace.putFuel(bot.registry.itemsByName[fuel].id, null, needOf(fuel));
         guard(job);
         await furnace.putInput(bot.registry.itemsByName[input].id, null, n);
