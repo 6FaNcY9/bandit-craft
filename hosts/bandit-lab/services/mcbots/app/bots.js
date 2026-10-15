@@ -964,6 +964,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
     // Something else (combat, a block update) can stop the path mid-walk; walk
     // again instead of failing the job, unless the deadline or a stop hit.
     for (let tries = 0; ; tries++) {
+      const epoch = r.combat?.epoch;
       try {
         if (!brave) await waitSafe(r, job, x, z, y);
         await r.bot.pathfinder.goto(goal || new goals.GoalNear(x, y, z, dist)); // settledGoto on a live bot
@@ -972,8 +973,10 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         guard(job);
         const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${e.message}`);
         // A fight takes the pathfinder over ("The goal was changed", 67 failed walks in 4 days): wait it
-        // out, it is no failed try; the deadline still bounds the walk.
-        if (!timedOut && r.combat?.busy) {
+        // out, it is no failed try; the deadline still bounds the walk. Its end changes the goal too, with busy
+        // already false (release), so a changed combat epoch counts as well: bot2's shaft failed 60 times in
+        // 6 h underground (2026-10-15).
+        if (!timedOut && (r.combat?.busy || (epoch !== undefined && r.combat?.epoch !== epoch))) {
           await waitCalm(r, job);
           tries--;
         } else if (timedOut || tries >= 3) throw fail();

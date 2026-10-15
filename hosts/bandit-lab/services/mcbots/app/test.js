@@ -5031,6 +5031,14 @@ require('./crafting');
   const r = {bot: b2, world: {hostilesNear: () => []}, emit() {}, protectedAreas: [], combat: {get busy() { return busy; }}};
   await goNear(r, {t: {}, cancelled: false}, 10, 64, 0, 1);
   assert.strictEqual(calls, 6, 'five fight interruptions, then the walk');
+  // ... also when the fight's end changed the goal: release() clears it while busy is already false, and bot2's
+  // shaft failed 60 times in 6 h with "The goal was changed" (main server, 2026-10-15). A changed combat epoch is
+  // no failed try either.
+  calls = 0;
+  const combat = {busy: false, epoch: 0};
+  b2.pathfinder.goto = async () => { calls++; if (calls <= 5) { combat.epoch++; throw new Error('The goal was changed before it could be completed!'); } };
+  await goNear({...r, combat}, {t: {}, cancelled: false}, 10, 64, 0, 1);
+  assert.strictEqual(calls, 6, 'five fights that ended mid-walk, then the walk');
 })();
 
 { // smelt takes what goes in, not what comes out nor an ore that drops its item
