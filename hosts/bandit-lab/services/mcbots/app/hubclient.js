@@ -5,6 +5,9 @@
 // are refused (digging jobs stop with an error) rather than guessed.
 const WebSocket = require('ws');
 const {WorldModel} = require('./world');
+const {farmBox} = require('./wheatfarm');
+// The hub's wheat field as a farm box, or null for anything else.
+const fieldOf = (b) => { try { return b ? farmBox(b) : null; } catch { return null; } };
 const {BotRunner, keptOf} = require('./bots');
 const {Settings} = require('./settings');
 const {PROTOCOL} = require('./hub');
@@ -225,6 +228,7 @@ class HubClient {
         if (!this.runners.length) {
           const opts = {protectedAreas: this.protectedAreas, supplyChest: this.supplyChest};
           this.runners = this.names.map((n) => this.makeRunner(n, opts));
+          for (const r of this.runners) r.wheatField = this.wheatField;
           for (const r of this.runners) r.getSettings = () => this.settings.get(r.name);
           for (const r of this.runners) r.start();
         }
@@ -283,7 +287,8 @@ class HubClient {
   applyPolicy(m) {
     this.protectedAreas.splice(0, this.protectedAreas.length, ...(Array.isArray(m.protectedAreas) ? m.protectedAreas : []));
     this.supplyChest = m.supplyChest || null;
-    for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; }
+    this.wheatField = fieldOf(m.wheatField);
+    for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; r.wheatField = this.wheatField; }
   }
 
   // Same rules as the hub's (settings.clean): a bad value is refused, the old settings stay.

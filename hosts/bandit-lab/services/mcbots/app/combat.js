@@ -24,6 +24,7 @@ const deathCause = (name, msg) => {
   return DEATH_PHRASE.test(rest) ? rest : null;
 };
 const FIGHT_RANGE = 4;
+const EAT_CLEAR = 8; // eating takes 1.6 s; a zombie covers about 4 blocks in that time
 // A mode that has not resolved by then ends, and its mob is left alone for IGNORE_MS (it still gets hit
 // at arm's length): a mob behind a wall kept bot1 hunting and bot3 retreating for hours while their
 // jobs waited for calm (lab, 2026-10-13).
@@ -151,7 +152,9 @@ class Combat {
     if (near && near.name === 'creeper' && dist < 6 && !r.sheltered) return this.takeover('creeper', near, 8);
     if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
     if (near && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
-    if (!this.busy && !near && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();
+    // Eat unless a hostile is close: at night one is nearly always within the 24 blocks a bot sees, and bot50 held
+    // bread at food 6 for minutes with a zombie 16 blocks off, until it fled at 2.5 health and died (sandbox 2026-10-15).
+    if (!this.busy && dist > EAT_CLEAR && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();
   }
 
   async fight(target) {

@@ -425,6 +425,28 @@ assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
   await c.tick();
   assert.ok(hit, 'an ignored mob is still fought at arm\'s length');
 })();
+(async () => {
+  // A hungry bot eats unless a hostile is close: with a zombie 16 blocks off, bot50 held bread at food 6 for minutes,
+  // then a zombie beat it to 2.5 health before it ate while fleeing, and died (sandbox, 2026-10-15). At night some
+  // hostile is nearly always within 24 blocks.
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const ate = [];
+  const zombie = {id: 8, type: 'hostile', name: 'zombie', position: new Vec3(16, 64, 0), height: 1.9};
+  const bot = {health: 20, food: 6, entity: {position: new Vec3(0, 64, 0)}, entities: {8: zombie}, game: {dimension: 'overworld'}, findBlock: () => null,
+    pathfinder: {setGoal() {}}, registry: {foodsByName: {bread: {foodPoints: 5}}, blocksByName: {}}, currentWindow: null,
+    inventory: {items: () => [{name: 'bread'}]}, equip: async () => {}, consume: async () => ate.push('bread'), lookAt: async () => {}};
+  const c = new Combat({bot, online: true, inventoryBusy: 0, name: 'bot50', world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8, eatBelow: 15})});
+  c.stop();
+  await c.tick();
+  assert.deepStrictEqual([c.mode, ate], [null, ['bread']], 'it eats with the zombie 16 blocks off');
+  zombie.position = new Vec3(5, 64, 0);
+  ate.length = 0;
+  c.fight = async () => {};
+  c.hunt = () => {};
+  await c.tick();
+  assert.deepStrictEqual(ate, [], 'not with one 5 blocks off');
+})();
 assert.ok(W.isHostile({type: 'hostile', name: 'zombie'}));
 assert.ok(W.isHostile({type: 'mob', category: 'Hostile mobs', name: 'phantom'}));
 assert.ok(!W.isHostile({type: 'player', name: 'x'}) && !W.isHostile({type: 'animal', name: 'wolf'}) && !W.isHostile(null));
@@ -1236,6 +1258,11 @@ require('./crafting');
       assert.deepStrictEqual([stub.protectedAreas, stub.supplyChest], [[box], {x: 7, y: 8, z: 9}]);
       client.handle({t: 'welcome', protectedAreas: [], supplyChest: null, settings: {}});
       assert.deepStrictEqual([stub.protectedAreas, stub.supplyChest], [[], null], 'a reconnect repairs it too');
+      // the wheat field too: hungry worker bots get bread there (bots.js wheatFood); a bad box is dropped
+      client.handle({t: 'policy', protectedAreas: [], supplyChest: null, wheatField: {x1: -254, z1: -242, x2: -262, z2: -250}});
+      assert.deepStrictEqual(stub.wheatField, {x1: -262, z1: -250, x2: -254, z2: -242});
+      client.handle({t: 'policy', protectedAreas: [], supplyChest: null, wheatField: {x1: 0, z1: 0, x2: 30, z2: 30}});
+      assert.strictEqual(stub.wheatField, null);
       hub.protectedAreas.push(box); hub.broadcastPolicy();
       await until(() => stub.protectedAreas.length === 2, 'the hub broadcast reaches the connected worker');
       hub.protectedAreas.pop(); hub.broadcastPolicy();
@@ -3099,10 +3126,18 @@ require('./crafting');
     runner.supplyChest = null; runner.protectedAreas = [];
     let seen = null;
     const dig0 = bot.dig;
-    bot.dig = async (b) => { seen ||= [...runner.keepCells].sort(); return dig0(b); };
+    let bridging = null;
+    const mvShaft = safeMovements(bot, [], runner);
+    const items0 = bot.inventory.items;
+    bot.inventory.items = () => [...items0(), {type: md.itemsByName.cobblestone.id, name: 'cobblestone', count: 16}];
+    bot.dig = async (b) => { seen ||= [...runner.keepCells].sort(); bridging ??= mvShaft.countScaffoldingItems(); return dig0(b); };
     await JOBS.shaft(runner, {t: {}, cancelled: false, type: 'shaft', args: VALIDATE.shaft({x1: 0, z1: 0, x2: 2, z2: 2, top: 60, bottom: 58})});
     assert.deepStrictEqual(seen, ['0,60,0', '1,59,0', '2,58,0']);
     assert.strictEqual(runner.keepCells, null, 'released when the job ends');
+    // no scaffolding while the shaft is dug: bot2 bridged over the void and stranded on one block (2026-10-15)
+    assert.strictEqual(bridging, 0, 'a walk during the shaft places none of its 16 cobblestone');
+    assert.strictEqual(mvShaft.countScaffoldingItems(), 16, 'after the shaft the blocks count again');
+    bot.inventory.items = items0;
     runner.keepCells = new Set(seen);
     runner.digOnly = NATURAL;
     blocks.set('0,60,0', 'stone'); blocks.set('1,60,0', 'stone');
@@ -4126,6 +4161,15 @@ require('./crafting');
     assert.ok(f.events.filter((e) => e.startsWith('plant')).length >= 15, 'and planted');
     assert.match(f.job.progress, /3 wheat harvested, \d+ planted, 1 bread/);
     assert.match(f.job.t.doing, /waiting for the wheat to grow/);
+    // forFood (a hungry bot, bots.js wheatFood): the bread is kept and the pass ends when nothing is left to do
+    w = flat({'-1,64,1': 'water'});
+    w.put(0, 64, 0, 'farmland'); w.put(0, 65, 0, wheat(7)); w.put(1, 64, 0, 'farmland'); w.put(1, 65, 0, wheat(7)); w.put(2, 64, 0, 'farmland'); w.put(2, 65, 0, wheat(7));
+    f = fake({world: w, inv: [{name: 'wooden_hoe', count: 1, type: 1}, {name: 'wheat_seeds', count: 20, type: 2}, {name: 'bread', count: 16, type: 3}]});
+    f.job.forFood = true;
+    await f.run(); // returns, no Stop needed
+    assert.deepStrictEqual(f.calls.deposit, [], 'the bread is kept, even 16 of it');
+    assert.ok(f.inv.find((i) => i.name === 'bread').count > 16, 'and the harvest became bread');
+    assert.ok(f.events.filter((e) => e.startsWith('plant')).length >= 15, 'the field is replanted on the way');
     // 16 bread are handed in (bread, not wheat)
     f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'bread', count: 16, type: 3}, {name: 'wheat', count: 2, type: 4}]});
     await assert.rejects(f.run(), Cancelled);

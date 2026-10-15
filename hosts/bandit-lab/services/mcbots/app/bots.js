@@ -741,6 +741,8 @@ function safeMovements(bot, areas, runner = null) {
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   mv.exclusionAreasPlace = [veto];
+  const scaffold = mv.countScaffoldingItems.bind(mv);
+  mv.countScaffoldingItems = () => (runner?.noScaffold ? 0 : scaffold()); // a path with 0 blocks places none
   // Every block change counts up, so the path cache never answers from before it.
   if (bot.blockVersion === undefined) {
     bot.blockVersion = 0;
@@ -1566,7 +1568,8 @@ async function upkeep(r, job, ids) {
         guard(job);
         r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
       });
-      // The chest had none: hunt for it. Same 10-minute timer, so at most one hunt per bot per 10 minutes.
+      // The chest had none: bread from the wheat field, else hunt. Same 10-minute timer, so at most one try per bot per 10 minutes.
+      if (!bot.inventory.items().some((i) => edible(bot, i)) && r.wheatField) await wheatFood(r, job);
       if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
     }
     // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
@@ -1583,6 +1586,16 @@ async function upkeep(r, job, ids) {
     job.t.upkeep = false;
     Object.assign(job.t, shown); // helper jobs borrowed the counters
   }
+}
+
+// The wheat field (the `wheat` zone, r.wheatField) is the bots' own food: a hungry bot with none in the chest harvests
+// the ripe wheat, replants and bakes bread there, and keeps the bread. No food was left anywhere on the main server
+// and it hung on an agent choosing the field (bot1 at food 1, 2026-10-15). One pass: it leaves when nothing is left
+// to do. Its own `t`, so the field never becomes where the interrupted job resumes.
+async function wheatFood(r, job) {
+  r.emit('info', 'hungry: getting bread from the wheat field');
+  await wheatfarm(r, child(job, {type: 'wheatfarm', args: r.wheatField, forFood: true, t: {}}))
+    .catch((e) => { guard(job); r.emit('info', `wheat field: ${e.message.slice(0, 100)}`); });
 }
 
 // Hungry and the supply chest has no food: hunt two cows or pigs (chickens too when there is fuel to cook
@@ -2512,6 +2525,10 @@ const JOBS = {
     hold();
     const refresh = setInterval(hold, 45000);
     r.digBox = {x1, z1, x2, z2};
+    // No scaffolding while digging the shaft: the pathfinder bridged over the dug-out void, ran out of blocks and left
+    // bot2 on a single floating cobblestone, twice (y 35 and y 41, main server 2026-10-15). The ring of steps is the
+    // way down and up; a walk without blocks digs its own steps instead (safeMovements).
+    r.noScaffold = true;
     try {
       for (let y = top; y >= bottom; y--) {
         const keep = ring[(top - y) % ring.length];
@@ -2551,6 +2568,7 @@ const JOBS = {
     } finally {
       r.keepCells = null;
       r.digBox = null;
+      r.noScaffold = false;
       clearInterval(refresh);
       for (const k of held) r.world?.release(r.name, k);
     }

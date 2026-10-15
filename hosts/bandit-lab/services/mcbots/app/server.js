@@ -96,8 +96,10 @@ function applyPlaces() {
   cfg.protectedAreas.splice(0, cfg.protectedAreas.length, ...staticAreas, ...protectedBoxes(places.list));
   const s = places.first('supply'), site = places.first('site');
   supplyChest = s ? {x: s.x, y: s.y, z: s.z} : cfg.supplyChest;
-  for (const r of runners.values()) if (!(r instanceof RemoteRunner)) r.supplyChest = supplyChest;
-  if (hub) { hub.supplyChest = supplyChest; hub.broadcastPolicy(); }
+  const w = places.zone('wheat')?.box;
+  const wheatField = w ? {x1: w.x1, z1: w.z1, x2: w.x2, z2: w.z2} : null; // hungry bots get bread there (bots.js wheatFood)
+  for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField});
+  if (hub) { Object.assign(hub, {supplyChest, wheatField}); hub.broadcastPolicy(); }
   if (keeper) {
     keeper.chest = supplyChest;
     keeper.site = site ? {x: site.x, y: site.y, z: site.z} : cfg.keeperSite;

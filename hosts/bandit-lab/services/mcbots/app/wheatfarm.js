@@ -231,7 +231,8 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       const work = chooseWork(s.cells, {me, seeds, hoe: !!hoe, skip: (c) => skipped(`cell:${c.x},${c.z}`)});
       let acted = false;
 
-      if (shouldDeposit({bread: held(bot, /^bread$/), emptySlots: bot.inventory.emptySlotCount()})) {
+      // forFood (bots.js wheatFood): a hungry bot keeps its bread and leaves once nothing is left to do.
+      if (!job.forFood && shouldDeposit({bread: held(bot, /^bread$/), emptySlots: bot.inventory.emptySlotCount()})) {
         await handIn();
         if (bot.inventory.emptySlotCount() < 4) throw new Error('inventory still full after depositing (chest full?)');
         continue;
@@ -336,6 +337,7 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       }
       report();
       if (acted) continue;
+      if (job.forFood) return;
 
       if (!s.cells.some((c) => ['growing', 'ripe', 'plant', 'till', 'clear'].includes(c.state))) throw new Error('nothing to farm: no soil, farmland or wheat in the area');
       job.t.doing = work.needHoe ? 'no hoe to till with' : work.needSeeds ? 'waiting for seeds' : s.cells.some((c) => c.state === 'growing') ? 'waiting for the wheat to grow' : 'nothing to do';
