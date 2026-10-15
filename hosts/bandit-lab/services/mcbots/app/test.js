@@ -5698,6 +5698,12 @@ require('./crafting');
     assert.match(whispers.at(-1).text, /^geht nicht:/); assert.equal(runner.queue[0].type, 'follow');
     bot.emit('message', msg('stopp', true), 'chat', uuid);
     assert.equal(runner.queue.length, 0); assert.ok(outcomes.some((o) => o[1] === 'stopped'));
+    // the main server sends the format text instead of the key: no bot ever answered there (probe 2026-10-15)
+    const asText = (m, t) => ({...m, translate: t}), heard = whispers.length;
+    bot.emit('message', asText(msg('bot1 status'), '<%s> %s'), 'chat', uuid, false);
+    assert.match(whispers.at(-1).text, /^ok: Leben 20/); assert.equal(whispers.length, heard + 1);
+    bot.emit('message', asText(msg('status', true), '%s whispers to you: %s'), 'chat', uuid, false);
+    assert.equal(whispers.length, heard + 2);
     const disabled = new BotRunner('bot1', {log: () => {}}); disabled.bindOwner(bot);
     const env = {BOT_NAMES: 'bot1', BOT_PASSWORD_SEED: 'test', OWNER_UUIDS: uuid};
     assert.deepEqual(loadConfig(env).ownerUuids, [uuid]);

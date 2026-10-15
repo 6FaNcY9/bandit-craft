@@ -34,6 +34,8 @@ const owner = require('./owner');
 const NAME_RE = /^bot[0-9]{1,2}$/; // BotGate's pattern (Velocity plugin)
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
+const CHAT_TYPES = new Set(['chat.type.text', '<%s> %s']);
+const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers to you: %s']);
 const BACKOFF_START = 5000;
 const BACKOFF_CAP = 300000;
 // Kept on deposit: what a bot needs to craft a replacement tool or light a mine.
@@ -311,8 +313,10 @@ class BotRunner {
     if (!this.ownerUuids.length) return;
     bot.on('message', (msg, position, sender, verified) => {
       if (bot !== this.bot) return;
-      const whisper = msg.translate === 'commands.message.display.incoming';
-      if (!whisper && msg.translate !== 'chat.type.text') return;
+      // The main server sends the chat type's English text, not its key ("<%s> %s"): no bot ever answered
+      // the owner there (probe, 2026-10-15). Both forms count.
+      const whisper = WHISPER_TYPES.has(msg.translate);
+      if (!whisper && !CHAT_TYPES.has(msg.translate)) return;
       const text = msg.with?.[1]?.toString();
       if (text === undefined) return;
       const order = owner.parseOrder(text, this.name, {whisper});
