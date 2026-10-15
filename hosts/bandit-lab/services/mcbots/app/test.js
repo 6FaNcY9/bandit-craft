@@ -5007,6 +5007,20 @@ require('./crafting');
   await assert.rejects(none.ensureItem({bot}, {}, 'cobblestone', 9), /need 6 more cobblestone/);
 })();
 
+(async () => { // ensurePlanks: no logs in hand come from the base chest (bot3 could not make a hoe beside 87 logs, 2026-10-15)
+  const {makeCrafting} = require('./crafting');
+  const items = [];
+  const bot = {registry: {itemsByName: {oak_planks: {id: 5}}}, inventory: {items: () => items}, recipesFor: () => [{}],
+    craft: async (recipe, n) => { items.find((i) => i.name === 'oak_log').count -= n; items.push({name: 'oak_planks', count: 4 * n}); }};
+  const asked = [];
+  const c = makeCrafting({goNear: async () => {}, guard() {}, fetch: async (r, job, item, n) => { asked.push([item, n]); items.push({name: 'oak_log', count: n}); }});
+  await c.ensurePlanks({bot}, {}, 6);
+  assert.deepStrictEqual(asked, [['logs', 2]]);
+  assert.ok(items.some((i) => i.name === 'oak_planks' && i.count >= 6));
+  const none = makeCrafting({goNear: async () => {}, guard() {}, fetch: async () => {}});
+  await assert.rejects(none.ensurePlanks({bot: {...bot, inventory: {items: () => []}}}, {}, 2), /no logs/);
+})();
+
 { // a guard job fights even with the defend setting off
   const {Combat} = require('./combat');
   const c = Object.create(Combat.prototype);
@@ -5020,7 +5034,8 @@ require('./crafting');
   const {Rescue} = require('./rescue');
   const sent = [], said = [];
   let t = 0;
-  const r = new Rescue({call: async (c) => { sent.push(...c); return ['']; }, events: {add: (b, k, x) => said.push(x)}, target: () => ({x: -270, y: 66, z: -216}), now: () => t});
+  let reply = 'Teleported bot4 to -269.500000, 66.000000, -215.500000';
+  const r = new Rescue({call: async (c) => { sent.push(...c); return [reply]; }, events: {add: (b, k, x) => said.push(x)}, target: () => ({x: -270, y: 66, z: -216}), now: () => t});
   const fail = (bot, why = 'could not reach 1 2 3: No path to the goal!') => r.event({bot, kind: 'fail', text: `failed: goto 1 2 3 - ${why}`});
   fail('bot4'); fail('bot4');
   r.event({bot: 'bot4', kind: 'done', text: 'finished: mine stone 2'}); // a success in between resets
@@ -5039,6 +5054,13 @@ require('./crafting');
   r.event({bot: 'bad name;op x', kind: 'fail', text: 'No path to the goal'}); r.event({bot: 'bad name;op x', kind: 'fail', text: 'No path to the goal'}); r.event({bot: 'bad name;op x', kind: 'fail', text: 'No path to the goal'});
   await new Promise((res) => setImmediate(res));
   assert.strictEqual(sent.length, 2, 'only bot names reach the console');
+  // a bot on the real server is not in the sandbox: the console finds nobody, and nothing claims a rescue
+  // (bot2 and bot3 "rescued" on the main server, 2026-10-15)
+  reply = 'No entity was found';
+  said.length = 0;
+  fail('bot2'); fail('bot2'); fail('bot2');
+  await new Promise((res) => setImmediate(res));
+  assert.deepStrictEqual([sent.at(-1), said], ['minecraft:tp bot2 -270 66 -216', []]);
 })();
 
 (async () => { // litematic: packed states cross longs; signed sizes locate the min corner

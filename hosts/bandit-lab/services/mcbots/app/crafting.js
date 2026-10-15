@@ -125,7 +125,10 @@ function makeCrafting({goNear, guard, fetch = null}) {
     const {bot} = r;
     while (planksHeld(bot) < want) {
       guard(job);
-      const log = bot.inventory.items().filter((i) => isLog(i.name)).sort((a, b) => b.count - a.count)[0];
+      const logs = () => bot.inventory.items().filter((i) => isLog(i.name)).sort((a, b) => b.count - a.count)[0];
+      // The base chest usually has logs: bot3, empty-handed at the wheat field, could not make a hoe beside 87 (2026-10-15).
+      if (!logs() && fetch) await fetch(r, job, 'logs', Math.ceil((want - planksHeld(bot)) / 4)).catch(() => guard(job));
+      const log = logs();
       if (!log) throw new Error(`need ${want - planksHeld(bot)} more planks and have no logs (chop first)`);
       const plank = bot.registry.itemsByName[log.name.replace(/^stripped_/, '').replace(/_(log|stem)$/, '_planks')];
       const recipe = plank && bot.recipesFor(plank.id, null, 1, null)[0];

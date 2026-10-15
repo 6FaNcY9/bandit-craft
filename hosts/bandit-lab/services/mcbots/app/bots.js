@@ -1569,7 +1569,9 @@ async function upkeep(r, job, ids) {
       // The chest had none: hunt for it. Same 10-minute timer, so at most one hunt per bot per 10 minutes.
       if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
     }
-    if (bot.food >= FOOD_BELOW) await ensureGear(r, job);
+    // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
+    // and 4.7 health went on without armour while the iron lay in storage, 2026-10-15).
+    if (bot.food >= FOOD_BELOW || !bot.inventory.items().some((i) => edible(bot, i))) await ensureGear(r, job);
     if (bot.inventory.emptySlotCount() < 4 && !jobWants(job, 'cobblestone')) await tossJunk(r, job);
     if (bot.inventory.emptySlotCount() < 2) {
       const chest = chestOf(r, job);

@@ -28,8 +28,9 @@ class Rescue {
     if (!NAME_RE.test(bot) || !t) return;
     this.last.set(bot, this.now());
     this.fails.delete(bot);
-    await this.call([`minecraft:tp ${bot} ${t.x} ${t.y} ${t.z}`]);
-    this.events.add(bot, 'info', `rescued: no path ${n} times in a row, teleported to the base (sandbox)`);
+    const [reply] = await this.call([`minecraft:tp ${bot} ${t.x} ${t.y} ${t.z}`]);
+    // A bot on the real server is not in the sandbox: the console finds nobody, and no rescue is claimed.
+    if (/^Teleported /.test(String(reply))) this.events.add(bot, 'info', `rescued: no path ${n} times in a row, teleported to the base (sandbox)`);
   }
 }
 
