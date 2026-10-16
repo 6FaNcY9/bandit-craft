@@ -2860,6 +2860,19 @@ require('./crafting');
     assert.deepStrictEqual([table.position.x, table.position.y, table.position.z], [1, 64, 0]);
     walled.blockAt = (p) => ({name: 'oak_planks', position: p, boundingBox: 'block'}); // placed walls are not dug
     await assert.rejects(placeNear(walled, 'crafting_table'), /no free spot/);
+    // One refused spot is no reason to give up, and a cell the bot's own body reaches into is skipped ("placing
+    // crafting_table did not take" ended 7 jobs, main server 2026-10-16): at x .1 its box reaches into x -1.
+    const cells = new Map(), tried = [];
+    const name = (p) => cells.get(`${p.x},${p.y},${p.z}`) || (p.y === 63 ? 'stone' : 'air');
+    const edge = {
+      inventory: {items: () => [{name: 'crafting_table'}]},
+      entity: {position: new Vec3(0.1, 64, 0.5)},
+      blockAt: (p) => ({name: name(p), position: p, boundingBox: name(p) === 'air' ? 'empty' : 'block'}),
+      equip: async () => {},
+      placeBlock: async (g) => { const k = `${g.position.x},${g.position.y + 1},${g.position.z}`; tried.push(k); if (tried.length > 1) cells.set(k, 'crafting_table'); },
+    };
+    assert.strictEqual((await placeNear(edge, 'crafting_table')).name, 'crafting_table');
+    assert.deepStrictEqual(tried, ['1,64,0', '0,64,1'], 'refused at 1 64 0, -1 64 0 skipped (its own body), placed at 0 64 1');
   }
   { // excavate's walking may dig natural ground only: placed walls stay, also for the ascent (Codex R3-1)
     const {safeMovements, guardDigs, BotRunner, NATURAL} = require('./bots');

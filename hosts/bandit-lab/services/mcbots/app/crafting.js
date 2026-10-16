@@ -62,14 +62,26 @@ async function placeNear(bot, itemName, areas = [], check = () => {}) {
     throw new Error(`placing ${itemName} did not take`);
   };
   const allowed = (b) => !insideAreas(areas, b.position.x, b.position.z);
+  // The server refuses a block where the bot's own body is (0.6 wide, anywhere in its cell), and one refused spot
+  // is no reason to give up: "placing crafting_table did not take" ended 7 jobs on the main server (2026-10-16).
+  const p = bot.entity.position;
+  const inMe = (c) => c.x + 1 > p.x - 0.3 && c.x < p.x + 0.3 && c.z + 1 > p.z - 0.3 && c.z < p.z + 0.3 && c.y + 1 > p.y && c.y < p.y + 1.8;
+  let tries = 0, refused = null;
   // Same level first, then on top of a neighbouring block (bot in a pit), then one down.
   for (const dy of [-1, 0, -2]) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
       const ground = bot.blockAt(me.offset(dx, dy, dz));
       const spot = bot.blockAt(me.offset(dx, dy + 1, dz));
-      if (ground?.boundingBox === 'block' && open(spot) && allowed(spot)) return put(ground, spot);
+      if (!(ground?.boundingBox === 'block' && open(spot) && allowed(spot)) || inMe(spot.position)) continue;
+      try {
+        return await put(ground, spot);
+      } catch (e) {
+        if (!/did not take/.test(e.message) || ++tries >= 4) throw e; // a Stop ends it
+        refused = e;
+      }
     }
   }
+  if (refused) throw refused;
   // Walled in (back up its own stair shaft beside the project chest, sandbox 2026-10-13): a niche dug
   // beside its feet, which keeps the stairs free.
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
