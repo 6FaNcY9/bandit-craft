@@ -587,7 +587,7 @@ in `app/bots.js`, checked before every block):
   out in 33 s with full health; without it `No path to the goal!` at once.
 - **Out of a hole past the job's dig limits**: a farm, shaft or excavate walk digs natural ground only (a farm's
   only inside its box). A climb that finds no way up within them lifts both for that climb, once, and puts them
-  back after (event `no way up within the job's dig limits: climbing out digging anything`). bot3 sat an hour in a
+  back after; a job phase that digs nothing at all (`seal`, `level` placing) keeps that (event `no way up within the job's dig limits: climbing out digging anything`). bot3 sat an hour in a
   sandstone cave under its own cobblestone lid with sand all around; in the sandbox copy of that cave a wheatfarm
   bot got out in 5 s with it, and failed with `No path to the goal!` without.
 - **Claims** that expired no longer count toward the per-bot cap of 8 and are

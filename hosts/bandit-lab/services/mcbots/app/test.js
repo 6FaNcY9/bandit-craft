@@ -5131,10 +5131,15 @@ require('./crafting');
       if (r3.digOnly) throw new Error('No path to the goal!');
       b3.entity.position = new Vec3(0.5, 68, 0.5);
     }}});
-  const r3 = {bot: b3, world: {hostilesNear: () => []}, emit: (k, t) => infos.push(t), protectedAreas: [], combat: {busy: false, epoch: 0}, digOnly: /^stone$/};
+  const {NATURAL} = require('./bots');
+  const r3 = {bot: b3, world: {hostilesNear: () => []}, emit: (k, t) => infos.push(t), protectedAreas: [], combat: {busy: false, epoch: 0}, digOnly: NATURAL, digBox: {x1: 50, z1: 50, x2: 60, z2: 60}};
   await goNear(r3, {t: {}, cancelled: false}, 0, 68, 0, 1);
   assert.ok(seen[0] && seen.includes(false) && seen.at(-1), `limited, then out digging anything, then the walk with the limit: ${seen}`);
-  assert.ok(r3.digOnly && infos.some((t) => /climbing out digging anything/.test(t)), infos.join('|'));
+  assert.ok(r3.digOnly === NATURAL && r3.digBox && infos.some((t) => /climbing out digging anything/.test(t)), infos.join('|'));
+  // a job that digs nothing at all (seal, level) keeps that: no way up stays "No path"
+  b3.entity.position = new Vec3(0.5, 59, 0.5);
+  r3.digOnly = /(?!)/;
+  await assert.rejects(goNear(r3, {t: {}, cancelled: false}, 0, 68, 0, 1), /No path/);
 })();
 
 { // smelt takes what goes in, not what comes out nor an ore that drops its item
