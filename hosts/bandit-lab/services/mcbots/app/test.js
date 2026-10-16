@@ -5138,6 +5138,20 @@ require('./crafting');
   await assert.rejects(none.ensureItem({bot}, {}, 'cobblestone', 9), /need 6 more cobblestone/);
 })();
 
+(async () => { // ensureItem: with neither stone at hand, a stone pickaxe is planned from cobblestone, not cobbled_deepslate (bot1, 2026-10-16)
+  const {makeCrafting} = require('./crafting');
+  const items = [{name: 'stick', count: 2}];
+  const names = {1: 'cobbled_deepslate', 2: 'cobblestone', 3: 'stick', 4: 'stone_pickaxe'};
+  const variant = (stone) => ({requiresTable: false, result: {count: 1}, delta: [{id: stone, count: -3}, {id: 3, count: -2}, {id: 4, count: 1}]});
+  const bot = {registry: {itemsByName: {stone_pickaxe: {id: 4}, cobblestone: {id: 2}, cobbled_deepslate: {id: 1}, stick: {id: 3}}, items: Object.fromEntries(Object.entries(names).map(([id, name]) => [id, {name}]))},
+    inventory: {items: () => items}, recipesAll: (id) => (id === 4 ? [variant(1), variant(2)] : []),
+    recipesFor: () => [{}], craft: async () => items.push({name: 'stone_pickaxe', count: 1})};
+  const asked = [];
+  const c = makeCrafting({goNear: async () => {}, guard() {}, fetch: async (r, job, item, n) => { asked.push(item); items.push({name: item, count: n}); }});
+  await c.ensureItem({bot}, {}, 'stone_pickaxe', 1);
+  assert.deepStrictEqual(asked, ['cobblestone']);
+})();
+
 (async () => { // ensurePlanks: no logs in hand come from the base chest (bot3 could not make a hoe beside 87 logs, 2026-10-15)
   const {makeCrafting} = require('./crafting');
   const items = [];

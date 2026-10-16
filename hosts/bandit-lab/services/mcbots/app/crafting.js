@@ -143,6 +143,7 @@ function makeCrafting({goNear, guard, fetch = null}) {
   // the recipe variant that needs the fewest missing ingredients, treat planks
   // of any wood as interchangeable, make missing ingredients first, then craft
   // once. No retrying across variants (that burned materials).
+  const RARE_STONE = /^(cobbled_deepslate|blackstone)$/;
   async function ensureItem(r, job, name, want, depth = 0) {
     const {bot} = r;
     guard(job);
@@ -163,7 +164,10 @@ function makeCrafting({goNear, guard, fetch = null}) {
       return n + Math.max(0, -d.count * times - held);
     }, 0);
     const timesOf = (recipe) => Math.ceil((want - have) / recipe.result.count);
-    const recipe = [...all].sort((a, b) => missing(a, timesOf(a)) - missing(b, timesOf(b)))[0];
+    // A tie (none of either at hand) goes to the common stone: bot1 could not replace its pickaxe, asking for "3 more
+    // cobbled_deepslate" while the storage hall held cobblestone (main server, 2026-10-16).
+    const rare = (recipe) => (recipe.delta.some((d) => d.count < 0 && RARE_STONE.test(bot.registry.items[d.id].name)) ? 1 : 0);
+    const recipe = [...all].sort((a, b) => missing(a, timesOf(a)) - missing(b, timesOf(b)) || rare(a) - rare(b))[0];
     const times = timesOf(recipe);
     // The table first: its 4 planks must not come out of the planks made for the recipe.
     let where = null;
