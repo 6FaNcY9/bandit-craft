@@ -1669,6 +1669,43 @@ async function storedBread(r, job, {withdraw = withdrawFrom, bake = (rr, j, n) =
   await bake(r, job, loaves).catch((e) => { guard(job); r.emit('info', `no bread baked: ${e.message.slice(0, 80)}`); });
 }
 
+// Stair steps a bot inside a shaft's footprint could stand on, nearest first: the step of the layer under its feet
+// and of the three below. None when it stands outside the footprint or on a step (the ring is its way already).
+function shaftSteps(ring, {x1, z1, x2, z2, top, bottom}, p) {
+  if (p.x < x1 || p.x > x2 || p.z < z1 || p.z > z2) return [];
+  const stepAt = (y) => ring[(((top - y) % ring.length) + ring.length) % ring.length];
+  const under = stepAt(p.y - 1);
+  if (under.x === p.x && under.z === p.z) return [];
+  const out = [];
+  for (let y = p.y - 1; y >= Math.max(bottom, p.y - 4); y--) out.push({...stepAt(y), y: y + 1});
+  return out;
+}
+
+// bot2 sat some 45 min at a time on old scaffold pillars in the shaft, 8 times in a day (main server, 2026-10-15/16):
+// with no scaffolding allowed nothing was in reach. For this one walk to a stair step it may build again.
+async function escapeShaft(r, job, ring, args) {
+  const {bot} = r;
+  const steps = shaftSteps(ring, args, bot.entity.position.floored());
+  if (!steps.length) return false;
+  const was = r.noScaffold;
+  r.noScaffold = false;
+  try {
+    for (const s of steps) {
+      try {
+        await goLeg(r, job, s.x, s.y, s.z, 0, {brave: true, goal: new goals.GoalBlock(s.x, s.y, s.z), doing: `out of the shaft to the stair step at ${at(s)}`});
+        r.emit('info', `out of the shaft void to the stair step at ${at(s)}`);
+        return true;
+      } catch (e) {
+        guard(job);
+      }
+    }
+    r.emit('info', `stuck in the shaft at ${at(bot.entity.position.floored())}: no way to a stair step`);
+    return false;
+  } finally {
+    r.noScaffold = was;
+  }
+}
+
 // Iron for a bucket: ingots from storage, else stored raw iron smelted with fuel carried or fetched. ensureItem
 // "crafts" ingots from an iron block it does not have and never smelts: bot3 could not water two new wheat fields,
 // "need 9 more iron_ingot", while 39 raw iron lay in storage (main server, 2026-10-16).
@@ -2641,6 +2678,8 @@ const JOBS = {
   async shaft(r, job) {
     const {x1, z1, x2, z2, top, bottom} = job.args;
     const ring = stairRing(x1, z1, x2, z2);
+    // Stranded in the shaft (on an old scaffold pillar, nothing in reach): out to a stair step first.
+    await escapeShaft(r, job, ring, job.args);
     // Walk over first: far away (after a login or a death) the shaft's chunks are not loaded yet.
     await goNear(r, job, (x1 + x2) >> 1, Math.floor(r.bot.entity.position.y), z1 - 2, 4, {doing: 'walking to the shaft'});
     // ponytail: the start corner comes from the name's char-code sum mod 4 (bot3/bot17/bot18 get three
@@ -2663,6 +2702,7 @@ const JOBS = {
     // bot2 on a single floating cobblestone, twice (y 35 and y 41, main server 2026-10-15). The ring of steps is the
     // way down and up; a walk without blocks digs its own steps instead (safeMovements).
     r.noScaffold = true;
+    const escaped = new Set(); // layers where the bot already walked out of the void once
     try {
       for (let y = top; y >= bottom; y--) {
         const keep = ring[(top - y) % ring.length];
@@ -2681,7 +2721,10 @@ const JOBS = {
           } catch (e) {
             guard(job);
             if (!/were not dug/.test(e.message)) throw e;
-            if (unreachable.size * 2 > (x2 - x1 + 1) * (z2 - z1 + 1)) throw new Error(`the shaft is blocked at y ${y}: ${unreachable.size} blocks of the layer have no way to them (water, a cave or a drop below?)`);
+            if (unreachable.size * 2 > (x2 - x1 + 1) * (z2 - z1 + 1)) {
+              if (!escaped.has(y) && (await escapeShaft(r, job, ring, job.args))) { escaped.add(y); unreachable.clear(); continue; }
+              throw new Error(`the shaft is blocked at y ${y}: ${unreachable.size} blocks of the layer have no way to them (water, a cave or a drop below?)`);
+            }
             if (pass === 3) { skipped += Number(e.message.split(' ')[0]) || 0; break; }
             await sleep(2000);
           }
@@ -2816,4 +2859,4 @@ const JOBS = {
   },
 };
 
-module.exports = {ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

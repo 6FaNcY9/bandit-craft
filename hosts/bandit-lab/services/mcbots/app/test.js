@@ -6051,5 +6051,13 @@ require('./crafting');
   asked2.length = 0;
   await ironIngots(ri, {t: {}}, 3, {take: take2, smelt: async () => smelted.push('again')});
   assert.deepStrictEqual(asked2, [], 'three ingots at hand: nothing to do');
+  // shaft escape: the stair steps near a bot stranded inside the footprint (bot2 on old pillars, 2026-10-16)
+  const {shaftSteps, stairRing} = require('./bots');
+  const sa = {x1: -291, z1: -222, x2: -276, z2: -207, top: 80, bottom: -59};
+  const sr = stairRing(sa.x1, sa.z1, sa.x2, sa.z2);
+  assert.deepStrictEqual(shaftSteps(sr, sa, {x: -285, y: 47, z: -208}).slice(0, 2), [{x: -280, y: 47, z: -207}, {x: -281, y: 46, z: -207}], 'bot2 on the pillar at -285 46 -208: the steps of layers 46 and 45');
+  assert.strictEqual(shaftSteps(sr, sa, {x: -285, y: 47, z: -208}).length, 4);
+  assert.deepStrictEqual(shaftSteps(sr, sa, {x: -280, y: 47, z: -207}), [], 'on a step: nothing to escape');
+  assert.deepStrictEqual(shaftSteps(sr, sa, {x: -300, y: 47, z: -208}), [], 'outside the shaft');
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
