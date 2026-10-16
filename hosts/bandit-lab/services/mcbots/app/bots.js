@@ -889,7 +889,7 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     const pf = r.bot.pathfinder, budget = pf.searchRadius;
     const hand = !(r.bot.inventory?.items() || []).some((i) => /_pickaxe$/.test(i.name));
     pf.searchRadius = budget < 0 ? budget : Math.max(budget, CLIMB_BUDGET);
-    let dugOut = 0;
+    let dugOut = 0, limit = null;
     try {
       for (let i = 0; i < 8 && r.bot?.entity && y - r.bot.entity.position.y > 4 && roofed(); i++) {
         const p = r.bot.entity.position;
@@ -901,12 +901,21 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
         } catch (e) {
           // Under sand or gravel the search digs no way up at all: open the column from beside, climb again.
           guard(job);
-          if (dugOut >= 3 || !(await unroof(r, job))) throw e;
+          if (dugOut >= 3) throw e;
+          if ((r.digOnly || r.digBox) && !limit) {
+            // A farm or shaft walk digs natural ground only, a farm's only inside its box: bot3 (wheatfarm) sat in a
+            // sandstone cave under its own cobblestone lid with sand all around, "No path" for an hour (main server
+            // 2026-10-16). Out of a hole the climb digs what it must.
+            limit = {digOnly: r.digOnly, digBox: r.digBox};
+            r.digOnly = r.digBox = null;
+            r.emit('info', `no way up within the job's dig limits: climbing out digging anything (${at(r.bot.entity.position.floored())})`);
+          } else if (!(await unroof(r, job))) throw e;
           dugOut++;
         }
       }
     } finally {
       pf.searchRadius = budget;
+      if (limit) Object.assign(r, limit);
     }
   };
   if (!opts.xz) await climb(covered);

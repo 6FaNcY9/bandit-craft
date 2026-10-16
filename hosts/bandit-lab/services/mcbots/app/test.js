@@ -5120,6 +5120,21 @@ require('./crafting');
   b2.pathfinder.goto = async () => { calls++; if (calls <= 5) { combat.epoch++; throw new Error('The goal was changed before it could be completed!'); } };
   await goNear({...r, combat}, {t: {}, cancelled: false}, 10, 64, 0, 1);
   assert.strictEqual(calls, 6, 'five fights that ended mid-walk, then the walk');
+  // a climb with no way up digging natural ground only digs anything, then the job's limit is back (bot3, wheatfarm,
+  // in a sandstone cave under a cobblestone lid, 2026-10-16)
+  const seen = [], infos = [];
+  const b3 = Object.assign(new EventEmitter(), {entity: {position: new Vec3(0.5, 59, 0.5)}, game: {dimension: 'overworld'}, inventory: {items: () => [{name: 'iron_pickaxe'}]},
+    blockAt: (p) => (p.y === 63 ? {boundingBox: 'block', name: 'cobblestone'} : {boundingBox: 'empty', name: 'air'}),
+    pathfinder: {searchRadius: -1, stop() {}, setGoal() {}, goto: async () => {
+      seen.push(!!r3.digOnly);
+      if (b3.entity.position.y >= 64) return;
+      if (r3.digOnly) throw new Error('No path to the goal!');
+      b3.entity.position = new Vec3(0.5, 68, 0.5);
+    }}});
+  const r3 = {bot: b3, world: {hostilesNear: () => []}, emit: (k, t) => infos.push(t), protectedAreas: [], combat: {busy: false, epoch: 0}, digOnly: /^stone$/};
+  await goNear(r3, {t: {}, cancelled: false}, 0, 68, 0, 1);
+  assert.ok(seen[0] && seen.includes(false) && seen.at(-1), `limited, then out digging anything, then the walk with the limit: ${seen}`);
+  assert.ok(r3.digOnly && infos.some((t) => /climbing out digging anything/.test(t)), infos.join('|'));
 })();
 
 { // smelt takes what goes in, not what comes out nor an ore that drops its item
