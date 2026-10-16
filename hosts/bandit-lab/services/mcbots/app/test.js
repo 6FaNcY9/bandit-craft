@@ -2561,6 +2561,23 @@ require('./crafting');
     await assert.rejects(h.build(h.r, h.job), /no progress/);
     assert.ok(Date.now() - t0 < 2000);
   }
+  { // openChest: a bot's diorite pillar kept storage shut (2026-10-16)
+    const {openChest} = require('./bots');
+    const {Vec3} = require('vec3');
+    const chest = {name: 'chest', position: new Vec3(-271, 59, -219)};
+    let cover = {name: 'diorite', position: chest.position.offset(0, 1, 0), boundingBox: 'block'};
+    const log = [];
+    const bot = {
+      blockAt: (p) => p.equals(chest.position) ? chest : p.equals(chest.position.offset(0, 1, 0)) ? cover : null,
+      entity: {position: chest.position.offset(0, 0, 3), onGround: true}, game: {dimension: 'overworld'}, entities: {}, inventory: {items: () => [{type: 1, name: 'stone_pickaxe'}]},
+      pathfinder: {goto: async () => {}, stop() {}, setGoal() {}}, tool: {equipForBlock: async () => {}},
+      dig: async (blk) => { log.push(`dig ${blk.name}`); cover = null; },
+      openContainer: async (blk) => { assert.strictEqual(blk, chest); log.push('open chest'); return 'box'; }, stopDigging() {},
+    };
+    const r = {bot, world: {hostilesNear: () => []}, emit() {}, protectedAreas: []};
+    assert.strictEqual(await openChest(r, {t: {}, cancelled: false}, chest), 'box');
+    assert.deepStrictEqual(log, ['dig diorite', 'open chest']);
+  }
   { // openChest: a Stop between two covers digs no more and opens nothing; a single chest has no partner
     const {openChest, Cancelled} = require('./bots');
     const {Vec3} = require('vec3');

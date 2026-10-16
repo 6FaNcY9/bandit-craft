@@ -1375,10 +1375,8 @@ function depositList(byName) {
 // "logs" stands for every kind of log; anything else is an exact item name.
 const itemMatcher = (what) => (what === 'logs' ? (n) => n.endsWith('_log') : what === 'wool' ? (n) => n.endsWith('_wool') : what === 'coal' ? (n) => n === 'coal' || n === 'charcoal' : (n) => n === what);
 
-// A chest cannot be opened with a solid block on top. The pathfinder builds with
-// dirt (which grows grass)/cobblestone/stone/netherrack, and a chest it bridged over stayed shut
-// for the bots (2026-10-08): clear that kind of cover, report anything else.
-const SCAFFOLD = /^(dirt|grass_block|cobblestone|stone|netherrack)$/; // dirt turns into grass in the light
+// A bot's diorite pillar kept storage shut (2026-10-16): clear any pillar block, including dirt grown into grass.
+const SCAFFOLD = new Set([...PILLAR_BLOCKS, 'grass_block']);
 // The left half's partner lies clockwise of `facing`, the right half's counter-clockwise (read off
 // double chests on the live server, 2026-10-10: north-facing left at x, right at x+1).
 const PARTNER_STEP = {north: [1, 0], south: [-1, 0], east: [0, 1], west: [0, -1]};
@@ -1403,7 +1401,7 @@ async function openChest(r, job, block) {
     // Only a solid, light-blocking block keeps a chest shut: a chest stacked on a chest (the storage
     // walls are two high) or glass does not (filechests refused the lower row, 2026-10-10).
     if (!above || above.boundingBox !== 'block' || /(^|_)chest$|glass/.test(above.name)) continue;
-    if (!SCAFFOLD.test(above.name) || insideAreas(r.protectedAreas, p.x, p.z)) throw new Error(`${block.name} at ${at(half.position)} is covered by ${above.name}`);
+    if (!SCAFFOLD.has(above.name) || insideAreas(r.protectedAreas, p.x, p.z)) throw new Error(`${block.name} at ${at(half.position)} is covered by ${above.name}`);
     job.t.doing = `clearing ${above.name} off the chest`;
     r.emit('info', `chest at ${at(half.position)} was covered by ${above.name}: digging it away`);
     const cover = above.name;
