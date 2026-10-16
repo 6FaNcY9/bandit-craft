@@ -110,8 +110,9 @@ rendered on the server from the blocks the bot has loaded (`app/view.js`, `GET /
 one frame per bot per 0.7 s, refreshed every second while open). Blocks are flat colours by name,
 players blue and hostile mobs red boxes; no textures. Laptop workers (bot5) have no view yet.
 
-**Settings** per bot (card, or map menu): fight hostile mobs on/off, fight range (2-16 blocks: the
-bot walks up to a hostile this close, so skeletons no longer shoot it from afar), retreat below
+**Settings** per bot (card, or map menu): fight hostile mobs on/off, fight range (2-16 blocks: a bot
+with a sword or axe, two armour pieces and more than 12 health walks up to a hostile this close, so skeletons no
+longer shoot it from afar; never to a creeper), retreat below
 health, eat below food. `POST /api/settings {"bot": "bot1", "settings": {...}}` (same-origin JSON);
 kept in `STATE_DIR/settings.json`, on the lab the named volume `mcbots-state` (the only mount the
 `lab-mcbots` check allows). Worker bots (bot16-bot18, laptop bots) use the same card: the hub validates and
@@ -543,7 +544,8 @@ What a bot does on its own while a `mine`, `chop` or `shift` job runs (`upkeep()
 in `app/bots.js`, checked before every block):
 
 - **Iron gear** (`ensureGear`, `app/gear.js`, once per 5 min, only when the food is fine and there is
-  something to do): 3 or more raw iron and coal or charcoal in the inventory are smelted into ingots (no
+  something to do; a builder runs it between its cells too): iron ingots, then raw iron for the rest, are taken from
+  the supply chest when 3 or more are missing; 3 or more raw iron and coal or charcoal in the inventory are smelted into ingots (no
   more than the missing gear needs, and never the ore the job itself is mining, which belongs in the
   chest). Then, with the ingots on hand and in this order: iron pickaxe (3), iron sword (2), then the
   cheapest empty armour slot first (boots 4, helmet 5, leggings 7, chestplate 8), worn at once. Iron
@@ -556,8 +558,8 @@ in `app/bots.js`, checked before every block):
   else a wooden one (chopping 3 logs first when it has no wood), else take one
   from the supply chest; then carry on where it was. Chopping without an axe is
   fine, so a broken axe is not replaced.
-- **Hunger**: food below 14, none in the inventory and a supply chest set: walk
-  there and take food (the `rearm` routine), at most once per 10 min. Every withdrawal in `rearm` is allowed to fail (full inventory, another bot took the last one): it is logged as `re-arm: could not take ...` and the armour, food and equip steps still happen. Food comes before the spare pickaxe and the 2 logs. Planks that could not be crafted show as `no planks` in the job's progress. The
+- **Hunger**: food below 14 (or health 10 or less below food 18, where it does not heal), none in the inventory and a
+  supply chest set, also for a builder between its cells: walk there and take food (the `rearm` routine), at most once per 10 min. Every withdrawal in `rearm` is allowed to fail (full inventory, another bot took the last one): it is logged as `re-arm: could not take ...` and the armour, food and equip steps still happen. Food comes before the spare pickaxe and the 2 logs. Planks that could not be crafted show as `no planks` in the job's progress. The
   existing combat loop eats from the inventory below 15 (below 18 while hurt).
 - **No wood for torches**: a `mine` or `shift` on an ore, with a supply chest set and
   fewer than 2 logs and fewer than 8 planks in the inventory, first takes 4 logs from the

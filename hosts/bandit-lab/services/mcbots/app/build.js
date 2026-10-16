@@ -475,7 +475,7 @@ async function clickFace(bot, t, w, sleep) {
   }
 }
 
-function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null}) {
+function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null, care = null}) {
   // Near enough to click the cell, never standing in it or under it.
   class GoalBeside extends goals.GoalNear {
     constructor(t, range) {
@@ -911,6 +911,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           });
           continue;
         }
+        // Food and gear (bots.js care, on its own retry timers): a builder fetched neither, and bot2 built on at 2 health,
+        // food 14, without armour or sword (main server 2026-10-16).
+        if (care) await care(r, job);
         // 1. The site, top down: ground, trees and wrong blocks of ours come out of cells that are air
         // in the schematic or hold another block there. Anything else is the owner's: reported, never dug.
         // Each bot takes the cell of the top layer nearest to it, so a crew spreads out (in scan order all
@@ -1084,7 +1087,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               }
               if (ct && ATTACHED.test(t.name)) continue;
               const sup = supportAt(c.x, c.y, c.z);
-              if (sup && !skip.has(`${sup.x},${sup.y},${sup.z}`) && (!best || sup.height < best.height)) best = {...sup, for: k};
+              // Of equal heights the nearest: in scan order bot2 ran 20 blocks across the iron farm for every dirt
+              // support, one under each side wall in turn (main server 2026-10-16).
+              const d = sup && (sup.x - me2.x) ** 2 + (sup.y - me2.y) ** 2 + (sup.z - me2.z) ** 2;
+              if (sup && !skip.has(`${sup.x},${sup.y},${sup.z}`) && (!best || sup.height < best.height || (sup.height === best.height && d < best.d))) best = {...sup, for: k, d};
             }
           }
           if (best?.real) return best.real;

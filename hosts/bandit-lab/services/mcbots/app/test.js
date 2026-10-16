@@ -385,6 +385,7 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
 assert.equal(deathCause('bot1', 'bot1 was slain by Zombie'), 'was slain by Zombie');
 assert.equal(deathCause('bot1', 'bot1 fell from a high place'), 'fell from a high place');
 assert.equal(deathCause('bot1', 'bot1 hit the ground too hard'), 'hit the ground too hard');
+assert.equal(deathCause('bot3', 'bot3 was speared by Zombie'), 'was speared by Zombie'); // a zombie with a spear (26.x)
 assert.equal(deathCause('bot1', 'bot1 tried to swim in lava'), 'tried to swim in lava');
 assert.equal(deathCause('bot1', 'bot1 experienced kinetic energy'), 'experienced kinetic energy');
 for (const m of ['bot1 drowned', 'bot1 burned to death', 'bot1 went up in flames', 'bot1 blew up', 'bot1 was blown up by Creeper', 'bot1 suffocated in a wall', 'bot1 starved to death', 'bot1 froze to death', 'bot1 was killed by magic', 'bot1 withered away', 'bot1 was pricked to death', 'bot1 was shot by Skeleton']) assert.ok(deathCause('bot1', m), m);
@@ -415,7 +416,7 @@ assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
   const zombie = {id: 7, type: 'hostile', name: 'zombie', position: new Vec3(10, 64, 0), height: 1.9};
   const bot = {health: 6.8, food: 17, entity: {position: new Vec3(0, 64, 0)}, entities: {7: zombie}, game: {dimension: 'overworld'},
     pathfinder: {setGoal: (g) => goals.push(g)}, registry: {foodsByName: {bread: {foodPoints: 5}}}, currentWindow: null,
-    inventory: {items: () => [{name: 'bread'}]}, equip: async () => {}, consume: async () => ate.push('bread'), lookAt: async () => {}};
+    inventory: {items: () => [{name: 'bread'}], slots: {}}, getEquipmentDestSlot: () => 5, equip: async () => {}, consume: async () => ate.push('bread'), lookAt: async () => {}};
   const c = new Combat({bot, online: true, inventoryBusy: 0, name: 'bot3', world: {noteMob() {}}, log: (n, m) => logs.push(m), getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 16, eatBelow: 14})});
   c.stop();
   await c.tick();
@@ -444,7 +445,7 @@ assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
   const zombie = {id: 8, type: 'hostile', name: 'zombie', position: new Vec3(16, 64, 0), height: 1.9};
   const bot = {health: 20, food: 6, entity: {position: new Vec3(0, 64, 0)}, entities: {8: zombie}, game: {dimension: 'overworld'}, findBlock: () => null,
     pathfinder: {setGoal() {}}, registry: {foodsByName: {bread: {foodPoints: 5}}, blocksByName: {}}, currentWindow: null,
-    inventory: {items: () => [{name: 'bread'}]}, equip: async () => {}, consume: async () => ate.push('bread'), lookAt: async () => {}};
+    inventory: {items: () => [{name: 'bread'}], slots: {}}, getEquipmentDestSlot: () => 5, equip: async () => {}, consume: async () => ate.push('bread'), lookAt: async () => {}};
   const c = new Combat({bot, online: true, inventoryBusy: 0, name: 'bot50', world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8, eatBelow: 15})});
   c.stop();
   await c.tick();
@@ -4161,7 +4162,7 @@ require('./crafting');
 
     // the job: wet field, seeds in the pocket, a hoe; it harvests, tills, plants, crafts bread and deposits
     const small = {x1: 0, z1: 0, x2: 3, z2: 3};
-    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null, noWay = () => false}) => {
       const events = [], infos = [], calls = {deposit: [], craft: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const give = (name, n) => { const e = inv.find((i) => i.name === name) || (inv.push(it(name, 0)), inv.at(-1)); e.count += n; };
@@ -4179,7 +4180,7 @@ require('./crafting');
       const job = {type: 'wheatfarm', args: small, t: {}, cancelled: false};
       let sleeps = 0;
       const wfm = W.makeWheatFarm({
-        goNear: async (r, j, x, y, z) => { bot.entity.position = new Vec3(x, y, z); },
+        goNear: async (r, j, x, y, z) => { if (noWay(x, z)) throw new Error(`could not reach ${x} ${y} ${z}: No path to the goal!`); bot.entity.position = new Vec3(x, y, z); },
         guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
         sleep: async () => { if (++sleeps > stopAfterSleeps) job.cancelled = true; },
         waitCalm: async () => {}, at: (c) => `${c.x} ${c.y} ${c.z}`,
@@ -4269,6 +4270,15 @@ require('./crafting');
     await assert.rejects(f.run(), Cancelled);
     assert.ok(f.infos.some((t) => /field 2 left for now \(no water source/.test(t)), f.infos.join('|'));
     assert.ok(f.events.filter((e) => e.startsWith('plant')).length >= 15, 'field 1 farmed anyway');
+    // no way to a field (bot3's order ended on "could not reach -234 66 -218: No path", 2026-10-16) or to its cells:
+    // that field and those cells are left: the job goes on until the Stop
+    const refused = [];
+    f = fake({world: flat({'-1,64,1': 'water', '29,64,1': 'water'}), inv: seeds(), stopAfterSleeps: 2, noWay: (x, z) => refused.push(`${x},${z}`)});
+    f.r.bot.entity.position = new Vec3(-4.5, 65, -4.5); // near field 1 (no walk to its centre), every cell out of reach
+    f.job.args = {...small, fields: [small, {x1: 30, z1: 0, x2: 33, z2: 3}]};
+    await assert.rejects(f.run(), Cancelled);
+    assert.ok(f.infos.some((t) => /field 2 left for now \(could not reach .*No path/.test(t)), f.infos.join('|'));
+    assert.ok(refused.some((c) => c === '0,0') && !f.events.length, `cell walks refused (${refused.slice(0, 4)}), nothing tilled or planted: ${f.events}`);
     // withFields: a dashboard wheat zone stands for all of them, the asked one first
     const zones = [{x1: 0, z1: 0, x2: 8, z2: 8}, {x1: 9, z1: 0, x2: 17, z2: 8}, {x1: 18, z1: 0, x2: 26, z2: 8}];
     assert.deepStrictEqual(W.withFields({x1: 17, z1: 8, x2: 9, z2: 0}, zones).fields.map((z) => z.x1), [9, 18, 0]);
@@ -5173,6 +5183,32 @@ require('./crafting');
   assert.ok(items.some((i) => i.name === 'oak_planks' && i.count >= 6));
   const none = makeCrafting({goNear: async () => {}, guard() {}, fetch: async () => {}});
   await assert.rejects(none.ensurePlanks({bot: {...bot, inventory: {items: () => []}}}, {}, 2), /no logs/);
+})();
+
+(async () => { // only a fit bot walks up to a mob, never to a creeper; an unfit one still hits what comes close (2026-10-16)
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const mob = (name, x) => ({id: x, name, type: 'hostile', position: new Vec3(x, 64, 0), height: 1.8});
+  const run = async (gear, ents) => {
+    const c = Object.create(Combat.prototype);
+    const goals = [], hits = [];
+    const slots = {head: gear ? {name: 'iron_helmet'} : null, torso: gear ? {name: 'iron_chestplate'} : null};
+    const bot = {
+      health: 20, food: 20, entity: {position: new Vec3(0, 64, 0)}, entities: Object.fromEntries(ents.map((e) => [e.id, e])),
+      inventory: {items: () => (gear ? [{name: 'iron_sword'}] : []), slots: {1: slots.head, 2: slots.torso}},
+      getEquipmentDestSlot: (s) => ({head: 1, torso: 2, legs: 3, feet: 4})[s],
+      registry: {blocksByName: {}}, findBlock: () => null, game: {dimension: 'overworld'},
+      pathfinder: {setGoal: (g) => goals.push(g)},
+    };
+    Object.assign(c, {r: {bot, online: true, name: 'b', world: {noteMob() {}}, getSettings: () => ({defend: true, fightRange: 8, retreatHealth: 8}), log() {}},
+      epoch: 0, busy: false, mode: null, ignore: new Map(), ticks: 1, eat: async () => {}, fight: async (t) => hits.push(t.name), scanBlocks() {}});
+    await c.tick();
+    return {mode: c.mode, hits};
+  };
+  assert.strictEqual((await run(true, [mob('zombie', 6)])).mode, 'hunt', 'armoured and armed: it goes for the zombie');
+  assert.strictEqual((await run(false, [mob('zombie', 6)])).mode, null, 'bare: it lets the zombie come');
+  assert.deepStrictEqual((await run(false, [mob('zombie', 3)])).hits, ['zombie'], 'and hits it once it is close');
+  assert.strictEqual((await run(true, [mob('creeper', 7)])).mode, null, 'a creeper 7 blocks off is never hunted');
 })();
 
 { // a guard job fights even with the defend setting off

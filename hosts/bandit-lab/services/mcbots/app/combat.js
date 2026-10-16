@@ -16,7 +16,7 @@ const wantsToEat = (food, health, eatBelow) => food < eatBelow || (health < 20 &
 // instead of waiting for it to leave (5 of 8 lab bots stood still at night, 2026-10-10).
 const fightReady = (names, armour, health) => health > 12 && armour >= 2 && names.some((n) => /_(sword|axe)$/.test(n));
 
-const DEATH_PHRASE = /^(was slain by|was shot by|fell|hit the ground|drowned|burned|went up in flames|tried to swim in lava|blew up|was blown up|suffocated|starved|froze|was killed|withered|was pricked|experienced kinetic energy)/;
+const DEATH_PHRASE = /^(was slain by|was shot by|was speared by|fell|hit the ground|drowned|burned|went up in flames|tried to swim in lava|blew up|was blown up|suffocated|starved|froze|was killed|withered|was pricked|experienced kinetic energy)/;
 // "bot1 fell from a high place" -> "fell from a high place"; null for chat and other players.
 const deathCause = (name, msg) => {
   if (!msg.startsWith(`${name} `)) return null;
@@ -151,7 +151,9 @@ class Combat {
 
     if (near && near.name === 'creeper' && dist < 6 && !r.sheltered) return this.takeover('creeper', near, 8);
     if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
-    if (near && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
+    // Only a fit bot walks up to a mob, never to a creeper: bot2, unarmoured and unarmed, hunted a creeper and was blown
+    // up, and died four times in ten minutes (main server 2026-10-16). An unfit bot still hits what comes close.
+    if (near && near.name !== 'creeper' && (this.fit() || this.r.current?.type === 'guard') && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
     // Eat unless a hostile is close: at night one is nearly always within the 24 blocks a bot sees, and bot50 held
     // bread at food 6 for minutes with a zombie 16 blocks off, until it fled at 2.5 health and died (sandbox 2026-10-15).
     if (!this.busy && dist > EAT_CLEAR && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();

@@ -143,9 +143,13 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
     return test(look(bot, x, y, z)?.name || '');
   }
 
+  // Within reach of the cell, else walk there; false when there is no way (that cell is left, not the whole job).
+  const reach = (r, job, c, what) => r.bot.entity.position.distanceTo(new Vec3(c.x + 0.5, c.gy + 1, c.z + 0.5)) <= 3.5 ||
+    goNear(r, job, c.x, c.gy + 1, c.z, 3, {doing: `walking to ${at({x: c.x, y: c.gy + 1, z: c.z})} to ${what}`}).then(() => true, () => { guard(job); return false; });
+
   async function till(r, job, c, hoe) {
     const {bot} = r;
-    if (bot.entity.position.distanceTo(new Vec3(c.x + 0.5, c.gy + 1, c.z + 0.5)) > 3.5) await goNear(r, job, c.x, c.gy + 1, c.z, 3, {doing: `walking to ${at({x: c.x, y: c.gy + 1, z: c.z})} to till`});
+    if (!(await reach(r, job, c, 'till'))) return false;
     guard(job);
     job.t.doing = `tilling ${at({x: c.x, y: c.gy, z: c.z})}`;
     await bot.equip(hoe, 'hand');
@@ -158,7 +162,7 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
     const {bot} = r;
     const seed = bot.inventory.items().find((i) => i.name === 'wheat_seeds');
     if (!seed) return false;
-    if (bot.entity.position.distanceTo(new Vec3(c.x + 0.5, c.gy + 1, c.z + 0.5)) > 3.5) await goNear(r, job, c.x, c.gy + 1, c.z, 3, {doing: `walking to ${at({x: c.x, y: c.gy + 1, z: c.z})} to plant`});
+    if (!(await reach(r, job, c, 'plant'))) return false;
     guard(job);
     job.t.doing = `planting wheat at ${at({x: c.x, y: c.gy + 1, z: c.z})}`;
     await bot.equip(seed, 'hand');
@@ -220,6 +224,13 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       }
     };
     const next = () => { fi = (fi + 1) % fields.length; };
+    // One field of several that fails (no water, no way there) is left for a while; the others go on.
+    const leave = (e) => {
+      if (fields.length === 1) throw e;
+      later(`field:${fi}`, 10 * RETRY_MS);
+      r.emit('info', `wheatfarm: field ${fi + 1} left for now (${e.message.slice(0, 80)})`);
+      next();
+    };
     for (;;) {
       guard(job);
       const box = fields[fi], mid = centre(box);
@@ -231,7 +242,16 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       await waitCalm(r, job);
       if (r.world?.unreachable) throw new Error('hub unreachable: not farming without block reservations');
       const dim = normDim(bot.game?.dimension);
-      if (Math.hypot(bot.entity.position.x - mid.x, bot.entity.position.z - mid.z) > 10) await goNear(r, job, mid.x, y0, mid.z, 6, {doing: `walking to the wheat field at ${mid.x} ${mid.z}`});
+      if (Math.hypot(bot.entity.position.x - mid.x, bot.entity.position.z - mid.z) > 10) {
+        // bot3's whole order ended on "could not reach -234 66 -218: No path" to its third field (2026-10-16).
+        try {
+          await goNear(r, job, mid.x, y0, mid.z, 6, {doing: `walking to the wheat field at ${mid.x} ${mid.z}`});
+        } catch (e) {
+          guard(job);
+          leave(e);
+          continue;
+        }
+      }
       guard(job);
       const s = scan(blockAt, box, y0, r.protectedAreas);
       if (s.unloaded) { // not loaded yet: wait a moment before judging the field
@@ -254,10 +274,7 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
         } catch (e) {
           guard(job);
           if (!dryCentre) {
-            if (fields.length === 1) throw e;
-            later(`field:${fi}`, 10 * RETRY_MS);
-            r.emit('info', `wheatfarm: field ${fi + 1} left for now (${e.message.slice(0, 80)})`);
-            next();
+            leave(e);
             continue;
           }
           later(`water:${fi}`, 10 * RETRY_MS); // the wet part is farmed meanwhile

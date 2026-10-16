@@ -1586,12 +1586,16 @@ async function ensureGear(r, job) {
   if (Date.now() - (r.gearTriedAt || 0) < 300000) return;
   const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
   const owned = [...bot.inventory.items(), ...worn].map((i) => i.name);
-  const wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
+  let wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
   if (wanted - n('raw_iron') >= 3 && r.supplyChest && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
     const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}))
       .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from storage: ${e.message.slice(0, 80)}`); });
-    await fetch('raw_iron', wanted - n('raw_iron'));
+    // Ingots first: 21 lay in the supply chest while bot2 went without armour or sword, as only raw iron was fetched
+    // (2026-10-16).
+    await fetch('iron_ingot', wanted);
+    wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
+    if (wanted - n('raw_iron') > 0) await fetch('raw_iron', wanted - n('raw_iron'));
     // Logs to burn, plus 2 for the sticks of the pickaxe and sword: 20 logs for 29 iron all burned and left
     // the bot with armour but no sword (sandbox, 2026-10-15).
     const smelts = Math.min(n('raw_iron'), wanted);
@@ -1626,6 +1630,36 @@ const toolFor = (bot, id) => {
   return /mineable\/shovel/.test(b?.material || '') ? 'shovel' : null;
 };
 
+// Food and gear, for every job's upkeep and for a builder between its cells (build.js).
+async function care(r, job) {
+  const {bot} = r;
+  // Hurt and below food 18 it does not heal (bot2 stayed at 2.2 health at food 16 with none on it, 2026-10-16): food then too.
+  const needFood = bot.food < FOOD_BELOW || (bot.health <= 10 && bot.food < 18);
+  if (needFood && r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
+    r.foodTriedAt = Date.now();
+    r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from the supply chest`);
+    // Agents take no order while this runs (server.js restingOf): bot1's agent replaced its job right after
+    // "getting bread from the wheat field", and it stayed at food 0 and 4.7 health (2026-10-15).
+    r.gettingFood = true;
+    try {
+      await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
+        guard(job);
+        r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
+      });
+      // The chest had none: bread from stored wheat, from the wheat field, else hunt. Same 10-minute timer, so at most
+      // one try per bot per 10 minutes.
+      if (!bot.inventory.items().some((i) => edible(bot, i))) await storedBread(r, job);
+      if (!bot.inventory.items().some((i) => edible(bot, i)) && r.wheatField) await wheatFood(r, job);
+      if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
+    } finally {
+      r.gettingFood = false;
+    }
+  }
+  // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
+  // and 4.7 health went on without armour while the iron lay in storage, 2026-10-15).
+  if (bot.food >= FOOD_BELOW || !bot.inventory.items().some((i) => edible(bot, i))) await ensureGear(r, job);
+}
+
 async function upkeep(r, job, ids) {
   if (job.t.upkeep) return;
   job.t.upkeep = true;
@@ -1637,29 +1671,7 @@ async function upkeep(r, job, ids) {
     for (const kind of new Set(ids.map((id) => toolFor(bot, id)).filter(Boolean))) await getTool(r, job, kind);
     const need = ids.find((id) => !canHarvest(bot, id));
     if (need !== undefined) await replacePickaxe(r, job, need);
-    if (bot.food < FOOD_BELOW && r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
-      r.foodTriedAt = Date.now();
-      r.emit('info', `hungry (food ${bot.food}) and no food: fetching some from the supply chest`);
-      // Agents take no order while this runs (server.js restingOf): bot1's agent replaced its job right after
-      // "getting bread from the wheat field", and it stayed at food 0 and 4.7 health (2026-10-15).
-      r.gettingFood = true;
-      try {
-        await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
-          guard(job);
-          r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
-        });
-        // The chest had none: bread from stored wheat, from the wheat field, else hunt. Same 10-minute timer, so at most
-        // one try per bot per 10 minutes.
-        if (!bot.inventory.items().some((i) => edible(bot, i))) await storedBread(r, job);
-        if (!bot.inventory.items().some((i) => edible(bot, i)) && r.wheatField) await wheatFood(r, job);
-        if (!bot.inventory.items().some((i) => edible(bot, i))) await huntFood(r, job);
-      } finally {
-        r.gettingFood = false;
-      }
-    }
-    // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
-    // and 4.7 health went on without armour while the iron lay in storage, 2026-10-15).
-    if (bot.food >= FOOD_BELOW || !bot.inventory.items().some((i) => edible(bot, i))) await ensureGear(r, job);
+    await care(r, job);
     if (bot.inventory.emptySlotCount() < 4 && !jobWants(job, 'cobblestone')) await tossJunk(r, job);
     if (bot.inventory.emptySlotCount() < 2) {
       const chest = chestOf(r, job);
@@ -2071,7 +2083,7 @@ const buildContext = (r) => {
 const build = buildJob.makeBuild({goNear, guard, sleep, goals, digAt, withdraw: buildWithdraw, runJob: buildRunJob, gatherContext: buildContext});
 const SCHEMATIC_DIR = process.env.SCHEMATIC_DIR || require('node:path').join(process.env.STATE_DIR || '.', 'schematics'); // a worker has no STATE_DIR, only this
 const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
-  dir: SCHEMATIC_DIR,
+  dir: SCHEMATIC_DIR, care,
   // Waiting for material, the builder makes some itself: one production step for its own project.
   help: async (r, job) => {
     const a = job.args;
@@ -2911,4 +2923,4 @@ const JOBS = {
   },
 };
 
-module.exports = {supportStock, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, supportStock, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
