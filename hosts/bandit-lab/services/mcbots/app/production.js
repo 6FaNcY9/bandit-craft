@@ -45,7 +45,7 @@ function nextChain({need, stock = {}, taken = new Set(), store, version = '26.1'
     const key = `gather:${g.item}`;
     const job = gatherJob(g.how, Math.min(g.count, MAX));
     if (taken.has(key) || !job) continue;
-    return {key, label: `${g.how} for ${Math.min(g.count, MAX)} ${g.item}`, chain: [job, ['deposit', {...at(store), only: g.item}]]};
+    return {key, label: `${g.how} for ${Math.min(g.count, MAX)} ${g.item}`, chain: [job, ['deposit', {...at(store), only: g.item}]], gather: {item: g.item, count: g.count}};
   }
   const left = [...plan.unknown, ...plan.gather.filter((g) => !gatherJob(g.how, 1)).map((g) => g.item)];
   return {idle: left.length ? `nothing the bots can make: ${left.join(', ')}` : taken.size ? 'the other bots have the open steps' : 'the project has all it needs'};

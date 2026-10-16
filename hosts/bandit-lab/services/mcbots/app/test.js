@@ -5792,6 +5792,8 @@ require('./crafting');
   const gather = nextChain({need: {hopper: 2}, store});
   assert.match(gather.key, /^gather:/);
   assert.deepStrictEqual(gather.chain[1], ['deposit', {...store, only: gather.key.slice(7)}]);
+  // the whole gather amount rides along, so produce can take it from storage first (1600 stored cobblestone, 2026-10-16)
+  assert.deepStrictEqual(nextChain({need: {cobblestone: 1529}, store}).gather, {item: 'cobblestone', count: 1529});
   assert.deepStrictEqual(nextChain({need: {oak_planks: 4}, store}).chain[0], ['mine', {block: 'oak_log', count: 1}], 'oak stays oak');
   assert.deepStrictEqual(nextChain({need: {snowball: 64}, store}).chain[0], ['mine', {block: 'snow_block', count: 16}], 'four snowballs a snow block');
   const {rawUnknown} = require('./recipes');

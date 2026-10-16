@@ -2032,6 +2032,7 @@ async function projectMaterials(r) {
   const owner = rawUnknown(Object.fromEntries(cannot.map((n) => [n, lacking[n] || p.gather.find((g) => g.item === n)?.count || 1])), {have: stock});
   return {file: job.args.file, origin: job.args.origin, lo: plan.lo, hi: plan.hi, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
 }
+const NONE_STORED = new Map(); // item -> until: the storage hall had none of it (produce)
 async function produce(r, job) {
   const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
   const {store} = job.args;
@@ -2081,8 +2082,23 @@ async function produce(r, job) {
     PRODUCING.set(next.key, {by: r.name, until: now + 30 * 60000});
     job.progress = next.label;
     job.t.doing = `producing: ${next.label}`;
-    r.emit('info', `produce: ${next.label}`);
     try {
+      // Stored first: some 1600 cobblestone lay in the storage hall while bot1 mined stone for the iron farm
+      // (2026-10-16). As much as the inventory holds; a store without it is asked again after 10 min.
+      if (next.gather && r.supplyChest && !((NONE_STORED.get(next.gather.item) || 0) > now)) {
+        const {item} = next.gather, held = () => craftingLib.count(r.bot, item), before = held();
+        const want = Math.min(next.gather.count, 1728, Math.max(0, r.bot.inventory.emptySlotCount() - 2) * 64);
+        job.t.doing = `fetching ${item} from storage`;
+        if (want > 0) await JOBS.withdraw(r, child(job, {type: 'withdraw', args: VALIDATE.withdraw({item, count: want, ...r.supplyChest})})).catch(() => guard(job));
+        const got = held() - before;
+        if (got > 0) {
+          r.emit('info', `produce: took ${got} ${item} from storage`);
+          await viaChests('deposit', {only: item});
+          continue;
+        }
+        NONE_STORED.set(item, Date.now() + 10 * 60000);
+      }
+      r.emit('info', `produce: ${next.label}`);
       for (const [type, args] of next.chain) {
         guard(job);
         if (type === 'deposit' || type === 'withdraw') await viaChests(type, args);
