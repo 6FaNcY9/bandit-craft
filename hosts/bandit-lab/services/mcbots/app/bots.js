@@ -2072,6 +2072,13 @@ const build = buildJob.makeBuild({goNear, guard, sleep, goals, digAt, withdraw: 
 const SCHEMATIC_DIR = process.env.SCHEMATIC_DIR || require('node:path').join(process.env.STATE_DIR || '.', 'schematics'); // a worker has no STATE_DIR, only this
 const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
   dir: SCHEMATIC_DIR,
+  // Waiting for material, the builder makes some itself: one production step for its own project.
+  help: async (r, job) => {
+    const a = job.args;
+    if (!a.chests?.length) return false;
+    const s = await producer(r, child(job, {type: 'produce', t: {}}), {...a, store: a.chests[0]}).step();
+    return !s.idle;
+  },
   deposit: (r, job, c, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {})}}))});
 
 // Material production for a schematic build (production.js): one short chain at a time (gather, smelt,
@@ -2080,6 +2087,9 @@ const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, na
 const productionLib = require('./production');
 const PRODUCING = new Map(); // step key -> {by, until}
 const SUPPORT_STOCK = {glass: 320, dirt: 128}; // the crew climbs on glass over hoppers: some hundred a sorter
+// Glass only as the hoppers call for it: the iron farm's 9 hoppers would have had 320 glass made beside its own 68
+// (2026-10-16). One per hopper, 16 at least, the sorter's 320 at most.
+const supportStock = (plan) => ({...SUPPORT_STOCK, glass: Math.min(SUPPORT_STOCK.glass, Math.max(16, plan.targets.filter((t) => t.name === 'hopper').length))});
 
 // For the dashboard: what a bot's schematic project still needs, what its chests hold (as the crew last counted
 // them) and what the bots cannot make (the owner's part). Null unless the bot runs the project and sees its site.
@@ -2109,22 +2119,25 @@ async function projectMaterials(r) {
   return {file: job.args.file, origin: job.args.origin, lo: plan.lo, hi: plan.hi, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
 }
 const NONE_STORED = new Map(); // item -> until: the storage hall had none of it (produce)
-async function produce(r, job) {
-  const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
-  const {store} = job.args;
-  const chests = [store, ...job.args.chests.filter((c) => c.x !== store.x || c.y !== store.y || c.z !== store.z)];
+// One producer for a project: step() runs the next chain (or says why there is none). A step is claimed on the hub,
+// so bots on other workers leave it alone too (the builder helps while it waits, 2026-10-16), and in PRODUCING
+// for this process's bots.
+function producer(r, job, args) {
+  const {store} = args;
+  const chests = [store, ...args.chests.filter((c) => c.x !== store.x || c.y !== store.y || c.z !== store.z)];
   const dim = normDim(r.bot.game?.dimension);
+  let plan = null;
   // The project's chests together are its store (one double chest holds 54 stacks, a sorter needs some 9000
   // items): a withdraw takes from each in turn, a deposit goes into the first with room.
-  const viaChests = async (type, args) => {
-    const have = () => r.bot.inventory.items().filter((i) => i.name === args.item).reduce((a, i) => a + i.count, 0);
+  const viaChests = async (type, a0) => {
+    const have = () => r.bot.inventory.items().filter((i) => i.name === a0.item).reduce((a, i) => a + i.count, 0);
     const before = type === 'withdraw' ? have() : 0;
     // As last counted: a withdraw skips the chests without the item, a deposit tops up a stack of it first.
-    const n = (c) => buildJob.chestStock(dim, c)?.get(args.item ?? args.only) ?? null;
+    const n = (c) => buildJob.chestStock(dim, c)?.get(a0.item ?? a0.only) ?? null;
     const order = type === 'withdraw' ? chests.filter((c) => n(c) !== 0) : [...chests].sort((a, b) => (n(b) ? 1 : 0) - (n(a) ? 1 : 0));
     for (const c of order) {
-      const a = {...args, x: c.x, y: c.y, z: c.z};
-      if (type === 'withdraw') a.count = args.count - (have() - before);
+      const a = {...a0, x: c.x, y: c.y, z: c.z};
+      if (type === 'withdraw') a.count = a0.count - (have() - before);
       if (type === 'withdraw' && a.count <= 0) return;
       try {
         await JOBS[type](r, child(job, {type, args: VALIDATE[type](a)}));
@@ -2136,26 +2149,26 @@ async function produce(r, job) {
         buildJob.forgetChest(dim, c);
       }
     }
-    if (type === 'deposit') throw new Error(`the project's chests are full (${args.only})`);
-    if (have() - before < 1) throw new Error(`no ${args.item} in the project's chests`);
+    if (type === 'deposit') throw new Error(`the project's chests are full (${a0.only})`);
+    if (have() - before < 1) throw new Error(`no ${a0.item} in the project's chests`);
   };
-  for (;;) {
-    guard(job);
+  async function step() {
+    plan ||= await buildJob.schematicPlan(SCHEMATIC_DIR, args);
     const need = buildJob.stillNeeded(r.bot, plan);
     // Supports: glass over hoppers (it drops nothing), dirt elsewhere; used up as the build goes.
-    if (Object.keys(need).length) for (const [item, n] of Object.entries(SUPPORT_STOCK)) need[item] = (need[item] || 0) + n;
+    if (Object.keys(need).length) for (const [item, n] of Object.entries(supportStock(plan))) need[item] = (need[item] || 0) + n;
     const stock = await buildJob.readStock(r, job, chests, {goNear, guard});
     const now = Date.now();
     for (const [k, t] of PRODUCING) if (t.until < now || t.by === r.name) PRODUCING.delete(k);
-    const next = productionLib.nextChain({need, stock, taken: new Set(PRODUCING.keys()), store});
-    if (next.idle) {
-      job.progress = next.idle;
-      if (/all it needs/.test(next.idle)) return;
-      job.t.doing = `waiting: ${next.idle}`;
-      await sleep(60000);
-      continue;
+    const taken = new Set(PRODUCING.keys());
+    let next = productionLib.nextChain({need, stock, taken, store});
+    while (!next.idle && r.world && !(await r.world.claim(r.name, `produce:${next.key}`))) {
+      taken.add(next.key); // another worker's bot has it
+      next = productionLib.nextChain({need, stock, taken, store});
     }
+    if (next.idle) return {idle: next.idle};
     PRODUCING.set(next.key, {by: r.name, until: now + 30 * 60000});
+    const claim = `produce:${next.key}`, hold = setInterval(() => Promise.resolve(r.world?.claim(r.name, claim)).catch(() => {}), 45000);
     job.progress = next.label;
     job.t.doing = `producing: ${next.label}`;
     try {
@@ -2170,25 +2183,43 @@ async function produce(r, job) {
         if (got > 0) {
           r.emit('info', `produce: took ${got} ${item} from storage`);
           await viaChests('deposit', {only: item});
-          continue;
+          return {ran: `took ${got} ${item} from storage`};
         }
         NONE_STORED.set(item, Date.now() + 10 * 60000);
       }
       r.emit('info', `produce: ${next.label}`);
-      for (const [type, args] of next.chain) {
+      for (const [type, a] of next.chain) {
         guard(job);
-        if (type === 'deposit' || type === 'withdraw') await viaChests(type, args);
-        else await JOBS[type](r, child(job, {type, args: VALIDATE[type](args)}));
+        if (type === 'deposit' || type === 'withdraw') await viaChests(type, a);
+        else await JOBS[type](r, child(job, {type, args: VALIDATE[type](a)}));
       }
       r.emit('info', `produce: done ${next.label}`);
+      return {ran: next.label};
     } catch (e) {
       guard(job);
       r.emit('info', `produce: ${next.label} failed, resting it 10 min: ${e.message.slice(0, 100)}`);
       PRODUCING.set(next.key, {by: '-', until: Date.now() + 10 * 60000});
+      return {ran: null};
     } finally {
+      clearInterval(hold);
+      r.world?.release(r.name, claim);
       if (PRODUCING.get(next.key)?.by === r.name) PRODUCING.delete(next.key);
       for (const c of chests) buildJob.forgetChest(dim, c); // the chain changed what the chests hold
     }
+  }
+  return {step};
+}
+
+async function produce(r, job) {
+  const p = producer(r, job, job.args);
+  for (;;) {
+    guard(job);
+    const s = await p.step();
+    if (!s.idle) continue;
+    job.progress = s.idle;
+    if (/all it needs/.test(s.idle)) return;
+    job.t.doing = `waiting: ${s.idle}`;
+    await sleep(60000);
   }
 }
 
@@ -2880,4 +2911,4 @@ const JOBS = {
   },
 };
 
-module.exports = {dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {supportStock, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

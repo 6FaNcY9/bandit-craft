@@ -6070,5 +6070,9 @@ require('./crafting');
   assert.deepStrictEqual(seen, [12, 6], '9 health: a 6-block fall leaves 6');
   rp.bot.health = 7;
   await assert.rejects(dropDown(rp, async () => seen.push('walked'), new Error('No path')), /No path/, 'too hurt: the walk fails as before');
+  // support glass as the hoppers call for it (iron farm: 9 hoppers, not the sorter's 320 glass, 2026-10-16)
+  const {supportStock} = require('./bots');
+  const hop = (n) => ({targets: Array.from({length: n}, () => ({name: 'hopper'})).concat([{name: 'cobblestone'}])});
+  assert.deepStrictEqual([supportStock(hop(9)).glass, supportStock(hop(40)).glass, supportStock(hop(347)).glass, supportStock(hop(0)).dirt], [16, 40, 320, 128]);
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

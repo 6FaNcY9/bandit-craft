@@ -475,7 +475,7 @@ async function clickFace(bot, t, w, sleep) {
   }
 }
 
-function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS}) {
+function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null}) {
   // Near enough to click the cell, never standing in it or under it.
   class GoalBeside extends goals.GoalNear {
     constructor(t, range) {
@@ -586,7 +586,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const fillTries = new Map(), unfillable = new Set(); // containers to fill at the end that no bot reached
     let idle = false; // last loop found nothing to place: the cells left to clear are tried again
     const total = plan.targets.length;
-    let lastProgress = Date.now(), lastDone = -1, first = true, final = false;
+    let lastProgress = Date.now(), lastDone = -1, first = true, final = false, helped = 0;
     const stalled = (what) => {
       if (Date.now() - lastProgress > waitMs) throw new Error(`no progress for ${Math.round(waitMs / 1000)} s: ${what}`);
     };
@@ -1177,7 +1177,14 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           }
           const why = waiting.size ? `waiting for material: ${[...waiting].join(', ')}` : stuck.size ? `in the way: ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}` : `${open} cells left that this bot cannot place or reach`;
           job.t.doing = why;
-          // Waiting for material is not stuck: the producers or the owner fill the chests, looked at every 5 min
+          // Waiting for material is not stuck: the producers or the owner fill the chests, looked at every 5 min.
+          // Meanwhile the builder makes some itself, one production step at most once a minute (bot2 waited for
+          // most of the morning while bot1 alone made the iron farm's material, 2026-10-16).
+          if (waiting.size && help && Date.now() - helped > 60000) {
+            helped = Date.now();
+            const did = await help(r, job).catch((e) => { guard(job); r.emit?.('info', `helping production: ${e.message.slice(0, 80)}`); return false; });
+            if (did) { lastProgress = Date.now(); continue; }
+          }
           if (waiting.size) lastProgress = Date.now(); else stalled(why);
           await sleep(1000);
           continue;
