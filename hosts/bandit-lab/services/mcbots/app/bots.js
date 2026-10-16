@@ -531,7 +531,9 @@ class BotRunner {
     // An area job the bot already runs or has queued is not queued again: bot2's agent ordered the same shaft
     // four more times while the first one ran, and every run walks all its layers again (lab, 2026-10-13).
     const same = (j) => j && j.type === type && JSON.stringify(j.args) === JSON.stringify(job.args);
-    if (AREA_JOBS.has(type) && (same(this.current) || this.queue.some(same))) return;
+    // A run just cancelled by this very order (replace) is no duplicate: the same farm ordered again stopped and
+    // then dropped, and the bot stood idle (sandbox, 2026-10-16).
+    if (AREA_JOBS.has(type) && ((same(this.current) && !this.current.cancelled) || this.queue.some(same))) return;
     this.queue.push(job);
     this.pump();
   }
@@ -1667,6 +1669,23 @@ async function storedBread(r, job, {withdraw = withdrawFrom, bake = (rr, j, n) =
   await bake(r, job, loaves).catch((e) => { guard(job); r.emit('info', `no bread baked: ${e.message.slice(0, 80)}`); });
 }
 
+// Iron for a bucket: ingots from storage, else stored raw iron smelted with fuel carried or fetched. ensureItem
+// "crafts" ingots from an iron block it does not have and never smelts: bot3 could not water two new wheat fields,
+// "need 9 more iron_ingot", while 39 raw iron lay in storage (main server, 2026-10-16).
+async function ironIngots(r, job, n, {take = withdrawFrom, smelt = (rr, j, k) => crafting.smelt(rr, child(j, {type: 'smelt'}), 'raw_iron', k)} = {}) {
+  const count = (item) => craftingLib.count(r.bot, item);
+  if (count('iron_ingot') >= n || !r.supplyChest) return;
+  const fetch = (item, k) => take(r, job, item, k).catch(() => guard(job));
+  await fetch('iron_ingot', n - count('iron_ingot'));
+  const raw = n - count('iron_ingot');
+  if (raw <= 0) return;
+  if (count('raw_iron') < raw) await fetch('raw_iron', raw - count('raw_iron'));
+  if (count('raw_iron') < raw) return; // the craft then says what is missing
+  if (!craftingLib.fuelFor(r.bot, 'raw_iron', raw)) await fetch('coal', 1);
+  if (!craftingLib.fuelFor(r.bot, 'raw_iron', raw)) await fetch('logs', 2);
+  await smelt(r, job, raw);
+}
+
 async function wheatFood(r, job) {
   r.emit('info', 'hungry: getting bread from the wheat field');
   await wheatfarm(r, child(job, {type: 'wheatfarm', args: r.wheatField, forFood: true, t: {}}))
@@ -2137,7 +2156,10 @@ const {fluids, emptyBucket, fillAt} = fluidsJob.makeFluids({
   goNear, guard, sleep, at,
   plan: (a) => buildJob.schematicPlan(SCHEMATIC_DIR, a),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
-  craft: (r, job, item) => crafting.ensureItem(r, child(job), item, 1),
+  craft: async (r, job, item) => {
+    if (item === 'bucket') await ironIngots(r, job, 3);
+    return crafting.ensureItem(r, child(job), item, 1);
+  },
 });
 
 const {unroof} = unroofJob.makeUnroof({
@@ -2794,4 +2816,4 @@ const JOBS = {
   },
 };
 
-module.exports = {storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

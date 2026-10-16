@@ -534,6 +534,10 @@ assert.deepStrictEqual(runner.supplyChest, {x: 1, y: 2, z: 3});
   q.enqueue('shaft', {...shaft, bottom: -40});
   q.enqueue('shaft', {...shaft, bottom: -40});
   assert.deepStrictEqual(q.queue.map((j) => `${j.type} ${j.args.bottom ?? ''}`), ['mine ', 'mine ', 'shaft -40']);
+  // ordered again with replace: the running one is cancelled and the new one queued, not dropped as its double
+  q.cancel = () => { if (q.current) q.current.cancelled = true; };
+  q.enqueue('shaft', shaft, {replace: true});
+  assert.deepStrictEqual(q.queue.map((j) => j.type), ['shaft'], 'the same shaft again, after the stop');
 }
 // Block claims: a second bot cannot take a block the first one holds.
 const {WorldModel} = require('./world');
@@ -6035,5 +6039,17 @@ require('./crafting');
   wheat = 0; baked.length = 0;
   await storedBread(rb, {t: {}}, {withdraw: async () => { throw new Error('none'); }, bake: async (rr, j, n) => baked.push(n)});
   assert.deepStrictEqual(baked, [], 'none in store: nothing baked, no error');
+  // iron for a bucket: stored raw iron smelted when no ingots are stored (bot3's dry wheat fields, 2026-10-16)
+  const {ironIngots} = require('./bots');
+  const inv2 = [];
+  const add = (name, n) => { const e = inv2.find((i) => i.name === name) || (inv2.push({name, count: 0}), inv2.at(-1)); e.count += n; };
+  const ri = {bot: {inventory: {items: () => inv2.filter((i) => i.count > 0)}}, supplyChest: {x: 0, y: 64, z: 0}};
+  const store = {raw_iron: 39, coal: 5}, asked2 = [], smelted = [];
+  const take2 = async (rr, j, item, n) => { asked2.push(item); if (!store[item]) throw new Error(`no ${item} in the chest`); const k = Math.min(n, store[item]); store[item] -= k; add(item, k); };
+  await ironIngots(ri, {t: {}}, 3, {take: take2, smelt: async (rr, j, k) => { smelted.push(k); add('raw_iron', -k); add('iron_ingot', k); }});
+  assert.deepStrictEqual([asked2, smelted], [['iron_ingot', 'raw_iron', 'coal'], [3]], 'ingots asked first, then raw iron and coal, smelted');
+  asked2.length = 0;
+  await ironIngots(ri, {t: {}}, 3, {take: take2, smelt: async () => smelted.push('again')});
+  assert.deepStrictEqual(asked2, [], 'three ingots at hand: nothing to do');
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
