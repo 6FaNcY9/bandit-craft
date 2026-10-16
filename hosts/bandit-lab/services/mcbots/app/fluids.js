@@ -121,7 +121,7 @@ function makeFluids({goNear, guard, sleep, plan, withdraw, craft, at}) {
     }
   }
 
-  return {fluids};
+  return {fluids, emptyBucket, fillAt};
 }
 
 module.exports = {missing, aim, refills, fillable, isSource, makeFluids, BUCKET};

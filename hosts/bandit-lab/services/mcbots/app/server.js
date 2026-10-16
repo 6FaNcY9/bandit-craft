@@ -626,9 +626,12 @@ const server = http.createServer(async (req, res) => {
       if (!targets.length || targets.includes(undefined)) throw new Error('unknown bot');
       const errors = [];
       const stopping = type === 'stop' || replace === true;
+      // A field that is one of the dashboard's wheat zones means all of them, tended in turn (wheatfarm.js).
+      const wheatZones = places.list.filter((p) => p.kind === 'wheat' && p.box && p.dim === 'overworld').map(({box: b}) => ({x1: b.x1, z1: b.z1, x2: b.x2, z2: b.z2}));
+      const jobArgs = type === 'wheatfarm' ? require('./wheatfarm').withFields(args || {}, wheatZones) : args || {};
       for (const r of targets) {
         try {
-          r.enqueue(type, args || {}, {replace: replace === true});
+          r.enqueue(type, jobArgs, {replace: replace === true});
           if (stopping) {
             delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
             projects.pause(r.name);

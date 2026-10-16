@@ -230,7 +230,12 @@ const VALIDATE = {
   // Plant and chop trees in an area of at most 24 x 24 until stopped; logs go to the supply chest.
   treefarm: (a) => treeFarmJob.farmBox(zoned(a)),
   // Keep a wheat field of at most 9 x 9 going until stopped: harvest, till, plant, bake bread, hand it in at the base chest.
-  wheatfarm: (a) => wheatFarmJob.farmBox(zoned(a)),
+  wheatfarm: (a) => {
+    const box = wheatFarmJob.farmBox(zoned(a));
+    if (a.fields == null) return box;
+    if (!Array.isArray(a.fields) || !a.fields.length || a.fields.length > wheatFarmJob.MAX_FIELDS) throw new Error(`fields must be a list of 1 to ${wheatFarmJob.MAX_FIELDS} fields`);
+    return {...box, fields: a.fields.map((f) => wheatFarmJob.farmBox(f))};
+  },
   say: (a) => {
     const text = String(a.text ?? '').trim();
     if (!text || text.length > 200) throw new Error('text must be 1..200 characters');
@@ -2112,7 +2117,7 @@ const {treefarm} = treeFarmJob.makeTreeFarm({
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
 });
 
-const {fluids} = fluidsJob.makeFluids({
+const {fluids, emptyBucket, fillAt} = fluidsJob.makeFluids({
   goNear, guard, sleep, at,
   plan: (a) => buildJob.schematicPlan(SCHEMATIC_DIR, a),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
@@ -2130,6 +2135,14 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
   craftTable: (r) => !!craftingLib.nearBlock(r.bot, 'crafting_table'),
   // `only` is needed: a plain deposit keeps food. Bread and wheat go to the base chest, where the plan reads them.
   deposit: (r, job, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...planConfig.BASE.chest, only}})),
+  // A field without water: a bucket (supply chest, else crafted) filled at a source outside every field, so no
+  // field's own centre water is taken.
+  getWater: async (r, job, fields) => {
+    await emptyBucket(r, job);
+    const lo = {x: Math.min(...fields.map((f) => f.x1)), y: -64, z: Math.min(...fields.map((f) => f.z1))};
+    const hi = {x: Math.max(...fields.map((f) => f.x2)), y: 320, z: Math.max(...fields.map((f) => f.z2))};
+    await fillAt(r, job, 'water', {lo, hi}, new Set());
+  },
 });
 
 // Put what `left()` returns into the hall: each item to its category's chests (the ones holding it first,

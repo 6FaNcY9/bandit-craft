@@ -32,6 +32,17 @@ function farmBox(a) {
 }
 
 const inBox = (box, x, z) => x >= box.x1 && x <= box.x2 && z >= box.z1 && z <= box.z2;
+const sameBox = (a, b) => ['x1', 'z1', 'x2', 'z2'].every((k) => a[k] === b[k]);
+
+// One field of the dashboard's wheat zones stands for all of them, the asked one first: one 9 x 9 field fed three
+// bots poorly (104 hungry bots in 48 h, 2026-10-16). At most MAX_FIELDS; other args stay.
+const MAX_FIELDS = 4;
+function withFields(args, zones) {
+  if (args.fields || args.zone !== undefined || zones.length < 2) return args;
+  const box = farmBox(args), i = zones.findIndex((z) => sameBox(farmBox(z), box));
+  if (i < 0) return args;
+  return {...args, fields: [...zones.slice(i), ...zones.slice(0, i)].slice(0, MAX_FIELDS).map(farmBox)};
+}
 const centre = (box) => ({x: Math.floor((box.x1 + box.x2) / 2), z: Math.floor((box.z1 + box.z2) / 2)});
 
 // The growth stage of a wheat block. mineflayer exposes the state as getProperties().age on flattened
@@ -122,7 +133,7 @@ const breadFrom = (wheat) => Math.floor(wheat / 3);
 // Hand in when the bread is worth a trip or the inventory is nearly full.
 const shouldDeposit = ({bread, emptySlots}) => bread >= BREAD_AT || emptySlots < 4;
 
-function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting, craftTable, base, at}) {
+function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting, craftTable, base, at, getWater = null}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
   const look = (bot, x, y, z) => bot.blockAt(new Vec3(x, y, z));
 
@@ -183,16 +194,17 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
 
   async function wheatfarm(r, job) {
     const {bot} = r;
-    const box = job.args;
+    // Several fields (job.args.fields) are tended in turn: the next one when this one has nothing to do.
+    const fields = job.args.fields?.length ? job.args.fields : [job.args];
+    let fi = 0, idle = 0;
     const blockAt = (x, y, z) => look(bot, x, y, z);
     const y0 = (r.supplyChest || base).y;
-    const mid = centre(box);
     const skip = new Map(); // key -> time until which that cell, item or chore is left alone
     const skipped = (k) => (skip.get(k) || 0) > Date.now();
     const later = (k, ms = RETRY_MS) => skip.set(k, Date.now() + ms);
     let harvested = job.harvested || 0, planted = job.planted || 0, bread = job.bread || 0, unloadedTries = 0;
     job.t.open = true; // no end: the dashboard shows a count, not a bar
-    job.t.area = {x: mid.x, y: y0, z: mid.z}; // where a resumed job walks back to
+    job.t.area = {x: centre(fields[0]).x, y: y0, z: centre(fields[0]).z}; // where a resumed job walks back to
     const report = () => {
       job.harvested = harvested;
       job.planted = planted;
@@ -207,8 +219,15 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
         await deposit(r, job, what);
       }
     };
+    const next = () => { fi = (fi + 1) % fields.length; };
     for (;;) {
       guard(job);
+      const box = fields[fi], mid = centre(box);
+      if (fields.length > 1 && skipped(`field:${fi}`)) { // no water to be had for it: the others go on
+        if (++idle >= fields.length) { idle = 0; await sleep(10000); }
+        next();
+        continue;
+      }
       await waitCalm(r, job);
       if (r.world?.unreachable) throw new Error('hub unreachable: not farming without block reservations');
       const dim = normDim(bot.game?.dimension);
@@ -222,7 +241,30 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       }
       unloadedTries = 0;
       if (!s.cells.length) throw new Error('nothing to farm: the whole area is protected');
-      if (!s.wet) { await addWater(r, job, s, box, y0); continue; }
+      // Water: none at all, or only at an edge (a pond beside the field wetted 6 of 81 cells, sandbox 2026-10-16) while
+      // the centre is dry soil: a source at the centre wets the whole 9 x 9.
+      const bucket = () => bot.inventory.items().some((i) => i.name === 'water_bucket');
+      const dryCentre = s.wet && !!s.centre && !s.centre.wet && ['till', 'clear', 'plant'].includes(s.centre.state);
+      if (!s.wet || (dryCentre && (getWater || bucket()) && !skipped(`water:${fi}`))) {
+        let poured = false;
+        try {
+          if (getWater && !bucket()) await getWater(r, job, fields);
+          await addWater(r, job, s, box, y0);
+          poured = true;
+        } catch (e) {
+          guard(job);
+          if (!dryCentre) {
+            if (fields.length === 1) throw e;
+            later(`field:${fi}`, 10 * RETRY_MS);
+            r.emit('info', `wheatfarm: field ${fi + 1} left for now (${e.message.slice(0, 80)})`);
+            next();
+            continue;
+          }
+          later(`water:${fi}`, 10 * RETRY_MS); // the wet part is farmed meanwhile
+          r.emit('info', `wheatfarm: no water for the dry part of field ${fi + 1} (${e.message.slice(0, 80)})`);
+        }
+        if (poured) continue;
+      }
 
       const me = bot.entity.position;
       const near = (a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z);
@@ -336,10 +378,17 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
         }
       }
       report();
-      if (acted) continue;
+      if (acted) { idle = 0; continue; }
       if (job.forFood) return;
 
-      if (!s.cells.some((c) => ['growing', 'ripe', 'plant', 'till', 'clear'].includes(c.state))) throw new Error('nothing to farm: no soil, farmland or wheat in the area');
+      if (!s.cells.some((c) => ['growing', 'ripe', 'plant', 'till', 'clear'].includes(c.state))) {
+        if (fields.length === 1) throw new Error('nothing to farm: no soil, farmland or wheat in the area');
+        later(`field:${fi}`, 10 * RETRY_MS);
+        r.emit('info', `wheatfarm: nothing to farm in field ${fi + 1}`);
+      }
+      if (fields.length > 1 && ++idle < fields.length) { next(); continue; } // the next field may have work
+      idle = 0;
+      next();
       job.t.doing = work.needHoe ? 'no hoe to till with' : work.needSeeds ? 'waiting for seeds' : s.cells.some((c) => c.state === 'growing') ? 'waiting for the wheat to grow' : 'nothing to do';
       for (let i = 0; i < 10; i++) {
         guard(job);
@@ -351,4 +400,4 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
   return {wheatfarm};
 }
 
-module.exports = {farmBox, centre, wheatAge, columnTop, hydrated, scan, chooseWork, pickups, breadFrom, shouldDeposit, makeWheatFarm};
+module.exports = {withFields, MAX_FIELDS, farmBox, centre, wheatAge, columnTop, hydrated, scan, chooseWork, pickups, breadFrom, shouldDeposit, makeWheatFarm};

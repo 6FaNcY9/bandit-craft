@@ -4152,7 +4152,7 @@ require('./crafting');
 
     // the job: wet field, seeds in the pocket, a hoe; it harvests, tills, plants, crafts bread and deposits
     const small = {x1: 0, z1: 0, x2: 3, z2: 3};
-    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null}) => {
       const events = [], infos = [], calls = {deposit: [], craft: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const give = (name, n) => { const e = inv.find((i) => i.name === name) || (inv.push(it(name, 0)), inv.at(-1)); e.count += n; };
@@ -4164,6 +4164,8 @@ require('./crafting');
         activateBlock: async (b) => { if (bot.heldItem?.name.endsWith('_hoe') && b.name === 'grass_block') { world.put(b.position.x, b.position.y, b.position.z, 'farmland'); events.push(`till ${b.position.x},${b.position.z}`); } },
         placeBlock: async (ref) => { bot.heldItem.count--; world.put(ref.position.x, ref.position.y + 1, ref.position.z, wheat(0)); events.push(`plant ${ref.position.x},${ref.position.z}`); },
         findBlocks: () => [],
+        lookAt: async (p) => { bot.looking = p; },
+        activateItem: async () => { if (bot.heldItem?.name === 'water_bucket') { world.put(Math.floor(bot.looking.x), bot.looking.y, Math.floor(bot.looking.z), 'water'); bot.heldItem.name = 'bucket'; } },
       };
       const job = {type: 'wheatfarm', args: small, t: {}, cancelled: false};
       let sleeps = 0;
@@ -4183,6 +4185,7 @@ require('./crafting');
         crafting: {count: (b, n) => inv.filter((i) => i.name === n).reduce((a, i) => a + i.count, 0), ensureItem: async (r, j, name, want) => { calls.craft.push(`${name} ${want}`); if (chestFail) throw new Error('no logs'); if (name === 'bread') { give('wheat', -3 * (want - inv.filter((i) => i.name === 'bread').reduce((a, i) => a + i.count, 0))); give('bread', want); } else give(name, 1); }},
         craftTable: () => true, base: {x: -9, y: 65, z: -9},
         deposit: async (r, j, what) => { calls.deposit.push(what); for (const i of inv) if (i.name === what) i.count = 0; },
+        getWater: getWater && (async (...a) => { await getWater(...a); give('water_bucket', 1); }),
       });
       const r = {bot, world: {claim: async () => true, release() {}}, combat: {busy: false, epoch: 0}, emit: (k, t) => infos.push(t), protectedAreas: [], supplyChest: {x: -3, y: 65, z: -3}};
       return {r, job, events, infos, calls, inv, run: () => wfm.wheatfarm(r, job)};
@@ -4226,6 +4229,46 @@ require('./crafting');
     f = fake({world: flat({'-1,64,1': 'water'})});
     f.r.protectedAreas = [[0, 0, 3, 3]];
     await assert.rejects(f.run(), /nothing to farm/);
+    // several fields (the dashboard's wheat zones, 2026-10-16): tended in turn before the job waits
+    const field2 = {x1: 10, z1: 0, x2: 13, z2: 3};
+    const seeds = () => [{name: 'wooden_hoe', count: 1, type: 1}, {name: 'wheat_seeds', count: 40, type: 2}];
+    w = flat({'-1,64,1': 'water', '9,64,1': 'water'});
+    for (const x of [0, 10]) { w.put(x, 64, 0, 'farmland'); w.put(x, 65, 0, wheat(7)); }
+    f = fake({world: w, inv: seeds(), stopAfterSleeps: 1});
+    f.job.args = {...small, fields: [small, field2]};
+    await assert.rejects(f.run(), Cancelled);
+    assert.ok(f.calls.dig.includes('wheat 0,0') && f.calls.dig.includes('wheat 10,0'), 'both fields harvested: ' + f.calls.dig.slice(0, 8));
+    assert.ok(f.events.some((e) => e === 'plant 12,2'), 'and the second one planted');
+    // a dry second field: a water bucket is fetched and poured into its centre
+    const fetched = [];
+    f = fake({world: flat({'-1,64,1': 'water'}), inv: seeds(), stopAfterSleeps: 6, getWater: async (r, j, fs) => fetched.push(fs.length)});
+    f.job.args = {...small, fields: [small, field2]};
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(fetched, [2], 'one bucket, filled outside both fields');
+    assert.strictEqual(f.r.bot.blockAt(new Vec3(11, 64, 1)).name, 'water', 'poured at the centre of field 2');
+    // wet only at an edge (a pond beside it): the dry centre still gets its water
+    const field3 = {x1: 20, z1: 0, x2: 28, z2: 8};
+    fetched.length = 0;
+    f = fake({world: flat({'-1,64,1': 'water', '29,64,8': 'water'}), inv: seeds(), stopAfterSleeps: 6, getWater: async (r, j, fs) => fetched.push(fs.length)});
+    f.job.args = {...small, fields: [small, field3]};
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(fetched, [2]);
+    assert.strictEqual(f.r.bot.blockAt(new Vec3(24, 64, 4)).name, 'water', 'poured at the centre of field 3');
+    // no water to be had: that field waits, the other goes on (one field alone still fails, as above)
+    f = fake({world: flat({'-1,64,1': 'water'}), inv: seeds(), stopAfterSleeps: 2, getWater: async () => { throw new Error('no water source within 96 blocks'); }});
+    f.job.args = {...small, fields: [small, field2]};
+    await assert.rejects(f.run(), Cancelled);
+    assert.ok(f.infos.some((t) => /field 2 left for now \(no water source/.test(t)), f.infos.join('|'));
+    assert.ok(f.events.filter((e) => e.startsWith('plant')).length >= 15, 'field 1 farmed anyway');
+    // withFields: a dashboard wheat zone stands for all of them, the asked one first
+    const zones = [{x1: 0, z1: 0, x2: 8, z2: 8}, {x1: 9, z1: 0, x2: 17, z2: 8}, {x1: 18, z1: 0, x2: 26, z2: 8}];
+    assert.deepStrictEqual(W.withFields({x1: 17, z1: 8, x2: 9, z2: 0}, zones).fields.map((z) => z.x1), [9, 18, 0]);
+    assert.deepStrictEqual(W.withFields({x1: 50, z1: 0, x2: 52, z2: 2}, zones), {x1: 50, z1: 0, x2: 52, z2: 2}, 'not a zone: one field');
+    assert.deepStrictEqual(W.withFields({x1: 0, z1: 0, x2: 8, z2: 8}, zones.slice(0, 1)).fields, undefined, 'one zone: nothing to add');
+    const V = require('./bots').VALIDATE;
+    assert.deepStrictEqual(V.wheatfarm({x1: 0, z1: 0, x2: 3, z2: 3, fields: [field2, {x1: 3, z1: 3, x2: 0, z2: 0}]}).fields, [field2, small]);
+    assert.throws(() => V.wheatfarm({...small, fields: [small, small, small, small, small]}), /fields must be a list of 1 to 4/);
+    assert.throws(() => V.wheatfarm({...small, fields: [{x1: 0, z1: 0, x2: 20, z2: 0}]}), /at most 9 x 9/);
   }
   { // activation (bone meal, a bed, shears, a grave click) looks first: a Stop or a new job in that look sends no packet (Codex R5-1)
     const {guardDigs, BotRunner} = require('./bots');
