@@ -55,10 +55,11 @@ function makeFluids({goNear, guard, sleep, plan, withdraw, craft, at}) {
     if (!held(r.bot, 'bucket')) throw new Error('no bucket: none in the supply chest and none could be crafted (3 iron)');
   }
 
-  async function fillAt(r, job, name, box, own) {
+  // minY: only sources at least that high (the nearest one may be in a cave nobody reaches).
+  async function fillAt(r, job, name, box, own, {minY = -Infinity} = {}) {
     const {bot} = r;
-    const src = bot.findBlocks({matching: fillable(blockAtOf(bot), box, name, own), useExtraInfo: true, maxDistance: 96, count: 1})[0];
-    if (!src) throw new Error(`no ${name} source within 96 blocks to fill a bucket`);
+    const src = bot.findBlocks({matching: fillable(blockAtOf(bot), box, name, own), useExtraInfo: true, maxDistance: 96, count: 64}).find((p) => p.y >= minY);
+    if (!src) throw new Error(`no ${name} source within 96 blocks${minY > -Infinity ? ` at y ${minY} or higher` : ''} to fill a bucket`);
     await goNear(r, job, src.x, src.y, src.z, 3, {doing: `walking to the ${name} at ${at(src)} to fill a bucket`});
     guard(job);
     await bot.equip(held(bot, 'bucket'), 'hand');

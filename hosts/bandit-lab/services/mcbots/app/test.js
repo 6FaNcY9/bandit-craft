@@ -6059,5 +6059,16 @@ require('./crafting');
   assert.strictEqual(shaftSteps(sr, sa, {x: -285, y: 47, z: -208}).length, 4);
   assert.deepStrictEqual(shaftSteps(sr, sa, {x: -280, y: 47, z: -207}), [], 'on a step: nothing to escape');
   assert.deepStrictEqual(shaftSteps(sr, sa, {x: -300, y: 47, z: -208}), [], 'outside the shaft');
+  // a perch with no way down: one more try with a longer fall, bounded by health (bot1 on a scaffold top, 2026-10-16)
+  const {dropDown} = require('./bots');
+  const mv = {maxDropDown: 4}, seen = [];
+  const rp = {bot: {health: 20, pathfinder: {movements: mv}}};
+  await dropDown(rp, async () => seen.push(mv.maxDropDown), new Error('No path'));
+  assert.deepStrictEqual([seen, mv.maxDropDown], [[12], 4], 'up to 12 at full health, restored after');
+  rp.bot.health = 9;
+  await dropDown(rp, async () => seen.push(mv.maxDropDown), new Error('No path'));
+  assert.deepStrictEqual(seen, [12, 6], '9 health: a 6-block fall leaves 6');
+  rp.bot.health = 7;
+  await assert.rejects(dropDown(rp, async () => seen.push('walked'), new Error('No path')), /No path/, 'too hurt: the walk fails as before');
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

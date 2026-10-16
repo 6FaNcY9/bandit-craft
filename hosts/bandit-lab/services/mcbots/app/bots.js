@@ -922,9 +922,13 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
   } catch (e) {
     // Down an open shaft nothing is overhead, so the climb above was skipped: a goal far above with no
     // path climbs anyway, then walks once more (bot4 stuck at Y 36 under the base chest, 2026-10-11).
-    if (opts.goal || !/No path|Took to long/.test(e.message) || !r.bot?.entity || y - r.bot.entity.position.y <= 4) throw e;
-    await climb(() => true);
-    return goLeg(r, job, x, y, z, dist, opts);
+    if (opts.goal || !/No path|Took to long/.test(e.message) || !r.bot?.entity) throw e;
+    if (y - r.bot.entity.position.y > 4) {
+      await climb(() => true);
+      return goLeg(r, job, x, y, z, dist, opts);
+    }
+    if (!/No path/.test(e.message)) throw e;
+    return dropDown(r, () => goLeg(r, job, x, y, z, dist, opts), e);
   }
 }
 
@@ -967,6 +971,22 @@ function settledGoto(bot, goal) {
     bot.on('path_stop', stopped);
     bot.pathfinder.setGoal(goal);
   });
+}
+
+// A perch with no way down: a scaffold top left from chopping a tall tree held bot1 at -251 75 -234 twice, the second
+// time until a tree grew round it (main server, 2026-10-16). Once, a longer fall is allowed while health covers it:
+// fall damage is the height less 3, and 6 health are kept.
+async function dropDown(r, walk, e) {
+  const mv = r.bot.pathfinder?.movements;
+  const drop = Math.min(12, Math.floor((r.bot.health || 0) - 6) + 3);
+  if (!mv || !(drop > mv.maxDropDown)) throw e;
+  const was = mv.maxDropDown;
+  mv.maxDropDown = drop;
+  try {
+    return await walk();
+  } finally {
+    mv.maxDropDown = was;
+  }
 }
 
 async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null} = {}) {
@@ -2216,7 +2236,8 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
     await emptyBucket(r, job);
     const lo = {x: Math.min(...fields.map((f) => f.x1)), y: -64, z: Math.min(...fields.map((f) => f.z1))};
     const hi = {x: Math.max(...fields.map((f) => f.x2)), y: 320, z: Math.max(...fields.map((f) => f.z2))};
-    await fillAt(r, job, 'water', {lo, hi}, new Set());
+    // Water at the fields' height: the nearest source was cave water at y 19-21 that no walk reached (2026-10-16).
+    await fillAt(r, job, 'water', {lo, hi}, new Set(), {minY: Math.floor(r.bot.entity.position.y) - 6});
   },
 });
 
@@ -2859,4 +2880,4 @@ const JOBS = {
   },
 };
 
-module.exports = {shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
