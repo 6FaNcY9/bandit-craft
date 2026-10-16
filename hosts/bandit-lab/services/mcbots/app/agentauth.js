@@ -110,6 +110,10 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   // The owner's schematic build: an agent's order would replace or stop it, so only the owner ends it.
   const busy = bots.find((b) => OWNER_PROJECTS.has(policy.jobOf?.(b)?.type));
   if (busy !== undefined) return `${busy} works on the owner's ${policy.jobOf(busy).type} project: only the owner stops it`;
+  // Any order the owner gave on the dashboard holds while the bot works on it: bot3's wheat fields became a tree farm
+  // 4 s after the order, and the iron farm jobs went after every restart (main server, 2026-10-16).
+  const ordered = bots.find((b) => { const t = policy.ownerOrderOf?.(b); return !!t && t === policy.jobOf?.(b)?.type; });
+  if (ordered !== undefined) return `${ordered} works on the owner's ${policy.jobOf(ordered).type} order: only the owner changes it`;
   if (!AGENT_JOBS.has(type)) return `job ${type} is not allowed for agents`;
   const tired = type === 'stop' ? null : bots.map((b) => policy.restingOf?.(b)).find(Boolean);
   if (tired) return tired;

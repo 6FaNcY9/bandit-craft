@@ -123,6 +123,11 @@ const keptJobs = () => {
   }
   return out;
 };
+// The owner's orders (dashboard, not an agent): the job type each bot was last given, which an agent may not replace
+// while the bot works on it (agentauth). Kept across restarts, when agents used to take the bots over.
+const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
+const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))); } catch { return []; } })());
+const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
 // Saved jobs wait until their bot is online (a job started before the login fails at once).
 let toResume = {};
 if (jobsFile) {
@@ -617,7 +622,7 @@ const server = http.createServer(async (req, res) => {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {bots, type, args, replace, solver} = await readJson(req);
-      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || busyOf(runners.get(n)?.snapshot()), limiter: solverLimiter});
+      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || busyOf(runners.get(n)?.snapshot()), ownerOrderOf: (n) => ownerOrders.get(n), limiter: solverLimiter});
       if (refused) return json(403, {error: refused});
       // "all" skips remote bots whose worker is away, so a Stop reaches every
       // bot that can still hear it; naming an offline bot is an error.
@@ -632,6 +637,7 @@ const server = http.createServer(async (req, res) => {
       for (const r of targets) {
         try {
           r.enqueue(type, jobArgs, {replace: replace === true});
+          if (!agent) type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, type);
           if (stopping) {
             delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
             projects.pause(r.name);
@@ -641,6 +647,7 @@ const server = http.createServer(async (req, res) => {
           errors.push(`${r.name}: ${e.message}`); // one bot failing must not keep the others from getting the job
         }
       }
+      if (!agent) saveOrders();
       // Stop all is authoritative here, not in the browser: standing orders off first
       // (they would hand idle bots new work), then every pending recovery dropped.
       let keeperOff = false;
