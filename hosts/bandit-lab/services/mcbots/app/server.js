@@ -41,7 +41,17 @@ let rescue = null; // set below, once the supply chest is known
 // (archive.js); the 200-entry ring alone lost the night's deaths. SESSION tells server runs apart (dataset.js).
 const ARCHIVE = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'archive') : null;
 const SESSION = Date.now().toString(36);
-const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
+// The owner's orders (dashboard, not an agent): the job type each bot was last given. Until that job finishes or fails
+// (or the owner stops it) no agent order reaches the bot (agentauth): while it ran was not enough, the agents took the
+// bots in the gap after every restart, before their jobs resumed (2026-10-16). Kept across restarts.
+const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
+const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))); } catch { return []; } })());
+const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
+const orderEnded = (e) => {
+  const m = (e.kind === 'done' || e.kind === 'fail') && /^(?:finished|failed): (\w+)/.exec(e.text || '');
+  if (m && ownerOrders.get(e.bot) === m[1]) { ownerOrders.delete(e.bot); saveOrders(); }
+};
+const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.
 const decisions = new EventLog();
@@ -123,11 +133,6 @@ const keptJobs = () => {
   }
   return out;
 };
-// The owner's orders (dashboard, not an agent): the job type each bot was last given, which an agent may not replace
-// while the bot works on it (agentauth). Kept across restarts, when agents used to take the bots over.
-const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
-const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))); } catch { return []; } })());
-const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
 // Saved jobs wait until their bot is online (a job started before the login fails at once).
 let toResume = {};
 if (jobsFile) {

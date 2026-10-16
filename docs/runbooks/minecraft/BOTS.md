@@ -191,10 +191,10 @@ areas (zoom with the wheel). "Advanced: debug" is the panel described below.
 All write endpoints below are for humans only (same-origin JSON POST behind the Tailscale login
 check, `TRUSTED_PROXIES` rule unchanged); the agent token is refused on them.
 
-A job given on the dashboard (`POST /api/job` without the agent token) is the owner's order: while the
-bot still runs that job type, an agent's order for it is refused ("works on the owner's ... order: only
-the owner changes it"). The last order per bot is kept in `STATE_DIR/owner-orders.json`, so it holds
-across restarts; a dashboard Stop clears it.
+A job given on the dashboard (`POST /api/job` without the agent token) is the owner's order: until that
+job finishes or fails, every agent order for the bot is refused ("works on the owner's ... order: only
+the owner changes it"), also while it waits to be resumed after a restart. The open order per bot is
+kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
 
 - **Projects** (`POST /api/project {bot, action: pause|resume|stop}`): one row per bot with a
   shaft/excavate/level/seal/rim/treefarm/homebed/build/grave job running, queued or remembered, with progress.

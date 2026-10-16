@@ -59,10 +59,11 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   const building = {...pol, jobOf: (b) => (b === 'bot2' ? {type: 'schematic'} : {type: 'mine'})};
   assert.match(A.agentJobRefusal({bots: ['bot1', 'bot2'], type: 'stop', args: {}}, building), /bot2 works on the owner's schematic project/);
   assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, building), null, 'a bot on an ordinary job takes orders');
-  // the owner's dashboard order holds while the bot works on it (bot3's wheat fields, 2026-10-16), not after
-  const ordered = {...pol, agentBots: ['bot1', 'bot3'], jobOf: (b) => ({bot3: {type: 'wheatfarm'}, bot1: {type: 'mine'}})[b], ownerOrderOf: (b) => ({bot3: 'wheatfarm', bot1: 'wheatfarm'})[b]};
+  // the owner's dashboard order holds until it ends, idle before a resume too (bot3's wheat fields, restarts, 2026-10-16)
+  const ordered = {...pol, agentBots: ['bot1', 'bot3'], jobOf: (b) => ({bot3: {type: 'wheatfarm'}, bot1: null})[b], ownerOrderOf: (b) => ({bot3: 'wheatfarm', bot1: 'produce'})[b]};
   assert.match(A.agentJobRefusal({bots: ['bot3'], type: 'treefarm', args: {x1: 0, z1: 0, x2: 3, z2: 3}}, ordered), /bot3 works on the owner's wheatfarm order/);
-  assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, ordered), null, 'the order is over (another job runs): agents may');
+  assert.match(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, ordered), /bot1 works on the owner's produce order/, 'idle, its order not resumed yet');
+  assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, {...ordered, ownerOrderOf: () => undefined}), null, 'the order ended: agents may');
   // Three failed jobs in a row: no agent order for REST_MS after the newest (bot3, main server 2026-10-14).
   const ev = (kind, t, bot = 'bot1') => ({bot, kind, t, text: `${kind === 'fail' ? 'failed' : 'finished'}: chop 1 - no free logs`});
   const now = 1e6;
