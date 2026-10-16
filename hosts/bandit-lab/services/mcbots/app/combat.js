@@ -4,7 +4,7 @@
 // pathfinder (retreat / creeper back-off); `epoch` then changes so the running
 // job knows to re-issue its goal, and `busy` makes jobs wait until calm.
 const {goals} = require('mineflayer-pathfinder');
-const {isHostile, shouldFight, normDim, NOTABLE_BLOCKS} = require('./world');
+const {mobLocation, isHostile, shouldFight, normDim, NOTABLE_BLOCKS} = require('./world');
 const {DEFAULTS} = require('./settings');
 
 const TICK_MS = 500;
@@ -82,7 +82,7 @@ class Combat {
     this.busy = true;
     this.epoch++;
     this.r.log(this.r.name, `${mode}: away from ${target.name}`);
-    this.r.bot.pathfinder.setGoal(new goals.GoalInvert(new goals.GoalFollow(target, dist)), true);
+    this.r.bot.pathfinder.setGoal(new goals.GoalInvert(new goals.GoalFollow(mobLocation(target), dist)), true);
   }
 
   // Lava or fire within 3 blocks of a mob: do not chase it there (a bot burned
@@ -99,7 +99,7 @@ class Combat {
     this.since = Date.now();
     this.busy = true;
     this.epoch++;
-    this.r.bot.pathfinder.setGoal(new goals.GoalFollow(target, 2), true);
+    this.r.bot.pathfinder.setGoal(new goals.GoalFollow(mobLocation(target), 2), true);
   }
 
   release() {
@@ -119,7 +119,7 @@ class Combat {
     const dim = normDim(bot.game?.dimension);
     const me = bot.entity.position;
 
-    const seen = Object.values(bot.entities).filter((e) => e !== bot.entity && isHostile(e) && e.position.distanceTo(me) <= SEE_RANGE);
+    const seen = Object.values(bot.entities).filter((e) => e !== bot.entity && isHostile(e) && mobLocation(e).position.distanceTo(me) <= SEE_RANGE);
     for (const e of seen) r.world.noteMob(r.name, e, dim);
     if (this.ticks % SCAN_EVERY === 0) this.scanBlocks(dim);
     // Only mobs that actually threaten the bot drive retreat/back-off/attack;
@@ -127,10 +127,10 @@ class Combat {
     const s = this.settings();
     const now = Date.now();
     for (const [id, until] of this.ignore) if (until < now) this.ignore.delete(id);
-    const threats = seen.filter(shouldFight).sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me));
-    const close = threats[0], closeDist = close ? close.position.distanceTo(me) : Infinity;
+    const threats = seen.filter(shouldFight).sort((a, b) => mobLocation(a).position.distanceTo(me) - mobLocation(b).position.distanceTo(me));
+    const close = threats[0], closeDist = close ? mobLocation(close).position.distanceTo(me) : Infinity;
     const near = threats.find((e) => !this.ignore.has(e.id));
-    const dist = near ? near.position.distanceTo(me) : Infinity;
+    const dist = near ? mobLocation(near).position.distanceTo(me) : Infinity;
 
     if (this.mode && now - this.since > MODE_MAX_MS[this.mode]) {
       if (this.target) this.ignore.set(this.target.id, now + IGNORE_MS);
@@ -153,7 +153,7 @@ class Combat {
     if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
     // Only a fit bot walks up to a mob, never to a creeper: bot2, unarmoured and unarmed, hunted a creeper and was blown
     // up, and died four times in ten minutes (main server 2026-10-16). An unfit bot still hits what comes close.
-    if (near && near.name !== 'creeper' && (this.fit() || this.r.current?.type === 'guard') && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(near.position)) return this.hunt(near);
+    if (near && near.name !== 'creeper' && (this.fit() || this.r.current?.type === 'guard') && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(mobLocation(near).position)) return this.hunt(near);
     // Eat unless a hostile is close: at night one is nearly always within the 24 blocks a bot sees, and bot50 held
     // bread at food 6 for minutes with a zombie 16 blocks off, until it fled at 2.5 health and died (sandbox 2026-10-15).
     if (!this.busy && dist > EAT_CLEAR && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();
@@ -178,23 +178,23 @@ class Combat {
     const cooldown = (bot.heldItem?.name.endsWith('_axe') ? 1000 : 625) + 30; // attack speed 1.0 / 1.6 per s, plus a tick of slack
     const wait = cooldown - (Date.now() - this.lastAttack);
     if (this.striking || target.isValid === false) return;
-    const aim = () => bot.lookAt(target.position.offset(0, target.height * 0.8, 0), true).catch(() => {});
+    const aim = () => bot.lookAt(mobLocation(target).position.offset(0, (target.vehicle?.height || 0) + target.height * 0.8, 0), true).catch(() => {});
     await aim();
     if (wait > 450) return; // the next tick comes in 500 ms
     this.striking = true;
     try {
       if (wait > 0) await new Promise((res) => setTimeout(res, wait));
       // A sword sweep (ground hit) beats a crit when two or more hostiles stand together.
-      const bunch = Object.values(bot.entities).filter((e) => e !== target && shouldFight(e) && e.position.distanceTo(target.position) <= 2).length;
+      const bunch = Object.values(bot.entities).filter((e) => e !== target && shouldFight(e) && mobLocation(e).position.distanceTo(mobLocation(target).position) <= 2).length;
       const sweep = bunch > 0 && bot.heldItem?.name.endsWith('_sword');
-      const crit = !sweep && bot.entity.onGround && !bot.entity.isInWater && !bot.entity.isInLava && target.position.distanceTo(bot.entity.position) <= 3.2;
+      const crit = !sweep && bot.entity.onGround && !bot.entity.isInWater && !bot.entity.isInLava && mobLocation(target).position.distanceTo(bot.entity.position) <= 3.2;
       if (crit) {
         bot.setControlState('jump', true);
         await bot.waitForTicks(1);
         bot.setControlState('jump', false);
         for (let i = 0; i < 12 && !(bot.entity.velocity.y < 0); i++) await bot.waitForTicks(1); // apex of the jump
       }
-      if (target.isValid === false || target.position.distanceTo(bot.entity.position) > 3.6) return;
+      if (target.isValid === false || mobLocation(target).position.distanceTo(bot.entity.position) > 3.6) return;
       await aim();
       this.lastAttack = Date.now();
       bot.attack(target);

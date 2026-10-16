@@ -381,6 +381,83 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
   assert.equal(mk(false, 20, ['wooden_sword']).fit(), false); // defend off: combat will not fight, so the bot waits
   assert.equal(mk(true, 8, ['wooden_sword']).fit(), false);
 }
+{
+  const {EventEmitter} = require('node:events');
+  const {Vec3} = require('vec3');
+  const mineflayer = require('mineflayer'), {BotRunner} = require('./bots');
+  const vehicle = {id: 8, position: new Vec3(2, 64, 0), passengers: []};
+  const rider = {id: 7, position: new Vec3(100, 64, 0), vehicle};
+  const kept = {id: 9, vehicle};
+  vehicle.passengers = [rider, kept];
+  const bot = Object.assign(new EventEmitter(), {_client: new EventEmitter(), entities: {7: rider, 8: vehicle, 9: kept}});
+  // Model the upstream plugin's deferred registration and its missing dismount cleanup.
+  bot.once('inject_allowed', () => bot._client.on('set_passengers', ({passengers}) => {
+    assert.ok(vehicle.passengers.includes(rider), 'upstream runs before our cleanup');
+    for (const id of passengers) bot.entities[id].vehicle = vehicle;
+  }));
+  const done = new Error('stop setup before collectBlock'), createBot = mineflayer.createBot;
+  let plugins = 0;
+  bot.loadPlugin = () => { if (++plugins === 2) throw done; };
+  mineflayer.createBot = () => bot;
+  try {
+    assert.throws(() => BotRunner.prototype.connect.call({log() {}, bindOwner() {}}), (e) => e === done);
+  } finally { mineflayer.createBot = createBot; }
+  bot.emit('inject_allowed');
+  assert.equal(bot._client.listenerCount('set_passengers'), 2);
+  assert.strictEqual(W.mobLocation(rider), vehicle);
+  bot._client.emit('set_passengers', {entityId: vehicle.id, passengers: [kept.id]});
+  assert.strictEqual(rider.vehicle, null);
+  assert.deepStrictEqual(vehicle.passengers, [kept]);
+  assert.strictEqual(kept.vehicle, vehicle);
+  assert.strictEqual(W.mobLocation(rider).position, rider.position, 'dismounted rider uses its own position');
+  rider.vehicle = vehicle;
+  vehicle.isValid = false;
+  assert.strictEqual(W.mobLocation(rider).position, rider.position, 'dead mount cannot supply the rider position');
+}
+(async () => {
+  // Riders kept old positions as their mounts approached (suspected spearing deaths, 2026-10-16).
+  const {Vec3} = require('vec3');
+  for (const mounted of [false, true]) {
+    const vehicle = {position: new Vec3(2, 64, 0), height: 1.6};
+    const zombie = {id: 7, type: 'hostile', name: 'zombie', height: 1.9, position: new Vec3(mounted ? 100 : 2, 64, 0)};
+    if (mounted) zombie.vehicle = vehicle;
+    const location = mounted ? vehicle : zombie;
+    const world = new W.WorldModel(), hits = [], aims = [], paths = [], hazards = [];
+    const bot = {health: 20, food: 20, entity: {position: new Vec3(0, 64, 0)}, entities: {7: zombie}, game: {dimension: 'overworld'},
+      heldItem: {name: 'iron_sword'}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5,
+      lookAt: async (p) => aims.push(p), attack: (e) => hits.push(e), setControlState() {},
+      pathfinder: {setGoal: (g) => paths.push(g)}, findBlock: ({point}) => { hazards.push(point); return null; }, registry: {blocksByName: {}}};
+    const c = new Combat({bot, online: true, name: 'bot3', world, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 16})});
+    c.stop();
+    await c.tick();
+    assert.deepStrictEqual(hits, [zombie], 'attack the rider even with its own position far away');
+    assert.deepStrictEqual(aims[0], location.position.offset(0, (mounted ? vehicle.height : 0) + zombie.height * 0.8, 0));
+    assert.equal(world.hostilesNear(2, 0, 'overworld', 1).length, 1);
+    assert.equal(world.snapshot().mobs[0].x, 2);
+    assert.equal(zombie.position.x, mounted ? 100 : 2, 'leave the protocol position alone');
+    bot.health = 6;
+    await c.tick();
+    assert.equal(c.mode, 'retreat');
+    assert.strictEqual(paths.at(-1).goal.entity, location);
+    location.position = new Vec3(25, 64, 0);
+    assert.equal(paths.at(-1).goal.hasChanged(), true, 'retreat follows mount movement');
+    await c.tick();
+    assert.equal(c.mode, null, 'release when the threat moves away');
+    bot.health = 20;
+    c.fit = () => true;
+    location.position = new Vec3(10, 64, 0);
+    await c.tick();
+    assert.equal(c.mode, 'hunt');
+    assert.strictEqual(paths.at(-1).entity, location);
+    assert.strictEqual(hazards.at(-1), location.position);
+    c.release();
+    zombie.name = 'creeper';
+    location.position = new Vec3(5, 64, 0);
+    await c.tick();
+    assert.equal(c.mode, 'creeper');
+    assert.strictEqual(paths.at(-1).goal.entity, location);
+  }
+})();
 // Death causes: only the bot's own death messages; chat and other players are ignored.
 assert.equal(deathCause('bot1', 'bot1 was slain by Zombie'), 'was slain by Zombie');
 assert.equal(deathCause('bot1', 'bot1 fell from a high place'), 'fell from a high place');

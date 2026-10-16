@@ -388,6 +388,16 @@ class BotRunner {
     bot.once('spawn', () => guardDigs(this, bot)); // bot.dig exists only once the plugins loaded
     bot.loadPlugin(pathfinder);
     useSettledGoto(bot);
+    bot.once('inject_allowed', () => bot._client.on('set_passengers', ({entityId, passengers}) => {
+      // Mineflayer 4.39 leaves dismounted passengers attached (2026-10-16); run after its plugins.
+      const vehicle = bot.entities[entityId];
+      if (!vehicle) return;
+      vehicle.passengers = vehicle.passengers.filter((e) => {
+        if (passengers.includes(e.id)) return true;
+        e.vehicle = null;
+        return false;
+      });
+    }));
     bot.loadPlugin(collectBlock);
     require('./crafting').fixCraftTiming(bot);
     unwedge(bot);

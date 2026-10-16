@@ -18,6 +18,9 @@ const isHostile = (e) => !!e && e.type !== 'player' && (e.type === 'hostile' || 
 const NO_FIGHT = new Set(['enderman', 'zombified_piglin', 'piglin', 'piglin_brute', 'warden', 'wither', 'ender_dragon', 'elder_guardian', 'ghast', 'breeze']);
 const shouldFight = (e) => isHostile(e) && !NO_FIGHT.has(e.name);
 
+// Mineflayer does not move passengers with mounts; suspected spearing deaths, 2026-10-16.
+const mobLocation = (e) => e.vehicle && e.vehicle.isValid !== false ? e.vehicle : e;
+
 // 'minecraft:the_nether' / 'the_nether' / 'overworld' -> canonical name.
 const normDim = (d) => String(d || '').replace(/^minecraft:/, '');
 
@@ -203,7 +206,7 @@ class WorldModel {
   }
 
   noteMob(by, e, dim) {
-    const {x, y, z} = e.position;
+    const {x, y, z} = mobLocation(e).position;
     this.mobs.set(`${dim}:${e.id}`, {id: e.id, type: e.name, x, y, z, dim, by, t: this.now()});
     this.trim(this.mobs, MAX_MOBS);
   }
@@ -285,4 +288,4 @@ function startBlueMap(world, baseUrl, log, fetchFn = fetch) {
   return () => clearInterval(timer);
 }
 
-module.exports = {CLAIM_TTL_MS, stairRing, WorldModel, startBlueMap, parsePlayers, isHostile, shouldFight, normDim, deadlineMs, insideAreas, NOTABLE_BLOCKS, MAPS, MOB_TTL_MS, MAX_MOBS, MAX_BLOCKS, NO_FIGHT};
+module.exports = {CLAIM_TTL_MS, stairRing, WorldModel, startBlueMap, parsePlayers, mobLocation, isHostile, shouldFight, normDim, deadlineMs, insideAreas, NOTABLE_BLOCKS, MAPS, MOB_TTL_MS, MAX_MOBS, MAX_BLOCKS, NO_FIGHT};
