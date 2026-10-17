@@ -2894,6 +2894,12 @@ require('./crafting');
       blockAt: (p) => ({name: world[p.y], position: p, getProperties: () => ({})})});
     const runner = Object.assign(Object.create(BotRunner.prototype), {bot, current: {cancelled: false}, protectedAreas: []});
     const mv = safeMovements(bot, [], runner);
+    // a landing block without a position is no landing (it threw in getMoveDropDown and took the bot process down,
+    // main server 2026-10-17)
+    bot.game = {minY: -64};
+    mv.getBlock = (pos, dx, dy, dz) => (pos.y + dy === 62 ? {physical: true, liquid: false, safe: false, position: new Vec3(pos.x + dx, 62, pos.z + dz)} : {physical: false, liquid: false, safe: false});
+    assert.strictEqual(mv.getLandingBlock({x: 0, y: 64, z: 0}, {x: 1, z: 0}), null);
+    delete bot.game;
     mv.getBlock = () => ({liquid: false, canFall: false});
     const blk = (n) => ({type: md.blocksByName[n].id, name: n, position: new Vec3(0, 60, 0)});
     for (const n of ['cobblestone', 'oak_planks', 'torch']) assert.ok(mv.safeToBreak(blk(n)), `${n}: free outside an excavation`);
@@ -5356,7 +5362,7 @@ require('./crafting');
   const controls = {}, goals = [];
   let roof = true; // a stone roof at y 57 over the bot: it needs the pathfinder to the air at 2 60 0
   const water = (p) => (roof && p.y === 57 && p.x === 0 ? {name: 'stone', boundingBox: 'block'} : p.y < 60 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
-  const bot = {health: 20, food: 20, oxygenLevel: 6, entity: {position: new Vec3(0.5, 55, 0.5)}, entities: {}, game: {dimension: 'overworld'},
+  const bot = {health: 20, food: 20, ownAir: 6, oxygenLevel: 20, entity: {position: new Vec3(0.5, 55, 0.5)}, entities: {}, game: {dimension: 'overworld'},
     registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt: water, setControlState: (k, v) => { controls[k] = v; },
     findBlock: ({useExtraInfo}) => [new Vec3(1, 50, 0), new Vec3(2, 60, 0), new Vec3(3, 61, 0)].map((p) => ({position: p})).find(useExtraInfo) ?? null,
     pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
@@ -5365,14 +5371,21 @@ require('./crafting');
   await c.tick();
   assert.deepStrictEqual([c.mode, c.busy, controls.jump], ['air', true, true]);
   assert.deepStrictEqual([goals[0].x, goals[0].y, goals[0].z], [2, 59, 0], 'feet in the water under the air at 2 60 0, not the cave at 1 50 0');
-  bot.oxygenLevel = 19;
+  bot.ownAir = 19;
   await c.tick();
   assert.deepStrictEqual([c.mode, c.busy, controls.jump], [null, false, false], 'breathing again: on with the job');
   // open water up to the air: straight up, no pathfinder goal (it let go of the jump, sandbox 2026-10-17)
   roof = false;
-  bot.oxygenLevel = 5;
+  bot.ownAir = 5;
   await c.tick();
   assert.deepStrictEqual([c.mode, controls.jump, goals.at(-1)], ['air', true, null]);
+  // on dry land a low air reading (another entity's, via mineflayer's oxygenLevel) is ignored (all three bots, 2026-10-17)
+  c.release();
+  bot.entity.position = new Vec3(0.5, 61, 0.5);
+  bot.ownAir = 5;
+  bot.oxygenLevel = 5;
+  await c.tick();
+  assert.strictEqual(c.mode, null, 'head in the air: no surfacing');
 })();
 
 { // a guard job fights even with the defend setting off

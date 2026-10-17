@@ -388,6 +388,13 @@ class BotRunner {
     bot.once('spawn', () => guardDigs(this, bot)); // bot.dig exists only once the plugins loaded
     bot.loadPlugin(pathfinder);
     useSettledGoto(bot);
+    // The bot's own air: mineflayer 4.39 sets bot.oxygenLevel from ANY entity's air_supply, so a swimming sheep or a
+    // drowned near three bots sent all three "surfacing" on dry land at once (main server 2026-10-17). Key 1 is the air.
+    bot.once('inject_allowed', () => bot._client.on('entity_metadata', ({entityId, metadata}) => {
+      if (entityId !== bot.entity?.id) return;
+      const a = Array.isArray(metadata) ? metadata.find((m) => m.key === 1) : null;
+      if (typeof a?.value === 'number') bot.ownAir = Math.round(a.value / 15);
+    }));
     bot.once('inject_allowed', () => bot._client.on('set_passengers', ({entityId, passengers}) => {
       // Mineflayer 4.39 leaves dismounted passengers attached (2026-10-16); run after its plugins.
       const vehicle = bot.entities[entityId];
@@ -771,6 +778,10 @@ function safeMovements(bot, areas, runner = null) {
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   mv.exclusionAreasPlace = [veto];
+  // A landing block without a position (a cell the pathfinder could not read) threw in getMoveDropDown and took the
+  // whole bot process down with it (main server 2026-10-17 10:08): no landing there.
+  const landing = mv.getLandingBlock.bind(mv);
+  mv.getLandingBlock = (node, dir) => { const b = landing(node, dir); return b?.position ? b : null; };
   const scaffold = mv.countScaffoldingItems.bind(mv);
   mv.countScaffoldingItems = () => (runner?.noScaffold ? 0 : scaffold()); // a path with 0 blocks places none
   // Every block change counts up, so the path cache never answers from before it.

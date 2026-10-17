@@ -127,7 +127,7 @@ class Combat {
     this.since = Date.now();
     this.busy = true;
     this.epoch++;
-    this.r.log(this.r.name, `air ${bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${spot.position.x} ${spot.position.y} ${spot.position.z}` : 'with no air in sight'}`);
+    this.r.log(this.r.name, `air ${bot.ownAir ?? bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${spot.position.x} ${spot.position.y} ${spot.position.z}` : 'with no air in sight'}`);
     bot.pathfinder.setGoal(spot ? new goals.GoalBlock(spot.position.x, spot.position.y - 1, spot.position.z) : null, !!spot);
     bot.setControlState('jump', true);
   }
@@ -149,7 +149,10 @@ class Combat {
     this.ticks++;
     // Air before anything else: 6 drownings in a day, bot1 three times at -228 29 -205, mining and then back for its
     // grave (main server 2026-10-17). Nothing in the bots watched the air.
-    const air = bot.oxygenLevel ?? 20;
+    // Only with its head in water, and its own air (bots.js ownAir): mineflayer's oxygenLevel is any entity's.
+    const eye = bot.blockAt?.(bot.entity.position.offset(0, 1.62, 0));
+    const wet = /^(water|bubble_column|kelp|kelp_plant|seagrass|tall_seagrass)$/.test(eye?.name || '') || eye?.getProperties?.().waterlogged === true;
+    const air = wet ? bot.ownAir ?? bot.oxygenLevel ?? 20 : 20;
     if (this.mode === 'air' && air >= 18) this.release();
     else if (this.mode === 'air' && Date.now() - this.since <= MODE_MAX_MS.air) return void (this.straightUp && bot.setControlState('jump', true));
     if (air <= AIR_LOW) return this.surface(); // also again after MODE_MAX_MS: another search from where it is now

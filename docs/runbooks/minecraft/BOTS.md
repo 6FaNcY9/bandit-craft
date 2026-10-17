@@ -387,7 +387,9 @@ dashboard radar and served by `GET /api/state` (`bots`, `world`,
   BlueMap position (same dimension only; otherwise the job fails) and switches
   to the live player once visible. `come` allows 90 s plus 1 s per block of
   distance, at most 10 min.
-- **Air** (`app/combat.js`, before anything else): under water at 12 of 20 air or less (about 6 s left) the bot
+- **Air** (`app/combat.js`, before anything else): with its head in water (eye block water, kelp, seagrass or
+  waterlogged) and its own air (`bot.ownAir`, read from its own entity metadata: mineflayer's `oxygenLevel` takes
+  any entity's air) at 12 of 20 or less (about 6 s left) the bot
   drops its job and surfaces: straight up where open water reaches the air, else the pathfinder takes it to the
   nearest air above its feet; at 18 it goes on (dashboard `surfacing for air`, debug `physics.air`). 6 drownings in
   a day before (2026-10-17); sandbox: 75 s idle at the bottom of an 8-deep pool, full health.
