@@ -135,7 +135,7 @@ const breadFrom = (wheat) => Math.floor(wheat / 3);
 // Hand in when the bread is worth a trip or the inventory is nearly full.
 const shouldDeposit = ({bread, emptySlots}) => bread >= BREAD_AT || emptySlots < 4;
 
-function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting, craftTable, base, at, getWater = null}) {
+function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting, craftTable, base, at, getWater = null, care = null}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
   const look = (bot, x, y, z) => bot.blockAt(new Vec3(x, y, z));
 
@@ -242,6 +242,9 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
         continue;
       }
       await waitCalm(r, job);
+      // Food and gear (bots.js care): the farmer hands all its bread in, and bot3 was down to food 5 and 3 health on
+      // its own field (main server 2026-10-17). Not in a pass for food: that is care's own last resort.
+      if (care && !job.forFood) await care(r, job);
       if (r.world?.unreachable) throw new Error('hub unreachable: not farming without block reservations');
       const dim = normDim(bot.game?.dimension);
       if (Math.hypot(bot.entity.position.x - mid.x, bot.entity.position.z - mid.z) > 10) {

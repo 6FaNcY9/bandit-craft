@@ -2296,7 +2296,7 @@ const {unroof} = unroofJob.makeUnroof({
 });
 
 const {wheatfarm} = wheatFarmJob.makeWheatFarm({
-  goNear, guard, sleep, digAt, waitCalm, at, crafting,
+  goNear, guard, sleep, digAt, waitCalm, at, crafting, care,
   base: planConfig.BASE.chest,
   craftTable: (r) => !!craftingLib.nearBlock(r.bot, 'crafting_table'),
   // `only` is needed: a plain deposit keeps food. Bread and wheat go to the base chest, where the plan reads them.

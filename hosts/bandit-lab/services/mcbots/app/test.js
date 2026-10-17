@@ -4287,7 +4287,7 @@ require('./crafting');
 
     // the job: wet field, seeds in the pocket, a hoe; it harvests, tills, plants, crafts bread and deposits
     const small = {x1: 0, z1: 0, x2: 3, z2: 3};
-    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null, noWay = () => false}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null, noWay = () => false, care = null}) => {
       const events = [], infos = [], calls = {deposit: [], craft: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const give = (name, n) => { const e = inv.find((i) => i.name === name) || (inv.push(it(name, 0)), inv.at(-1)); e.count += n; };
@@ -4321,6 +4321,7 @@ require('./crafting');
         craftTable: () => true, base: {x: -9, y: 65, z: -9},
         deposit: async (r, j, what) => { calls.deposit.push(what); for (const i of inv) if (i.name === what) i.count = 0; },
         getWater: getWater && (async (...a) => { await getWater(...a); give('water_bucket', 1); }),
+        care,
       });
       const r = {bot, world: {claim: async () => true, release() {}}, combat: {busy: false, epoch: 0}, emit: (k, t) => infos.push(t), protectedAreas: [], supplyChest: {x: -3, y: 65, z: -3}};
       return {r, job, events, infos, calls, inv, run: () => wfm.wheatfarm(r, job)};
@@ -4335,6 +4336,16 @@ require('./crafting');
     assert.ok(f.events.filter((e) => e.startsWith('plant')).length >= 15, 'and planted');
     assert.match(f.job.progress, /3 wheat harvested, \d+ planted, 1 bread/);
     assert.match(f.job.t.doing, /waiting for the wheat to grow/);
+    // care (food and gear) runs in the farm loop, never in a pass for food (bot3 at food 5 on its field, 2026-10-17)
+    let cared = 0;
+    f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'wooden_hoe', count: 1, type: 1}], care: async () => { cared++; }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.ok(cared >= 1, 'care in the loop');
+    cared = 0;
+    f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'wooden_hoe', count: 1, type: 1}], care: async () => { cared++; }});
+    f.job.forFood = true;
+    await f.run();
+    assert.strictEqual(cared, 0, 'not in a pass for food');
     // forFood (a hungry bot, bots.js wheatFood): the bread is kept and the pass ends when nothing is left to do
     w = flat({'-1,64,1': 'water'});
     w.put(0, 64, 0, 'farmland'); w.put(0, 65, 0, wheat(7)); w.put(1, 64, 0, 'farmland'); w.put(1, 65, 0, wheat(7)); w.put(2, 64, 0, 'farmland'); w.put(2, 65, 0, wheat(7));
