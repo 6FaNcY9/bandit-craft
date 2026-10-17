@@ -17,13 +17,16 @@ const GATHER = {
 for (const item of ['dirt', 'sand', 'red_sand', 'gravel', 'netherrack', 'cactus', 'sugar_cane',
   'andesite', 'diorite', 'granite', 'tuff', 'calcite', 'obsidian', 'end_stone', 'blackstone', 'basalt']) GATHER[item] = `mine ${item}`;
 
+// A recipe's grid cells (item ids), and whether it needs a crafting table (wider or taller than 2, or more than 4 items).
+const cells = (r) => (r.inShape ? r.inShape.flat() : r.ingredients || []).filter((id) => id != null);
+const needsTable = (r) => (r.inShape ? r.inShape.length > 2 || r.inShape.some((row) => row.length > 2) : cells(r).length > 4);
+
 function planMaterials(items, {version = '26.1', have = {}} = {}) {
   const data = mcData(version);
   if (!data) throw new Error(`unsupported Minecraft version: ${version}`);
   const gatherHow = {...GATHER};
   for (const item of data.itemsArray) if (item.name.endsWith('_log') && !item.name.startsWith('stripped_')) gatherHow[item.name] = `chop ${item.name}`;
   const memo = new Map();
-  const cells = (r) => (r.inShape ? r.inShape.flat() : r.ingredients || []).filter((id) => id != null);
   const ingredientsOf = (r) => {
     const out = {};
     for (const id of cells(r)) {
@@ -64,7 +67,7 @@ function planMaterials(items, {version = '26.1', have = {}} = {}) {
       if (!best || cost < best.cost || (cost === best.cost && (oak > best.oak ||
         (oak === best.oak && lower >= 0 && ids[lower] < best.ids[lower])))) {
         best = {kind: 'craft', cost, ingredients, per: r.result.count, oak, ids,
-          table: r.inShape ? r.inShape.length > 2 || r.inShape.some((row) => row.length > 2) : cells(r).length > 4};
+          table: needsTable(r)};
       }
     }
     if (!best && !missing) best = {kind: 'unknown', cost: 0, ingredients: {}};
@@ -141,4 +144,4 @@ function rawUnknown(items, {version = '26.1', have = {}} = {}) {
   return out;
 }
 
-module.exports = {planMaterials, rawUnknown};
+module.exports = {planMaterials, rawUnknown, cells, needsTable, SMELT};

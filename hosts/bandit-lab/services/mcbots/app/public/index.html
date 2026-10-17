@@ -122,6 +122,12 @@
     <div class="row" id="gatherCounts"></div>
     <div class="mt12 row"><button class="b go" id="gatherGo">Sammeln schicken</button><span class="mut small" id="gatherHint"></span></div>
   </section>
+  <section class="card">
+    <h2>Besorgen</h2>
+    <p class="mut small">Irgendein Item: der Bot rechnet selbst aus, wie er es bekommt (Kiste, craften, schmelzen, abbauen, Tiere).</p>
+    <div class="row"><input class="grow t" id="getItem" placeholder="Item, z.B. iron_pickaxe" autocomplete="off"><input class="t" id="getCount" type="number" min="1" max="256" value="1" size="4" title="Anzahl"></div>
+    <div class="mt12 row"><button class="b go" id="getGo">Besorgen schicken</button></div>
+  </section>
   <p class="mut small">Hinschicken: auf der <a href="#" data-goto-tab="map" class="acc">Karte</a> eine Stelle antippen.</p>
 </main>
 
@@ -346,7 +352,7 @@ const eventText = (s) => { for (const [re, f] of EVENT) { const m = re.exec(s); 
 const doing = (s) => { if (!s) return ''; for (const [re, f] of DOING) { const m = re.exec(s); if (m) return f(m); } return s; };
 const JOB = {schematic: 'baut', produce: 'besorgt Material', mine: 'baut ab', chop: 'fällt Bäume', come: 'kommt', follow: 'folgt', guard: 'hält Wache',
   deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin',
-  treefarm: 'Baumfarm', shaft: 'Schacht', shift: 'Schicht'};
+  treefarm: 'Baumfarm', shaft: 'Schacht', shift: 'Schicht', get: 'besorgt'};
 const PROJECT = new Set(['schematic', 'produce']);
 const pct = (a, b) => (b ? Math.max(0, Math.min(100, Math.round((100 * a) / b))) : 0);
 const ago = (s) => (s == null ? '' : s < 90 ? 'gerade eben' : s < 5400 ? `vor ${Math.round(s / 60)} min` : `vor ${Math.round(s / 3600)} h`);
@@ -478,6 +484,10 @@ function paintGather() {
   $('gatherHint').textContent = `${gCount} ${lbl}${picked.size > 1 ? ', jeder Bot' : ''}`;
 }
 paintGather();
+$('getGo').onclick = () => {
+  const bots = chosen(), item = $('getItem').value.trim().toLowerCase().replace(/^minecraft:/, '').replace(/\s+/g, '_'), count = Math.max(1, Math.min(256, +$('getCount').value || 1));
+  if (bots.length && item) sendJob(bots, 'get', {item, count}, `Besorgen: ${count} ${item}`);
+};
 $('gatherGo').onclick = () => {
   const bots = chosen();
   if (!bots.length) return;

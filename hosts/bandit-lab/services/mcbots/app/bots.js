@@ -216,6 +216,11 @@ const VALIDATE = {
   fluids: (a) => VALIDATE.schematic(a),
   // The materials for that schematic build, made into `store` (the build's chests are counted too).
   produce: (a) => ({...VALIDATE.schematic(a), store: xyz(a.store || {})}),
+  // N of any item, by whatever way the game offers (acquire.js): the plan is worked out, not described.
+  get: (a) => {
+    if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be an item name like iron_pickaxe');
+    return {item: a.item, count: num(a.count ?? 1, 1, 256, 'count')};
+  },
   // Kill (shear) `count` animals of one kind within `radius` of x,y,z and pick the drops up.
   hunt: (a) => {
     if (!Object.hasOwn(huntJob.ANIMALS, a.animal)) throw new Error(`animal must be one of ${Object.keys(huntJob.ANIMALS).join(', ')}`);
@@ -265,6 +270,7 @@ class BotRunner {
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
     this.hits = []; // {t, by}: who hurt this bot lately, for the death line
+    this.acquireFailed = new Map(); // acquire.js method key -> until: the "get" job leaves that way out meanwhile
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
     this.conflicts = {n: 0, at: 0};
     this.hostLabel = hostLabel; // machine this bot runs on, shown in the dashboard
@@ -835,7 +841,7 @@ async function waitCalm(r, job) {
 // Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (alerts.js)
-const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'level', 'rim', 'tidy']);
+const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'level', 'rim', 'tidy', 'get']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
@@ -2184,6 +2190,83 @@ async function projectMaterials(r) {
   const owner = rawUnknown(Object.fromEntries(cannot.map((n) => [n, lacking[n] || p.gather.find((g) => g.item === n)?.count || 1])), {have: stock});
   return {file: job.args.file, origin: job.args.origin, lo: plan.lo, hi: plan.hi, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
 }
+// "get N of an item" (acquire.js): plan, do the next step, plan again from what the bot has now. A step is done for
+// the whole plan at once (one walk to the trees, not one per log). A mine, hunt or chest step that fails is left out
+// for 10 minutes, so the next plan takes another way; a craft or smelt only on its second failure, since it mostly
+// lacked an input the next plan gets (bot50's torches ate the coal and a cobblestone, sandbox 2026-10-17).
+const acquire = require('./acquire');
+const ACQUIRE_FAIL_MS = 10 * 60000;
+// Walls and floors somewhere even though nothing crafts them: never mined for their drops.
+const PLACED_RE = /^(cobblestone|mossy_cobblestone|cobbled_deepslate|glass|terracotta|[a-z_]+_terracotta|[a-z_]+_concrete)$/;
+function acquireWorld(r) {
+  const {bot} = r, me = bot.entity.position;
+  const have = {};
+  for (const i of bot.inventory.items()) have[i.name] = (have[i.name] || 0) + i.count;
+  const stores = [];
+  for (const [k, c] of r.world?.chests || []) { // the storage index, as last seen
+    const [x, y, z] = k.split(',').map(Number);
+    const dist = Math.hypot(x - me.x, y - me.y, z - me.z);
+    if (dist <= 256) stores.push({at: {x, y, z}, dist, stock: c.items || {}});
+  }
+  const now = Date.now();
+  for (const [k, until] of r.acquireFailed) if (until < now) r.acquireFailed.delete(k);
+  return {
+    data: bot.registry, have, stores,
+    blockNear: (name) => {
+      const id = bot.registry.blocksByName[name]?.id;
+      const b = id === undefined ? null : bot.findBlock({matching: id, maxDistance: 64, useExtraInfo: (bl) => !insideAreas(r.protectedAreas, bl.position.x, bl.position.z)});
+      return b ? b.position.distanceTo(me) : null;
+    },
+    mobNear: (name) => {
+      const e = bot.nearestEntity((x) => x.name === name);
+      return e ? e.position.distanceTo(me) : null;
+    },
+    canMine: (b) => !BUILT_RE.test(b) && !PLACED_RE.test(b),
+    canKill: (m) => Object.hasOwn(huntJob.ANIMALS, m),
+    stationNear: (name) => /^(crafting_table|furnace)$/.test(name) && !!craftingLib.nearBlock(bot, name),
+    failed: new Set(r.acquireFailed.keys()),
+  };
+}
+// The plan's nodes with this method whose inputs are all in hand: what the next step does together.
+const readySteps = (node, key) => [...(node.key === key && node.children.every((c) => c.via === 'have') ? [node] : []), ...node.children.flatMap((c) => readySteps(c, key))];
+async function acquireStep(r, job, step, all) {
+  const sum = (f) => all.reduce((s, n) => s + n[f], 0);
+  const run = (type, args) => JOBS[type](r, child(job, {type, args: VALIDATE[type](args)}));
+  const p = r.bot.entity.position.floored();
+  if (step.via === 'chest') return run('withdraw', {item: step.item, count: sum('count'), ...step.at});
+  if (step.via === 'mine') return run('mine', {block: step.block, count: Math.min(2048, sum('blocks'))});
+  if (step.via === 'kill') return run('hunt', {animal: step.mob, count: Math.min(32, sum('kills')), x: p.x, y: p.y, z: p.z, radius: 48});
+  if (step.via === 'craft') return run('craft', {item: step.item, count: Math.min(64, sum('count'))});
+  if (step.via === 'smelt') return run('smelt', {item: step.input, count: Math.min(64, sum('count'))});
+  throw new Error(`no job does "${step.via}"`);
+}
+async function getItem(r, job) {
+  const {item, count} = job.args;
+  const held = () => crafting.count(r.bot, item);
+  job.target ??= held() + count; // a resumed job keeps its goal
+  for (let steps = 0; held() < job.target; steps++) {
+    guard(job);
+    if (steps >= 80) throw new Error(`still ${job.target - held()} ${item} short after 80 steps`);
+    const {node, missing} = acquire.plan({item, count: job.target - held()}, acquireWorld(r));
+    if (steps === 0) {
+      r.emit('info', `get ${count} ${item}: ${acquire.summary(node)}`);
+      r.log(r.name, `get plan:\n${acquire.explain(node)}`);
+    }
+    const step = acquire.nextStep(node);
+    if (!step) throw new Error(missing.length ? `no way to get ${missing.join(', ')} (for ${item})` : `nothing left to do but still ${job.target - held()} ${item} short`);
+    job.progress = `${Math.max(0, count - (job.target - held()))}/${count}`;
+    job.t.doing = `getting ${item}: ${acquire.explain({...step, children: []})}`;
+    try {
+      await acquireStep(r, job, step, readySteps(node, step.key));
+    } catch (e) {
+      guard(job);
+      const fails = (job.fails ||= new Map()).set(step.key, (job.fails.get(step.key) || 0) + 1).get(step.key);
+      const out = !/^(craft|smelt):/.test(step.key) || fails >= 2;
+      if (out) r.acquireFailed.set(step.key, Date.now() + ACQUIRE_FAIL_MS);
+      r.emit('info', `get ${item}: ${step.key} failed${out ? ', trying another way' : ', planning again'}: ${e.message.slice(0, 100)}`);
+    }
+  }
+}
 const NONE_STORED = new Map(); // item -> until: the storage hall had none of it (produce)
 // One producer for a project: step() runs the next chain (or says why there is none). A step is claimed on the hub,
 // so bots on other workers leave it alone too (the builder helps while it waits, 2026-10-16), and in PRODUCING
@@ -2916,6 +2999,7 @@ const JOBS = {
   },
 
   craft: (r, job) => crafting.ensureItem(r, job, job.args.item, crafting.count(r.bot, job.args.item) + job.args.count),
+  get: (r, job) => getItem(r, job),
 
   // The input may sit in the base chest (the plan's iron goes there): fetch what is missing first.
   async smelt(r, job) {

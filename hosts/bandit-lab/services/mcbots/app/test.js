@@ -381,6 +381,56 @@ const {Combat, weaponScore, wantsToEat, deathCause, fightReady} = require('./com
   assert.equal(hitsNote([hit('zombie', 1000), hit('skeleton', 2000), hit('zombie', 3000), hit('creeper', 40000)], 'walking', now), ' (last 30 s: zombie x2, skeleton x1; walking)');
   assert.equal(hitsNote([], 'idle - no job', now), ' (last 30 s: no hits seen; idle - no job)');
 }
+{
+  // acquire.js: how to get an item, worked out from the game's data (owner, 2026-10-17: derive, do not describe).
+  const A = require('./acquire');
+  const data = require('minecraft-data')('26.1');
+  const near = {oak_log: 12, stone: 3, iron_ore: 30, coal_ore: 20, oak_planks: 1, deepslate: 6};
+  const world = (o = {}) => ({data, have: {}, stores: [], blockNear: (b) => near[b] ?? null, mobNear: (m) => ({sheep: 20})[m] ?? null,
+    canKill: (m) => ['sheep', 'cow', 'pig', 'chicken'].includes(m), canMine: (b) => b !== 'cobblestone', ...o});
+  const nodes = (n) => [n, ...n.children.flatMap(nodes)];
+  // From an empty inventory: logs, a table, a wooden pickaxe for the stone, sticks; the first thing to do is a log.
+  let p = A.plan({item: 'stone_pickaxe', count: 1}, world());
+  assert.deepStrictEqual(p.missing, []);
+  assert.deepStrictEqual([A.nextStep(p.node).via, A.nextStep(p.node).block], ['mine', 'oak_log']);
+  assert.ok(nodes(p.node).some((n) => n.item === 'wooden_pickaxe' && n.kept), A.explain(p.node));
+  assert.ok(nodes(p.node).some((n) => n.via === 'mine' && n.block === 'stone'), A.explain(p.node));
+  // Planks are crafted, never dug out of a house next door (a crafted block that drops itself was placed).
+  assert.ok(!nodes(p.node).some((n) => n.via === 'mine' && n.block === 'oak_planks'));
+  assert.match(A.summary(p.node), /^~\d+ s: mine \d+ oak_log, mine 3 stone; then \d+ crafts$/);
+  // A known chest beats digging; a way that failed lately is left out.
+  p = A.plan({item: 'cobblestone', count: 20}, world({stores: [{at: {x: 1, y: 64, z: 2}, dist: 8, stock: {cobblestone: 64}}]}));
+  assert.deepStrictEqual([p.node.via, p.node.count, p.node.at], ['chest', 20, {x: 1, y: 64, z: 2}]);
+  p = A.plan({item: 'stone_pickaxe', count: 1}, world({have: {wooden_pickaxe: 1, stick: 2, crafting_table: 1}, failed: new Set(['mine:stone'])}));
+  assert.ok(!nodes(p.node).some((n) => n.key === 'mine:stone'), A.explain(p.node));
+  assert.ok(nodes(p.node).some((n) => n.key === 'mine:deepslate'), A.explain(p.node)); // cobbled deepslate does too
+  // Wool from sheep (minecraft-data keeps it in loot tables it does not list); a bed from that and planks.
+  p = A.plan({item: 'white_bed', count: 1}, world({have: {crafting_table: 1, oak_planks: 3}}));
+  assert.deepStrictEqual(nodes(p.node).filter((n) => n.via === 'kill').map((n) => [n.mob, n.kills]), [['sheep', 3]]);
+  // Held raw iron must not make raw_iron -> raw_iron_block -> raw_iron look free: the plan ended in a stack overflow
+  // (sandbox 2026-10-17). The third raw iron is dug.
+  p = A.plan({item: 'iron_ingot', count: 3}, world({have: {raw_iron: 2, coal: 1, stone_pickaxe: 1}, stationNear: (n) => n === 'furnace'}));
+  assert.deepStrictEqual(nodes(p.node).filter((n) => n.item === 'raw_iron').map((n) => [n.via, n.count]), [['parts', 3], ['have', 2], ['mine', 1]]);
+  // Iron ingots are smelted, not crafted from 27 nuggets that only ingots make (a dead end the plan backs out of).
+  p = A.plan({item: 'iron_pickaxe', count: 1}, world());
+  assert.deepStrictEqual(p.missing, []);
+  assert.ok(nodes(p.node).some((n) => n.item === 'iron_ingot' && n.via === 'smelt'), A.explain(p.node));
+  // Held items count even where nothing near makes more: diamonds in hand, no diamond ore to be mined.
+  p = A.plan({item: 'diamond_pickaxe', count: 1}, world({have: {diamond: 3, stick: 2, crafting_table: 1}, canMine: (b) => !/diamond/.test(b)}));
+  assert.deepStrictEqual([p.missing, p.node.via, p.node.children.map((c) => c.via)], [[], 'craft', ['have', 'have']]);
+  // A furnace standing near is used, not a new one made.
+  p = A.plan({item: 'iron_ingot', count: 1}, world({have: {raw_iron: 1, coal: 1}, stationNear: (n) => n === 'furnace'}));
+  assert.deepStrictEqual(p.node.children.map((c) => c.via), ['have', 'have']);
+  // What no way reaches is missing, and there is no next step.
+  p = A.plan({item: 'nether_star', count: 1}, world({canKill: () => false}));
+  assert.deepStrictEqual([p.missing, A.nextStep(p.node)], [['nether_star'], null]);
+  // Cycles (iron_block <-> iron_ingot) end; held ingots are used.
+  p = A.plan({item: 'iron_block', count: 1}, world({have: {iron_ingot: 9, crafting_table: 1}}));
+  assert.deepStrictEqual([p.node.via, p.node.children.map((c) => [c.item, c.via, c.count])], ['craft', [['iron_ingot', 'have', 9]]]);
+  // Drops without silk touch: an iron ore gives raw iron; the loot table's flattened side drops count a tenth.
+  assert.ok(Math.abs(A.yieldOf(data.blockLoot.iron_ore.drops).raw_iron - 1) < 1e-9);
+  assert.ok(!A.lootIndex(data).blocks.get('stick').some((b) => b.block === 'oak_leaves' && b.per > 0.2));
+}
 // Hurt bots eat at food 15-17 so they regenerate (bot1 sat at 6.7 health with food 17, 2026-10-10).
 assert.equal(wantsToEat(17, 6.7, 15), true);
 assert.equal(wantsToEat(17, 20, 15), false);
