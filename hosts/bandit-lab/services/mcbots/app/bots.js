@@ -1586,6 +1586,9 @@ async function wearArmour(r) {
     const it = bot.inventory.items().find((i) => re.test(i.name));
     if (it) await bot.equip(it, slot).catch(() => {});
   }
+  // A shield goes into an empty off-hand (a totem stays there): combat blocks with it between swings.
+  const shield = !bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')] && bot.inventory.items().find((i) => i.name === 'shield');
+  if (shield) await bot.equip(shield, 'off-hand').catch(() => {});
 }
 
 // Chopping by hand is slow: make a stone (else wooden) axe from what the bot
@@ -2631,7 +2634,7 @@ const JOBS = {
     const tier = (n) => ['wooden', 'leather', 'golden', 'stone', 'chainmail', 'iron', 'diamond', 'netherite'].findIndex((t) => n.startsWith(t));
     const best = (items, re) => items.filter((i) => re.test(i.name)).sort((a, b) => tier(b.name) - tier(a.name))[0];
     const mine = () => [...bot.inventory.items(), ...['head', 'torso', 'legs', 'feet', 'off-hand'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean)];
-    const WANT = [/_helmet$/, /_chestplate$/, /_leggings$/, /_boots$/, /_sword$/, /_axe$/, /_pickaxe$/, /^totem_of_undying$/];
+    const WANT = [/_helmet$/, /_chestplate$/, /_leggings$/, /_boots$/, /_sword$/, /_axe$/, /_pickaxe$/, /^totem_of_undying$/, /^shield$/];
     const isFood = (n) => bot.registry.foodsByName[n] && !/rotten|spider_eye|poisonous|pufferfish|chorus|golden_apple/.test(n);
     const foodCount = () => bot.inventory.items().filter((i) => isFood(i.name)).reduce((n, i) => n + i.count, 0);
     const opened = new Set();
@@ -2703,7 +2706,8 @@ const JOBS = {
       if (it) await wear(it, slot);
     }
     const totem = bot.inventory.items().find((i) => i.name === 'totem_of_undying');
-    if (totem) await wear(totem, 'off-hand');
+    const shield = bot.inventory.items().find((i) => i.name === 'shield');
+    if (totem || shield) await wear(totem || shield, 'off-hand');
     const sword = best(bot.inventory.items(), /_sword$/);
     if (sword) await wear(sword, 'hand');
     const worn = ['head', 'torso', 'legs', 'feet'].filter((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).length;

@@ -393,6 +393,12 @@ dashboard radar and served by `GET /api/state` (`bots`, `world`,
   drops its job and surfaces: straight up where open water reaches the air, else the pathfinder takes it to the
   nearest air above its feet; at 18 it goes on (dashboard `surfacing for air`, debug `physics.air`). 6 drownings in
   a day before (2026-10-17); sandbox: 75 s idle at the bottom of an 8-deep pool, full health.
+- **Shield** (`app/combat.js`, `app/gear.js`): iron gear brings a shield right after the sword (1 ingot, 6 planks),
+  worn in the off-hand (a totem keeps that slot). In a close fight it goes up right after each swing and down for
+  the next one (it counts after 5 ticks, so it guards most of a sword's 0.65 s), facing the target; it comes down
+  when nothing hostile is within 6 blocks, to eat, and to surface for air. It is no armour for fit(), and a creeper
+  is still backed away from. Sandbox 2026-10-17, iron sword, no armour, normal: 3 zombies all killed at lowest
+  health 8 and 11 (the shield took 30 damage) against death without it; 2 skeletons about the same either way.
 - Combat (`app/combat.js`, every 500 ms): hostile mobs only, never players or
   animals. A hostile within 4 blocks is attacked with the best sword/axe in the
   inventory (swords before axes); creepers within 6 blocks are backed away from,

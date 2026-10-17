@@ -1751,12 +1751,13 @@ require('./crafting');
   assert.deepStrictEqual(gearPlan(0, []), []);
   assert.deepStrictEqual(gearPlan(3, []), ['iron_pickaxe']);
   assert.deepStrictEqual(gearPlan(2, []), ['iron_sword']);
-  assert.deepStrictEqual(gearPlan(9, ['stone_pickaxe']), ['iron_pickaxe', 'iron_sword', 'iron_boots']);
-  assert.deepStrictEqual(gearPlan(30, ['diamond_pickaxe', 'iron_sword', 'iron_boots']), ['iron_helmet', 'iron_leggings', 'iron_chestplate']);
-  assert.deepStrictEqual(gearPlan(30, ['netherite_sword', 'leather_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots', 'iron_pickaxe']), []);
-  assert.deepStrictEqual(gearPlan(8, ['iron_pickaxe', 'iron_sword']), ['iron_boots']);
-  assert.strictEqual(ingotsWanted([]), 29);
-  assert.strictEqual(ingotsWanted(['iron_pickaxe', 'iron_sword', 'iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots']), 0);
+  assert.deepStrictEqual(gearPlan(9, ['stone_pickaxe']), ['iron_pickaxe', 'iron_sword', 'shield'], 'a shield right after the sword');
+  assert.deepStrictEqual(gearPlan(30, ['diamond_pickaxe', 'iron_sword', 'iron_boots']), ['shield', 'iron_helmet', 'iron_leggings', 'iron_chestplate']);
+  assert.deepStrictEqual(gearPlan(30, ['netherite_sword', 'leather_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots', 'iron_pickaxe', 'shield']), []);
+  assert.deepStrictEqual(gearPlan(8, ['iron_pickaxe', 'iron_sword']), ['shield', 'iron_boots']);
+  assert.strictEqual(ingotsWanted([]), 30);
+  assert.strictEqual(ingotsWanted(['iron_pickaxe', 'iron_sword', 'iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots']), 1, 'the shield');
+  assert.strictEqual(ingotsWanted(['iron_pickaxe', 'iron_sword', 'iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots', 'shield']), 0);
   // chain arguments pass the real validators (the bots would refuse them otherwise)
   const {VALIDATE: V} = require('./bots');
   for (const [type, args] of [...PLANS.logs(40, chest), ...PLANS.cobblestone(64, chest), ...PLANS.coal(8, chest), ...PLANS.torch(16, chest, {coal: 9, oak_log: 3}), ...PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 3}), ...PLANS.raw_iron(16, chest), ...PLANS.iron_pickaxe(2, chest, kitStock), ...PLANS.iron_sword(1, chest, kitStock), ['stock', chest], ['goto', chest]]) assert.doesNotThrow(() => V[type](args), type);
@@ -5379,6 +5380,39 @@ require('./crafting');
   assert.strictEqual((await run(false, [mob('zombie', 6)])).mode, null, 'bare: it lets the zombie come');
   assert.deepStrictEqual((await run(false, [mob('zombie', 3)])).hits, ['zombie'], 'and hits it once it is close');
   assert.strictEqual((await run(true, [mob('creeper', 7)])).mode, null, 'a creeper 7 blocks off is never hunted');
+})();
+
+(async () => { // shield: up between swings, down for the swing; a creeper is still backed away from (2026-10-17)
+  const {Combat, hasShield} = require('./combat');
+  const {Vec3} = require('vec3');
+  const mk = (shield, mobs) => {
+    const log = [], goals = [];
+    const bot = {health: 20, food: 20, entity: {position: new Vec3(0, 64, 0), onGround: false, velocity: {y: -1}}, game: {dimension: 'overworld'},
+      entities: Object.fromEntries(mobs.map((m) => [m.id, m])), heldItem: {name: 'iron_sword', type: 1},
+      inventory: {items: () => [{name: 'iron_sword', type: 1}], slots: {45: shield ? {name: 'shield'} : null}}, getEquipmentDestSlot: (s) => (s === 'off-hand' ? 45 : 5),
+      registry: {blocksByName: {}}, findBlock: () => null, blockAt: () => ({name: 'air'}), lookAt: async () => {}, setControlState() {}, waitForTicks: async () => {},
+      activateItem: (off) => log.push(off ? 'up' : 'use'), deactivateItem: () => log.push('down'), attack: (e) => log.push(`hit ${e.name}`),
+      pathfinder: {setGoal: (g) => goals.push(g)}};
+    const c = new Combat({bot, online: true, name: 'bot1', world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
+    c.stop();
+    return {c, bot, log, goals};
+  };
+  const mob = (name, x) => ({id: x, name, type: 'hostile', position: new Vec3(x, 64, 0), height: 1.8});
+  let t = mk(true, [mob('zombie', 2)]);
+  assert.strictEqual(hasShield(t.bot), true);
+  await t.c.tick();
+  assert.deepStrictEqual(t.log, ['down', 'hit zombie', 'up'].slice(t.log[0] === 'down' ? 0 : 1), 'down for the swing, up again at once: ' + t.log);
+  t.c.lastAttack = Date.now(); // cooling down: the next tick only raises (it is up already)
+  await t.c.tick();
+  assert.strictEqual(t.log.at(-1), 'up');
+  t = mk(false, [mob('zombie', 2)]);
+  await t.c.tick();
+  assert.deepStrictEqual(t.log, ['hit zombie'], 'no shield: no blocking');
+  for (const shield of [true, false]) {
+    t = mk(shield, [mob('creeper', 3)]);
+    await t.c.tick();
+    assert.strictEqual(t.c.mode, 'creeper', `backed away from, shield ${shield}`);
+  }
 })();
 
 (async () => { // air: under water with little left the bot surfaces before anything else, then goes on (6 drownings, 2026-10-17)

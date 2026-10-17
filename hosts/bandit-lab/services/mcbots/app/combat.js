@@ -15,6 +15,10 @@ const wantsToEat = (food, health, eatBelow) => food < eatBelow || (health < 20 &
 // A bot with a sword or axe, two armour pieces and more than 12 health fights a mob near its target
 // instead of waiting for it to leave (5 of 8 lab bots stood still at night, 2026-10-10).
 const fightReady = (names, armour, health) => health > 12 && armour >= 2 && names.some((n) => /_(sword|axe)$/.test(n));
+// A shield held in the off-hand: the bot blocks with it between swings in close fights. It is no armour for fit():
+// a "fit" bot with only a shield walked up to two skeletons with it raised, slowed and turned to its path, and
+// fared worse than without one (lowest health 1, 14, 0 vs 18, 10, 15; sandbox 2026-10-17).
+const hasShield = (bot) => bot.inventory?.slots?.[bot.getEquipmentDestSlot?.('off-hand')]?.name === 'shield';
 
 const DEATH_PHRASE = /^(was slain by|was shot by|was speared by|fell|hit the ground|drowned|burned|went up in flames|tried to swim in lava|blew up|was blown up|suffocated|starved|froze|was killed|withered|was pricked|experienced kinetic energy)/;
 // "bot1 fell from a high place" -> "fell from a high place"; null for chat and other players.
@@ -104,11 +108,23 @@ class Combat {
     this.r.bot.pathfinder.setGoal(new goals.GoalFollow(mobLocation(target), 2), true);
   }
 
+  // The shield, if one is in the off-hand: up between swings (it counts after 5 ticks, so it guards most of a sword's
+  // 0.65 s), down for the swing and when no hostile is close (a raised shield keeps the bot from digging and eating).
+  // A player rarely times this; a bot does it every swing (owner, 2026-10-17).
+  block(up) {
+    const bot = this.r.bot;
+    if (up === !!this.blocking || (up && !hasShield(bot))) return;
+    this.blocking = up;
+    if (up) bot.activateItem(true);
+    else bot.deactivateItem();
+  }
+
   // Head out of the water: swim up, and walk to the nearest cell that has air over a water or air cell (stand in the
   // lower one, breathe in the upper one). Everything else waits meanwhile (busy).
   surface() {
     const bot = this.r.bot;
     if (bot.targetDigBlock) bot.stopDigging();
+    this.block(false); // a raised shield slows the swim
     // Open water up to the air: swimming up is enough, and the pathfinder would only fight the jump (it let go of it,
     // and bot50 hung at y 60 in a pool with no air left, sandbox 2026-10-17). Under a roof: the nearest air it reaches.
     const at = bot.entity.position.floored();
@@ -135,6 +151,7 @@ class Combat {
   release() {
     if (!this.mode) return;
     if (this.mode === 'air') this.r.bot.setControlState('jump', false);
+    this.block(false);
     this.mode = null;
     this.target = null;
     this.busy = false;
@@ -189,7 +206,10 @@ class Combat {
     if (this.mode === 'hunt' && (!near || !s.defend || dist > s.fightRange + 4 || near !== this.target)) this.release();
     if (this.mode === 'creeper' && (!near || near.name !== 'creeper' || dist > 8)) this.release();
 
+    // A creeper is backed away from, shield or not: fought behind a shield it still took bot50 to 3 health (the
+    // swing lowers it), backing off kept it at 20 (sandbox 2026-10-17).
     if (near && near.name === 'creeper' && dist < 6 && !r.sheltered) return this.takeover('creeper', near, 8);
+    if (this.blocking && closeDist > 6) this.block(false);
     if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
     // Only a fit bot walks up to a mob, never to a creeper: bot2, unarmoured and unarmed, hunted a creeper and was blown
     // up, and died four times in ten minutes (main server 2026-10-16). An unfit bot still hits what comes close.
@@ -220,7 +240,7 @@ class Combat {
     if (this.striking || target.isValid === false) return;
     const aim = () => bot.lookAt(mobLocation(target).position.offset(0, (target.vehicle?.height || 0) + target.height * 0.8, 0), true).catch(() => {});
     await aim();
-    if (wait > 450) return; // the next tick comes in 500 ms
+    if (wait > 450) return this.block(true); // the next tick comes in 500 ms
     this.striking = true;
     try {
       if (wait > 0) await new Promise((res) => setTimeout(res, wait));
@@ -236,8 +256,10 @@ class Combat {
       }
       if (target.isValid === false || mobLocation(target).position.distanceTo(bot.entity.position) > 3.6) return;
       await aim();
+      this.block(false); // no swing with the shield up
       this.lastAttack = Date.now();
       bot.attack(target);
+      this.block(true); // up again at once: it counts from 5 ticks on
       this.hits = (this.hits || 0) + 1;
       if (crit) this.crits = (this.crits || 0) + 1;
     } finally {
@@ -249,6 +271,7 @@ class Combat {
   async eat() {
     const bot = this.r.bot;
     if (this.eating || !wantsToEat(bot.food, bot.health, (this.r.getSettings?.() || DEFAULTS).eatBelow)) return;
+    this.block(false); // a raised shield would keep the food from being eaten
     const best = (ok) => bot.inventory.items()
       .filter((i) => bot.registry.foodsByName[i.name] && ok(i.name))
       .sort((a, b) => bot.registry.foodsByName[b.name].foodPoints - bot.registry.foodsByName[a.name].foodPoints)[0];
@@ -275,4 +298,4 @@ class Combat {
   }
 }
 
-module.exports = {Combat, weaponScore, AVOID_FOOD, wantsToEat, deathCause, fightReady};
+module.exports = {Combat, weaponScore, AVOID_FOOD, wantsToEat, deathCause, fightReady, hasShield};
