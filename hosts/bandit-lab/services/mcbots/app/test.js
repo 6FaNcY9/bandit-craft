@@ -72,6 +72,13 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.strictEqual(at('fail', 'failed: rearm -271 66 -214 - chest full'), null, 'a helper job is not the order');
   assert.strictEqual(at('info', 'failed: produce f'), null);
   assert.deepStrictEqual(A.orderOutcome({kind: 'fail', text: 'failed: produce f - x'}, {type: 'produce'}), {end: true}, 'saved without args (older file): ends');
+  // a sweep starts idle bots' orders again, also after a restart forgot the failure (bot2 after the 11:19 deploy)
+  const orders = new Map([['bot1', order], ['bot2', order], ['bot3', order], ['bot4', {type: 'produce'}], ['bot5', order], ['bot6', order]]);
+  const snaps = {bot1: {online: true, job: null, queue: []}, bot2: {online: true, job: {type: 'produce'}, queue: []}, bot3: {online: false},
+    bot4: {online: true, job: null, queue: []}, bot5: {online: true, job: null, queue: []}, bot6: {online: true, remote: true, connected: false, job: null, queue: []}};
+  const waits = new Map([['bot5', 2000]]);
+  assert.deepStrictEqual(A.ordersToStart(orders, (b) => snaps[b], waits, 1000).map(([b]) => b), ['bot1'], 'idle and online only, with args, after the wait');
+  assert.deepStrictEqual(A.ordersToStart(orders, (b) => snaps[b], waits, 3000).map(([b]) => b), ['bot1', 'bot5'], 'the wait is over');
   // Three failed jobs in a row: no agent order for REST_MS after the newest (bot3, main server 2026-10-14).
   const ev = (kind, t, bot = 'bot1') => ({bot, kind, t, text: `${kind === 'fail' ? 'failed' : 'finished'}: chop 1 - no free logs`});
   const now = 1e6;

@@ -48,16 +48,23 @@ const SESSION = Date.now().toString(36);
 const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
 const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
 const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
+const orderRetryAt = new Map(); // bot -> before then a failed order does not start again
 const orderEnded = (e) => {
   const order = ownerOrders.get(e.bot), out = agentauth.orderOutcome(e, order);
   if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
-  if (out?.retry) setTimeout(() => {
-    const r = runners.get(e.bot);
-    if (ownerOrders.get(e.bot) !== order || !r) return; // stopped or replaced meanwhile
-    events.add(e.bot, 'info', `the owner's ${order.type} order goes on after: ${e.text.slice(0, 100)}`);
-    try { r.enqueue(order.type, order.args); } catch (err) { events.add(e.bot, 'info', `the owner's ${order.type} order could not go on: ${err.message}`); }
-  }, out.retry).unref();
+  if (out?.retry) orderRetryAt.set(e.bot, Date.now() + out.retry);
 };
+// Every minute an owner order whose bot is online and idle starts again (after a failure's wait, also after a restart).
+setInterval(() => {
+  for (const [name, order] of agentauth.ordersToStart(ownerOrders, (n) => runners.get(n)?.snapshot(), orderRetryAt)) {
+    orderRetryAt.delete(name);
+    events.add(name, 'info', `the owner's ${order.type} order goes on`);
+    try { runners.get(name).enqueue(order.type, order.args); } catch (err) {
+      orderRetryAt.set(name, Date.now() + agentauth.ORDER_RETRY_MS);
+      events.add(name, 'info', `the owner's ${order.type} order could not go on: ${err.message}`);
+    }
+  }
+}, 60000).unref();
 const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.

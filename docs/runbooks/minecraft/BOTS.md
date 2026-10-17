@@ -195,8 +195,8 @@ check, `TRUSTED_PROXIES` rule unchanged); the agent token is refused on them.
 A job given on the dashboard (`POST /api/job` without the agent token) is the owner's order: until that
 job finishes, or the owner stops or replaces it, every agent order for the bot is refused ("works on the
 owner's ... order: only the owner changes it"), also while it waits to be resumed after a restart. A failure
-does not end it: the same job starts again after 5 min (20 min after `gave up ... (died 4 times)`), event
-`the owner's <type> order goes on after: ...` (one exploded project chest had ended two orders, and the agents
+does not end it: once a minute an order whose bot is online and idle starts again, 5 min after a failure (20 min
+after `gave up ... (died 4 times)`) and right after a restart, event `the owner's <type> order goes on` (one exploded project chest had ended two orders, and the agents
 then sent bot1 out at night 806 times in 17 h: 17 deaths, 2026-10-17). The open order per bot (type and args)
 is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
 

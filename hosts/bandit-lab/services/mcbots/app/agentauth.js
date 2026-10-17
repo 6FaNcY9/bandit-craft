@@ -113,6 +113,19 @@ function orderOutcome(e, order) {
   return {retry: m[1] === 'gave up' ? 4 * ORDER_RETRY_MS : ORDER_RETRY_MS}; // gave up: it died 4 times, give it longer
 }
 
+// Owner orders to start again now: the bot is online and idle, the order has its args, and a failure's wait
+// (retryAt) is over. A sweep, not a timer per failure: a restart forgot the timer, and bot2 sat idle with its
+// order after the 11:19 deploy (main server 2026-10-17). -> [[bot, order]]
+function ordersToStart(orders, snapshotOf, retryAt, now = Date.now()) {
+  const out = [];
+  for (const [bot, order] of orders) {
+    const s = snapshotOf(bot);
+    if (!order?.args || !s?.online || s.connected === false || s.job || s.queue?.length || (retryAt.get(bot) || 0) > now) continue;
+    out.push([bot, order]);
+  }
+  return out;
+}
+
 function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const {agentBots, supplyChest} = policy;
   if (solver === true && Array.isArray(bots) && bots.length === 1 && !agentBots.includes(bots[0])) return solverRefusal({bots, type, args, replace}, policy);
@@ -138,4 +151,4 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
 
 const validBackend = (backend) => typeof backend === 'string' && /^[a-zA-Z0-9_.:\[\]-]{1,128}$/.test(backend);
 
-module.exports = {orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
+module.exports = {ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
