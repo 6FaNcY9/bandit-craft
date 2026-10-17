@@ -3406,6 +3406,13 @@ require('./crafting');
     const c = mk();
     await nightShelter(c.r, {...job, type: 'goto'});
     assert.strictEqual(c.dug.size, 0, 'an owner\'s walk is not paused');
+    // a builder shelters only while unfit (bot2 without armour at the iron farm, 2026-10-17)
+    const fitB = mk(), bare = mk();
+    fitB.r.combat = {fit: () => true};
+    bare.r.combat = {fit: () => false};
+    await nightShelter(fitB.r, {...job, type: 'schematic'});
+    await nightShelter(bare.r, {...job, type: 'schematic'});
+    assert.deepStrictEqual([fitB.dug.size, bare.placed], [0, [90]], 'with gear it builds on, without it shelters');
     // An agent's new job replaced the waiting one (main server 2026-10-14): back in tonight's hole it waits on
     // without digging a new one, and digs only the lid out in the morning.
     const d = mk({sky: 0});

@@ -819,9 +819,13 @@ const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (
 const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'level', 'rim', 'tidy']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
+// Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
+// without armour and died six times in six minutes at the iron farm (main server 2026-10-17); with gear they build on.
+const UNFIT_NIGHT_JOBS = new Set(['schematic', 'produce']);
 async function nightShelter(r, job) {
   const {bot} = r;
-  if (r.sheltered || !NIGHT_JOBS.has(job.type) || !bot?.entity || !isNight(bot)) return;
+  if (r.sheltered || !bot?.entity || !isNight(bot)) return;
+  if (!NIGHT_JOBS.has(job.type) && !(UNFIT_NIGHT_JOBS.has(job.type) && r.combat && !r.combat.fit())) return;
   const feet = bot.entity.position.floored();
   // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.
   const back = !!r.shelterAt && feet.x === r.shelterAt.x && feet.z === r.shelterAt.z && feet.y === r.shelterAt.y - 2;
