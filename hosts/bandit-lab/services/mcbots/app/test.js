@@ -6215,9 +6215,9 @@ require('./crafting');
   assert.deepStrictEqual(rawUnknown({comparator: 5, sticky_piston: 2, shulker_box: 1}), {quartz: 5, slime_ball: 2, shulker_shell: 2}, 'the raw items the owner brings');
   assert.deepStrictEqual(rawUnknown({comparator: 5}, {have: {quartz: 3}}), {quartz: 2}, 'net of what the chests hold');
   assert.deepStrictEqual(rawUnknown({sticky_piston: 22}), {slime_ball: 22}, 'not round the slime block');
-  assert.deepStrictEqual(nextChain({need: {hopper: 1}, stock: {iron_ingot: 5, chest: 1}, store, taken: new Set(['craft:hopper'])}), {idle: 'the other bots have the open steps'});
-  assert.deepStrictEqual(nextChain({need: {}, store}), {idle: 'the project has all it needs'});
-  assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool'});
+  assert.deepStrictEqual(nextChain({need: {hopper: 1}, stock: {iron_ingot: 5, chest: 1}, store, taken: new Set(['craft:hopper'])}), {idle: 'the other bots have the open steps', left: []});
+  assert.deepStrictEqual(nextChain({need: {}, store}), {idle: 'the project has all it needs', left: []});
+  assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool', left: ['white_wool']}); // the producer asks acquire.js for these
   console.log('production: next chains ok');
 }
 

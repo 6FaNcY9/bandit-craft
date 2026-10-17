@@ -434,7 +434,7 @@ async function readStock(r, job, chests, {goNear, guard}) {
   for (const c of chests) {
     let s = CHEST_STOCK.get(chestKey(dim, c));
     if (!s || Date.now() - s.t > 600000) {
-      await goNear(r, job, c.x, c.y, c.z, 3, {doing: `counting the chest at ${c.x} ${c.y} ${c.z}`});
+      await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `counting the chest at ${c.x} ${c.y} ${c.z}`});
       guard(job);
       const block = r.bot.blockAt(new Vec3(c.x, c.y, c.z));
       if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z}`);
@@ -616,7 +616,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         if (!/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z} (found ${block.name})`);
         try {
           if (bot.entity.position.offset(0, 1.62, 0).distanceTo(new Vec3(c.x + 0.5, c.y + 0.5, c.z + 0.5)) > 4.5) {
-            await goNear(r, job, c.x, c.y, c.z, 3, {doing: `walking to the material chest at ${c.x} ${c.y} ${c.z} for ${item}`});
+            await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `walking to the material chest at ${c.x} ${c.y} ${c.z} for ${item}`});
           }
         } catch (e) {
           guard(job);
@@ -641,7 +641,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             // Opened from the edge of reach it sometimes stays shut (the sorter's main material chest, again and
             // again, sandbox 2026-10-13): once more from next to it, then the next chest.
             if (tries) break;
-            await goNear(r, job, c.x, c.y, c.z, 2, {doing: `walking up to the chest at ${c.x} ${c.y} ${c.z}`}).catch(() => guard(job));
+            await goNear(r, job, c.x, c.y, c.z, 2, {under: true, doing: `walking up to the chest at ${c.x} ${c.y} ${c.z}`}).catch(() => guard(job));
           }
         }
         if (!win) {

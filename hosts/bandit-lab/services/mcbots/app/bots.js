@@ -920,7 +920,20 @@ async function waitSafe(r, job, x, z, y = null) {
 const LEG = 48;
 const CLIMB_BUDGET = 1500; // search cost for 16 levels of stairs dug by hand (some 70 a level)
 const HAND_LEVEL = 40; // the search's estimate for one level up without a pickaxe (below its true ~70: still finds the stairs)
+// The ground a chest stands over: a chest out of a creeper's blast, 5 blocks up in the air (the iron farm's material
+// chest went up twice in one evening, main server 2026-10-17), is opened from the ground under it (the server takes a
+// block within 5.5 blocks of the eye). A chest on the ground: its own y. Unloaded: its own y.
+function groundUnder(bot, x, y, z) {
+  for (let dy = 1; dy <= 6; dy++) {
+    const b = bot.blockAt(new Vec3(x, y - dy, z));
+    if (!b) return y;
+    if (b.boundingBox === 'block') return y - dy + 1;
+  }
+  return y;
+}
+
 async function goNear(r, job, x, y, z, dist, opts = {}) {
+  if (opts.under) y = groundUnder(r.bot, x, y, z); // a container: walk to the ground under it
   // A goal above (a chest on the surface seen from a mine; 12 levels already failed, bot2 at Y 51 under
   // the chest at Y 63) gets no path in one search, so the
   // bot climbs first, 16 levels per walk, digging its own stairs (bot1, bot2 and bot3 were
@@ -2301,6 +2314,14 @@ function producer(r, job, args) {
     if (type === 'deposit') throw new Error(`the project's chests are full (${a0.only})`);
     if (have() - before < 1) throw new Error(`no ${a0.item} in the project's chests`);
   };
+  const getStep = (items, need, stock, taken, store) => {
+    for (const item of items) {
+      const count = Math.min(16, (need[item] || 0) - (stock[item] || 0)), key = `get:${item}`;
+      if (count < 1 || taken.has(key) || acquire.plan({item, count}, acquireWorld(r)).missing.length) continue;
+      return {key, label: `get ${count} ${item}`, chain: [['get', {item, count}], ['deposit', {...store, only: item}]]};
+    }
+    return null;
+  };
   async function step() {
     plan ||= await buildJob.schematicPlan(SCHEMATIC_DIR, args);
     const need = buildJob.stillNeeded(r.bot, plan);
@@ -2315,7 +2336,10 @@ function producer(r, job, args) {
       taken.add(next.key); // another worker's bot has it
       next = productionLib.nextChain({need, stock, taken, store});
     }
+    // What these chains cannot make, the planner may (acquire.js: white beds from sheep's wool), up to 16 a step.
+    if (next.idle) next = getStep(next.left || [], need, stock, taken, store) || next;
     if (next.idle) return {idle: next.idle};
+    if (next.key.startsWith('get:') && r.world && !(await r.world.claim(r.name, `produce:${next.key}`))) return {idle: 'the other bots have the open steps'};
     PRODUCING.set(next.key, {by: r.name, until: now + 30 * 60000});
     const claim = `produce:${next.key}`, hold = setInterval(() => Promise.resolve(r.world?.claim(r.name, claim)).catch(() => {}), 45000);
     job.progress = next.label;
@@ -2532,7 +2556,7 @@ const JOBS = {
   async deposit(r, job) {
     const {bot} = r;
     const {x, y, z} = job.args;
-    await goNear(r, job, x, y, z, 3, {doing: `walking to ${place(r, job.args)} to deposit`});
+    await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, job.args)} to deposit`});
     job.t.doing = `depositing at ${place(r, job.args)}`;
     const Vec3 = require('vec3').Vec3;
     const block = bot.blockAt(new Vec3(x, y, z));
@@ -2625,7 +2649,7 @@ const JOBS = {
       // The rooms are full or unreachable: the base chest takes the rest. With `only`, that is the coal that
       // did not fit before (the junk carried out stays with the bot, never goes back in).
       if (only ? eligible().length : junk().length) {
-        await goNear(r, job, x, y, z, 3, {doing: `walking back to ${place(r, job.args)} to deposit`});
+        await goNear(r, job, x, y, z, 3, {under: true, doing: `walking back to ${place(r, job.args)} to deposit`});
         chest = await openChest(r, job, bot.blockAt(new Vec3(x, y, z)));
         const rest = await fill(chest, eligible());
         noteStock(r, job, chest);
@@ -2670,7 +2694,7 @@ const JOBS = {
   async stock(r, job) {
     const {bot} = r;
     const {x, y, z} = job.args;
-    await goNear(r, job, x, y, z, 3, {doing: `walking to ${place(r, job.args)} to count its contents`});
+    await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, job.args)} to count its contents`});
     const block = bot.blockAt(new (require('vec3').Vec3)(x, y, z));
     if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${x} ${y} ${z} (found ${block?.name})`);
     job.t.doing = `counting what is in ${place(r, job.args)}`;
@@ -2699,7 +2723,7 @@ const JOBS = {
       const where = room ? `the storage chest at ${at(c)}` : place(r, job.args);
       const stand = c.stand; // hall chests carry their aisle cell
       if (stand) await goNear(r, job, stand.x, stand.y, stand.z, 1, {doing: `walking to ${where} to take ${item}`});
-      else await goNear(r, job, c.x, c.y, c.z, 3, {doing: `walking to ${where} to take ${item}`});
+      else await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `walking to ${where} to take ${item}`});
       const block = bot.blockAt(new Vec3(c.x, c.y, c.z));
       if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z} (found ${block?.name})`);
       job.t.doing = `taking ${item} from ${where}`;
@@ -2730,7 +2754,7 @@ const JOBS = {
     const Vec3 = require('vec3').Vec3;
     const centre = new Vec3(x, y, z);
     const ids = ['chest', 'trapped_chest', 'barrel'].map((n) => bot.registry.blocksByName[n]?.id).filter((i) => i !== undefined);
-    await goNear(r, job, x, y, z, 3, {brave: true, doing: `walking to ${place(r, job.args)} to re-arm`}); // getting armour is the safety step
+    await goNear(r, job, x, y, z, 3, {brave: true, under: true, doing: `walking to ${place(r, job.args)} to re-arm`}); // getting armour is the safety step
     const spots = bot.findBlocks({matching: ids, point: centre, maxDistance: 6, count: 64});
     if (!spots.length) throw new Error(`no chests within 6 blocks of ${x} ${y} ${z}`);
     const tier = (n) => ['wooden', 'leather', 'golden', 'stone', 'chainmail', 'iron', 'diamond', 'netherite'].findIndex((t) => n.startsWith(t));
