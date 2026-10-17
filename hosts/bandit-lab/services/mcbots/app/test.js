@@ -1483,6 +1483,16 @@ require('./crafting');
     await until(() => world.stock?.items.coal === 3, 'stock reached the hub');
     assert.deepStrictEqual(world.stock.items, {coal: 3, oak_log: 20});
     assert.strictEqual(world.stock.by, 'bot6');
+    // One storage index for all processes (acquire.js plans from it): a worker's chest reaches the hub, cleaned...
+    client.world.noteChest('10,64,-3', {iron_ingot: 12, 'Bad Name': 1, coal: -2}, 20);
+    client.world.flush();
+    await until(() => world.chests.get('10,64,-3'), 'worker chest reached the hub');
+    assert.deepStrictEqual([world.chests.get('10,64,-3').items, world.chests.get('10,64,-3').free], [{iron_ingot: 12}, 20]);
+    // ... and a lab bot's chest reaches the worker.
+    world.noteChest('-5,60,7', {oak_log: 30});
+    hub.broadcastWorld();
+    await until(() => client.world.chests.get('-5,60,7'), 'lab chest reached the worker');
+    assert.deepStrictEqual(client.world.chests.get('-5,60,7').items, {oak_log: 30});
     client.world.release('bot6', 'overworld:40,60,5');
     await until(() => !world.claims.has('overworld:40,60,5'), 'worker release reached the hub');
     // hub link drops: reservations are refused until it is back

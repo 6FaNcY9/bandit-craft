@@ -34,6 +34,7 @@ const HOST_RE = /^[\w.-]{1,40}$/;
 const WID_RE = /^[0-9a-f]{32}$/;
 const RESUME_MS = 300000; // a restarted worker's bot has this long to log in before its old jobs are dropped
 const BLOCK_RE = /^[a-z_]{1,48}$/;
+const CHEST_KEY_RE = /^-?\d{1,8},-?\d{1,4},-?\d{1,8}$/; // storage index key: x,y,z
 
 // ---- sanitizers: nothing a worker sends is trusted ----
 const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
@@ -501,15 +502,26 @@ class Hub {
       const c = obj(st.chest);
       this.world.noteStock(by(st.by), items, Number.isInteger(st.free) && st.free >= 0 && st.free <= 54 ? st.free : null, c && [c.x, c.y, c.z].every(Number.isInteger) ? {x: c.x, y: c.y, z: c.z} : null);
     }
+    // Chests a worker's bot looked into: one storage index for every bot, so a plan (acquire.js) knows them all.
+    for (const x of list(m.chests, 40, (v) => obj(v) || {})) {
+      if (!CHEST_KEY_RE.test(String(x.key))) continue;
+      const items = Object.fromEntries(Object.entries(obj(x.items) || {}).slice(0, 80).filter(([k, v]) => BLOCK_RE.test(k) && Number.isInteger(v) && v >= 0).map(([k, v]) => [k, Math.min(v, 1e6)]));
+      this.world.noteChest(x.key, items, Number.isInteger(x.free) && x.free >= 0 && x.free <= 54 ? x.free : null);
+    }
   }
 
   // ---- hub to workers ----
   broadcastWorld() {
     const live = [...this.conns].filter((c) => c.hello && c.ws.readyState === 1);
     if (!live.length) return;
-    const w = this.world.snapshot();
-    const msg = JSON.stringify({t: 'world', players: w.players, mobs: w.mobs, blocks: w.blocks, claims: w.claims, bluemap: w.bluemap});
-    for (const c of live) c.ws.send(msg);
+    const w = this.world.snapshot(), now = this.now();
+    const shared = {t: 'world', players: w.players, mobs: w.mobs, blocks: w.blocks, claims: w.claims, bluemap: w.bluemap};
+    for (const c of live) {
+      // The storage index goes out as it changes: all of it to a new connection, then what changed since.
+      const chests = [...(this.world.chests || [])].filter(([, v]) => v.t > (c.chestsAt ?? -Infinity)).map(([key, v]) => ({key, items: v.items, free: v.free, age: (now - v.t) / 1000}));
+      c.chestsAt = now;
+      c.ws.send(JSON.stringify(chests.length ? {...shared, chests} : shared));
+    }
   }
 
   // Zones or the supply chest changed (server.js applyPlaces): connected workers must follow, not only new ones.

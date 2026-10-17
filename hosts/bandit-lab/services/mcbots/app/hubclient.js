@@ -34,6 +34,7 @@ class RemoteWorld extends WorldModel {
     this.gone = new Set();
     this.outStock = null;
     this.outChanges = [];
+    this.outChests = new Map(); // storage index entries our bots saw, for the hub
   }
 
   get unreachable() {
@@ -106,6 +107,11 @@ class RemoteWorld extends WorldModel {
     this.outStock = {by, items, free, chest};
   }
 
+  noteChest(key, items, free = null) {
+    super.noteChest(key, items, free);
+    this.outChests.set(key, {key, items, free});
+  }
+
   forgetMob(id) {
     super.forgetMob(id);
     for (const k of this.outMobs.keys()) if (k.endsWith(`:${id}`)) this.outMobs.delete(k);
@@ -114,8 +120,9 @@ class RemoteWorld extends WorldModel {
 
   // One batched frame per report interval instead of one per observation.
   flush() {
-    if (!this.link || !(this.outMobs.size || this.outBlocks.size || this.gone.size || this.outStock || this.outChanges.length)) return;
-    this.link.send({t: 'observe', mobs: [...this.outMobs.values()], blocks: [...this.outBlocks.values()], gone: [...this.gone], stock: this.outStock, changes: this.outChanges});
+    if (!this.link || !(this.outMobs.size || this.outBlocks.size || this.gone.size || this.outStock || this.outChanges.length || this.outChests.size)) return;
+    this.link.send({t: 'observe', mobs: [...this.outMobs.values()], blocks: [...this.outBlocks.values()], gone: [...this.gone], stock: this.outStock, changes: this.outChanges, chests: [...this.outChests.values()]});
+    this.outChests.clear();
     this.outStock = null;
     this.outChanges = [];
     this.outMobs.clear();
@@ -141,6 +148,12 @@ class RemoteWorld extends WorldModel {
       if (!this.mine.has(c.by)) this.claims.set(c.key, {by: c.by, t});
     }
     if (msg.bluemap && typeof msg.bluemap === 'object') this.bluemap = {...msg.bluemap, t: ago(msg.bluemap)};
+    // The hub's storage index: the newer look wins (our own bots' looks come back from it too).
+    for (const c of Array.isArray(msg.chests) ? msg.chests : []) {
+      if (typeof c?.key !== 'string' || !c.items || typeof c.items !== 'object') continue;
+      const t = ago(c);
+      if ((this.chests.get(c.key)?.t ?? -Infinity) < t) this.chests.set(c.key, {items: c.items, free: c.free ?? null, t});
+    }
   }
 }
 
