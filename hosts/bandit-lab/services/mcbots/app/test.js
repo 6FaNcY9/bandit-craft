@@ -3093,6 +3093,50 @@ require('./crafting');
     w = world([[0, 0, 'barrel'], [1, 0, 'barrel']]);
     assert.strictEqual(partnerOf(w.bot, w.bot.blockAt(new Vec3(0, 64, 0))), null);
   }
+  { // withdraw: a storage chest with no way to it is passed over for 30 min, the next one gives the item
+    const {JOBS} = require('./bots');
+    const {Vec3} = require('vec3');
+    const {WorldModel} = require('./world');
+    const pc = require('./plan-config'), L = require('./storage-layout');
+    const world = new WorldModel();
+    world.noteChest('-251,59,-214', {iron_ingot: 9}, 0); // its aisle cell -251 58 -215 is walled in
+    world.noteChest('-263,58,-219', {iron_ingot: 5}, 0);
+    const it = (name, count) => ({name, count, type: 7, metadata: null});
+    const held = {[L.keyOf(pc.BASE.chest)]: [], '-251,59,-214': [it('iron_ingot', 9)], '-263,58,-219': [it('iron_ingot', 5)]};
+    const walks = [];
+    const bot = {
+      entity: {position: new Vec3(-250, 58, -214), onGround: true}, game: {dimension: 'overworld'}, entities: {},
+      inventory: {items: () => []},
+      blockAt: (p) => (held[L.keyOf(p)] ? {name: 'chest', position: p, boundingBox: 'block', getProperties: () => ({})} : null),
+      pathfinder: {searchRadius: -1, stop() {}, setGoal() {}, goto: async (g) => {
+        walks.push(`${g.x},${g.z}`);
+        if (g.x === -251 && g.z === -215) throw new Error('The goal was changed');
+      }},
+      openContainer: async (b) => {
+        const items = held[L.keyOf(b.position)];
+        return {containerItems: () => items, close() {}, withdraw: async (_t, _m, n) => { items[0].count -= n; if (!items[0].count) items.shift(); }};
+      },
+    };
+    const infos = [];
+    const r = {bot, world, sheltered: true, emit: (k, m) => infos.push(m), protectedAreas: []};
+    const job = (count) => ({type: 'withdraw', t: {}, cancelled: false, args: {...pc.BASE.chest, item: 'iron_ingot', count}});
+    await JOBS.withdraw(r, job(12));
+    assert.deepStrictEqual(held['-263,58,-219'], [], 'the reachable chest gave its 5');
+    assert.ok(infos.some((m) => /-251 59 -214 is out of reach, passed over for 30 min/.test(m)), infos.join('\n'));
+    walks.length = 0;
+    await assert.rejects(JOBS.withdraw(r, job(3)), /no iron_ingot in the chest or the storage room \(1 storage chests out of reach\)/);
+    assert.ok(!walks.includes('-251,-215'), `no second walk to the walled-in chest: ${walks}`);
+    // goNear under a chest up in the air: the ground cell under it or one beside it, not 3 around (a level lower is
+    // out of the server's reach); a chest on the ground keeps its distance
+    const goals = [];
+    const air = {name: 'air', boundingBox: 'empty'}, solid = {name: 'obsidian', boundingBox: 'block'};
+    const floating = {...bot, entity: {position: new Vec3(-356, 67, -189), onGround: true},
+      blockAt: (p) => (p.y === 66 || (p.x === -350 && p.y === 63) ? solid : air), pathfinder: {searchRadius: -1, stop() {}, setGoal() {}, goto: async (g) => { goals.push(g); }}};
+    const near = require('./bots').goNear;
+    await near({...r, bot: floating}, job(1), -356, 72, -191, 3, {under: true});
+    await near({...r, bot: floating}, job(1), -350, 64, -189, 3, {under: true});
+    assert.deepStrictEqual(goals.map((g) => [g.y, g.rangeSq]), [[67, 1], [64, 9]]);
+  }
   { // rearm: the optional spare pickaxe / logs / planks never end the equipment step (R2-4)
     const {JOBS, Cancelled} = require('./bots');
     const {Vec3} = require('vec3');
@@ -6236,6 +6280,40 @@ require('./crafting');
   assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool', left: ['white_wool']}); // the producer asks acquire.js for these
   console.log('production: next chains ok');
 }
+
+(async () => { // Project cards count placed cells, unique chests, and only materials with no acquire plan (main server 2026-10-18).
+  const assert = require('node:assert/strict');
+  const bots = require('./bots');
+  const {projectPlaced, projectChests, projectOwner} = bots;
+  const targets = [
+    {p: {item: 'stone', again: false}}, {p: {item: 'stone', again: false}}, {p: {item: 'oak_slab', again: true}},
+  ];
+  assert.strictEqual(projectPlaced(3, targets, {stone: 1, oak_slab: 2}), 1, 'remaining blocks map to missing cells');
+  const chest = {x: 1, y: 64, z: 2};
+  assert.deepStrictEqual(projectChests({store: chest, chests: [chest, {x: 2, y: 64, z: 2}]}), [chest, {x: 2, y: 64, z: 2}], 'store/chests are unique by position');
+  const data = require('minecraft-data')('26.1');
+  const world = {data, have: {}, stores: [], blockNear: () => null, mobNear: (mob) => mob === 'sheep' ? 20 : null, canKill: (mob) => mob === 'sheep'};
+  assert.deepStrictEqual(projectOwner({white_wool: 4, nether_star: 1}, world), {nether_star: 1}, 'sheep makes wool acquirable; impossible drops stay on the owner list');
+  const build = require('./build'), old = {plan: build.schematicPlan, needed: build.stillNeeded, stock: build.chestStock};
+  const storeChest = {x: 1, y: 64, z: 2}, job = {type: 'produce', args: {file: 'fake.litematic', origin: {x: 0, y: 64, z: 0}, store: storeChest, chests: [storeChest]}};
+  let scans = 0;
+  const pos = {x: 0, y: 64, z: 0, distanceTo: () => 20};
+  const bot = {entity: {position: pos}, game: {dimension: 'overworld'}, registry: data, inventory: {items: () => []}, blockAt: () => ({}), findBlock: () => null,
+    nearestEntity: (match) => { const sheep = {name: 'sheep', position: pos}; return match(sheep) ? sheep : null; }};
+  const runner = {current: job, bot, world: {chests: new Map()}, acquireFailed: new Map(), protectedAreas: []};
+  build.schematicPlan = async () => ({lo: {x: 0, y: 64, z: 0}, hi: {x: 1, y: 64, z: 0}, targets: [{p: {item: 'white_wool'}}, {p: {item: 'white_wool'}}]});
+  build.stillNeeded = () => { scans++; return {white_wool: 1}; };
+  build.chestStock = () => new Map();
+  try {
+    const m = await bots.projectMaterials(runner);
+    assert.deepStrictEqual([m.placed, m.chests, m.counted, m.owner], [1, 1, 1, {}], 'materials show exact remaining cells and do not ask for sheep drops');
+    m.lacking.white_wool = 99;
+    const cached = await bots.projectMaterials(runner);
+    assert.deepStrictEqual(cached.lacking, {white_wool: 1}, 'API consumers cannot mutate the cached result');
+    assert.strictEqual(scans, 1, 'dashboard polls reuse one bot result for a minute');
+  } finally { build.schematicPlan = old.plan; build.stillNeeded = old.needed; build.chestStock = old.stock; }
+  console.log('project materials: progress, chest dedupe, and acquire owner list ok');
+})();
 
 // hostilesNear with a height: a mob in a cave far below the target is not near it.
 {

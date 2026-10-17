@@ -612,7 +612,7 @@ function renderProject() {
   $('projMini').hidden = !any;
   const lead = crew.filter((b) => b.job.type === 'schematic' && b.job.total).sort((a, z) => z.job.done - a.job.done)[0];
   const file = String(materials?.file || /^(\S+?)\.litematic/.exec(crew[0]?.job.label || paused[0]?.[1].summary || '')?.[1] || '').replace(/\.litematic$/, '');
-  const total = lead?.job.total || materials?.cells || 0, done = lead?.job.done || 0;
+  const total = lead?.job.total || materials?.cells || 0, done = Math.max(lead?.job.done || 0, materials?.placed || 0);
   const prod = crew.find((b) => b.job.type === 'produce');
   const owner = Object.entries(materials?.owner || {});
   $('projMiniTitle').textContent = `🏗️ ${file || 'Projekt'}`;

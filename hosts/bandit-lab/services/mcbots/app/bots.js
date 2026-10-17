@@ -34,6 +34,7 @@ const owner = require('./owner');
 const NAME_RE = /^bot[0-9]{1,2}$/; // BotGate's pattern (Velocity plugin)
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
+const UNREACHABLE_CHEST_MS = 30 * 60000;
 const CHAT_TYPES = new Set(['chat.type.text', '<%s> %s']);
 const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers to you: %s']);
 const BACKOFF_START = 5000;
@@ -949,7 +950,14 @@ function groundUnder(bot, x, y, z) {
 }
 
 async function goNear(r, job, x, y, z, dist, opts = {}) {
-  if (opts.under) y = groundUnder(r.bot, x, y, z); // a container: walk to the ground under it
+  // A container: walk to the ground under it. Under a chest up in the air only that cell and the ones beside it
+  // will do: 3 around the ground let bot1 stand a level lower next to the obsidian under -356 72 -191, 5.6 from the
+  // chest where the server opens one 5.5 away, and "the container did not open within 10 s" (main server 2026-10-18).
+  if (opts.under) {
+    const ground = groundUnder(r.bot, x, y, z);
+    if (ground < y) dist = Math.min(dist, 1);
+    y = ground;
+  }
   // A goal above (a chest on the surface seen from a mine; 12 levels already failed, bot2 at Y 51 under
   // the chest at Y 63) gets no path in one search, so the
   // bot climbs first, 16 levels per walk, digging its own stairs (bot1, bot2 and bot3 were
@@ -2192,17 +2200,38 @@ const SUPPORT_STOCK = {glass: 320, dirt: 128}; // the crew climbs on glass over 
 // (2026-10-16). One per hopper, 16 at least, the sorter's 320 at most.
 const supportStock = (plan) => ({...SUPPORT_STOCK, glass: Math.min(SUPPORT_STOCK.glass, Math.max(16, plan.targets.filter((t) => t.name === 'hopper').length))});
 
+const PROJECT_MATERIALS_MS = 60000;
+const PROJECT_MATERIALS = new WeakMap();
+function projectPlaced(cells, targets, need) {
+  const left = {...need};
+  let missing = 0;
+  for (const t of targets) {
+    const item = t.p.item;
+    const count = t.p.again ? 2 : 1;
+    if ((left[item] || 0) < count) continue;
+    left[item] -= count;
+    missing++;
+  }
+  return Math.max(0, cells - missing);
+}
+const projectChests = (args) => [...new Map([args.store, ...(args.chests || [])].filter(Boolean).map((c) => [`${c.x},${c.y},${c.z}`, c])).values()];
+function projectOwner(owner, world) {
+  return Object.fromEntries(Object.entries(owner).filter(([item, count]) => acquire.plan({item, count}, world).missing.length));
+}
+
 // For the dashboard: what a bot's schematic project still needs, what its chests hold (as the crew last counted
 // them) and what the bots cannot make (the owner's part). Null unless the bot runs the project and sees its site.
 async function projectMaterials(r) {
   const job = r.current;
   if (!job || !/^(schematic|produce)$/.test(job.type) || !r.bot?.entity) return null;
+  const cached = PROJECT_MATERIALS.get(r.bot);
+  if (cached?.job === job && Date.now() - cached.t < PROJECT_MATERIALS_MS) return {...cached.value, lacking: {...cached.value.lacking}};
   const plan = await buildJob.schematicPlan(SCHEMATIC_DIR, job.args);
   const {Vec3} = require('vec3');
   if (!r.bot.blockAt(new Vec3(Math.floor((plan.lo.x + plan.hi.x) / 2), plan.lo.y, Math.floor((plan.lo.z + plan.hi.z) / 2)))) return null;
   const dim = normDim(r.bot.game?.dimension);
   const need = buildJob.stillNeeded(r.bot, plan);
-  const chests = [job.args.store, ...(job.args.chests || [])].filter(Boolean);
+  const chests = projectChests(job.args);
   const stock = {};
   let counted = 0;
   for (const c of chests) {
@@ -2216,8 +2245,11 @@ async function projectMaterials(r) {
   const {planMaterials, rawUnknown} = require('./recipes');
   const p = planMaterials(lacking, {have: stock});
   const cannot = [...p.unknown, ...p.gather.filter((g) => !productionLib.gatherJob(g.how, 1)).map((g) => g.item)];
-  const owner = rawUnknown(Object.fromEntries(cannot.map((n) => [n, lacking[n] || p.gather.find((g) => g.item === n)?.count || 1])), {have: stock});
-  return {file: job.args.file, origin: job.args.origin, lo: plan.lo, hi: plan.hi, cells: plan.targets.length, need, stock, lacking, owner, chests: chests.length, counted};
+  const raw = rawUnknown(Object.fromEntries(cannot.map((n) => [n, lacking[n] || p.gather.find((g) => g.item === n)?.count || 1])), {have: stock});
+  const result = {file: job.args.file, origin: job.args.origin, lo: plan.lo, hi: plan.hi, cells: plan.targets.length,
+    placed: projectPlaced(plan.targets.length, plan.targets, need), need, stock, lacking, owner: projectOwner(raw, acquireWorld(r)), chests: chests.length, counted};
+  PROJECT_MATERIALS.set(r.bot, {job, t: Date.now(), value: result});
+  return {...result, lacking: {...result.lacking}};
 }
 // "get N of an item" (acquire.js): plan, do the next step, plan again from what the bot has now. A step is done for
 // the whole plan at once (one walk to the trees, not one per log). A mine, hunt or chest step that fails is left out
@@ -2732,14 +2764,27 @@ const JOBS = {
     const atBase = storage.sameXYZ(job.args, planConfig.BASE.chest);
     const match = itemMatcher(item);
     const rooms = atBase ? layout.withdrawOrder({item, match, chests: r.world?.chests || new Map(), wall: planConfig.BASE.roomChests, from: bot.entity.position, exists: (c) => bot.blockAt(new Vec3(c.x, c.y, c.z))?.name === 'chest'}) : [];
-    let taken = 0;
+    // A storage chest with no way to it is passed over for 30 min: bot2 spent 90 s at the walled-in -272 58 -219
+    // every few minutes and fetched no iron at all, while -251 58 -216 held some (main server 2026-10-18).
+    const away = (r.unreachableChests ||= new Map());
+    let taken = 0, skipped = 0;
     for (const c of [{x, y, z}, ...rooms]) {
       if (taken >= count) break;
       const room = rooms.includes(c);
+      if (room && Date.now() - (away.get(layout.keyOf(c)) || -Infinity) < UNREACHABLE_CHEST_MS) { skipped++; continue; }
       const where = room ? `the storage chest at ${at(c)}` : place(r, job.args);
       const stand = c.stand; // hall chests carry their aisle cell
-      if (stand) await goNear(r, job, stand.x, stand.y, stand.z, 1, {doing: `walking to ${where} to take ${item}`});
-      else await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `walking to ${where} to take ${item}`});
+      try {
+        if (stand) await goNear(r, job, stand.x, stand.y, stand.z, 1, {doing: `walking to ${where} to take ${item}`});
+        else await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `walking to ${where} to take ${item}`});
+      } catch (e) {
+        guard(job);
+        if (!room || !/^could not reach/.test(e.message)) throw e;
+        away.set(layout.keyOf(c), Date.now());
+        r.emit('info', `${where} is out of reach, passed over for 30 min: ${e.message.slice(0, 80)}`);
+        skipped++;
+        continue;
+      }
       const block = bot.blockAt(new Vec3(c.x, c.y, c.z));
       if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z} (found ${block?.name})`);
       job.t.doing = `taking ${item} from ${where}`;
@@ -2758,7 +2803,7 @@ const JOBS = {
         chest.close();
       }
     }
-    if (!taken) throw new Error(`no ${item} in the chest${rooms.length ? ' or the storage room' : ''}`);
+    if (!taken) throw new Error(`no ${item} in the chest${rooms.length ? ' or the storage room' : ''}${skipped ? ` (${skipped} storage chests out of reach)` : ''}`);
   },
 
   // Visit every chest/barrel within 6 blocks of the supply point and take
@@ -3102,4 +3147,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, supportStock, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
