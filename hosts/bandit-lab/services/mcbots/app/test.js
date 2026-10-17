@@ -487,7 +487,7 @@ assert.equal(deathCause('bot1', 'bot1 hit the ground too hard'), 'hit the ground
 assert.equal(deathCause('bot3', 'bot3 was speared by Zombie'), 'was speared by Zombie'); // a zombie with a spear (26.x)
 assert.equal(deathCause('bot1', 'bot1 tried to swim in lava'), 'tried to swim in lava');
 assert.equal(deathCause('bot1', 'bot1 experienced kinetic energy'), 'experienced kinetic energy');
-for (const m of ['bot1 drowned', 'bot1 burned to death', 'bot1 went up in flames', 'bot1 blew up', 'bot1 was blown up by Creeper', 'bot1 suffocated in a wall', 'bot1 starved to death', 'bot1 froze to death', 'bot1 was killed by magic', 'bot1 withered away', 'bot1 was pricked to death', 'bot1 was shot by Skeleton']) assert.ok(deathCause('bot1', m), m);
+for (const m of ['bot1 drowned', 'bot1 burned to death', 'bot1 went up in flames', 'bot1 blew up', 'bot1 was blown up by Creeper', 'bot1 suffocated in a wall', 'bot1 starved to death', 'bot1 froze to death', 'bot1 was killed by magic', 'bot1 withered away', 'bot1 was pricked to death', 'bot1 was shot by Skeleton', 'bot1 was doomed to fall by Creeper', 'bot1 was squashed by a falling block', 'bot1 died', 'bot1 walked into fire while fighting Zombie', 'bot1 fell out of the world', 'bot1 was obliterated by a sonically-charged shriek']) assert.ok(deathCause('bot1', m), m);
 assert.equal(deathCause('bot1', 'bot2 was slain by Zombie'), null);
 assert.equal(deathCause('bot1', '<bot1> fell from a high place'), null);
 assert.equal(deathCause('bot1', 'bot1 joined the game'), null);

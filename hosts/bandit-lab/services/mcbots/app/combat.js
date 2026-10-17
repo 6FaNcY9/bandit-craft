@@ -20,7 +20,8 @@ const fightReady = (names, armour, health) => health > 12 && armour >= 2 && name
 // fared worse than without one (lowest health 1, 14, 0 vs 18, 10, 15; sandbox 2026-10-17).
 const hasShield = (bot) => bot.inventory?.slots?.[bot.getEquipmentDestSlot?.('off-hand')]?.name === 'shield';
 
-const DEATH_PHRASE = /^(was slain by|was shot by|was speared by|fell|hit the ground|drowned|burned|went up in flames|tried to swim in lava|blew up|was blown up|suffocated|starved|froze|was killed|withered|was pricked|experienced kinetic energy)/;
+// Vanilla's death messages (en_us): "bot2 was doomed to fall by Creeper" went unnamed (main server 2026-10-17).
+const DEATH_PHRASE = /^(was (slain|shot|speared|killed|blown up|fireballed|pummeled|impaled|skewered|stung|squashed|squished|poked|pricked|doomed to fall|knocked into the void|burned|struck by lightning|frozen|obliterated|roasted|stabbed)|fell|hit the ground|drowned|died|burned|went (up in flames|off with a bang)|tried to swim in lava|discovered the floor was lava|walked into|blew up|suffocated|starved|froze|withered|experienced kinetic energy|didn't want to live|left the confines of this world|removed an elytra)/;
 // "bot1 fell from a high place" -> "fell from a high place"; null for chat and other players.
 const deathCause = (name, msg) => {
   if (!msg.startsWith(`${name} `)) return null;
