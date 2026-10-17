@@ -100,6 +100,7 @@ class Combat {
   }
 
   hunt(target) {
+    this.r.log(this.r.name, `hunt: ${target.name} at ${Math.round(mobLocation(target).position.distanceTo(this.r.bot.entity.position))}, health ${Math.round(this.r.bot.health)}`);
     this.mode = 'hunt';
     this.target = target;
     this.since = Date.now();

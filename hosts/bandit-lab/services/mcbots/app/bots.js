@@ -37,6 +37,14 @@ const GOTO_TIMEOUT_MS = 90000;
 const CHAT_TYPES = new Set(['chat.type.text', '<%s> %s']);
 const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers to you: %s']);
 const BACKOFF_START = 5000;
+const HITS_MS = 30000;
+// " (last 30 s: zombie x6, skeleton x3; walking to the storage)" for the death line: what hurt the bot and what it did.
+const hitsNote = (hits, doing, now = Date.now()) => {
+  const by = {};
+  for (const h of hits) if (now - h.t < HITS_MS) by[h.by] = (by[h.by] || 0) + 1;
+  const list = Object.entries(by).map(([n, c]) => `${n} x${c}`).join(', ');
+  return ` (last 30 s: ${list || 'no hits seen'}; ${doing})`;
+};
 const BACKOFF_CAP = 300000;
 // Kept on deposit: what a bot needs to craft a replacement tool or light a mine.
 // Natural ground an excavation may remove; never placed blocks (cobblestone is a wall).
@@ -256,6 +264,7 @@ class BotRunner {
     this.name = name;
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
+    this.hits = []; // {t, by}: who hurt this bot lately, for the death line
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
     this.conflicts = {n: 0, at: 0};
     this.hostLabel = hostLabel; // machine this bot runs on, shown in the dashboard
@@ -405,6 +414,13 @@ class BotRunner {
         return false;
       });
     }));
+    // Who hurt it (an arrow counts for its shooter): bot1 died in full iron, "shot by Skeleton", and nothing told
+    // what else hit it or what it was doing (main server 2026-10-17).
+    bot.on('entityHurt', (e, by) => {
+      if (e !== bot.entity) return;
+      const now = Date.now();
+      this.hits = [...this.hits.filter((h) => now - h.t < HITS_MS), {t: now, by: by?.username || by?.name || 'no mob'}];
+    });
     bot.loadPlugin(collectBlock);
     require('./crafting').fixCraftTiming(bot);
     unwedge(bot);
@@ -469,12 +485,14 @@ class BotRunner {
     });
     bot.on('entityGone', (e) => this.world.forgetMob(e.id));
     bot.on('death', () => {
+      const doing = this.activity(); // before `dead`, which hides it
       this.dead = true;
       this.lastError = 'died';
       const p = bot.entity?.position;
       const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
       this.deathCause = null;
-      this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}`);
+      this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${hitsNote(this.hits, doing)}`);
+      this.hits = [];
       const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
       this.cancel();
       this.resumeLater(was, 'died');
@@ -2959,4 +2977,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, supportStock, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, supportStock, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

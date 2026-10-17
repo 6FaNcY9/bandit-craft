@@ -374,6 +374,13 @@ const {Combat, weaponScore, wantsToEat, deathCause, fightReady} = require('./com
   assert.equal(needsWood([{name: 'birch_planks', count: 8}]), false);
   assert.equal(needsWood([{name: 'oak_log', count: 1}, {name: 'spruce_log', count: 1}]), false);
 }
+{
+  // The death line says what hurt the bot in its last 30 s and what it was doing (bot1, main server 2026-10-17).
+  const {hitsNote} = require('./bots');
+  const now = 100000, hit = (by, ago) => ({t: now - ago, by});
+  assert.equal(hitsNote([hit('zombie', 1000), hit('skeleton', 2000), hit('zombie', 3000), hit('creeper', 40000)], 'walking', now), ' (last 30 s: zombie x2, skeleton x1; walking)');
+  assert.equal(hitsNote([], 'idle - no job', now), ' (last 30 s: no hits seen; idle - no job)');
+}
 // Hurt bots eat at food 15-17 so they regenerate (bot1 sat at 6.7 health with food 17, 2026-10-10).
 assert.equal(wantsToEat(17, 6.7, 15), true);
 assert.equal(wantsToEat(17, 20, 15), false);
