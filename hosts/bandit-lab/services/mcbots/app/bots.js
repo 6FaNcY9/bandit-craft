@@ -719,7 +719,7 @@ class BotRunner {
   activity() {
     if (!this.online) return this.lastSeen ? 'offline' : 'connecting...';
     if (this.dead) return 'dead - respawning';
-    if (this.combat.busy) return {hunt: `fighting ${this.combat.target?.name || 'a hostile mob'}`, retreat: 'retreating to heal', creeper: 'backing off a creeper', air: 'surfacing for air'}[this.combat.mode] || 'fighting';
+    if (this.combat.busy) return {hunt: `fighting ${this.combat.target?.name || 'a hostile mob'}`, retreat: 'retreating to heal', creeper: 'kiting a creeper', kite: 'kiting the mobs back', air: 'surfacing for air'}[this.combat.mode] || 'fighting';
     const j = this.current;
     if (!j) return this.queue.length ? 'starting the next job' : 'idle - no job';
     return j.t?.doing || `${jobLabel(j)} ${j.progress || ''}`.trim();
@@ -850,6 +850,22 @@ const UNFIT_NIGHT_JOBS = new Set(['schematic', 'produce']);
 async function nightShelter(r, job) {
   const {bot} = r;
   if (r.sheltered || !bot?.entity || !isNight(bot)) return;
+  // An unfit bot fetches its grave by day (AxGraves keeps one 24 h): bot2, unarmed, went for its graves through the
+  // night and died at each (main server 2026-10-17). It waits where it is, at the base after a respawn.
+  if (job.type === 'grave' && r.combat && !r.combat.fit()) {
+    r.emit('info', 'night: waiting for the morning before fetching the grave');
+    r.sheltered = true;
+    try {
+      while (isNight(bot)) {
+        guard(job);
+        job.t.doing = 'night: waiting for the morning to fetch the grave';
+        await sleep(5000);
+      }
+    } finally {
+      r.sheltered = false;
+    }
+    return;
+  }
   if (!NIGHT_JOBS.has(job.type) && !(UNFIT_NIGHT_JOBS.has(job.type) && r.combat && !r.combat.fit())) return;
   const feet = bot.entity.position.floored();
   // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.

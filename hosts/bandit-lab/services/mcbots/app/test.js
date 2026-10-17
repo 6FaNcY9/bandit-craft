@@ -509,6 +509,14 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
     assert.equal(world.snapshot().mobs[0].x, 2);
     assert.equal(zombie.position.x, mounted ? 100 : 2, 'leave the protocol position alone');
     bot.health = 6;
+    // Hurt by a zombie close by: it kites it (backwards, striking), it does not turn its back (some 20 deaths
+    // "retreating to heal" in one night, main server 2026-10-17); from an archer alone it still walks off.
+    bot.waitForTicks = async () => { zombie.isValid = false; };
+    await c.tick();
+    assert.ok(controls.includes('back true') && c.mode === null, `hurt by a zombie: kites it (${controls})`);
+    zombie.isValid = true;
+    delete bot.waitForTicks;
+    zombie.name = 'skeleton';
     await c.tick();
     assert.equal(c.mode, 'retreat');
     assert.strictEqual(paths.at(-1).goal.entity, location);
@@ -516,6 +524,7 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
     assert.equal(paths.at(-1).goal.hasChanged(), true, 'retreat follows mount movement');
     await c.tick();
     assert.equal(c.mode, null, 'release when the threat moves away');
+    zombie.name = 'zombie';
     bot.health = 20;
     c.fit = () => true;
     location.position = new Vec3(10, 64, 0);
@@ -531,6 +540,7 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
     bot.waitForTicks = async () => { if (++ticks >= 2) zombie.isValid = false; }; // killed on the second tick
     location.position = new Vec3(5, 64, 0);
     hits.length = 0;
+    controls.length = 0;
     c.lastAttack = 0;
     await c.tick();
     assert.deepStrictEqual(hits, [zombie], 'fit, at 5: struck');
@@ -544,10 +554,15 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
     await c.tick();
     assert.deepStrictEqual([controls[0], controls.at(-1)], ['back true', 'back false'], 'fit, at 3: walks backwards, and stops after');
     assert.ok(aims.at(-1).x > 0, 'facing the creeper while it backs off');
+    // Unfit, it kites the creeper too: walking backwards keeps it off better than the pathfinder backing off did
+    // (bot2, naked, was blown up "backing off a creeper", main server 2026-10-17).
     c.fit = () => false;
-    location.position = new Vec3(5, 64, 0);
+    Object.assign(zombie, {isValid: true});
+    ticks = 0;
+    controls.length = 0;
+    location.position = new Vec3(3, 64, 0);
     await c.tick();
-    assert.equal(c.mode, 'creeper', 'unfit: backs off');
+    assert.strictEqual(controls[0], 'back true', 'unfit: kites it too');
   }
 })();
 // Death causes: only the bot's own death messages; chat and other players are ignored.
@@ -5502,7 +5517,7 @@ require('./crafting');
   assert.strictEqual((await run(true, [mob('creeper', 7)])).mode, null, 'a creeper 7 blocks off is never hunted');
 })();
 
-(async () => { // shield: up between swings, down for the swing; a creeper is still backed away from (2026-10-17)
+(async () => { // shield: up between swings, down for the swing; a creeper is kited, struck from range (2026-10-17)
   const {Combat, hasShield} = require('./combat');
   const {Vec3} = require('vec3');
   const mk = (shield, mobs) => {
@@ -5530,8 +5545,9 @@ require('./crafting');
   assert.deepStrictEqual(t.log, ['hit zombie'], 'no shield: no blocking');
   for (const shield of [true, false]) {
     t = mk(shield, [mob('creeper', 3)]);
+    t.bot.waitForTicks = async () => { t.bot.entities[3].isValid = false; }; // gone after a tick
     await t.c.tick();
-    assert.strictEqual(t.c.mode, 'creeper', `backed away from, shield ${shield}`);
+    assert.ok(t.log.includes('hit creeper') && t.c.mode === null, `kited and struck, shield ${shield}: ${t.log}`);
   }
 })();
 
