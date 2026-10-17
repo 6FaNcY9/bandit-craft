@@ -28,7 +28,15 @@ const deathCause = (name, msg) => {
   const rest = msg.slice(name.length + 1);
   return DEATH_PHRASE.test(rest) ? rest : null;
 };
-const FIGHT_RANGE = 4;
+// A hit counts from up to 6 blocks, eye to hitbox (the server's interaction range 3 plus its allowance for lag 3): bot50
+// hit a still creeper from 6.0 blocks, not from 6.5 (sandbox 2026-10-17). A player swings at 3; a bot strikes from 5,
+// which leaves room for lag and a mob on the move, and is out of a zombie's reach.
+const STRIKE_REACH = 5;
+const FIGHT_RANGE = STRIKE_REACH;
+const CREEPER_KEEP = 5; // a creeper lights within 3 blocks of its target: the bot backs off below this
+const CREEPER_REACH = 5.5; // a creeper is struck from here; the server takes 6 (see STRIKE_REACH)
+const CREEPER_SWELL = 16; // metadata index of a creeper's fuse state: 1 while it hisses
+const DUEL_MAX_MS = 60000;
 const EAT_CLEAR = 8; // eating takes 1.6 s; a zombie covers about 4 blocks in that time
 // A mode that has not resolved by then ends, and its mob is left alone for IGNORE_MS (it still gets hit
 // at arm's length): a mob behind a wall kept bot1 hunting and bot3 retreating for hours while their
@@ -107,7 +115,7 @@ class Combat {
     this.since = Date.now();
     this.busy = true;
     this.epoch++;
-    this.r.bot.pathfinder.setGoal(new goals.GoalFollow(mobLocation(target), 2), true);
+    this.r.bot.pathfinder.setGoal(new goals.GoalFollow(mobLocation(target), 3), true); // strikes reach 5, a zombie 1.5
   }
 
   // The shield, if one is in the off-hand: up between swings (it counts after 5 ticks, so it guards most of a sword's
@@ -164,7 +172,7 @@ class Combat {
   async tick() {
     const {r} = this;
     const bot = r.bot;
-    if (!r.online || !bot?.entity) return;
+    if (!r.online || !bot?.entity || this.dueling) return; // a creeper duel runs tick by tick on its own
     this.ticks++;
     // Air before anything else: 6 drownings in a day, bot1 three times at -228 29 -205, mining and then back for its
     // grave (main server 2026-10-17). Nothing in the bots watched the air.
@@ -208,9 +216,11 @@ class Combat {
     if (this.mode === 'hunt' && (!near || !s.defend || dist > s.fightRange + 4 || near !== this.target)) this.release();
     if (this.mode === 'creeper' && (!near || near.name !== 'creeper' || dist > 8)) this.release();
 
-    // A creeper is backed away from, shield or not: fought behind a shield it still took bot50 to 3 health (the
-    // swing lowers it), backing off kept it at 20 (sandbox 2026-10-17).
-    if (near && near.name === 'creeper' && dist < 6 && !r.sheltered) return this.takeover('creeper', near, 8);
+    // A creeper: a fit bot strikes it from STRIKE_REACH, where it does not light, and steps back while it is closer than
+    // CREEPER_KEEP. Backing off alone let one blow up the iron farm's material chest beside bot1 (main server
+    // 2026-10-17); fought at arm's length it took bot50 to 3 health. An unfit bot still only backs off.
+    const creeper = threats.find((e) => e.name === 'creeper' && mobLocation(e).position.distanceTo(me) < 6); // an ignored one too, once close
+    if (creeper && !r.sheltered) return this.fit() ? this.duel(creeper) : this.takeover('creeper', creeper, 8);
     if (this.blocking && closeDist > 6) this.block(false);
     if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
     // Only a fit bot walks up to a mob, never to a creeper: bot2, unarmoured and unarmed, hunted a creeper and was blown
@@ -221,12 +231,12 @@ class Combat {
     if (!this.busy && dist > EAT_CLEAR && !this.r.inventoryBusy && !bot.currentWindow) await this.eat();
   }
 
-  async fight(target) {
+  // Swapping to a weapon (or striking) mid-dig leaves the dig running with the
+  // wrong item: the server counts its slower break time and refuses the block, and
+  // the bot waits for an answer that never comes. End the dig first; digAt() digs
+  // again once the fight is over (2026-10-10).
+  async armUp() {
     const bot = this.r.bot;
-    // Swapping to a weapon (or striking) mid-dig leaves the dig running with the
-    // wrong item: the server counts its slower break time and refuses the block, and
-    // the bot waits for an answer that never comes. End the dig first; digAt() digs
-    // again once the fight is over (2026-10-10).
     this.lastFight = Date.now();
     if (bot.targetDigBlock) bot.stopDigging();
     const weapon = bot.inventory.items().sort((a, b) => weaponScore(b.name) - weaponScore(a.name))[0];
@@ -234,6 +244,89 @@ class Combat {
     // with it instead of swapping to the sword and then chopping with that).
     const armed = /_(axe|sword)$/.test(bot.heldItem?.name || '');
     if (!armed && !this.r.inventoryBusy && !bot.currentWindow && weapon && weaponScore(weapon.name) && bot.heldItem?.type !== weapon.type) await bot.equip(weapon, 'hand').catch(() => {});
+  }
+
+  // Creepers, tick by tick: the combat tick is 500 ms, a creeper closes a block in that, and struck that late (after a
+  // crit jump) one lit and blew up beside bot50 (sandbox 2026-10-17). The bot kites them as a good player does: it faces
+  // them and walks backwards (4.3 blocks a second, a creeper makes about 2.6) while the nearest is closer than
+  // CREEPER_KEEP, away from all of them at once, and strikes the nearest whenever the sword is ready and it is within
+  // CREEPER_REACH; each hit knocks it back a block. The pathfinder backed off too slowly, and with three creepers
+  // around it walked into the next one (bot50 down to 6 health).
+  async duel(first) {
+    const bot = this.r.bot;
+    Object.assign(this, {dueling: true, mode: 'creeper', target: first, since: Date.now(), busy: true});
+    this.epoch++;
+    this.block(false);
+    bot.pathfinder.setGoal(null);
+    let struck = 0;
+    const around = (match) => Object.values(bot.entities).filter((e) => e !== bot.entity && e.isValid !== false && match(e))
+      .map((e) => ({e, at: mobLocation(e).position, d: mobLocation(e).position.distanceTo(bot.entity.position)})).sort((a, b) => a.d - b.d);
+    // Each hit knocks a creeper back past 6 blocks, and it takes some 5 s to kill one: the duel goes on while they come.
+    // One that stays out of reach for 8 s (behind a wall, say) is left alone, unless it comes close again.
+    const came = new Map(); // creeper id -> when it was last within reach (or first seen)
+    const creepers = () => around((e) => e.name === 'creeper').filter((c) => c.d < 6 || !this.ignore.has(c.e.id));
+    try {
+      await this.armUp();
+      const cooldown = (bot.heldItem?.name.endsWith('_axe') ? 1000 : 625) + 30;
+      for (const end = Date.now() + DUEL_MAX_MS; Date.now() < end && this.r.online;) {
+        const near = creepers(), now = Date.now();
+        for (const c of near) {
+          if (c.d <= CREEPER_REACH + 1.5 || !came.has(c.e.id)) came.set(c.e.id, now);
+          else if (now - came.get(c.e.id) > 8000) this.ignore.set(c.e.id, now + IGNORE_MS);
+        }
+        if (!near.length || near[0].d > 10) break;
+        const {e, d, at} = near[0];
+        this.target = e;
+        // Away from all of them: their middle, the near ones weighing most.
+        const me = bot.entity.position;
+        let ax = 0, az = 0;
+        for (const c of near.filter((x) => x.d < 8)) {
+          const w = 1 / Math.max(1, c.d) ** 2;
+          ax += (me.x - c.at.x) * w;
+          az += (me.z - c.at.z) * w;
+        }
+        const len = Math.hypot(ax, az) || 1;
+        // Closer than CREEPER_KEEP, or one hissing within 7: its fuse goes out once its target is further off.
+        const hiss = near.some((c) => c.d <= 7 && c.e.metadata?.[CREEPER_SWELL] === 1);
+        const back = (d < CREEPER_KEEP || hiss) && this.safeStep(me, ax / len, az / len);
+        if (back) bot.lookAt(me.offset(-ax / len, 1.62, -az / len), true).catch(() => {}); // facing them, back is away
+        bot.setControlState('back', back);
+        // The nearest creeper in reach, else another hostile in reach (a zombie walking up meanwhile).
+        const hit = d <= CREEPER_REACH ? {e, at} : around((x) => x.name !== 'creeper' && shouldFight(x)).find((x) => x.d <= STRIKE_REACH);
+        if (hit && Date.now() - this.lastAttack >= cooldown) {
+          if (!back) bot.lookAt(hit.at.offset(0, hit.e.height * 0.8, 0), true).catch(() => {});
+          this.lastAttack = this.lastFight = Date.now();
+          bot.attack(hit.e);
+          this.hits = (this.hits || 0) + 1;
+          struck++;
+        }
+        await bot.waitForTicks(1);
+      }
+      this.r.log(this.r.name, `creeper: ${creepers().length ? 'left some' : 'none left'} after ${struck} hits, health ${Math.round(bot.health)}`);
+    } finally {
+      bot.setControlState('back', false);
+      Object.assign(this, {dueling: false, mode: null, target: null, busy: false});
+      this.epoch++;
+    }
+  }
+
+  // Is a step from `me` in direction (dx, dz) safe on foot: room for the body, no fluid, ground at most 2 down?
+  safeStep(me, dx, dz) {
+    const bot = this.r.bot;
+    const at = me.offset(dx, 0, dz).floored();
+    const passable = (b) => !!b && b.boundingBox === 'empty' && !/water|lava|fire/.test(b.name);
+    if (!passable(bot.blockAt(at)) || !passable(bot.blockAt(at.offset(0, 1, 0)))) return false;
+    for (let dy = 1; dy <= 3; dy++) {
+      const b = bot.blockAt(at.offset(0, -dy, 0));
+      if (!b || /water|lava|fire|magma/.test(b.name)) return false;
+      if (b.boundingBox === 'block') return dy <= 3;
+    }
+    return false;
+  }
+
+  async fight(target) {
+    const bot = this.r.bot;
+    await this.armUp();
     // Precision a player cannot match: swing exactly when the weapon is fully
     // charged (full damage, and a sword sweeps every mob around), and make it a
     // critical hit (x1.5, the sparkles) by jumping and striking on the way down.
@@ -249,14 +342,14 @@ class Combat {
       // A sword sweep (ground hit) beats a crit when two or more hostiles stand together.
       const bunch = Object.values(bot.entities).filter((e) => e !== target && shouldFight(e) && mobLocation(e).position.distanceTo(mobLocation(target).position) <= 2).length;
       const sweep = bunch > 0 && bot.heldItem?.name.endsWith('_sword');
-      const crit = !sweep && bot.entity.onGround && !bot.entity.isInWater && !bot.entity.isInLava && mobLocation(target).position.distanceTo(bot.entity.position) <= 3.2;
+      const crit = !sweep && bot.entity.onGround && !bot.entity.isInWater && !bot.entity.isInLava && mobLocation(target).position.distanceTo(bot.entity.position) <= STRIKE_REACH;
       if (crit) {
         bot.setControlState('jump', true);
         await bot.waitForTicks(1);
         bot.setControlState('jump', false);
         for (let i = 0; i < 12 && !(bot.entity.velocity.y < 0); i++) await bot.waitForTicks(1); // apex of the jump
       }
-      if (target.isValid === false || mobLocation(target).position.distanceTo(bot.entity.position) > 3.6) return;
+      if (target.isValid === false || mobLocation(target).position.distanceTo(bot.entity.position) > STRIKE_REACH + 0.5) return;
       await aim();
       this.block(false); // no swing with the shield up
       this.lastAttack = Date.now();

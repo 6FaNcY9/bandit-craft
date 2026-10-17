@@ -494,10 +494,11 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
     const zombie = {id: 7, type: 'hostile', name: 'zombie', height: 1.9, position: new Vec3(mounted ? 100 : 2, 64, 0)};
     if (mounted) zombie.vehicle = vehicle;
     const location = mounted ? vehicle : zombie;
-    const world = new W.WorldModel(), hits = [], aims = [], paths = [], hazards = [];
+    const world = new W.WorldModel(), hits = [], aims = [], paths = [], hazards = [], controls = [];
     const bot = {health: 20, food: 20, entity: {position: new Vec3(0, 64, 0)}, entities: {7: zombie}, game: {dimension: 'overworld'},
       heldItem: {name: 'iron_sword'}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5,
-      lookAt: async (p) => aims.push(p), attack: (e) => hits.push(e), setControlState() {},
+      lookAt: async (p) => aims.push(p), attack: (e) => hits.push(e), setControlState: (k, v) => controls.push(`${k} ${v}`),
+      blockAt: (p) => (p.y < 64 ? {name: 'stone', boundingBox: 'block'} : {name: 'air', boundingBox: 'empty'}),
       pathfinder: {setGoal: (g) => paths.push(g)}, findBlock: ({point}) => { hazards.push(point); return null; }, registry: {blocksByName: {}}};
     const c = new Combat({bot, online: true, name: 'bot3', world, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 16})});
     c.stop();
@@ -523,11 +524,30 @@ assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
     assert.strictEqual(paths.at(-1).entity, location);
     assert.strictEqual(hazards.at(-1), location.position);
     c.release();
+    // A creeper: a fit bot kites it tick by tick, striking from 5.5 blocks (it lights within 3) and walking backwards
+    // while it is closer than 5; an unfit one only backs off (the iron farm's chest, main server 2026-10-17).
     zombie.name = 'creeper';
+    let ticks = 0;
+    bot.waitForTicks = async () => { if (++ticks >= 2) zombie.isValid = false; }; // killed on the second tick
+    location.position = new Vec3(5, 64, 0);
+    hits.length = 0;
+    c.lastAttack = 0;
+    await c.tick();
+    assert.deepStrictEqual(hits, [zombie], 'fit, at 5: struck');
+    assert.ok(!controls.includes('back true'), 'fit, at 5: stands');
+    assert.equal(c.mode, null, 'and done once it is gone');
+    Object.assign(zombie, {isValid: true});
+    ticks = 0;
+    c.lastAttack = 0;
+    controls.length = 0;
+    location.position = new Vec3(3, 64, 0);
+    await c.tick();
+    assert.deepStrictEqual([controls[0], controls.at(-1)], ['back true', 'back false'], 'fit, at 3: walks backwards, and stops after');
+    assert.ok(aims.at(-1).x > 0, 'facing the creeper while it backs off');
+    c.fit = () => false;
     location.position = new Vec3(5, 64, 0);
     await c.tick();
-    assert.equal(c.mode, 'creeper');
-    assert.strictEqual(paths.at(-1).goal.entity, location);
+    assert.equal(c.mode, 'creeper', 'unfit: backs off');
   }
 })();
 // Death causes: only the bot's own death messages; chat and other players are ignored.

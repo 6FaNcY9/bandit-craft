@@ -396,13 +396,24 @@ dashboard radar and served by `GET /api/state` (`bots`, `world`,
 - **Shield** (`app/combat.js`, `app/gear.js`): iron gear brings a shield right after the sword (1 ingot, 6 planks),
   worn in the off-hand (a totem keeps that slot). In a close fight it goes up right after each swing and down for
   the next one (it counts after 5 ticks, so it guards most of a sword's 0.65 s), facing the target; it comes down
-  when nothing hostile is within 6 blocks, to eat, and to surface for air. It is no armour for fit(), and a creeper
-  is still backed away from. Sandbox 2026-10-17, iron sword, no armour, normal: 3 zombies all killed at lowest
+  when nothing hostile is within 6 blocks, to eat, and to surface for air (and in a creeper duel). It is no armour
+  for fit(). Sandbox 2026-10-17, iron sword, no armour, normal: 3 zombies all killed at lowest
   health 8 and 11 (the shield took 30 damage) against death without it; 2 skeletons about the same either way.
 - Combat (`app/combat.js`, every 500 ms): hostile mobs only, never players or
-  animals. A hostile within 4 blocks is attacked with the best sword/axe in the
-  inventory (swords before axes); creepers within 6 blocks are backed away from,
-  not fought. Endermen, piglins, wardens, the wither/dragon, ghasts and breezes
+  animals. A hostile within 5 blocks is attacked with the best sword/axe in the
+  inventory (swords before axes). The server takes a hit from up to 6 blocks, eye to hitbox (its interaction range
+  3 plus 3 for lag: bot50 hit a still creeper from 6.0 blocks, not 6.5), so a bot strikes from 5, out of a zombie's
+  reach. A hunting bot follows its mob at 3 blocks.
+- Creepers (`duel()`): a fit bot kites every creeper within 6 blocks, tick by tick: it faces them and walks
+  backwards (away from all of them, a step only onto ground at most 2 down and no fluid) while the nearest is closer
+  than 5 or one hisses within 7, and strikes the nearest whenever the sword is ready and it is within 5.5 (no crit
+  jump; a zombie in reach gets a hit meanwhile). A creeper lights within 3 blocks of its target; each hit knocks it
+  back a block and it takes about 5 s to kill. The duel lasts while they come (at most 60 s); one that stays out of
+  reach for 8 s is left alone for 2 minutes unless it comes within 6. An unfit bot backs away as before. Backing off
+  alone let a creeper blow up the iron farm's material chest beside bot1 (main server 2026-10-17). Sandbox, iron
+  armour and sword, 3 creepers at a time, three rounds: lowest health 19-20, no explosion, 6 of 9 killed (the rest
+  wandered off); 3 zombies lowest 18, 2 skeletons 19; without armour 3 zombies lowest 4 (it died there before).
+- Endermen, piglins, wardens, the wither/dragon, ghasts and breezes
   are never attacked. Below 8 health the bot retreats from hostiles within 16
   blocks until health is 12; its job pauses and resumes afterwards. Food below
   15 is eaten when nothing hostile is near, and a hurt bot (health below 20) eats
