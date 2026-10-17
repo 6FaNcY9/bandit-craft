@@ -73,7 +73,9 @@ const hydrated = (isWater, x, gy, z) => {
 // plant (empty farmland), clear (soil with grass on it), till (soil with air on it), water, blocked
 // (anything else, also not loaded). `unloaded` counts the columns without a block. Protected columns are left out.
 function scan(blockAt, box, y0, areas) {
-  const isWater = (x, y, z) => blockAt(x, y, z)?.name === 'water';
+  // A waterlogged block wets farmland like water: the owner laid an oak slab over field 1's water, and bot3 left all
+  // three fields as dry for a whole night (main server 2026-10-17).
+  const isWater = (x, y, z) => { const b = blockAt(x, y, z); return b?.name === 'water' || b?.getProperties?.().waterlogged === true; };
   const cells = [];
   let unloaded = 0;
   for (let x = box.x1; x <= box.x2; x++) {

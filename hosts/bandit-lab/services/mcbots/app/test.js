@@ -4250,6 +4250,10 @@ require('./crafting');
     assert.strictEqual(sc.wet, true);
     assert.deepStrictEqual([st(3, 0).wet, st(4, 0).wet, st(4, 4).wet], [true, true, true], 'within 4 blocks of the water in the box (2,2) or beside it (-1,2)');
     assert.strictEqual(W.scan(flat().blockAt, box, 64, []).wet, false, 'no water anywhere');
+    // an oak slab laid in the water source (waterlogged) still wets the field (main server field 1, 2026-10-17)
+    const slab = {name: 'oak_slab', boundingBox: 'block', getProperties: () => ({type: 'bottom', waterlogged: true})};
+    assert.strictEqual(W.scan(flat({'2,64,2': slab}).blockAt, box, 64, []).wet, true, 'waterlogged slab');
+    assert.strictEqual(W.scan(flat({'2,64,2': {...slab, getProperties: () => ({waterlogged: false})}}).blockAt, box, 64, []).wet, false, 'a dry slab does not');
     assert.deepStrictEqual(W.scan(w.blockAt, box, 64, [[0, 0, 4, 1]]).cells.filter((c) => c.z <= 1).length, 0, 'protected columns are never listed');
     assert.strictEqual(W.scan((x, y, z) => (x === 2 && z === 2 ? null : w.blockAt(x, y, z)), box, 64, []).unloaded, 1, 'an unloaded column is counted');
     assert.strictEqual(W.centre(box).x + ',' + W.centre(box).z, '2,2');
