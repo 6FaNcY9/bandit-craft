@@ -707,6 +707,15 @@ assert.deepStrictEqual(VALIDATE.rearm({x: 1, y: 2, z: 3}), {x: 1, y: 2, z: 3});
 const {BotRunner} = require('./bots');
 const runner = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: [], supplyChest: {x: 1, y: 2, z: 3}});
 assert.deepStrictEqual(runner.supplyChest, {x: 1, y: 2, z: 3});
+{ // graves go first: the running job is interrupted, queued right behind them, and goes on afterwards
+  const q = new BotRunner('bot3', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: [], onEvent: () => {}});
+  q.pump = () => {};
+  q.enqueue('mine', {block: 'stone', count: 5});
+  q.current = q.queue.shift();
+  q.enqueue('graves', {spots: [{x: 1, y: 64, z: 1}]}, {first: true});
+  assert.strictEqual(q.current.cancelled, true);
+  assert.deepStrictEqual(q.queue.map((j) => j.type), ['graves', 'mine']);
+}
 {
   // The same shaft ordered again while it runs or waits is not queued twice; another job is (lab 2026-10-13).
   const q = new BotRunner('bot2', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: []});
@@ -3918,7 +3927,21 @@ require('./crafting');
     const {Vec3} = require('vec3');
     assert.deepStrictEqual(VALIDATE.grave({x: 1.9, y: 64, z: -2}), {x: 1, y: 64, z: -2});
     assert.throws(() => VALIDATE.grave({x: 1, y: 999, z: 2}), /y must be/);
+    assert.deepStrictEqual(VALIDATE.graves({spots: [{x: 1.8, y: 64, z: 2}]}), {spots: [{x: 1, y: 64, z: 2}]});
+    assert.strictEqual(VALIDATE.graves({spots: Array.from({length: 50}, (_, x) => ({x, y: 64, z: 0}))}).spots.length, 40);
     assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'grave', args: {}}, {agentBots: ['bot1'], supplyChest: {x: 1, y: 2, z: 3}}), null);
+
+    const now = Date.now(), ev = (bot, kind, text, age = 0) => ({bot, kind, text, t: now - age});
+    assert.deepStrictEqual(G.openGraves([
+      ev('bot1', 'death', 'died at 1 64 1: zombie'), ev('bot1', 'death', 'died at 2 64 2: zombie', 25 * 3600000),
+      ev('bot2', 'death', 'died at 3 64 3: zombie'), ev('bot1', 'done', 'finished: grave 1 64 1 (65 items)'),
+    ], 'bot1', {now, chest: {x: 0, y: 64, z: 0}}), [], 'only recent, own, unfetched graves are returned');
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at 1 64 1: zombie')], 'bot1', {now, chest: {x: 0, y: 64, z: 0}}), [{x: 1, y: 64, z: 1}]);
+    // "died at" is rounded, the grave job's spot floored: a fetch a block off after the death took it; a later death there is a new grave
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -382 71 -238: shot', 3000), ev('bot1', 'done', 'finished: grave -383 71 -239 (227 s)', 2000)],
+      'bot1', {now, chest: {x: -271, y: 66, z: -214}}), []);
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'done', 'finished: grave -383 71 -239 (227 s)', 2000), ev('bot1', 'death', 'died at -382 71 -238: shot', 1000)],
+      'bot1', {now, chest: {x: -271, y: 66, z: -214}}), [{x: -382, y: 71, z: -238}]);
 
     // graveCandidates: nearest first within 3 blocks; never players, items, orbs, invalid or far entities
     const ent = (id, name, x, y, z, extra = {}) => ({id, name, type: 'other', position: new Vec3(x, y, z), ...extra});
@@ -4000,6 +4023,14 @@ require('./crafting');
       await JOBS.grave(f.r, graveJob());
       assert.strictEqual(deposits.length, 0);
       assert.ok(f.infos.some((m) => /65 items back \(no supply chest/.test(m)));
+
+      f = fake();
+      const graveEntities = f.bot.entities;
+      const runner = G.makeGraves({goNear: async (_r, _j, x) => { if (x === 2) throw new Error('pathfinder reach error'); f.bot.entities = x === 0 ? graveEntities : {}; }, guard() {}, sleep: async () => {}, deposit: async () => {}});
+      const multi = {t: {}, cancelled: false, type: 'graves', args: {spots: [{x: 1, y: 64, z: 0}, {x: 2, y: 64, z: 0}, {x: 0, y: 64, z: 0}]}};
+      await runner.graves(f.r, multi);
+      assert.strictEqual(multi.done, 3);
+      assert.ok(f.infos.some((m) => m === 'graves: 1 of 3 fetched, 1 gone, 1 out of reach'), f.infos.join('|'));
     } finally {
       JOBS.deposit = realDeposit;
     }

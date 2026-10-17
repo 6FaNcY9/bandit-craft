@@ -125,6 +125,7 @@ const VALIDATE = {
   // Collect the dropped items within `radius` of x,y,z (default: the supply chest) and deposit them there.
   tidy: (a) => ({...(a.x !== undefined ? xyz(a) : {}), radius: num(a.radius ?? 16, 2, 32, 'radius')}),
   grave: xyz, // where the bot died; AxGraves keeps the loot in a grave there
+  graves: (a) => ({spots: (Array.isArray(a.spots) ? a.spots : []).slice(0, 40).map(xyz)}),
   craft: (a) => {
     if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be an item name like stone_pickaxe');
     // Plain words the model uses for real item names ("unknown item: planks", lab 2026-10-10).
@@ -553,7 +554,8 @@ class BotRunner {
   // ---- jobs ----
   // replace: drop the queue and the running job first, so a click means "do
   // this now" instead of waiting behind earlier clicks.
-  enqueue(type, args = {}, {replace = false} = {}) {
+  // first: the job goes ahead of the running one, which is interrupted and goes on afterwards (as after a death).
+  enqueue(type, args = {}, {replace = false, first = false} = {}) {
     if (replace && type !== 'stop' && type !== 'remove') {
       this.dropQueue();
       this.stoppedAt = Date.now();
@@ -577,7 +579,12 @@ class BotRunner {
     // A run just cancelled by this very order (replace) is no duplicate: the same farm ordered again stopped and
     // then dropped, and the bot stood idle (sandbox, 2026-10-16).
     if (AREA_JOBS.has(type) && ((same(this.current) && !this.current.cancelled) || this.queue.some(same))) return;
-    this.queue.push(job);
+    if (first) {
+      const was = this.current && !this.current.cancelled ? this.current : null;
+      this.cancel();
+      this.resumeLater(was, type);
+      this.queue.unshift(job);
+    } else this.queue.push(job);
     this.pump();
   }
 
@@ -853,7 +860,7 @@ async function nightShelter(r, job) {
   if (r.sheltered || !bot?.entity || !isNight(bot)) return;
   // An unfit bot fetches its grave by day (AxGraves keeps one 24 h): bot2, unarmed, went for its graves through the
   // night and died at each (main server 2026-10-17). It waits where it is, at the base after a respawn.
-  if (job.type === 'grave' && r.combat && !r.combat.fit()) {
+  if ((job.type === 'grave' || job.type === 'graves') && r.combat && !r.combat.fit()) {
     r.emit('info', 'night: waiting for the morning before fetching the grave');
     r.sheltered = true;
     try {
@@ -2444,7 +2451,7 @@ async function produce(r, job) {
   }
 }
 
-const {grave} = gravesJob.makeGraves({goNear, guard, sleep, deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: r.supplyChest}))});
+const {grave, graves} = gravesJob.makeGraves({goNear, guard, sleep, deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: r.supplyChest}))});
 const {hunt, bed} = huntJob.makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at});
 
 const {homebed} = homebedJob.makeHomebed({goNear, guard, sleep, goals, crafting, run: buildRunJob, at, digAt, NATURAL});
@@ -2533,6 +2540,7 @@ const JOBS = {
   wheatfarm,
   fluids,
   grave,
+  graves,
   treefarm,
   homebed,
   level,

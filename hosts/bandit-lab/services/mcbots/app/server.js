@@ -13,6 +13,7 @@ const {WINDOW_MS} = require('./debug');
 const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
 const {EventLog} = require('./events');
 const archive = require('./archive');
+const gravesLib = require('./graves');
 const {NtfyNotifier} = require('./notify');
 const {Keeper} = require('./keeper');
 const {Plan} = require('./plan');
@@ -655,8 +656,12 @@ const server = http.createServer(async (req, res) => {
       const jobArgs = type === 'wheatfarm' ? require('./wheatfarm').withFields(args || {}, wheatZones) : args || {};
       for (const r of targets) {
         try {
-          r.enqueue(type, jobArgs, {replace: replace === true});
-          if (!agent) type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: jobArgs});
+          const pos = r.snapshot().pos;
+          const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
+          if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); continue; }
+          // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
+          r.enqueue(type, perBotArgs, {replace: replace === true, ...(type === 'graves' ? {first: true} : {})});
+          if (!agent && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
           if (stopping) {
             delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
             projects.pause(r.name);

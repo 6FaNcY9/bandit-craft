@@ -112,6 +112,7 @@
       <button class="b" data-order="rearm"><b>🎒</b>Ausrüsten</button>
       <button class="b" data-order="deposit"><b>📥</b>Einlagern</button>
       <button class="b" data-order="tidy"><b>🧹</b>Aufräumen</button>
+      <button class="b" id="collectGraves"><b>🪦</b>Gräber einsammeln</button>
       <button class="b stop" data-order="stop"><b>⏹</b>Stopp</button>
     </div>
   </section>
@@ -351,7 +352,7 @@ const EVENT = [
 const eventText = (s) => { for (const [re, f] of EVENT) { const m = re.exec(s); if (m) return f(m); } return doing(s); };
 const doing = (s) => { if (!s) return ''; for (const [re, f] of DOING) { const m = re.exec(s); if (m) return f(m); } return s; };
 const JOB = {schematic: 'baut', produce: 'besorgt Material', mine: 'baut ab', chop: 'fällt Bäume', come: 'kommt', follow: 'folgt', guard: 'hält Wache',
-  deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin',
+  deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', graves: 'sammelt seine Gräber ein', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin',
   treefarm: 'Baumfarm', shaft: 'Schacht', shift: 'Schicht', get: 'besorgt'};
 const PROJECT = new Set(['schematic', 'produce']);
 const pct = (a, b) => (b ? Math.max(0, Math.min(100, Math.round((100 * a) / b))) : 0);
@@ -472,6 +473,10 @@ for (const b of document.querySelectorAll('[data-order]')) {
     sendJob(bots, t, args, b.textContent.replace(/^\S+/, '').trim());
   };
 }
+$('collectGraves').onclick = () => {
+  const bots = (last?.bots || []).filter((b) => b.online).map((b) => b.name);
+  if (bots.length) sendJob(bots, 'graves', {}, 'Gräber einsammeln');
+};
 const GATHER = [['iron_ore', '⛏️', 'Eisen'], ['coal_ore', '⚫', 'Kohle'], ['copper_ore', '🟠', 'Kupfer'], ['gold_ore', '🟡', 'Gold'], ['redstone_ore', '🔴', 'Redstone'],
   ['diamond_ore', '💎', 'Diamant'], ['logs', '🪵', 'Holz'], ['stone', '🪨', 'Stein'], ['sand', '🏖️', 'Sand'], ['dirt', '🟫', 'Erde'], ['gravel', '⚪', 'Kies'], ['snow_block', '❄️', 'Schnee']];
 let gItem = store.get('gItem', 'iron_ore'), gCount = store.get('gCount', 32);
