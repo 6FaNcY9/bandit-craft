@@ -97,6 +97,50 @@ async function placeNear(bot, itemName, areas = [], check = () => {}) {
   throw new Error(`no free spot next to the bot to place ${itemName}`);
 }
 
+// The recipe book the server keeps for this bot (recipe_book_add): result item id -> its recipes' display ids.
+function trackRecipeBook(bot) {
+  bot.recipeBook = new Map();
+  bot.once('inject_allowed', () => {
+    bot._client.on('recipe_book_add', ({entries, replace}) => {
+      if (replace) bot.recipeBook.clear();
+      for (const {recipe: {displayId, display}} of entries) {
+        const res = /^crafting_/.test(display?.type || '') ? display.data.result : null;
+        const id = res?.type === 'item' ? res.data : res?.type === 'item_stack' ? res.data.itemId : null;
+        if (id == null) continue;
+        if (!bot.recipeBook.has(id)) bot.recipeBook.set(id, new Set());
+        bot.recipeBook.get(id).add(displayId);
+      }
+    });
+    bot._client.on('recipe_book_remove', ({recipeIds}) => { for (const ids of bot.recipeBook.values()) for (const i of recipeIds) ids.delete(i); });
+  });
+}
+
+// One craft the server lays out itself from what the bot carries, as a player's recipe book does, taken out with a
+// shift-click: no click of mineflayer's on a copy of the inventory that can be wrong (see ensureItem). False when the
+// book has no such recipe or the server cannot lay it out.
+async function bookCraft(bot, itemId, where) {
+  const ids = [...(bot.recipeBook?.get(itemId) || [])];
+  if (!ids.length) return false;
+  const window = where ? await bot.openBlock(where) : bot.inventory;
+  try {
+    for (const recipeId of ids) { // a recipe per wood and the like: the first the server can lay out
+      const filled = new Promise((res) => {
+        const on = (old, item) => { if (item) done(true); };
+        const done = (v) => { clearTimeout(t); window.off('updateSlot:0', on); res(v); };
+        const t = setTimeout(() => done(false), 2000);
+        window.on('updateSlot:0', on);
+      });
+      bot._client.write('craft_recipe_request', {windowId: window.id, recipeId, makeAll: false});
+      if (!(await filled)) continue;
+      await bot.clickWindow(0, 0, 1);
+      return true;
+    }
+    return false;
+  } finally {
+    if (where) bot.closeWindow(window);
+  }
+}
+
 // fetch(r, job, item, n) (optional): take an item that cannot be crafted from the base chest.
 function makeCrafting({goNear, guard, fetch = null}) {
   // Get or place a station block (crafting_table, furnace) near the bot.
@@ -192,16 +236,22 @@ function makeCrafting({goNear, guard, fetch = null}) {
       if (isPlanks(ing) && !isPlanks(name)) await ensurePlanks(r, job, need);
       else await ensureItem(r, job, ing, need, depth + 1);
     }
-    const ready = bot.recipesFor(item.id, null, 1, where);
-    if (!ready.length) throw new Error(`have the ingredients but no matching recipe for ${name}`);
     job.progress = `crafting ${name}`;
     if (job.t) job.t.doing = `crafting ${name}`;
-    // ponytail: blind retry; the result slot sometimes is not filled yet when mineflayer clicks it.
-    for (let attempt = 1; ; attempt++) {
-      await holding(r, () => bot.craft(ready[0], times, where));
-      if (await arrived(() => count(bot, name) > have)) return;
-      if (attempt === 3) throw new Error(`crafting ${name} did not take after 3 tries`);
+    // One craft at a time, laid out by the server (bookCraft), then the inventory as the server has it. mineflayer's
+    // bot.craft() clicks on its copy of the inventory, which is wrong for some seconds after a craft (4 logs and 4
+    // sticks where 6 and 6 were): asked for 9 campfires it made 1 and threw "missing ingredient" with 8 more at hand,
+    // and one at a time 0 of 6 at times (sandbox 2026-10-17); the iron farm's campfires, sticks and planks failed so
+    // on the main server. bot.craft() stays for a recipe the book lacks. A craft that makes nothing is retried twice.
+    for (let stalls = 0; count(bot, name) < want;) {
       guard(job);
+      const ready = bot.recipesFor(item.id, null, 1, where);
+      if (!ready.length) throw new Error(`have the ingredients but no matching recipe for ${name}`);
+      const before = count(bot, name);
+      const failed = await holding(r, async () => (await bookCraft(bot, item.id, where)) || bot.craft(ready[0], 1, where)).then(() => null, (e) => e);
+      await Promise.race([bot._syncWindow?.(bot.inventory), new Promise((res) => setTimeout(res, 3000))]).catch(() => {});
+      if (await arrived(() => count(bot, name) > before)) stalls = 0;
+      else if (++stalls === 3) throw failed || new Error(`crafting ${name} did not take after 3 tries`);
     }
   }
 
@@ -281,4 +331,4 @@ function fixCraftTiming(bot) {
   });
 }
 
-module.exports = {makeCrafting, placeNear, holding, fixCraftTiming, FUELS, count, fuelFor, nearBlock};
+module.exports = {makeCrafting, placeNear, holding, fixCraftTiming, trackRecipeBook, bookCraft, FUELS, count, fuelFor, nearBlock};

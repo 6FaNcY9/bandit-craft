@@ -5342,11 +5342,44 @@ require('./crafting');
   const variant = (stone) => ({requiresTable: false, result: {count: 1}, delta: [{id: stone, count: -3}, {id: 3, count: -2}, {id: 4, count: 1}]});
   const bot = {registry: {itemsByName: {stone_pickaxe: {id: 4}, cobblestone: {id: 2}, cobbled_deepslate: {id: 1}, stick: {id: 3}}, items: Object.fromEntries(Object.entries(names).map(([id, name]) => [id, {name}]))},
     inventory: {items: () => items}, recipesAll: (id) => (id === 4 ? [variant(1), variant(2)] : []),
-    recipesFor: () => [{}], craft: async () => items.push({name: 'stone_pickaxe', count: 1})};
+    recipesFor: () => [{result: {count: 1}}], craft: async () => items.push({name: 'stone_pickaxe', count: 1})};
   const asked = [];
   const c = makeCrafting({goNear: async () => {}, guard() {}, fetch: async (r, job, item, n) => { asked.push(item); items.push({name: item, count: n}); }});
   await c.ensureItem({bot}, {}, 'stone_pickaxe', 1);
   assert.deepStrictEqual(asked, ['cobblestone']);
+})();
+
+(async () => { // bookCraft: the server lays out a recipe from the bot's recipe book, the result comes out with a shift-click
+  const {EventEmitter} = require('events');
+  const {trackRecipeBook, bookCraft} = require('./crafting');
+  const client = new EventEmitter(), sent = [], clicks = [];
+  const window = new EventEmitter();
+  window.id = 3;
+  const bot = Object.assign(new EventEmitter(), {_client: client, openBlock: async () => window, closeWindow: (w) => sent.push(['close', w.id]), clickWindow: async (...a) => clicks.push(a)});
+  client.write = (name, data) => { sent.push([name, data.recipeId]); if (data.recipeId === 8) setImmediate(() => window.emit('updateSlot:0', null, {name: 'campfire'})); };
+  trackRecipeBook(bot);
+  bot.emit('inject_allowed');
+  const shaped = (id, displayId) => ({recipe: {displayId, display: {type: 'crafting_shaped', data: {result: {type: 'item', data: id}}}}});
+  client.emit('recipe_book_add', {replace: true, entries: [shaped(145, 7), shaped(145, 8), {recipe: {displayId: 9, display: {type: 'furnace', data: {result: {type: 'item', data: 145}}}}}]});
+  assert.deepStrictEqual([...bot.recipeBook.get(145)], [7, 8]); // a furnace recipe is no craft
+  assert.strictEqual(await bookCraft(bot, 145, {}), true); // recipe 7 cannot be laid out (2 s), 8 can
+  assert.deepStrictEqual(sent, [['craft_recipe_request', 7], ['craft_recipe_request', 8], ['close', 3]]);
+  assert.deepStrictEqual(clicks, [[0, 0, 1]]);
+  assert.strictEqual(await bookCraft(bot, 999, {}), false); // not in the book: bot.craft() does it
+  client.emit('recipe_book_remove', {recipeIds: [7, 8]});
+  assert.strictEqual(await bookCraft(bot, 145, {}), false);
+})();
+
+(async () => { // ensureItem: bot.craft(recipe, 9) made 1 campfire and threw "missing ingredient"; the rest come in more rounds (sandbox 2026-10-17)
+  const {makeCrafting} = require('./crafting');
+  const items = [{name: 'campfire', count: 0}];
+  const bot = {registry: {itemsByName: {campfire: {id: 1}}, items: {1: {name: 'campfire'}}}, inventory: {items: () => items},
+    recipesAll: () => [{requiresTable: false, result: {count: 1}, delta: [{id: 1, count: 1}]}], recipesFor: () => [{result: {count: 1}}],
+    craft: async (recipe, n) => { items[0].count++; if (n > 1) throw new Error('missing ingredient'); }};
+  await makeCrafting({goNear: async () => {}, guard() {}}).ensureItem({bot}, {}, 'campfire', 9);
+  assert.strictEqual(items[0].count, 9);
+  bot.craft = async () => { throw new Error('missing ingredient'); }; // no progress at all: the error, after 3 rounds
+  await assert.rejects(makeCrafting({goNear: async () => {}, guard() {}}).ensureItem({bot}, {}, 'campfire', 10), /missing ingredient/);
 })();
 
 (async () => { // ensurePlanks: no logs in hand come from the base chest (bot3 could not make a hoe beside 87 logs, 2026-10-15)

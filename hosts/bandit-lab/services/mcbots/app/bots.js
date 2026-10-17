@@ -423,6 +423,7 @@ class BotRunner {
     });
     bot.loadPlugin(collectBlock);
     require('./crafting').fixCraftTiming(bot);
+    require('./crafting').trackRecipeBook(bot);
     unwedge(bot);
     bot.on('forcedMove', () => this.trace.correction());
     const sampler = setInterval(() => {
