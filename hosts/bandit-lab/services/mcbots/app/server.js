@@ -41,15 +41,22 @@ let rescue = null; // set below, once the supply chest is known
 // (archive.js); the 200-entry ring alone lost the night's deaths. SESSION tells server runs apart (dataset.js).
 const ARCHIVE = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'archive') : null;
 const SESSION = Date.now().toString(36);
-// The owner's orders (dashboard, not an agent): the job type each bot was last given. Until that job finishes or fails
-// (or the owner stops it) no agent order reaches the bot (agentauth): while it ran was not enough, the agents took the
-// bots in the gap after every restart, before their jobs resumed (2026-10-16). Kept across restarts.
+// The owner's orders (dashboard, not an agent): the job each bot was last given, {type, args}. Until that job finishes
+// (or the owner stops or replaces it) no agent order reaches the bot (agentauth): while it ran was not enough, the agents
+// took the bots in the gap after every restart, before their jobs resumed (2026-10-16). A failure starts the job again
+// later (agentauth.orderOutcome). Kept across restarts.
 const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
-const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))); } catch { return []; } })());
+const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
 const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
 const orderEnded = (e) => {
-  const m = (e.kind === 'done' || e.kind === 'fail') && /^(?:finished|failed): (\w+)/.exec(e.text || '');
-  if (m && ownerOrders.get(e.bot) === m[1]) { ownerOrders.delete(e.bot); saveOrders(); }
+  const order = ownerOrders.get(e.bot), out = agentauth.orderOutcome(e, order);
+  if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
+  if (out?.retry) setTimeout(() => {
+    const r = runners.get(e.bot);
+    if (ownerOrders.get(e.bot) !== order || !r) return; // stopped or replaced meanwhile
+    events.add(e.bot, 'info', `the owner's ${order.type} order goes on after: ${e.text.slice(0, 100)}`);
+    try { r.enqueue(order.type, order.args); } catch (err) { events.add(e.bot, 'info', `the owner's ${order.type} order could not go on: ${err.message}`); }
+  }, out.retry).unref();
 };
 const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
@@ -627,7 +634,7 @@ const server = http.createServer(async (req, res) => {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {bots, type, args, replace, solver} = await readJson(req);
-      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || busyOf(runners.get(n)?.snapshot()), ownerOrderOf: (n) => ownerOrders.get(n), limiter: solverLimiter});
+      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || busyOf(runners.get(n)?.snapshot()), ownerOrderOf: (n) => ownerOrders.get(n)?.type, limiter: solverLimiter});
       if (refused) return json(403, {error: refused});
       // "all" skips remote bots whose worker is away, so a Stop reaches every
       // bot that can still hear it; naming an offline bot is an error.
@@ -642,7 +649,7 @@ const server = http.createServer(async (req, res) => {
       for (const r of targets) {
         try {
           r.enqueue(type, jobArgs, {replace: replace === true});
-          if (!agent) type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, type);
+          if (!agent) type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: jobArgs});
           if (stopping) {
             delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
             projects.pause(r.name);

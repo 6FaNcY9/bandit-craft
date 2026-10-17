@@ -687,7 +687,7 @@ class BotRunner {
   activity() {
     if (!this.online) return this.lastSeen ? 'offline' : 'connecting...';
     if (this.dead) return 'dead - respawning';
-    if (this.combat.busy) return {hunt: `fighting ${this.combat.target?.name || 'a hostile mob'}`, retreat: 'retreating to heal', creeper: 'backing off a creeper'}[this.combat.mode] || 'fighting';
+    if (this.combat.busy) return {hunt: `fighting ${this.combat.target?.name || 'a hostile mob'}`, retreat: 'retreating to heal', creeper: 'backing off a creeper', air: 'surfacing for air'}[this.combat.mode] || 'fighting';
     const j = this.current;
     if (!j) return this.queue.length ? 'starting the next job' : 'idle - no job';
     return j.t?.doing || `${jobLabel(j)} ${j.progress || ''}`.trim();
@@ -717,7 +717,7 @@ class BotRunner {
       queue: this.queue.map(jobLabel),
       combat: this.combat.mode || null,
       claims: this.world?.claimStats(this.name) || {granted: 0, refused: 0, timedOut: 0},
-      physics: live ? {onGround: !!e.onGround, collidedHorizontally: !!e.isCollidedHorizontally, velocity: ['x', 'y', 'z'].map((k) => round(e.velocity?.[k], 3)), controls: Object.keys(b.controlState || {}).filter((k) => b.controlState[k])} : null,
+      physics: live ? {onGround: !!e.onGround, collidedHorizontally: !!e.isCollidedHorizontally, velocity: ['x', 'y', 'z'].map((k) => round(e.velocity?.[k], 3)), controls: Object.keys(b.controlState || {}).filter((k) => b.controlState[k]), air: b.oxygenLevel ?? null, inWater: !!e.isInWater} : null,
       pathfinder: pf ? {moving: !!pf.isMoving?.(), mining: !!pf.isMining?.(), building: !!pf.isBuilding?.(), goal: pf.goal?.constructor?.name || null} : null,
       ...this.trace.snapshot(),
     };

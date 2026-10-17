@@ -101,6 +101,18 @@ function resting(events, bot, now = Date.now()) {
   return `${bot} failed its last ${REST_FAILS} jobs (newest: ${last.text.slice(0, 120)}); it rests ${Math.ceil((REST_MS - ago) / 1000)} s more, then try something different`;
 }
 
+// What a job event does to the owner's order {type, args}: a finish ends it; a failure or a give-up keeps it and the
+// job starts again after `retry` ms. One exploded chest failed bot1's and bot2's iron farm orders, the agents took both
+// bots, and bot1 changed jobs 806 times in 17 h, out at night without armour: 17 deaths (main server 2026-10-17).
+// null: the event is not about the order. An order saved without its args (before this) ends as it used to.
+const ORDER_RETRY_MS = 5 * 60000;
+function orderOutcome(e, order) {
+  const m = order && (e.kind === 'done' || e.kind === 'fail') && /^(finished|failed|gave up): (\w+)/.exec(e.text || '');
+  if (!m || m[2] !== order.type) return null;
+  if (m[1] === 'finished' || !order.args) return {end: true};
+  return {retry: m[1] === 'gave up' ? 4 * ORDER_RETRY_MS : ORDER_RETRY_MS}; // gave up: it died 4 times, give it longer
+}
+
 function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const {agentBots, supplyChest} = policy;
   if (solver === true && Array.isArray(bots) && bots.length === 1 && !agentBots.includes(bots[0])) return solverRefusal({bots, type, args, replace}, policy);
@@ -126,4 +138,4 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
 
 const validBackend = (backend) => typeof backend === 'string' && /^[a-zA-Z0-9_.:\[\]-]{1,128}$/.test(backend);
 
-module.exports = {SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
+module.exports = {orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};

@@ -28,7 +28,9 @@ const EAT_CLEAR = 8; // eating takes 1.6 s; a zombie covers about 4 blocks in th
 // A mode that has not resolved by then ends, and its mob is left alone for IGNORE_MS (it still gets hit
 // at arm's length): a mob behind a wall kept bot1 hunting and bot3 retreating for hours while their
 // jobs waited for calm (lab, 2026-10-13).
-const MODE_MAX_MS = {hunt: 20000, retreat: 30000, creeper: 15000};
+const MODE_MAX_MS = {hunt: 20000, retreat: 30000, creeper: 15000, air: 20000};
+// Air under water runs 20 -> 0 in 15 s, then it hurts. At AIR_LOW the bot drops everything and surfaces.
+const AIR_LOW = 12;
 const IGNORE_MS = 120000;
 const SEE_RANGE = 24;
 const SCAN_EVERY = 20; // ticks between notable-block scans (10 s)
@@ -102,8 +104,37 @@ class Combat {
     this.r.bot.pathfinder.setGoal(new goals.GoalFollow(mobLocation(target), 2), true);
   }
 
+  // Head out of the water: swim up, and walk to the nearest cell that has air over a water or air cell (stand in the
+  // lower one, breathe in the upper one). Everything else waits meanwhile (busy).
+  surface() {
+    const bot = this.r.bot;
+    if (bot.targetDigBlock) bot.stopDigging();
+    // Open water up to the air: swimming up is enough, and the pathfinder would only fight the jump (it let go of it,
+    // and bot50 hung at y 60 in a pool with no air left, sandbox 2026-10-17). Under a roof: the nearest air it reaches.
+    const at = bot.entity.position.floored();
+    this.straightUp = false;
+    for (let dy = 1; dy <= 24; dy++) {
+      const b = bot.blockAt(at.offset(0, dy, 0));
+      if (/^(cave_)?air$/.test(b?.name || '')) { this.straightUp = true; break; }
+      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) break;
+    }
+    const ids = ['air', 'cave_air'].map((n) => bot.registry.blocksByName[n]?.id).filter((i) => i !== undefined);
+    // Only above its feet: the nearest air was a cave under the pool floor (sandbox 2026-10-17).
+    const feet = bot.entity.position.y;
+    const spot = this.straightUp ? null : bot.findBlock({matching: ids, maxDistance: 12, useExtraInfo: (b) => { const under = bot.blockAt(b.position.offset(0, -1, 0)); return b.position.y > feet && !!under && (under.name === 'water' || under.boundingBox === 'empty'); }});
+    this.mode = 'air';
+    this.target = null;
+    this.since = Date.now();
+    this.busy = true;
+    this.epoch++;
+    this.r.log(this.r.name, `air ${bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${spot.position.x} ${spot.position.y} ${spot.position.z}` : 'with no air in sight'}`);
+    bot.pathfinder.setGoal(spot ? new goals.GoalBlock(spot.position.x, spot.position.y - 1, spot.position.z) : null, !!spot);
+    bot.setControlState('jump', true);
+  }
+
   release() {
     if (!this.mode) return;
+    if (this.mode === 'air') this.r.bot.setControlState('jump', false);
     this.mode = null;
     this.target = null;
     this.busy = false;
@@ -116,6 +147,12 @@ class Combat {
     const bot = r.bot;
     if (!r.online || !bot?.entity) return;
     this.ticks++;
+    // Air before anything else: 6 drownings in a day, bot1 three times at -228 29 -205, mining and then back for its
+    // grave (main server 2026-10-17). Nothing in the bots watched the air.
+    const air = bot.oxygenLevel ?? 20;
+    if (this.mode === 'air' && air >= 18) this.release();
+    else if (this.mode === 'air' && Date.now() - this.since <= MODE_MAX_MS.air) return void (this.straightUp && bot.setControlState('jump', true));
+    if (air <= AIR_LOW) return this.surface(); // also again after MODE_MAX_MS: another search from where it is now
     const dim = normDim(bot.game?.dimension);
     const me = bot.entity.position;
 

@@ -100,7 +100,7 @@ function cleanDebug(d) {
     job: job && {id: int(job.id), type: str(job.type, 32), args: cleanArgs(job.args), status: str(job.status, 16), progress: str(job.progress, 160), runningS: num(job.runningS)},
     queue: list(d.queue, 20, (q) => str(q, 160)),
     combat: optStr(d.combat, 32),
-    physics: phys && {onGround: bool(phys.onGround), collidedHorizontally: bool(phys.collidedHorizontally), velocity: vec(phys.velocity), controls: list(phys.controls, 8, (c) => str(c, 16))},
+    physics: phys && {onGround: bool(phys.onGround), collidedHorizontally: bool(phys.collidedHorizontally), velocity: vec(phys.velocity), controls: list(phys.controls, 8, (c) => str(c, 16)), air: typeof phys.air === 'number' ? phys.air : null, inWater: bool(phys.inWater)},
     pathfinder: pf && {moving: bool(pf.moving), mining: bool(pf.mining), building: bool(pf.building), goal: optStr(pf.goal, 48)},
     positions: list(d.positions, 130, (p) => ({agoS: num(p?.agoS), x: num(p?.x), y: num(p?.y), z: num(p?.z)})),
     claims: {granted: int(claims.granted), refused: int(claims.refused), timedOut: int(claims.timedOut)},

@@ -193,9 +193,12 @@ All write endpoints below are for humans only (same-origin JSON POST behind the 
 check, `TRUSTED_PROXIES` rule unchanged); the agent token is refused on them.
 
 A job given on the dashboard (`POST /api/job` without the agent token) is the owner's order: until that
-job finishes or fails, every agent order for the bot is refused ("works on the owner's ... order: only
-the owner changes it"), also while it waits to be resumed after a restart. The open order per bot is
-kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
+job finishes, or the owner stops or replaces it, every agent order for the bot is refused ("works on the
+owner's ... order: only the owner changes it"), also while it waits to be resumed after a restart. A failure
+does not end it: the same job starts again after 5 min (20 min after `gave up ... (died 4 times)`), event
+`the owner's <type> order goes on after: ...` (one exploded project chest had ended two orders, and the agents
+then sent bot1 out at night 806 times in 17 h: 17 deaths, 2026-10-17). The open order per bot (type and args)
+is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
 
 - **Projects** (`POST /api/project {bot, action: pause|resume|stop}`): one row per bot with a
   shaft/excavate/level/seal/rim/treefarm/homebed/build/grave job running, queued or remembered, with progress.
@@ -384,6 +387,10 @@ dashboard radar and served by `GET /api/state` (`bots`, `world`,
   BlueMap position (same dimension only; otherwise the job fails) and switches
   to the live player once visible. `come` allows 90 s plus 1 s per block of
   distance, at most 10 min.
+- **Air** (`app/combat.js`, before anything else): under water at 12 of 20 air or less (about 6 s left) the bot
+  drops its job and surfaces: straight up where open water reaches the air, else the pathfinder takes it to the
+  nearest air above its feet; at 18 it goes on (dashboard `surfacing for air`, debug `physics.air`). 6 drownings in
+  a day before (2026-10-17); sandbox: 75 s idle at the bottom of an 8-deep pool, full health.
 - Combat (`app/combat.js`, every 500 ms): hostile mobs only, never players or
   animals. A hostile within 4 blocks is attacked with the best sword/axe in the
   inventory (swords before axes); creepers within 6 blocks are backed away from,

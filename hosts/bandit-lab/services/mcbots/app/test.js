@@ -64,6 +64,14 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.match(A.agentJobRefusal({bots: ['bot3'], type: 'treefarm', args: {x1: 0, z1: 0, x2: 3, z2: 3}}, ordered), /bot3 works on the owner's wheatfarm order/);
   assert.match(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, ordered), /bot1 works on the owner's produce order/, 'idle, its order not resumed yet');
   assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'stop', args: {}}, {...ordered, ownerOrderOf: () => undefined}), null, 'the order ended: agents may');
+  // ... and a failure does not end it: the job starts again later (one exploded chest, 806 agent jobs, 2026-10-17)
+  const order = {type: 'produce', args: {file: 'f'}}, at = (kind, text) => A.orderOutcome({kind, text}, order);
+  assert.deepStrictEqual(at('done', 'finished: produce f (30 s)'), {end: true});
+  assert.deepStrictEqual(at('fail', 'failed: produce f - no chest at -356 67 -191'), {retry: A.ORDER_RETRY_MS});
+  assert.deepStrictEqual(at('fail', 'gave up: produce f (died 4 times)'), {retry: 4 * A.ORDER_RETRY_MS});
+  assert.strictEqual(at('fail', 'failed: rearm -271 66 -214 - chest full'), null, 'a helper job is not the order');
+  assert.strictEqual(at('info', 'failed: produce f'), null);
+  assert.deepStrictEqual(A.orderOutcome({kind: 'fail', text: 'failed: produce f - x'}, {type: 'produce'}), {end: true}, 'saved without args (older file): ends');
   // Three failed jobs in a row: no agent order for REST_MS after the newest (bot3, main server 2026-10-14).
   const ev = (kind, t, bot = 'bot1') => ({bot, kind, t, text: `${kind === 'fail' ? 'failed' : 'finished'}: chop 1 - no free logs`});
   const now = 1e6;
@@ -854,7 +862,7 @@ require('./crafting');
   d = on.debug();
   assert.deepStrictEqual(d.pos, [1.23, 60, -3.5]);
   assert.strictEqual(d.dimension, 'overworld');
-  assert.deepStrictEqual(d.physics, {onGround: true, collidedHorizontally: true, velocity: [0, -0.078, 0], controls: ['forward']});
+  assert.deepStrictEqual(d.physics, {onGround: true, collidedHorizontally: true, velocity: [0, -0.078, 0], controls: ['forward'], air: null, inWater: false});
   assert.deepStrictEqual(d.pathfinder, {moving: true, mining: false, building: false, goal: 'GoalNear'});
   assert.strictEqual(d.job.type, 'goto');
   assert.strictEqual(d.job.progress, '12 blocks');
@@ -5336,6 +5344,31 @@ require('./crafting');
   assert.strictEqual((await run(false, [mob('zombie', 6)])).mode, null, 'bare: it lets the zombie come');
   assert.deepStrictEqual((await run(false, [mob('zombie', 3)])).hits, ['zombie'], 'and hits it once it is close');
   assert.strictEqual((await run(true, [mob('creeper', 7)])).mode, null, 'a creeper 7 blocks off is never hunted');
+})();
+
+(async () => { // air: under water with little left the bot surfaces before anything else, then goes on (6 drownings, 2026-10-17)
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const controls = {}, goals = [];
+  let roof = true; // a stone roof at y 57 over the bot: it needs the pathfinder to the air at 2 60 0
+  const water = (p) => (roof && p.y === 57 && p.x === 0 ? {name: 'stone', boundingBox: 'block'} : p.y < 60 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
+  const bot = {health: 20, food: 20, oxygenLevel: 6, entity: {position: new Vec3(0.5, 55, 0.5)}, entities: {}, game: {dimension: 'overworld'},
+    registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt: water, setControlState: (k, v) => { controls[k] = v; },
+    findBlock: ({useExtraInfo}) => [new Vec3(1, 50, 0), new Vec3(2, 60, 0), new Vec3(3, 61, 0)].map((p) => ({position: p})).find(useExtraInfo) ?? null,
+    pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
+  const c = new Combat({bot, online: true, name: 'bot1', world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
+  c.stop();
+  await c.tick();
+  assert.deepStrictEqual([c.mode, c.busy, controls.jump], ['air', true, true]);
+  assert.deepStrictEqual([goals[0].x, goals[0].y, goals[0].z], [2, 59, 0], 'feet in the water under the air at 2 60 0, not the cave at 1 50 0');
+  bot.oxygenLevel = 19;
+  await c.tick();
+  assert.deepStrictEqual([c.mode, c.busy, controls.jump], [null, false, false], 'breathing again: on with the job');
+  // open water up to the air: straight up, no pathfinder goal (it let go of the jump, sandbox 2026-10-17)
+  roof = false;
+  bot.oxygenLevel = 5;
+  await c.tick();
+  assert.deepStrictEqual([c.mode, controls.jump, goals.at(-1)], ['air', true, null]);
 })();
 
 { // a guard job fights even with the defend setting off
