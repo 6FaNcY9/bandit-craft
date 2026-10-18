@@ -675,6 +675,8 @@ class BotRunner {
         this.log(this.name, this.lastError);
       }
     }
+    // Pillars the job left in the open come down before the next one (its own, unchanged ones only; pillars.js).
+    if (!job.cancelled && this.online) await unpillar(this, job).catch(() => {});
     const took = Math.round((Date.now() - job.startedAt) / 1000);
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
     else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id);
@@ -1294,9 +1296,12 @@ function guardDigs(runner, bot) {
   bot.placeBlock = (ref, face, ...rest) => {
     const why = placeRefusal(ref, face);
     if (why) return Promise.reject(new Error(why));
-    // A step straight up from the bot's own column while it chops is a pillar to a log: remember it (pillars.js).
+    // A step straight up from the bot's own column is a pillar: remember it (pillars.js) while it chops, and in any
+    // job out in the open or under leaves (towers to drops and out of dips: 146 left above y 67 in 2.3 days, none
+    // dug back, main server 2026-10-18). Under a roof of stone it is the way back up and stays.
     const p = ref.position.plus(face), held = bot.heldItem?.name;
-    const climb = PILLAR_JOBS.has(runner.current?.type) && PILLAR_BLOCKS.includes(held) && pillars.isPillarStep(face, ref.position, bot.entity.position);
+    const climb = PILLAR_BLOCKS.includes(held) && pillars.isPillarStep(face, ref.position, bot.entity.position) &&
+      (PILLAR_JOBS.has(runner.current?.type) || pillars.openAbove((x, y, z) => bot.blockAt(new Vec3(x, y, z)), p.x, p.y, p.z));
     return nativePlace(ref, face, ...rest).then((out) => {
       if (climb) pillars.record(runner.pillars, p.x, p.y, p.z, held);
       return out;
@@ -2102,7 +2107,7 @@ async function collect(r, job, matching, count, what) {
     job.progress = `${got}/${count}`;
     if (!job.t.open) Object.assign(job.t, {done: got, total: count});
   }
-  if (wood) await unpillar(r, job);
+  await unpillar(r, job); // a mine step of produce or get climbs to drops too, not only a chop
 }
 
 // " 12/32" for jobs that count their blocks, else "".

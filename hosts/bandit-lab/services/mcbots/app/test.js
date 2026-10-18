@@ -2828,6 +2828,23 @@ require('./crafting');
     await assert.rejects(bot.dig(blk(0, 60, 0)), /stopped/);
     assert.strictEqual(dug, 1);
   }
+  { // pillar steps are remembered in any job out in the open, not under a stone roof (main server 2026-10-18)
+    const {guardDigs} = require('./bots');
+    const {Vec3} = require('vec3');
+    let roof = null;
+    const bot = {dig: async () => {}, equip: async () => {}, placeBlock: async () => {}, lookAt: async () => {}, heldItem: {name: 'cobblestone'},
+      entity: {position: new Vec3(10.5, 67, 20.5)},
+      blockAt: (p) => (p.y === 66 || (roof && p.y === roof) ? {name: p.y === 66 ? 'dirt' : 'stone', position: p, boundingBox: 'block', getProperties: () => ({})}
+        : {name: 'air', position: p, boundingBox: 'empty', getProperties: () => ({})})};
+    const runner = {current: {cancelled: false, type: 'produce'}, protectedAreas: [], pillars: new Map()};
+    guardDigs(runner, bot);
+    const under = {name: 'dirt', position: new Vec3(10, 66, 20)};
+    await bot.placeBlock(under, new Vec3(0, 1, 0));
+    assert.deepStrictEqual([...runner.pillars.keys()], ['10,67,20'], 'a tower step under the sky is remembered');
+    runner.pillars.clear(); roof = 75;
+    await bot.placeBlock(under, new Vec3(0, 1, 0));
+    assert.strictEqual(runner.pillars.size, 0, 'under a stone roof it is the way back up');
+  }
   { // the pathfinder's equip-then-dig / equip-then-place survives neither a Stop, a path reset nor a new job (Codex R2-2, R3-2)
     const {guardDigs, BotRunner} = require('./bots');
     const EventEmitter = require('node:events');
@@ -5228,6 +5245,12 @@ require('./crafting');
   }
   assert.deepStrictEqual(due({protectedAt: (x) => x === 10}), ['30,66,20'], 'never in a protected area');
   assert.strictEqual(cells.size, 1);
+  // open above: sky or a tree's leaves yes; a stone roof or unloaded blocks no
+  const sky = (roof) => (x, y, z) => (roof && y === roof.y ? {name: roof.name, boundingBox: 'block'} : {name: 'air', boundingBox: 'empty'});
+  assert.ok(P.openAbove(sky(null), 0, 66, 0));
+  assert.ok(P.openAbove(sky({y: 72, name: 'oak_leaves'}), 0, 66, 0));
+  assert.ok(!P.openAbove(sky({y: 80, name: 'stone'}), 0, 66, 0));
+  assert.ok(!P.openAbove(() => null, 0, 66, 0));
 }
 { // server admin (admin.js): RCON packets, validation, restart, no agent access (2026-10-10)
   const AD = require('./admin');

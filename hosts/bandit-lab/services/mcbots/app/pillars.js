@@ -31,4 +31,14 @@ function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4
   return out.sort((a, b) => b.y - a.y);
 }
 
-module.exports = {record, changed, due, isPillarStep, key};
+// Open to the sky above x,y,z, or only leaves over it (a tree's canopy): a pillar there is in the way. Under a roof
+// of stone it is the way back up and stays. Unloaded blocks count as a roof.
+function openAbove(blockAt, x, y, z, up = 24) {
+  for (let dy = 1; dy <= up; dy++) {
+    const b = blockAt(x, y + dy, z);
+    if (!b || (b.boundingBox === 'block' && !/leaves$/.test(b.name))) return false;
+  }
+  return true;
+}
+
+module.exports = {record, changed, due, isPillarStep, openAbove, key};
