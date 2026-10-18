@@ -2598,6 +2598,9 @@ async function produce(r, job) {
   const p = producer(r, job, job.args);
   for (;;) {
     guard(job);
+    // Food, gear and a pickaxe first, as the build job does: bot2 failed its order on the sorter mountain, no path down
+    // to the storage without a pickaxe (main server 2026-10-18).
+    await care(r, job);
     const s = await p.step();
     if (!s.idle) continue;
     job.progress = s.idle;
