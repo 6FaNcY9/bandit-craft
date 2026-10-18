@@ -96,7 +96,7 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 });
 
 // Normalise and validate job arguments (throws on bad input).
-const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
+const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
 const AREA_JOBS = new Set(['shaft', 'excavate', 'rim', 'treefarm', 'wheatfarm']); // one run covers the area
 const VALIDATE = {
   help: () => ({}),
@@ -156,6 +156,14 @@ const VALIDATE = {
   place: (a) => {
     if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be a block name like chest');
     return {item: a.item, ...xyz(a)};
+  },
+  light: (a) => {
+    if (a.spawner) return {spawner: xyz(a.spawner)};
+    const p = xyz({x: a.x1, y: a.y1, z: a.z1}), q = xyz({x: a.x2, y: a.y2, z: a.z2});
+    const box = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
+    if (box.x2 - box.x1 > 63 || box.z2 - box.z1 > 63) throw new Error('a light zone is at most 64 x 64 blocks');
+    if (box.y2 - box.y1 > 47) throw new Error('a light zone is at most 48 blocks high');
+    return {...box, ...(a.zone ? {zone: String(a.zone).slice(0, 32)} : {})};
   },
   // A box to dig out (an underground room): two corners, at most 9x9 wide and 5 high.
   excavate: (a0) => {
@@ -710,6 +718,8 @@ class BotRunner {
       food: this.online ? b.food : null,
       pos: this.online && b.entity ? ['x', 'y', 'z'].map((k) => Math.round(b.entity.position[k])) : null,
       dimension: this.online ? normDim(b.game?.dimension) : null,
+      isDay: this.online ? b.time?.isDay ?? (Number.isFinite(b.time?.timeOfDay) && b.time.timeOfDay >= 0 && b.time.timeOfDay < 12000) : null,
+      fit: this.online ? !!this.combat?.fit?.() : false, // the keeper sends only a fit bot to a spawner
       combat: this.combat.mode || null,
       sheltered: !!this.shelterAt && !!b && isNight(b), // in its night shelter (nightShelter): agents leave it alone until morning
       gettingFood: !!this.gettingFood, // hungry and fetching food (upkeep): agents leave it alone until it has some
@@ -818,6 +828,8 @@ function safeMovements(bot, areas, runner = null) {
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   mv.exclusionAreasPlace = [veto];
+  const spawner = bot.registry.blocksByName.spawner?.id;
+  if (spawner !== undefined) mv.blocksCantBreak.add(spawner); // not on the way either (see digAt)
   // A landing block without a position (a cell the pathfinder could not read) threw in getMoveDropDown and took the
   // whole bot process down with it (main server 2026-10-17 10:08): no landing there.
   const landing = mv.getLandingBlock.bind(mv);
@@ -1372,6 +1384,8 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
   let block = bot.blockAt(pos);
   if (!block || block.name.endsWith('air')) return false;
   const first = block.name;
+  // The owner may build XP farms on spawners: they are lit, never dug (main server 2026-10-18).
+  if (first === 'spawner') throw new Error('refusing to dig a monster spawner');
   const want = expect || ((n) => n === first);
   if (!want(block.name)) return false;
   const tools = block.harvestTools ? Object.keys(block.harvestTools).map(Number) : null;
@@ -1616,6 +1630,30 @@ const child = (job, extra = {}) => Object.assign(Object.create(job), {collected:
 // between gets back to light 0, where monsters spawn). Out of torches: craft 4
 // when there is coal or charcoal (sticks come from planks).
 const TORCH_BELOW = 7;
+function lightCandidates(box, blockAt, protectedAt = () => false, torchNear = () => false, chestNear = () => false) {
+  const out = [];
+  for (let x = box.x1; x <= box.x2; x += 8) for (let z = box.z1; z <= box.z2; z += 8) {
+    let found = null;
+    for (let y = box.y1; y + 2 <= box.y2; y++) {
+      const ground = blockAt(x, y, z), feet = blockAt(x, y + 1, z), head = blockAt(x, y + 2, z);
+      if (!ground || ground.boundingBox !== 'block' || !feet || !head || !['air', 'cave_air'].includes(feet.name) || !['air', 'cave_air'].includes(head.name)) continue;
+      if (/farmland|leaves|_leaves|_slab|glass|water|lava|wheat|crop/.test(ground.name)) continue;
+      if ((feet.light ?? 15) !== 0 || protectedAt(x, z) || torchNear(x, y + 1, z) || chestNear(x, z)) continue;
+      found = {x, y: y + 1, z}; break;
+    }
+    if (found) out.push(found);
+  }
+  return out;
+}
+function spawnerTorchSpot(pos, blockAt) {
+  const top = {x: pos.x, y: pos.y + 1, z: pos.z};
+  if (['air', 'cave_air'].includes(blockAt(top.x, top.y, top.z)?.name)) return {spot: top, face: new Vec3(0, 1, 0)};
+  for (const d of [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]) {
+    const spot = {x: pos.x + d.x, y: pos.y, z: pos.z + d.z};
+    if (['air', 'cave_air'].includes(blockAt(spot.x, spot.y, spot.z)?.name)) return {spot, face: d};
+  }
+  return null;
+}
 // A shaft gets a wall torch every 8 blocks of depth; its rim wall one every 6 blocks.
 const shaftTorchDue = (top, y) => top - y > 0 && (top - y) % 8 === 0;
 const rimTorchDue = (placed) => placed > 0 && placed % 6 === 0;
@@ -2656,6 +2694,57 @@ async function fileToHall(r, job, {fill, left, isFood, hall}) {
 }
 
 const JOBS = {
+  light: async (r, job) => {
+    const {bot} = r, a = job.args;
+    const count = () => bot.inventory.items().filter((i) => i.name === 'torch').reduce((n, i) => n + i.count, 0);
+    const getTorch = async () => {
+      if (!count() && r.supplyChest) await JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item: 'torch', count: 32, ...r.supplyChest}})).catch((e) => { guard(job); r.emit('info', `torch supply: ${e.message.slice(0, 80)}`); });
+      if (!count() && bot.inventory.items().some((i) => i.name === 'coal' || i.name === 'charcoal')) await crafting.ensureItem(r, child(job), 'torch', 4).catch((e) => { guard(job); r.emit('info', `torch craft: ${e.message.slice(0, 80)}`); });
+      return count() > 0;
+    };
+    if (a.spawner) {
+      if (!r.combat.fit()) throw new Error('spawner lighting requires a fit bot');
+      const p = a.spawner;
+      await goNear(r, job, p.x, p.y, p.z, 3, {doing: `walking to the spawner at ${p.x} ${p.y} ${p.z}`});
+      guard(job);
+      if (bot.blockAt(new Vec3(p.x, p.y, p.z))?.name !== 'spawner') throw new Error('no spawner at the requested position');
+      const faces = [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+      if (faces.some(([dx, dy, dz]) => /torch$/.test(bot.blockAt(new Vec3(p.x + dx, p.y + dy, p.z + dz))?.name || ''))) return;
+      const spot = spawnerTorchSpot(p, (x, y, z) => bot.blockAt(new Vec3(x, y, z)));
+      if (!spot) throw new Error('no open space beside the spawner');
+      const liveSpawner = bot.blockAt(new Vec3(p.x, p.y, p.z));
+      if (liveSpawner?.name !== 'spawner' || !['air', 'cave_air'].includes(bot.blockAt(new Vec3(spot.spot.x, spot.spot.y, spot.spot.z))?.name)) throw new Error('spawner or torch spot changed while walking');
+      if (!await getTorch()) throw new Error('no torches available');
+      await bot.equip(bot.inventory.items().find((i) => i.name === 'torch'), 'hand');
+      await bot.placeBlock(liveSpawner, spot.face).catch(() => {});
+      await sleep(250);
+      if (!/torch$/.test(bot.blockAt(new Vec3(spot.spot.x, spot.spot.y, spot.spot.z))?.name || '')) throw new Error('torch did not stay beside the spawner');
+      return;
+    }
+    const chestPoints = [r.supplyChest, ...(r.world?.snapshot().blocks || []).filter((b) => ['chest', 'trapped_chest', 'barrel'].includes(b.type))].filter(Boolean);
+    const points = lightCandidates(a, (x, y, z) => bot.blockAt(new Vec3(x, y, z)), (x, z) => insideAreas(r.protectedAreas, x, z), (x, y, z) => {
+      const ids = ['torch', 'wall_torch'].map((n) => bot.registry.blocksByName[n]?.id).filter((n) => n !== undefined);
+      return bot.findBlocks({matching: ids, maxDistance: 9, count: 64}).some((v) => new Vec3(x, y, z).distanceTo(v) <= 7);
+    }, (x, z) => chestPoints.some((c) => Math.hypot(c.x - x, c.z - z) < 2));
+    let lit = 0;
+    for (const p of points) {
+      guard(job);
+      if (!await getTorch()) break;
+      try { await goNear(r, job, p.x, p.y, p.z, 2); } catch { guard(job); continue; }
+      guard(job);
+      if (bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) > 3) continue;
+      const here = bot.blockAt(new Vec3(p.x, p.y, p.z)), below = bot.blockAt(new Vec3(p.x, p.y - 1, p.z));
+      if (!here || !below || !['air', 'cave_air'].includes(here.name) || below.boundingBox !== 'block' || (here.light ?? 15) !== 0) continue;
+      try {
+        await bot.equip(bot.inventory.items().find((i) => i.name === 'torch'), 'hand');
+        await bot.placeBlock(below, new Vec3(0, 1, 0));
+        await sleep(200);
+        if (/^torch$/.test(bot.blockAt(new Vec3(p.x, p.y, p.z))?.name || '')) lit++;
+      } catch (e) { guard(job); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z}: ${e.message.slice(0, 60)}`); }
+    }
+    if (!count() && lit === 0) throw new Error('no torches available');
+    r.emit('info', `lit ${a.zone || `box ${a.x1},${a.y1},${a.z1}..${a.x2},${a.y2},${a.z2}`}: ${lit} torches`);
+  },
   help: (r, job) => helpOnce(r, job),
   tidy,
   wheatfarm,
@@ -3276,4 +3365,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

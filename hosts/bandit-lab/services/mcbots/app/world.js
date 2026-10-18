@@ -9,7 +9,7 @@ const BLOCK_TTL_MS = 600000;
 const PLAYER_TTL_MS = 10000; // BlueMap polled every 2 s; older = stale, drop
 const MAX_MOBS = 200;
 const MAX_BLOCKS = 100;
-const NOTABLE_BLOCKS = ['chest', 'trapped_chest', 'barrel', 'diamond_ore', 'deepslate_diamond_ore', 'ancient_debris', 'emerald_ore', 'deepslate_emerald_ore'];
+const NOTABLE_BLOCKS = ['chest', 'trapped_chest', 'barrel', 'spawner', 'diamond_ore', 'deepslate_diamond_ore', 'ancient_debris', 'emerald_ore', 'deepslate_emerald_ore'];
 
 // Hostile for the shared picture: mineflayer/minecraft-data classify mobs.
 const isHostile = (e) => !!e && e.type !== 'player' && (e.type === 'hostile' || e.category === 'Hostile mobs');

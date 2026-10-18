@@ -74,12 +74,13 @@ for (const [item, ingots] of [['iron_pickaxe', 3], ['iron_sword', 2]]) {
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
 class Keeper {
-  constructor({runners, world, chest, quotas, site = null, events = null, now = Date.now, log = () => {}}) {
+  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}}) {
     this.runners = runners;
     this.world = world;
     this.chest = chest; // {x,y,z} of the supply chest, or null: nothing to keep
     this.quotas = quotas; // [[item, want]]
     this.site = site;
+    this.places = places;
     this.events = events;
     this.now = now;
     this.log = log;
@@ -89,6 +90,8 @@ class Keeper {
     this.cooldown = new Map(); // item -> until
     this.notes = new Map(); // item -> why nothing is happening
     this.idleSince = new Map();
+    this.lighting = new Map();
+    this.lightWork = new Map();
   }
 
   say(text) {
@@ -138,8 +141,10 @@ class Keeper {
     if (!stock || t - stock.t > STOCK_MAX_AGE_MS) {
       if (!this.counting && busy.size < MAX_BOTS) {
         const r = free();
-        if (r) this.assign(r, [['stock', {...this.chest}]], () => (this.counting = {bot: r.name, at: t}), 'counting what is in the supply chest');
+        // Busy from now: planLighting below gave the same bot a light job on top (keeper test, 2026-10-18).
+        if (r) this.assign(r, [['stock', {...this.chest}]], () => { this.counting = {bot: r.name, at: t}; busy.add(r.name); }, 'counting what is in the supply chest');
       }
+      this.planLighting(snaps, t, busy);
       return;
     }
     // 2. the first quota that is short and has nobody on it
@@ -178,6 +183,29 @@ class Keeper {
         busy.add(r.name);
       }, `${r.name}: ${item} ${have(stock.items, item)}/${want}, fetching ${n} (${jobs[0][0]} ...)`);
     }
+    this.planLighting(snaps, t, busy);
+  }
+
+  planLighting(snaps, t, busy) {
+    const idleDay = [...snaps.values()].some((s) => this.idle(s) && s.isDay === true);
+    if (!idleDay) return;
+    const dayFree = (ok = () => true) => [...this.runners.values()].find((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && snaps.get(r.name)?.isDay === true && ok(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS);
+    const placeList = typeof this.places === 'function' ? this.places()?.list : this.places?.list;
+    const zones = (placeList || []).filter((p) => p.dim === 'overworld' && p.box && ['base', 'wheat', 'storage', 'treefarm'].includes(p.kind));
+    for (const p of zones) {
+      const key = `zone:${p.name}`;
+      if ((this.lighting.get(key) || 0) > t || this.lightWork.has(key) || busy.size >= MAX_BOTS) continue;
+      const r = dayFree(); if (!r) break;
+      const chain = [['light', {...p.box, zone: p.name}]];
+      this.assign(r, chain, () => { this.lightWork.set(key, {bot: r.name, at: t}); busy.add(r.name); }, `${r.name}: lighting ${p.name}`);
+    }
+    // A spawner seen lately (world blocks live 10 min): the job returns at once when a torch is on it already.
+    for (const b of this.world.snapshot().blocks.filter((x) => x.type === 'spawner' && x.dim === 'overworld')) {
+      const key = `spawner:${b.x},${b.y},${b.z}`;
+      if ((this.lighting.get(key) || 0) > t || this.lightWork.has(key) || busy.size >= MAX_BOTS) continue;
+      const r = dayFree((s) => s.fit); if (!r) break;
+      this.assign(r, [['light', {spawner: {x: b.x, y: b.y, z: b.z}}]], () => { this.lightWork.set(key, {bot: r.name, at: t}); busy.add(r.name); }, `${r.name}: lighting spawner ${b.x} ${b.y} ${b.z}`);
+    }
   }
 
   assign(r, chain, onOk, text) {
@@ -194,6 +222,14 @@ class Keeper {
 
   // A chain is over when its bot is idle again (after having been seen busy), offline, or too slow.
   finish(snaps, t, stock) {
+    for (const [key, w] of [...this.lightWork]) {
+      const s = snaps.get(w.bot);
+      if ((s && !this.idle(s)) || !s?.online || t - w.at > ASSIGN_TIMEOUT_MS) w.seen = true;
+      if (!w.seen || (s?.online && !this.idle(s))) continue;
+      this.lightWork.delete(key);
+      this.lighting.set(key, t + (key.startsWith('spawner:') ? 24 * 60 : 30) * 60 * 1000);
+      this.say(`${w.bot} finished ${key.startsWith('zone:') ? `lighting ${key.slice(5)}` : 'lighting a spawner'}`);
+    }
     if (this.counting) {
       const s = snaps.get(this.counting.bot);
       if ((stock && stock.t >= this.counting.at) || t - this.counting.at > 5 * 60 * 1000 || !s?.online) this.counting = null;
@@ -227,6 +263,7 @@ class Keeper {
         const w = this.work.get(item);
         return {item, want, have: stock ? have(stock.items, item) : null, bot: w?.bot || null, fetching: w?.n || 0, note: w ? '' : this.notes.get(item) || ''};
       }),
+      lighting: [...new Set([...this.lighting.keys(), ...this.lightWork.keys()])].map((key) => ({target: key, bot: this.lightWork.get(key)?.bot || null, nextAt: this.lighting.get(key) || null})),
       counting: this.counting?.bot || null,
     };
   }

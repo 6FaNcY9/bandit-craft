@@ -56,6 +56,8 @@ function cleanSnapshot(s) {
     food: num(s.food),
     pos: vec(s.pos),
     dimension: optStr(s.dimension, 32),
+    isDay: typeof s.isDay === 'boolean' ? s.isDay : null,
+    fit: bool(s.fit),
     combat: optStr(s.combat, 32),
     sheltered: bool(s.sheltered), // agentauth refuses orders to a sheltered bot (server.js restingOf)
     gettingFood: bool(s.gettingFood), // ... and to one fetching food

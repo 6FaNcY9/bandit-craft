@@ -6934,3 +6934,60 @@ require('./crafting');
   assert.ok(air.has('8,60,1') && air.has('10,60,2'), 'the corner stays 3 wide');
   console.log('highways: litematic round trip, tunnel shape, rock walls, joined legs ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+// ---- light jobs and keeper lighting ----
+(async () => {
+{
+  const {VALIDATE, lightCandidates, spawnerTorchSpot} = require('./bots');
+  const {NOTABLE_BLOCKS, WorldModel} = require('./world');
+  assert.deepStrictEqual(VALIDATE.light({x1: 0, y1: 0, z1: 0, x2: 63, y2: 47, z2: 63}), {x1: 0, y1: 0, z1: 0, x2: 63, y2: 47, z2: 63});
+  assert.throws(() => VALIDATE.light({x1: 0, y1: 0, z1: 0, x2: 64, y2: 1, z2: 1}), /64 x 64/);
+  assert.throws(() => VALIDATE.light({x1: 0, y1: 0, z1: 0, x2: 1, y2: 48, z2: 1}), /48 blocks high/);
+  assert.deepStrictEqual(VALIDATE.light({spawner: {x: 1, y: 2, z: 3}}), {spawner: {x: 1, y: 2, z: 3}});
+  assert.throws(() => VALIDATE.mine({block: 'spawner'}), /placed block/);
+  assert.ok(NOTABLE_BLOCKS.includes('spawner'));
+  const blocks = new Map();
+  const put = (x, y, z, name, boundingBox = 'empty', light = 0) => blocks.set(`${x},${y},${z}`, {name, boundingBox, light});
+  const at = (x, y, z) => blocks.get(`${x},${y},${z}`) || null;
+  for (let x = 0; x <= 40; x += 8) {
+    put(x, 0, 0, 'grass_block', 'block'); put(x, 1, 0, 'air', 'empty', 0); put(x, 2, 0, 'air');
+  }
+  put(8, 0, 0, 'farmland', 'block');
+  put(16, 1, 0, 'water');
+  const picks = lightCandidates({x1: 0, y1: 0, z1: 0, x2: 40, y2: 2, z2: 0}, at, (x) => x === 32, (x) => x === 24);
+  assert.deepStrictEqual(picks, [{x: 0, y: 1, z: 0}, {x: 40, y: 1, z: 0}], 'only safe dark grass remains: farmland, water, nearby torch and protected zone are skipped');
+  assert.deepStrictEqual(spawnerTorchSpot({x: 0, y: 1, z: 0}, (x, y, z) => at(x, y, z)), {spot: {x: 0, y: 2, z: 0}, face: new (require('vec3').Vec3)(0, 1, 0)});
+  put(0, 2, 0, 'stone', 'block'); put(1, 1, 0, 'air');
+  assert.deepStrictEqual(spawnerTorchSpot({x: 0, y: 1, z: 0}, at).spot, {x: 1, y: 1, z: 0}, 'blocked top selects an open side');
+}
+
+{
+  const {Keeper, IDLE_MS} = require('./keeper');
+  const {WorldModel} = require('./world');
+  let now = 1000000;
+  const world = new WorldModel({now: () => now});
+  world.noteStock('bot1', {oak_log: 1});
+  world.noteBlock('bot1', 'spawner', {x: 5, y: 20, z: 5}, 'overworld');
+  const zone = {name: 'Base', kind: 'base', dim: 'overworld', box: {x1: 0, y1: 60, z1: 0, x2: 8, y2: 64, z2: 8}};
+  const runner = {name: 'bot1', sent: [], idle: true, fit: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'lighting'}, queue: [], isDay: true, fit: this.fit}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }};
+  const keeper = new Keeper({runners: new Map([[runner.name, runner]]), world, chest: {x: 1, y: 2, z: 3}, quotas: [], places: () => ({list: [zone]}), now: () => now});
+  keeper.setEnabled(true); keeper.tick(); now += IDLE_MS; keeper.tick();
+  assert.deepStrictEqual(runner.sent[0], ['light', {...zone.box, zone: 'Base'}], 'daylight idle bot receives zone lighting');
+  keeper.tick(); // observe that the bot started its job
+  runner.idle = true; keeper.tick(); // finish the zone job
+  runner.fit = false;
+  runner.sent.length = 0;
+  keeper.tick();
+  assert.strictEqual(runner.sent.some(([type, args]) => type === 'light' && args.spawner), false, 'unfit bot does not receive a spawner job');
+  now += 30 * 60 * 1000; keeper.tick();
+  // The chest numbers are old by now: the bot counts the chest first, with no light job on top.
+  assert.deepStrictEqual(runner.sent.map(([type]) => type), ['stock'], 'one job at a time');
+  world.noteStock('bot1', {oak_log: 1}); runner.idle = true; keeper.tick(); now += IDLE_MS; keeper.tick();
+  assert.strictEqual(runner.sent.some(([type, args]) => type === 'light' && args.zone === 'Base'), true, 'zone is scheduled again after 30 minutes');
+  keeper.tick();
+  runner.idle = true; keeper.tick();
+  runner.fit = true; runner.idle = true; keeper.places = () => ({list: []}); keeper.tick();
+  // Seen again lately (world blocks live 10 min) and idle long enough.
+  now += IDLE_MS; world.noteBlock('bot1', 'spawner', {x: 5, y: 20, z: 5}, 'overworld'); keeper.tick();
+  assert.strictEqual(runner.sent.some(([type, args]) => type === 'light' && args.spawner), true, 'known spawner goes to a fit bot');
+}
+})().catch((e) => { console.error(e); process.exitCode = 1; });

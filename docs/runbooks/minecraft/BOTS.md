@@ -675,6 +675,8 @@ in `app/bots.js`, checked before every block):
 
 ## Standing orders (keeper)
 
+**Lighting:** `light` accepts a bounded zone box or `{spawner:{x,y,z}}`. Zone lighting places standing torches on dark, safe ground; known overworld base, wheat, storage and treefarm zones are checked every 30 minutes in daylight while standing orders are enabled. Known unlit spawners are assigned only to fit bots. Spawners are never dug.
+
 A switch on the dashboard ("Standing orders") that keeps the supply chest stocked
 (`app/keeper.js`). Quotas are declared in `default.nix` (`KEEPER_QUOTAS`, now
 `logs:64,cobblestone:128,coal:32,torch:64,raw_iron:16,iron_pickaxe:2,iron_sword:1`; optional `KEEPER_SITE=x,y,z` to walk to
