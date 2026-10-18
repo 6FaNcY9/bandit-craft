@@ -2345,8 +2345,9 @@ async function helpOnce(r, job) {
   }
   return false;
 }
-// Walls and floors somewhere even though nothing crafts them: never mined for their drops.
-const PLACED_RE = /^(cobblestone|mossy_cobblestone|cobbled_deepslate|glass|terracotta|[a-z_]+_terracotta|[a-z_]+_concrete)$/;
+// Walls and floors somewhere even though nothing crafts them: never mined for their drops. Tripwire too: it only lies
+// where someone strung it, and the planner wanted 192 of it for the string of 16 beds (main server 2026-10-18).
+const PLACED_RE = /^(cobblestone|mossy_cobblestone|cobbled_deepslate|glass|terracotta|[a-z_]+_terracotta|[a-z_]+_concrete|tripwire)$/;
 function acquireWorld(r) {
   const {bot} = r, me = bot.entity.position;
   const have = {};
@@ -2457,7 +2458,9 @@ function producer(r, job, args) {
   const getStep = (items, need, stock, taken, store) => {
     for (const item of items) {
       const count = Math.min(16, (need[item] || 0) - (stock[item] || 0)), key = `get:${item}`;
-      if (count < 1 || taken.has(key) || acquire.plan({item, count}, acquireWorld(r)).missing.length) continue;
+      // Only from what the crew has seen: planned on a guess (sheep nobody saw, 384 cobwebs), "get 16 white_bed" failed 9
+      // times in a day, each resting the step 10 min (main server 2026-10-18). An owner's own `get` may still explore.
+      if (count < 1 || taken.has(key) || acquire.plan({item, count}, {...acquireWorld(r), seenOnly: true}).missing.length) continue;
       return {key, label: `get ${count} ${item}`, chain: [['get', {item, count}], ['deposit', {...store, only: item}]]};
     }
     return null;
