@@ -6147,6 +6147,12 @@ require('./crafting');
     assert.strictEqual(itemOf(name), item);
     assert.strictEqual(itemOf(`minecraft:${name}`), item);
   }
+  // a bed of any colour does (owner, 2026-10-18): one material, and a gray bed fills a white bed's cell, facing kept
+  assert.deepStrictEqual(['gray_bed', 'red_bed', 'white_bed'].map(itemOf), ['white_bed', 'white_bed', 'white_bed']);
+  const bedCell = {name: 'white_bed', props: {part: 'foot', facing: 'north'}};
+  assert.ok(matches(bedCell, {name: 'gray_bed', props: {part: 'foot', facing: 'north'}}));
+  assert.ok(!matches(bedCell, {name: 'gray_bed', props: {part: 'foot', facing: 'east'}}), 'the facing still counts');
+  assert.ok(!matches({name: 'torch', props: {}}, {name: 'wall_torch', props: {facing: 'north'}}), 'other blocks stay apart');
   console.log('placing: block states ok');
 }
 

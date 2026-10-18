@@ -74,7 +74,7 @@ function billOfMaterials(blocks, version = '26.1') {
   for (const {name, props = {}, items: inside = []} of blocks) {
     for (const it of inside) if (Object.hasOwn(data.itemsByName, it.name)) items.set(it.name, (items.get(it.name) || 0) + it.count);
     if (SKIP.has(name) || props.half === 'upper' || props.part === 'head') continue;
-    const mapped = itemOf(name);
+    const mapped = /_bed$/.test(name) ? name : itemOf(name); // the bill keeps the schematic's bed colour; a build takes any
     const count = /_slab$/.test(name) && props.type === 'double' ? 2 : Number(props.candles ?? props.pickles ?? props.eggs ?? (name === 'snow' ? props.layers : undefined) ?? 1);
     const parts = name.startsWith('potted_') ? ['flower_pot', name.slice(7)] : [mapped];
     for (const part of parts) {

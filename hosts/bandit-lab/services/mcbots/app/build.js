@@ -442,7 +442,7 @@ async function readStock(r, job, chests, {goNear, guard}) {
       try { noteChest(dim, c, win); } finally { win.close(); }
       s = CHEST_STOCK.get(chestKey(dim, c));
     }
-    for (const [n, k] of s.items) total[n] = (total[n] || 0) + k;
+    for (const [n, k] of s.items) total[placing.itemOf(n)] = (total[placing.itemOf(n)] || 0) + k;
   }
   return total;
 }
@@ -592,7 +592,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     };
     const count = () => {
       const have = {};
-      for (const it of bot.inventory.items()) have[it.name] = (have[it.name] || 0) + it.count;
+      for (const it of bot.inventory.items()) { const n = placing.itemOf(it.name); have[n] = (have[n] || 0) + it.count; }
       return have;
     };
 
@@ -605,7 +605,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const note = (c, win) => noteChest(dim, c, win);
     const holds = (c, item) => {
       const s = stock.get(ckOf(c));
-      return !s || Date.now() - s.t > 600000 ? 0.5 : (s.items.get(item) || 0) > 0 ? 1 : 0;
+      return !s || Date.now() - s.t > 600000 ? 0.5 : [...s.items].some(([name, k]) => k > 0 && placing.itemOf(name) === item) ? 1 : 0;
     };
     async function take(item, n, doing) {
       for (const c of chests.filter((c) => holds(c, item) > 0).sort((a, b) => holds(b, item) - holds(a, item))) {
@@ -654,7 +654,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           // Counted here: the inventory shows what came out of the chest only once its window is closed, so
           // the two-stack cap read 0 and one bot took every stack (327 hoppers, 278 chests, sandbox 2026-10-13).
           let have = count()[item] || 0;
-          for (const it of win.containerItems().filter((i) => i.name === item)) {
+          for (const it of win.containerItems().filter((i) => placing.itemOf(i.name) === item)) {
             guard(job);
             const k = Math.min(n - have, it.count);
             if (k <= 0) break;
@@ -827,7 +827,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       const w = c.p.ways.find((q) => solid(stateAt(c.x + q.against[0], c.y + q.against[1], c.z + q.against[2])?.name));
       if (!w) throw new Error(`nothing to click for ${c.name} at ${keyOf(c)}`);
       if (!count()[c.p.item]) await take(c.p.item, 2, (left) => `taking ${left} ${c.p.item} to reshape a rail`);
-      const item = bot.inventory.items().find((i) => i.name === c.p.item);
+      const item = bot.inventory.items().find((i) => placing.itemOf(i.name) === c.p.item);
       if (!item) throw new Error(`missing material to reshape a rail: ${c.p.item}`);
       const eye = bot.entity.position.offset(0, 1.62, 0);
       if (eye.distanceTo(v(c).offset(w.against[0] + 0.5, w.against[1] + 0.5, w.against[2] + 0.5)) > 4.5) {
@@ -1212,7 +1212,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         }
         const {t, w} = next;
         const k = keyOf(t);
-        if (!bot.inventory.items().some((i) => i.name === t.p.item)) {
+        if (!bot.inventory.items().some((i) => placing.itemOf(i.name) === t.p.item)) {
           await restock(t.p.item);
           continue; // what is open may have changed during the walk
         }
@@ -1233,7 +1233,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             noPath = 0;
           }
           guard(job);
-          const item = bot.inventory.items().find((i) => i.name === t.p.item);
+          const item = bot.inventory.items().find((i) => placing.itemOf(i.name) === t.p.item);
           if (!item) continue;
           await bot.equip(item, 'hand');
           guard(job); // a Stop during the walk or the equip must not place anything
@@ -1242,7 +1242,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           await clickFace(bot, v(t), w, sleep);
           if (t.p.again) { // a double slab: the second half from the next slab, if the first click took the last one
             for (let i = 0; i < 10 && stateAt(t.x, t.y, t.z)?.name !== t.name; i++) await sleep(100);
-            const more = bot.inventory.items().find((i) => i.name === t.p.item);
+            const more = bot.inventory.items().find((i) => placing.itemOf(i.name) === t.p.item);
             if (more) {
               await bot.equip(more, 'hand');
               await clickFace(bot, v(t), t.p.again, sleep);

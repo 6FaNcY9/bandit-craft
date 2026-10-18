@@ -18,7 +18,11 @@ const CYCLE = {repeater: ['delay', ['1', '2', '3', '4']], comparator: ['mode', [
 const strip = (name) => name.replace(/^minecraft:/, '');
 const neg = (v) => v.map((n) => n ? -n : 0);
 
+// A bed of any colour does: the owner let the iron farm take other colours when 18 white beds wanted 54 white wool
+// and the crew found 21 white sheep (2026-10-18). Beds count as one material, white_bed, and any bed fills a bed cell.
+const BED = /_bed$/;
 function itemOf(name) {
+  if (BED.test(strip(name))) return 'white_bed';
   const item = strip(name).replace(/_wall_(torch|sign|hanging_sign|banner|head|skull)$/, '_$1').replace(/^wall_torch$/, 'torch');
   return item === 'redstone_wire' ? 'redstone' : item === 'tripwire' ? 'string' : item;
 }
@@ -119,7 +123,8 @@ function placement(name, props = {}) {
 // final: also the props that settle once the neighbours stand.
 function matches(want, have, {final = false} = {}) {
   const p = placement(want.name, want.props);
-  return p !== null && strip(want.name) === strip(have.name) &&
+  const kind = (n) => (BED.test(n) ? 'bed' : n);
+  return p !== null && kind(strip(want.name)) === kind(strip(have.name)) &&
     [...p.check, ...(final ? p.final || [] : [])].every((key) => String(want.props?.[key] ?? CYCLE[strip(want.name)]?.[1][0]) === String(have.props?.[key]));
 }
 
