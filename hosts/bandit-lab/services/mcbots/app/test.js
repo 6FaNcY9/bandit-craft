@@ -3030,6 +3030,19 @@ require('./crafting');
     assert.deepStrictEqual([table.position.x, table.position.y, table.position.z], [1, 64, 0]);
     walled.blockAt = (p) => ({name: 'oak_planks', position: p, boundingBox: 'block'}); // placed walls are not dug
     await assert.rejects(placeNear(walled, 'crafting_table'), /no free spot/);
+    // On a lone pillar with a drop all round, ground 2 away takes it (bot1 in a pit by the iron farm, 2026-10-18).
+    const placedAt = [];
+    const ground = (p) => p.y === 63 && ((p.x === 0 && p.z === 0) || Math.max(Math.abs(p.x), Math.abs(p.z)) >= 2);
+    const pillar = {
+      inventory: {items: () => [{name: 'crafting_table'}]},
+      entity: {position: new Vec3(0.5, 64, 0.5)},
+      blockAt: (p) => (placedAt.some((q) => q.x === p.x && q.y === p.y && q.z === p.z) ? {name: 'crafting_table', position: p, boundingBox: 'block'}
+        : {name: ground(p) ? 'stone' : 'air', position: p, boundingBox: ground(p) ? 'block' : 'empty'}),
+      equip: async () => {},
+      placeBlock: async (g) => { placedAt.push(g.position.offset(0, 1, 0)); },
+    };
+    const lone = await placeNear(pillar, 'crafting_table');
+    assert.deepStrictEqual([lone.position.x, lone.position.y, lone.position.z], [-2, 64, 0]);
     // One refused spot is no reason to give up, and a cell the bot's own body reaches into is skipped ("placing
     // crafting_table did not take" ended 7 jobs, main server 2026-10-16): at x .1 its box reaches into x -1.
     const cells = new Map(), tried = [];

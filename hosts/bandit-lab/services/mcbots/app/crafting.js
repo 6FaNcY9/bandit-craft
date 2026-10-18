@@ -79,9 +79,15 @@ async function placeNear(bot, itemName, areas = [], check = () => {}) {
   const p = bot.entity.position;
   const inMe = (c) => c.x + 1 > p.x - 0.3 && c.x < p.x + 0.3 && c.z + 1 > p.z - 0.3 && c.z < p.z + 0.3 && c.y + 1 > p.y && c.y < p.y + 1.8;
   let tries = 0, refused = null;
-  // Same level first, then on top of a neighbouring block (bot in a pit), then one down.
+  // Same level first, then on top of a neighbouring block (bot in a pit), then one down; the cells beside the bot
+  // first, then the ring 2 away: bot1 stood on uneven ground in a pit by the iron farm, no cell beside it would take a
+  // furnace, and smelting glass and iron failed for 10 min at a time (main server 2026-10-18).
+  const ring = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+  const far = [];
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if (Math.max(Math.abs(dx), Math.abs(dz)) === 2) far.push([dx, dz]);
+  ring.push(...far.sort((a, b) => Math.abs(a[0]) + Math.abs(a[1]) - Math.abs(b[0]) - Math.abs(b[1]))); // straight out before the corners
   for (const dy of [-1, 0, -2]) {
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    for (const [dx, dz] of ring) {
       const ground = bot.blockAt(me.offset(dx, dy, dz));
       const spot = bot.blockAt(me.offset(dx, dy + 1, dz));
       if (!(ground?.boundingBox === 'block' && open(spot) && allowed(spot)) || inMe(spot.position)) continue;
