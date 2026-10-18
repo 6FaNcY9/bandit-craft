@@ -99,6 +99,7 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
 const AREA_JOBS = new Set(['shaft', 'excavate', 'rim', 'treefarm', 'wheatfarm']); // one run covers the area
 const VALIDATE = {
+  help: () => ({}),
   // Without y (a spot tapped on the dashboard's map): walk there in x and z only.
   goto: (a) => (a.y === undefined || a.y === null ? {x: num(a.x, -3e7, 3e7, 'x'), z: num(a.z, -3e7, 3e7, 'z')} : xyz(a)),
   follow: player,
@@ -212,7 +213,7 @@ const VALIDATE = {
     const subs = a.substitute ?? {};
     if (!subs || typeof subs !== 'object' || Array.isArray(subs) || Object.keys(subs).length > 16 || !Object.entries(subs).every(([k, v]) => /^[a-z_]{1,48}$/.test(k) && /^[a-z_]{1,48}$/.test(v))) throw new Error('substitute must map at most 16 block names to block names');
     // clearAll (the owner's choice for a site): anything in the site box may be dug, except containers.
-    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
   },
   // The water and lava sources of that schematic build, poured from buckets once its blocks stand (fluids.js).
   fluids: (a) => VALIDATE.schematic(a),
@@ -1707,6 +1708,7 @@ async function ensureGear(r, job) {
   const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
   const owned = [...bot.inventory.items(), ...worn].map((i) => i.name);
   let wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
+  if (!gearJob.gearPlan(n('iron_ingot'), owned).length) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
   if (wanted - n('raw_iron') >= 3 && r.supplyChest && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
     const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}))
@@ -1714,6 +1716,10 @@ async function ensureGear(r, job) {
     // Ingots first: 21 lay in the supply chest while bot2 went without armour or sword, as only raw iron was fetched
     // (2026-10-16).
     await fetch('iron_ingot', wanted);
+    if (n('iron_ingot') >= gearJob.ingotsWanted(owned)) r.world?.dropNeed?.(r.name, 'iron_ingot');
+    else if (r.supplyChest && wanted > n('iron_ingot')) {
+      try { r.world?.postNeed(r.name, 'iron_ingot', Math.min(256, Math.max(1, wanted - n('iron_ingot'))), r.supplyChest, 'gear: no iron_ingot from storage'); } catch {}
+    }
     wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
     if (wanted - n('raw_iron') > 0) await fetch('raw_iron', wanted - n('raw_iron'));
     // Logs to burn, plus 2 for the sticks of the pickaxe and sword: 20 logs for 29 iron all burned and left
@@ -1742,6 +1748,8 @@ async function ensureGear(r, job) {
       r.emit('info', `could not make an ${item}: ${e.message.slice(0, 80)}`);
     }
   }
+  const wornNow = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
+  if (!gearJob.gearPlan(n('iron_ingot'), [...bot.inventory.items(), ...wornNow].map((i) => i.name)).length) r.world?.dropNeed?.(r.name, 'iron_ingot');
 }
 
 const toolFor = (bot, id) => {
@@ -2282,6 +2290,50 @@ async function projectMaterials(r) {
 // lacked an input the next plan gets (bot50's torches ate the coal and a cobblestone, sandbox 2026-10-17).
 const acquire = require('./acquire');
 const ACQUIRE_FAIL_MS = 10 * 60000;
+const NEED_FAILS = new WeakMap();
+async function helpOnce(r, job) {
+  const fails = NEED_FAILS.get(r) || new Map();
+  NEED_FAILS.set(r, fails);
+  const now = Date.now();
+  for (const [k, until] of fails) if (until <= now) fails.delete(k);
+  const needs = r.world?.openNeeds?.(now) || [];
+  for (const need of needs) {
+    if (need.bot === r.name || fails.has(`${need.bot}:${need.item}`)) continue;
+    // What no bot can make (soul sand, the owner's part) is passed over quietly, as the producer's getStep does.
+    if (r.bot && acquire.plan({item: need.item, count: Math.min(need.count, 64)}, {...acquireWorld(r), seenOnly: true}).missing.length) {
+      fails.set(`${need.bot}:${need.item}`, now + ACQUIRE_FAIL_MS);
+      continue;
+    }
+    const key = `need:${need.item}`;
+    if (r.world.claimedByOther?.(r.name, key)) continue;
+    if (r.world && !(await r.world.claim(r.name, key))) continue;
+    const hold = setInterval(() => Promise.resolve(r.world?.claim(r.name, key)).catch(() => {}), 45000);
+    // The wheat farm digs only natural ground inside its box: iron for another bot lies outside it.
+    const limits = {digOnly: r.digOnly, digBox: r.digBox};
+    r.digOnly = r.digBox = null;
+    try {
+      const childJob = child(job, {type: 'get', args: {item: need.item, count: Math.min(need.count, 64)}});
+      try { await JOBS.get(r, childJob); }
+      catch (e) {
+        guard(job);
+        fails.set(`${need.bot}:${need.item}`, Date.now() + ACQUIRE_FAIL_MS);
+        r.emit('info', `could not get ${need.item} for ${need.bot}: ${e.message.slice(0, 80)}`);
+        return true;
+      }
+      await JOBS.deposit(r, child(job, {type: 'deposit', args: {...need.to, only: need.item}}));
+      r.emit('info', `helped ${need.bot}: delivered ${need.item}`);
+    } catch (e) {
+      guard(job);
+      r.emit('info', `could not help ${need.bot} with ${need.item}: ${e.message.slice(0, 80)}`);
+    } finally {
+      clearInterval(hold);
+      r.world?.release(r.name, key);
+      Object.assign(r, limits);
+    }
+    return true;
+  }
+  return false;
+}
 // Walls and floors somewhere even though nothing crafts them: never mined for their drops.
 const PLACED_RE = /^(cobblestone|mossy_cobblestone|cobbled_deepslate|glass|terracotta|[a-z_]+_terracotta|[a-z_]+_concrete)$/;
 function acquireWorld(r) {
@@ -2469,6 +2521,7 @@ async function produce(r, job) {
     job.progress = s.idle;
     if (/all it needs/.test(s.idle)) return;
     job.t.doing = `waiting: ${s.idle}`;
+    if (await helpOnce(r, job).catch(() => false)) continue;
     await sleep(60000);
   }
 }
@@ -2508,6 +2561,7 @@ const {unroof} = unroofJob.makeUnroof({
 const {wheatfarm} = wheatFarmJob.makeWheatFarm({
   goNear, guard, sleep, digAt, waitCalm, at, crafting, care,
   base: planConfig.BASE.chest,
+  helpOnce,
   craftTable: (r) => !!craftingLib.nearBlock(r.bot, 'crafting_table'),
   // `only` is needed: a plain deposit keeps food. Bread and wheat go to the base chest, where the plan reads them.
   deposit: (r, job, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...planConfig.BASE.chest, only}})),
@@ -2558,6 +2612,7 @@ async function fileToHall(r, job, {fill, left, isFood, hall}) {
 }
 
 const JOBS = {
+  help: (r, job) => helpOnce(r, job),
   tidy,
   wheatfarm,
   fluids,
@@ -3177,4 +3232,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

@@ -682,6 +682,13 @@ let clock = 1000;
 const wm = new W.WorldModel({now: () => clock});
 wm.setPlayers(W.parsePlayers(bm, 'the_nether'));
 assert.strictEqual(wm.player('steve').dim, 'the_nether');
+wm.postNeed('bot2', 'hopper', 9, {x: -356, y: 72, z: -191}, 'waiting for material');
+wm.postNeed('bot3', 'iron_ingot', 4, {x: 1, y: 2, z: 3}, 'gear');
+assert.deepStrictEqual(wm.openNeeds().map((n) => n.item), ['hopper', 'iron_ingot']);
+for (const args of [['Bad', 1, {x: 0, y: 0, z: 0}, ''], ['stone', 0, {x: 0, y: 0, z: 0}, ''], ['stone', 1, {x: 0, y: 0.5, z: 0}, ''], ['stone', 1, {x: 0, y: 0, z: 0}, 'x'.repeat(161)], ['stone', 1, {x: 0, y: 0, z: 0}, 'bad\ntext']]) assert.throws(() => wm.postNeed('bot1', ...args), /invalid need/);
+clock += 600001;
+assert.deepStrictEqual(wm.openNeeds(), [], 'needs expire after ten minutes');
+clock -= 600001;
 const mob = (id, x) => ({id, name: 'zombie', position: {x, y: 64, z: 0}});
 wm.noteMob('bot1', mob(1, 10), 'overworld');
 assert.strictEqual(wm.hostilesNear(12, 0, 'overworld', 8).length, 1);
@@ -1537,6 +1544,22 @@ require('./crafting');
     hub.broadcastWorld();
     await until(() => client.world.chests.get('-5,60,7'), 'lab chest reached the worker');
     assert.deepStrictEqual(client.world.chests.get('-5,60,7').items, {oak_log: 30});
+    client.world.postNeed('bot6', 'hopper', 9, {x: -356, y: 72, z: -191}, 'waiting for material');
+    client.world.flush();
+    await until(() => world.openNeeds().some((n) => n.bot === 'bot6'), 'worker need reached hub');
+    hub.broadcastWorld();
+    await until(() => client.world.openNeeds().some((n) => n.bot === 'bot6' && n.item === 'hopper'), 'hub need returned to worker');
+    client.world.dropNeed('bot6', 'hopper');
+    client.world.flush();
+    await until(() => !world.needs.has('bot6:hopper'), 'worker need removal reached hub');
+    hub.broadcastWorld();
+    await until(() => !client.world.needs.has('bot6:hopper'), 'hub need removal reached worker');
+    hub.observe({bots: new Set(['bot6'])}, {needs: [
+      {bot: 'bot6', item: 'stone', count: 0, to: {x: 1, y: 2, z: 3}, why: 'bad count'},
+      {bot: 'bot6', item: 'stone', count: 1, to: {x: 1, y: 2, z: 3}, why: 'bad\ntext'},
+      {bot: 'bot6', item: 'stone', count: 1, to: {x: 1, y: 2.5, z: 3}, why: 'bad position'},
+    ]});
+    assert.ok(!world.needs.has('bot6:stone'), 'hub rejects malformed worker needs');
     client.world.release('bot6', 'overworld:40,60,5');
     await until(() => !world.claims.has('overworld:40,60,5'), 'worker release reached the hub');
     // hub link drops: reservations are refused until it is back
@@ -6670,5 +6693,40 @@ require('./crafting');
   const {supportStock} = require('./bots');
   const hop = (n) => ({targets: Array.from({length: n}, () => ({name: 'hopper'})).concat([{name: 'cobblestone'}])});
   assert.deepStrictEqual([supportStock(hop(9)).glass, supportStock(hop(40)).glass, supportStock(hop(347)).glass, supportStock(hop(0)).dirt], [16, 40, 320, 128]);
+  {
+    const {helpOnce, JOBS} = require('./bots');
+    const needs = [
+      {bot: 'bot1', item: 'dirt', count: 1, to: {x: 0, y: 1, z: 0}, t: 1},
+      {bot: 'bot2', item: 'hopper', count: 80, to: {x: 1, y: 2, z: 3}, t: 2},
+      {bot: 'bot4', item: 'iron_ingot', count: 3, to: {x: 4, y: 5, z: 6}, t: 3},
+    ];
+    const held = new Set(), calls = [];
+    const world = {openNeeds: () => needs, claimedByOther: () => false, claim: async (_by, key) => !held.has(key) && (held.add(key), true), release: (_by, key) => held.delete(key)};
+    const oldGet = JOBS.get, oldDeposit = JOBS.deposit;
+    let limits = null;
+    JOBS.get = async (r, j) => { limits = [r.digOnly, r.digBox]; calls.push(['get', j.args.item, j.args.count]); if (j.args.item === 'hopper') throw new Error('no route'); };
+    JOBS.deposit = async (_r, j) => calls.push(['deposit', j.args.only, j.args.x]);
+    const box = {x1: 0, z1: 0, x2: 8, z2: 8}, natural = new Set(['dirt']);
+    const runner = {name: 'bot1', world, emit() {}, digOnly: natural, digBox: box}; // a wheat farmer helping
+    const parent = {type: 'help', args: {}, cancelled: false};
+    try {
+      assert.strictEqual(await helpOnce(runner, parent), true);
+      assert.deepStrictEqual(calls, [['get', 'hopper', 64]], 'oldest other bot is tried, capped at 64; own need is ignored');
+      calls.length = 0;
+      assert.strictEqual(await helpOnce(runner, parent), true);
+      assert.deepStrictEqual(calls, [['get', 'iron_ingot', 3], ['deposit', 'iron_ingot', 4]], 'failed need rests while the next one is served');
+      assert.deepStrictEqual(limits, [null, null], 'the help digs outside the farm box');
+      assert.deepStrictEqual([runner.digOnly, runner.digBox], [natural, box], 'and the farm limits come back');
+      // what the planner cannot make (soul sand, the owner's part) is passed over without a try
+      const {Vec3} = require('vec3');
+      const helper = {name: 'bot3', world: {...world, chests: new Map(), openNeeds: () => [
+        {bot: 'bot2', item: 'soul_sand', count: 4, to: {x: 1, y: 2, z: 3}, t: 1}, {bot: 'bot2', item: 'iron_ingot', count: 5, to: {x: 1, y: 2, z: 3}, t: 2}]},
+      emit() {}, acquireFailed: new Map(), protectedAreas: [], bot: {entity: {position: new Vec3(0, 64, 0)}, registry: require('minecraft-data')('26.1'),
+        inventory: {items: () => [{name: 'iron_ingot', count: 5}]}, findBlock: () => null, findBlocks: () => [], nearestEntity: () => null}};
+      calls.length = 0;
+      assert.strictEqual(await helpOnce(helper, parent), true);
+      assert.deepStrictEqual(calls, [['get', 'iron_ingot', 5], ['deposit', 'iron_ingot', 1]], 'soul sand skipped, the iron delivered');
+    } finally { JOBS.get = oldGet; JOBS.deposit = oldDeposit; }
+  }
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

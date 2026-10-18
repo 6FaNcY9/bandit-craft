@@ -1,5 +1,13 @@
 # Minecraft bots (Mineflayer)
 
+## Needs board
+
+When a builder or a bot gearing up lacks material, it posts the item, remaining count, destination chest and reason
+to the shared needs board. Open needs stay visible for ten minutes and appear in the dashboard under **Bedarf**.
+An idle bot, a producer with no project step, or a wheat farmer waiting for growth can claim another bot's oldest
+unclaimed need, gather up to 64 items with the normal `get` planner, and deposit them into that chest. Failed
+gather attempts rest for ten minutes; workers relay needs through the hub, which validates each post.
+
 Mineflayer bots join Paper through Velocity and
 BotGate and are controlled from a small web dashboard. Code:
 `hosts/bandit-lab/services/mcbots/` (`app/` is the Node app, `default.nix` the

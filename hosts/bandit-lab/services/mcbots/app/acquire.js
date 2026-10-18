@@ -78,6 +78,8 @@ const chestKey = (s, item) => `chest:${s.at.x},${s.at.y},${s.at.z}:${item}`;
 //   canMine(block), canKill(mob) -> bool: what the bot's jobs may do at all,
 //   stationNear(name) -> bool: a crafting table or furnace stands near enough to use (crafting.js station()),
 //   smelting: {result: input} (default: recipes.js SMELT), failed: Set of method keys to leave out for now,
+//   seenOnly: mine and kill only what blockNear/mobNear know of, no exploring (a helper for another bot's need: soul
+//   sand is mined in the Nether, and none of the crew has seen any),
 // }
 // -> {node, missing: [item]}; node = {item, count, via, cost, children, ...}, via: have | chest | craft | smelt |
 // mine | kill | missing | parts (several of these). Costs are seconds, estimated.
@@ -109,6 +111,7 @@ function plan(goal, world) {
       if (!canMine(block) || hard < 0) continue; // bedrock and the like
       if (block === item && recipes(item).length) continue; // a block that is crafted and drops itself was placed: planks, wool
       const tools = toolsFor(block), dist = nearOf('block', block);
+      if (dist === null && world.seenOnly) continue;
       const each = DIG_S * hard + STEP_S + (dist === null ? EXPLORE_S : dist / SPEED) / 8;
       // The tool counts once a plan (keep()), not per block: here only whether one can be had at all.
       out.push({key: `mine:${block}`, kind: 'mine', block, per, tools, each, inputs: tools,
@@ -117,6 +120,7 @@ function plan(goal, world) {
     for (const {mob, per} of loot.mobs.get(item) || []) {
       if (!canKill(mob)) continue;
       const dist = nearOf('mob', mob);
+      if (dist === null && world.seenOnly) continue;
       const each = FIGHT_S + (dist === null ? EXPLORE_S : dist / SPEED);
       out.push({key: `kill:${mob}`, kind: 'kill', mob, per, each, inputs: [], unit: () => each / per});
     }

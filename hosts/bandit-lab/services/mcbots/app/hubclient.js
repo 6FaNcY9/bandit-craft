@@ -35,6 +35,7 @@ class RemoteWorld extends WorldModel {
     this.outStock = null;
     this.outChanges = [];
     this.outChests = new Map(); // storage index entries our bots saw, for the hub
+    this.outNeeds = new Map();
   }
 
   get unreachable() {
@@ -107,6 +108,11 @@ class RemoteWorld extends WorldModel {
     this.outStock = {by, items, free, chest};
   }
 
+  postNeed(bot, item, count, to, why) {
+    const n = super.postNeed(bot, item, count, to, why); this.outNeeds.set(`${bot}:${item}`, n); return n;
+  }
+  dropNeed(bot, item) { super.dropNeed(bot, item); this.outNeeds.set(`${bot}:${item}`, {bot, item, drop: true}); }
+
   noteChest(key, items, free = null) {
     super.noteChest(key, items, free);
     this.outChests.set(key, {key, items, free});
@@ -120,9 +126,10 @@ class RemoteWorld extends WorldModel {
 
   // One batched frame per report interval instead of one per observation.
   flush() {
-    if (!this.link || !(this.outMobs.size || this.outBlocks.size || this.gone.size || this.outStock || this.outChanges.length || this.outChests.size)) return;
-    this.link.send({t: 'observe', mobs: [...this.outMobs.values()], blocks: [...this.outBlocks.values()], gone: [...this.gone], stock: this.outStock, changes: this.outChanges, chests: [...this.outChests.values()]});
+    if (!this.link || !(this.outMobs.size || this.outBlocks.size || this.gone.size || this.outStock || this.outChanges.length || this.outChests.size || this.outNeeds.size)) return;
+    this.link.send({t: 'observe', mobs: [...this.outMobs.values()], blocks: [...this.outBlocks.values()], gone: [...this.gone], stock: this.outStock, changes: this.outChanges, chests: [...this.outChests.values()], needs: [...this.outNeeds.values()]});
     this.outChests.clear();
+    this.outNeeds.clear();
     this.outStock = null;
     this.outChanges = [];
     this.outMobs.clear();
@@ -148,6 +155,16 @@ class RemoteWorld extends WorldModel {
       if (!this.mine.has(c.by)) this.claims.set(c.key, {by: c.by, t});
     }
     if (msg.bluemap && typeof msg.bluemap === 'object') this.bluemap = {...msg.bluemap, t: ago(msg.bluemap)};
+    const needs = Array.isArray(msg.needs) ? msg.needs : [];
+    const presentNeeds = new Set(needs.filter((n) => n && !n.drop && typeof n.bot === 'string' && typeof n.item === 'string').map((n) => `${n.bot}:${n.item}`));
+    for (const key of this.needs.keys()) if (!presentNeeds.has(key) && !this.outNeeds.has(key)) this.needs.delete(key);
+    for (const n of needs) {
+      if (typeof n?.bot !== 'string') continue;
+      if (n.drop) { if (typeof n.item === 'string' && /^[a-z_]{1,48}$/.test(n.item)) super.dropNeed(n.bot, n.item); }
+      else if (Number.isFinite(n.age) && typeof n.why === 'string' && n.why.length <= 160 && !/[\u0000-\u001f\u007f]/.test(n.why)) {
+        try { const v = super.postNeed(n.bot, n.item, n.count, n.to, n.why); v.t = t - n.age * 1000; } catch {}
+      }
+    }
     // The hub's storage index: the newer look wins (our own bots' looks come back from it too).
     for (const c of Array.isArray(msg.chests) ? msg.chests : []) {
       if (typeof c?.key !== 'string' || !c.items || typeof c.items !== 'object') continue;

@@ -475,7 +475,7 @@ async function clickFace(bot, t, w, sleep) {
   }
 }
 
-function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null, care = null}) {
+function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null, care = null, supplyChest = null}) {
   // Near enough to click the cell, never standing in it or under it.
   class GoalBeside extends goals.GoalNear {
     constructor(t, range) {
@@ -1014,7 +1014,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         let open = 0, pushed = 0, held = 0, next = null, above = null, late = null, repair = null, nextScore = Infinity;
         const me2 = bot.entity.position;
         const carried = count();
-        for (const item of Object.keys(carried)) lacking.delete(item); // handed over or brought by the crew: not missing
+        for (const item of Object.keys(carried)) {
+          lacking.delete(item); // handed over or brought by the crew: not missing
+          r.world?.dropNeed?.(r.name, item);
+        }
         const waiting = new Set();
         // Layer by layer: only the lowest open layer and the two above it, with supports for them before
         // anything higher, so the crew grows up with the build (it built a dropper tower to y 17 first and
@@ -1183,6 +1186,18 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           }
           const why = waiting.size ? `waiting for material: ${[...waiting].join(', ')}` : stuck.size ? `in the way: ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}` : `${open} cells left that this bot cannot place or reach`;
           job.t.doing = why;
+          if (r.world && waiting.size) {
+            const destination = job.args.store || chests[0] || supplyChest || r.supplyChest;
+            if (destination) {
+              const held = count();
+              for (const item of waiting) {
+                const remaining = plan.targets.filter((t) => t.p.item === item && !placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?' })).reduce((n, t) => n + (t.p.again ? 2 : 1), 0);
+                const wanted = Math.min(256, Math.max(1, remaining - (held[item] || 0)));
+                try { r.world.postNeed(r.name, item, wanted, destination, why.slice(0, 160)); } catch {}
+              }
+            }
+          }
+          if (r.world) for (const n of r.world.openNeeds?.() || []) if (n.bot === r.name && !waiting.has(n.item)) r.world.dropNeed?.(r.name, n.item);
           // Waiting for material is not stuck: the producers or the owner fill the chests, looked at every 5 min.
           // Meanwhile the builder makes some itself, one production step at most once a minute (bot2 waited for
           // most of the morning while bot1 alone made the iron farm's material, 2026-10-16).

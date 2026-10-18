@@ -135,7 +135,7 @@ const breadFrom = (wheat) => Math.floor(wheat / 3);
 // Hand in when the bread is worth a trip or the inventory is nearly full.
 const shouldDeposit = ({bread, emptySlots}) => bread >= BREAD_AT || emptySlots < 4;
 
-function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting, craftTable, base, at, getWater = null, care = null}) {
+function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting, craftTable, base, at, getWater = null, care = null, helpOnce = null}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
   const look = (bot, x, y, z) => bot.blockAt(new Vec3(x, y, z));
 
@@ -414,6 +414,7 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       job.t.doing = work.needHoe ? 'no hoe to till with' : work.needSeeds ? 'waiting for seeds' : s.cells.some((c) => c.state === 'growing') ? 'waiting for the wheat to grow' : 'nothing to do';
       for (let i = 0; i < 10; i++) {
         guard(job);
+        if (helpOnce) await helpOnce(r, job).catch(() => false);
         await sleep(1000);
       }
     }

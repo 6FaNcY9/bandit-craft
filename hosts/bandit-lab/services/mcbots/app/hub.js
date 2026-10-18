@@ -502,6 +502,14 @@ class Hub {
       const c = obj(st.chest);
       this.world.noteStock(by(st.by), items, Number.isInteger(st.free) && st.free >= 0 && st.free <= 54 ? st.free : null, c && [c.x, c.y, c.z].every(Number.isInteger) ? {x: c.x, y: c.y, z: c.z} : null);
     }
+    for (const n of list(m.needs, 80, (v) => obj(v) || {})) {
+      if (!conn.bots.has(n.bot) || typeof n.item !== 'string' || !/^[a-z_]{1,48}$/.test(n.item)) continue;
+      if (n.drop) this.world.dropNeed(n.bot, n.item);
+      else {
+        if (!Number.isInteger(n.count) || n.count < 1 || n.count > 256 || !obj(n.to) || ![n.to.x, n.to.y, n.to.z].every(Number.isInteger) || typeof n.why !== 'string' || n.why.length > 160 || /[\u0000-\u001f\u007f]/.test(n.why)) continue;
+        try { this.world.postNeed(n.bot, n.item, n.count, n.to, n.why); } catch {}
+      }
+    }
     // Chests a worker's bot looked into: one storage index for every bot, so a plan (acquire.js) knows them all.
     for (const x of list(m.chests, 40, (v) => obj(v) || {})) {
       if (!CHEST_KEY_RE.test(String(x.key))) continue;
@@ -515,7 +523,8 @@ class Hub {
     const live = [...this.conns].filter((c) => c.hello && c.ws.readyState === 1);
     if (!live.length) return;
     const w = this.world.snapshot(), now = this.now();
-    const shared = {t: 'world', players: w.players, mobs: w.mobs, blocks: w.blocks, claims: w.claims, bluemap: w.bluemap};
+    const needs = this.world.openNeeds(now).map((n) => ({...n, age: (now - n.t) / 1000}));
+    const shared = {t: 'world', needs, players: w.players, mobs: w.mobs, blocks: w.blocks, claims: w.claims, bluemap: w.bluemap};
     for (const c of live) {
       // The storage index goes out as it changes: all of it to a new connection, then what changed since.
       const chests = [...(this.world.chests || [])].filter(([, v]) => v.t > (c.chestsAt ?? -Infinity)).map(([key, v]) => ({key, items: v.items, free: v.free, age: (now - v.t) / 1000}));

@@ -65,6 +65,15 @@ setInterval(() => {
       events.add(name, 'info', `the owner's ${order.type} order could not go on: ${err.message}`);
     }
   }
+  // Idle bots without an owner order help with another bot's need (the needs board, bots.js helpOnce); only when
+  // there is one, so an idle crew does not log a help job every minute.
+  const open = world.openNeeds();
+  for (const [name, runner] of runners) {
+    const s = runner.snapshot();
+    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && open.some((n) => n.bot !== name)) {
+      try { runner.enqueue('help', {}); } catch {}
+    }
+  }
 }, 60000).unref();
 const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
@@ -359,6 +368,10 @@ const server = http.createServer(async (req, res) => {
       return json(200, {...m, bot: r.name});
     }
     return json(200, null);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/needs') {
+    const now = Date.now();
+    return json(200, world.openNeeds(now).map((n) => ({...n, age: Math.max(0, Math.floor((now - n.t) / 1000))})));
   }
   if (req.method === 'GET' && url.pathname === '/vendor/three.min.js') {
     res.writeHead(200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'});

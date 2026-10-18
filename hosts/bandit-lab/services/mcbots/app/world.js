@@ -67,6 +67,7 @@ class WorldModel {
     this.chestFile = null;
     this.stock = null; // what a bot last saw in any chest it counted: {items: {name: count}, by, free (empty slots or null), chest, t}
     this.stocks = new Map(); // "x,y,z" (or "" with no coordinates) -> the same, per chest: the keeper and the plan read only their own
+    this.needs = new Map(); // `${bot}:${item}` -> {bot,item,count,to,why,t}
   }
 
   // A block change seen by one of this process' bots (blocklog.js); recorded when the hub set a log.
@@ -81,6 +82,15 @@ class WorldModel {
     this.stock = {items, by, free, chest: c, t: this.now()};
     this.stocks.set(c ? `${c.x},${c.y},${c.z}` : '', this.stock);
   }
+
+  postNeed(bot, item, count, to, why = '') {
+    if (typeof bot !== 'string' || !/^[a-z][a-z0-9]{0,15}$/.test(bot) || typeof item !== 'string' || !/^[a-z_]{1,48}$/.test(item) || !Number.isInteger(count) || count < 1 || count > 256 || !to || ![to.x,to.y,to.z].every(Number.isInteger) || typeof why !== 'string' || why.length > 160 || /[\u0000-\u001f\u007f]/.test(why)) throw new Error('invalid need');
+    const need = {bot, item, count, to: {x: to.x, y: to.y, z: to.z}, why, t: this.now()};
+    this.needs.set(`${bot}:${item}`, need);
+    return need;
+  }
+  dropNeed(bot, item) { this.needs.delete(`${bot}:${item}`); }
+  openNeeds(now = this.now()) { return [...this.needs.values()].filter((n) => now - n.t < 600000).sort((a,b) => a.t-b.t); }
 
   // What was last seen in this chest (an observation without coordinates counts for any chest: older callers and tests).
   stockAt(chest) {
