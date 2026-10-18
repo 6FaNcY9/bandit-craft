@@ -133,17 +133,21 @@ function makeGraves({goNear, guard, sleep, deposit}) {
   }
 
   async function graves(r, job) {
+    // Spots done leave the list, so a run resumed after a death goes on with the rest.
     const spots = job.args.spots || [], total = spots.length;
     let fetched = 0, gone = 0, unreachable = 0;
     job.t.total = total; job.t.done = 0;
-    for (const spot of spots) {
+    while (spots.length) {
       guard(job);
-      try { await grave(r, {...job, type: 'grave', args: spot}); fetched++; }
+      // A child, not a copy: a death or Stop cancels the job, and only then reaches the grave walk too (a copy
+      // kept bot1 on a dead job for an hour after a death, main server 2026-10-18).
+      try { await grave(r, Object.assign(Object.create(job), {type: 'grave', args: spots[0]})); fetched++; }
       catch (e) {
         guard(job);
         if (/no grave entity|gave nothing/.test(e.message)) gone++;
         else unreachable++;
       }
+      spots.shift();
       job.done = fetched + gone + unreachable;
       job.t.done = job.done;
       r.emit('info', `graves: ${job.done}/${total}`);

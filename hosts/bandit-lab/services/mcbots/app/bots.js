@@ -53,7 +53,7 @@ const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podz
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
-const RESUMABLE = new Set(['mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy']);
+const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
 const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up

@@ -4031,6 +4031,13 @@ require('./crafting');
       await runner.graves(f.r, multi);
       assert.strictEqual(multi.done, 3);
       assert.ok(f.infos.some((m) => m === 'graves: 1 of 3 fetched, 1 gone, 1 out of reach'), f.infos.join('|'));
+      // a death cancels the job during a grave walk: the walk sees it, the spot stays for the resumed run
+      const stopping = {t: {}, cancelled: false, type: 'graves', args: {spots: [{x: 5, y: 64, z: 0}, {x: 6, y: 64, z: 0}]}};
+      let walkSaw = null;
+      const dies = G.makeGraves({goNear: async (_r, j) => { stopping.cancelled = true; walkSaw = j.cancelled; if (j.cancelled) throw new Error('stopped'); }, guard: (j) => { if (j.cancelled) throw new Error('stopped'); }, sleep: async () => {}, deposit: async () => {}});
+      await assert.rejects(dies.graves(f.r, stopping), /stopped/);
+      assert.strictEqual(walkSaw, true, 'the grave walk sees the cancelled job');
+      assert.deepStrictEqual(stopping.args.spots, [{x: 5, y: 64, z: 0}, {x: 6, y: 64, z: 0}]);
     } finally {
       JOBS.deposit = realDeposit;
     }
