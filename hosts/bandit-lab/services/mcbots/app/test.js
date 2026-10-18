@@ -5940,7 +5940,8 @@ require('./crafting');
   };
   const encode = (value) => gzipSync(nbt.writeUncompressed({type: 'compound', name: '', value}));
   const root = {Metadata: {type: 'compound', value: {Name: {type: 'string', value: 'packed test'}}}, Regions: {type: 'compound', value: regions}};
-  assert.deepStrictEqual(await parseLitematic(encode(root)), {name: 'packed test', size: {x: 20, y: 4, z: 7}, offset: {x: -6, y: 7, z: -3}, blocks: [
+  const noAir = ({air, ...rest}) => rest; // explicit air cells (for tight builds) are checked with the highways
+  assert.deepStrictEqual(noAir(await parseLitematic(encode(root))), {name: 'packed test', size: {x: 20, y: 4, z: 7}, offset: {x: -6, y: 7, z: -3}, blocks: [
     {x: 16, y: 2, z: 1, name: 'stone', props: {}},
     {x: 17, y: 3, z: 0, name: 'oak_log', props: {axis: 'z'}},
     {x: 19, y: 3, z: 1, name: 'stone', props: {}},
@@ -5979,7 +5980,7 @@ require('./crafting');
   index.value.BlockStatePalette.value.value = palette.slice(0, 2);
   await assert.rejects(parseLitematic(encode({Regions: {type: 'compound', value: {index}}})), /bad palette index/);
   const empty = region({x: 0, y: 0, z: 0}, {x: 1, y: 1, z: 1}, [0]);
-  assert.deepStrictEqual(await parseLitematic(encode({Regions: {type: 'compound', value: {empty}}})), {name: '', size: {x: 0, y: 0, z: 0}, offset: {x: 0, y: 0, z: 0}, blocks: []});
+  assert.deepStrictEqual(noAir(await parseLitematic(encode({Regions: {type: 'compound', value: {empty}}}))), {name: '', size: {x: 0, y: 0, z: 0}, offset: {x: 0, y: 0, z: 0}, blocks: []});
 
   const b = (name, props = {}) => ({name, props});
   const bom = billOfMaterials([
@@ -6863,4 +6864,59 @@ require('./crafting');
     } finally { JOBS.get = oldGet; JOBS.deposit = oldDeposit; }
   }
   console.log('tools: no sword digging, shovel replaced ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
+(async () => { // tunnel highways: a written .litematic reads back, the tunnel's shape, rock walls (highway.js, 2026-10-18)
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const {writeLitematic} = require('./litematic-write');
+  const {parseLitematic} = require('./schematic');
+  const {tunnel, schematic} = require('./highway');
+  const {matches} = require('./placing');
+  // Round trip: 6 states (3 bits, entries spanning two longs), props kept, air returned, structure_void (unset) not.
+  const names = ['stone', 'cobblestone', 'oak_planks', 'glass', 'dirt'];
+  const blocks = [];
+  for (let x = 0; x < 5; x++) for (let z = 0; z < 5; z++) blocks.push({x, y: 0, z, name: names[(x + z) % 5], props: {}});
+  blocks.push({x: 2, y: 1, z: 2, name: 'cobblestone_stairs', props: {facing: 'east', half: 'bottom', shape: 'straight', waterlogged: 'false'}});
+  blocks.push({x: 1, y: 1, z: 1, name: 'air', props: {}});
+  const parsed = await parseLitematic(writeLitematic({name: 't', regions: [{name: 'r', position: {x: 0, y: 0, z: 0}, size: {x: 5, y: 3, z: 5}, blocks}]}));
+  assert.strictEqual(parsed.blocks.length, 26);
+  for (const b of blocks.filter((c) => c.name !== 'air')) assert.ok(parsed.blocks.some((p) => p.x === b.x && p.y === b.y && p.z === b.z && p.name === b.name && JSON.stringify(p.props) === JSON.stringify(b.props)), `${b.name} at ${b.x},${b.y},${b.z}`);
+  assert.deepStrictEqual(parsed.air, [{x: 1, y: 1, z: 1}]);
+  // A straight leg east: 3 wide walkway, 3 high, walls, floor and ceiling; a torch every 6 blocks pointing in.
+  const at = (r, x, y, z) => r.blocks.find((b) => b.x === x && b.y === y && b.z === z)?.name ?? (r.air.some((a) => a.x === x && a.y === y && a.z === z) ? 'air' : null);
+  let t = tunnel([{x: 0, y: 60, z: 0}, {x: 12, y: 60, z: 0}]);
+  for (const z of [-1, 0, 1]) for (const y of [60, 61]) assert.strictEqual(at(t, 4, y, z), 'air', `walkway ${y} ${z}`);
+  assert.deepStrictEqual([at(t, 4, 59, 0), at(t, 4, 63, 0), at(t, 4, 60, -2), at(t, 4, 62, 2)], ['cobblestone', 'cobblestone', 'cobblestone', 'cobblestone']);
+  const torches = t.blocks.filter((b) => b.name === 'wall_torch');
+  assert.deepStrictEqual(torches.map((b) => [b.x, b.y, b.z, b.props.facing]), [[6, 62, -1, 'south'], [12, 62, 1, 'north']]);
+  assert.ok(!t.air.some((a) => a.x === 6 && a.y === 62 && a.z === -1), 'a torch cell is no air to clear');
+  // An L: the corner is open both ways (air wins over the walls of either leg).
+  t = tunnel([{x: 0, y: 60, z: 0}, {x: 8, y: 60, z: 0}, {x: 8, y: 60, z: 8}]);
+  assert.deepStrictEqual([at(t, 9, 60, 0), at(t, 8, 60, 1), at(t, 7, 60, 0), at(t, 10, 60, 4)], ['air', 'air', 'air', 'cobblestone']);
+  // Rising 3 over 9 blocks: flat, three steps whose floor is a stair facing uphill, flat; headroom 3 over each step.
+  t = tunnel([{x: 0, y: 60, z: 0}, {x: 0, y: 63, z: 9}]);
+  const steps = t.blocks.filter((b) => b.name === 'cobblestone_stairs' && b.x === 0);
+  assert.deepStrictEqual(steps.map((b) => [b.y, b.z, b.props.facing]), [[60, 4, 'south'], [61, 5, 'south'], [62, 6, 'south']]);
+  for (const s of steps) for (const h of [1, 2, 3]) assert.strictEqual(at(t, 0, s.y + h, s.z), 'air', `headroom over the step at z ${s.z}`);
+  // Down is the same tunnel walked the other way.
+  assert.deepStrictEqual(tunnel([{x: 0, y: 63, z: 9}, {x: 0, y: 60, z: 0}]).blocks.filter((b) => b.name === 'cobblestone_stairs').length, t.blocks.filter((b) => b.name === 'cobblestone_stairs').length);
+  assert.throws(() => tunnel([{x: 0, y: 60, z: 0}, {x: 0, y: 70, z: 5}]), /rises no more/);
+  assert.throws(() => tunnel([{x: 0, y: 60, z: 0}, {x: 3, y: 60, z: 5}]), /along x or z/);
+  // The file the CLI writes builds where it should: its region at 0,0,0, the origin at the lowest corner.
+  const s = schematic([{x: 100, y: 60, z: 50}, {x: 110, y: 60, z: 50}]);
+  assert.deepStrictEqual(s.origin, {x: 100, y: 59, z: 48});
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hw-'));
+  fs.writeFileSync(path.join(dir, 'hw.litematic'), s.buffer);
+  const plan = await require('./build').schematicPlan(dir, {file: 'hw.litematic', origin: s.origin, anySolid: ['cobblestone']});
+  assert.ok(plan.air.has('104,60,50') && plan.air.has('104,62,51') && !plan.air.has('104,63,50'), 'the walkway, not the ceiling, is air to clear');
+  assert.ok(plan.byKey.get('104,59,50').anySolid && plan.byKey.get('104,63,50').anySolid, 'floor and ceiling take any rock');
+  assert.ok(!plan.byKey.get('106,62,49')?.anySolid, 'a torch is a torch');
+  fs.rmSync(dir, {recursive: true, force: true});
+  // Rock is as good as a cobblestone wall; gravel and water are not, nor rock where no anySolid was asked.
+  assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'stone', props: {}}), true);
+  assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'deepslate_iron_ore', props: {}}), true);
+  assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'gravel', props: {}}), false);
+  assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'water', props: {}}), false);
+  assert.strictEqual(matches({name: 'cobblestone', props: {}}, {name: 'stone', props: {}}), false);
+  console.log('highways: litematic round trip, tunnel shape, rock walls ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

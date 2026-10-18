@@ -373,8 +373,8 @@ function loneChests(cells) {
 // One parse per file and placement, shared by the bots of this process; so is what they saw in the chests.
 const SCHEMATIC_PLANS = new Map();
 const CHEST_STOCK = new Map(); // "dim:x,y,z" -> {items: Map(name -> count), t}
-function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substitute = {}}) {
-  const k = JSON.stringify([file, origin, rotation, mirror, substitute]);
+function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substitute = {}, anySolid = []}) {
+  const k = JSON.stringify([file, origin, rotation, mirror, substitute, anySolid]);
   if (!SCHEMATIC_PLANS.has(k)) {
     SCHEMATIC_PLANS.set(k, (async () => {
       const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
@@ -384,7 +384,7 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substi
       // over soul sand) are kept apart for a bucket step and are not built.
       const fluid = (c) => /^(water|lava|bubble_column)$/.test(c.name);
       const fluids = placed.filter((c) => fluid(c) && (c.name === 'bubble_column' || String(c.props?.level ?? '0') === '0')).map((c) => ({x: c.x, y: c.y, z: c.z, name: c.name === 'lava' ? 'lava' : 'water'}));
-      const cells = loneChests(placed.filter((c) => !fluid(c)));
+      const cells = loneChests(placed.filter((c) => !fluid(c))).map((t) => anySolid.includes(t.name) ? {...t, anySolid: true} : t);
       const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
       const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
       for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
@@ -397,7 +397,8 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substi
       const saveFilled = () => { try { fs.writeFileSync(filledFile, JSON.stringify([...new Set([...readFilled(), ...filled])])); } catch {} };
       // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
       // both for the whole crew, until the end
-      return {targets, fluids, byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
+      const air = schematicLib.placeSchematic(parsed, {origin, rotation, mirror, air: true}).filter((c) => c.name === 'air').map(keyOf);
+      return {targets, fluids, air: new Set(air), byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
     })().catch((e) => {
       SCHEMATIC_PLANS.delete(k);
       throw e;
@@ -520,7 +521,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // site free (a scaffold stood in the sorter's site on the main server, 2026-10-14): then anything but a
     // container comes out, so nothing of theirs spills.
     const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS ||
-      (job.args.clearAll === true && !CONTAINER.test(name));
+      (job.args.clearAll === true && !CONTAINER.test(name)) ||
+      // A tight build's air is air: bot50's own blocks blocked a test tunnel's mouth, "not ours" (sandbox 2026-10-18).
+      (job.args.tight === true && plan.air.has(k) && !CONTAINER.test(name));
     // Whether a drop at x,y,z comes to rest in a hopper: in the world now, or (`final`) in the finished build,
     // where a support decides its material.
     const landsInHopper = (x, y, z, final) => {
@@ -931,7 +934,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               const h = stateAt(x, y, z);
               if (!h || free(h.name) || skip.has(k) || (plan.leave.has(k) && !allPlaced && !idle)) continue;
               const t = plan.byKey.get(k);
-              if (t ? h.name === t.name : plan.cells.has(k)) continue; // the right block (its state is the build's job), a piston head
+              if (job.args.tight && !t && !plan.air.has(k)) continue;
+              if (t ? h.name === t.name || (t.anySolid && placing.matches(t, h)) : plan.cells.has(k)) continue; // the right block (its state is the build's job; rock for an anySolid wall), a piston head
               // A pillar stays until all is placed; a support in a cell of the schematic only until the cell that
               // needed it stands (then the real block goes there).
               const req = tempFor.get(k), reqT = req && plan.byKey.get(req);

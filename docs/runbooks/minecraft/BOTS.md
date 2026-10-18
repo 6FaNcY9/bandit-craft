@@ -24,6 +24,8 @@ lab deployment). Crafting, smelting and small builds exist; schematic import doe
 not yet (see Building). Goals in stages: `CONTROL-CENTRE-GOAL.md`. A new job
 type is one entry in `JOBS` and one in `VALIDATE` in `app/bots.js`.
 
+**Highways:** Generate a route with `node hosts/bandit-lab/services/mcbots/app/highway.js route.litematic x,y,z x,y,z ...`. Put the file in the schematics folder and start a `schematic` job at the printed origin with `tight: true` and `anySolid: ["cobblestone"]`. Tight clears only explicit air and wrong target blocks; anySolid lets natural solid rock satisfy the cobblestone lining.
+
 ## How it fits together
 
 - Since 2026-10-12 only three bots play on the lab, all of them Andy-4.2 agents with a role:

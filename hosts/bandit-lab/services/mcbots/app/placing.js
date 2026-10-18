@@ -120,8 +120,13 @@ function placement(name, props = {}) {
   return result([], FACES.map((v) => way(v)));
 }
 
+const SOLID_ROCK = /^(stone|deepslate|cobbled_deepslate|andesite|diorite|granite|tuff|calcite|dripstone_block|smooth_basalt|basalt|blackstone|netherrack|dirt|coarse_dirt|rooted_dirt|grass_block|podzol|mycelium|clay|terracotta|[a-z_]+_terracotta|sandstone|red_sandstone|obsidian|end_stone|cobblestone|mossy_cobblestone|stone_bricks|packed_mud)$/;
+
 // final: also the props that settle once the neighbours stand.
 function matches(want, have, {final = false} = {}) {
+  // A tunnel wall of natural rock is as good as cobblestone (highway.js): no digging stone out to put stone in.
+  // Never a falling block (sand, gravel) or a fluid: those come out and the wall is built.
+  if (want.anySolid && (SOLID_ROCK.test(have.name) || /_ore$/.test(have.name))) return true;
   const p = placement(want.name, want.props);
   const kind = (n) => (BED.test(n) ? 'bed' : n);
   return p !== null && kind(strip(want.name)) === kind(strip(have.name)) &&

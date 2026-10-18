@@ -11,6 +11,7 @@ async function parseLitematic(buffer) {
   const root = nbt.simplify((await nbt.parse(buffer)).parsed);
   if (!root.Regions || typeof root.Regions !== 'object' || Array.isArray(root.Regions)) throw new Error('litematic: missing Regions');
   const blocks = [];
+  const air = [];
   const min = {x: Infinity, y: Infinity, z: Infinity};
   const max = {x: -Infinity, y: -Infinity, z: -Infinity};
   for (const [region, r] of Object.entries(root.Regions)) {
@@ -45,8 +46,10 @@ async function parseLitematic(buffer) {
       const p = palette[Number(value & mask)];
       if (!p) throw new Error(`region ${region}: bad palette index at block ${i}`);
       const name = p.Name.replace(/^minecraft:/, '');
-      if (AIR.has(name)) continue;
       const lx = i % size.x, ly = Math.floor(i / (size.x * size.z)), lz = Math.floor(i / size.x) % size.z;
+      // Air given as such (not structure_void): cells a `tight` build clears (highway.js); size and offset stay the blocks'.
+      if (name === 'air') { air.push({x: origin.x + lx, y: origin.y + ly, z: origin.z + lz}); continue; }
+      if (AIR.has(name)) continue;
       const b = {x: origin.x + lx, y: origin.y + ly, z: origin.z + lz, name, props: {...p.Properties}};
       if (items.has(`${lx},${ly},${lz}`)) b.items = items.get(`${lx},${ly},${lz}`);
       blocks.push(b);
@@ -63,8 +66,9 @@ async function parseLitematic(buffer) {
     size[ax] = max[ax] - min[ax] + 1;
     offset[ax] = min[ax];
     for (const b of blocks) b[ax] -= min[ax];
+    for (const a of air) a[ax] -= min[ax];
   }
-  return {name: root.Metadata?.Name ?? '', size, offset, blocks};
+  return {name: root.Metadata?.Name ?? '', size, offset, blocks, air};
 }
 
 function billOfMaterials(blocks, version = '26.1') {
@@ -88,7 +92,7 @@ function billOfMaterials(blocks, version = '26.1') {
 
 const byPosition = (a, b) => a.y - b.y || a.z - b.z || a.x - b.x;
 
-function placeSchematic(parsed, {origin, rotation = 0, mirror = 'none'}) {
+function placeSchematic(parsed, {origin, rotation = 0, mirror = 'none', air = false}) {
   if (![0, 90, 180, 270].includes(rotation)) throw new Error('schematic: invalid rotation');
   if (!['none', 'left_right', 'front_back'].includes(mirror)) throw new Error('schematic: invalid mirror');
   const transform = (x, z) => {
@@ -103,7 +107,7 @@ function placeSchematic(parsed, {origin, rotation = 0, mirror = 'none'}) {
     return horizontal.find((key) => DIRS[key][0] === tx && DIRS[key][2] === tz);
   };
   const flip = (v) => v === 'left' ? 'right' : v === 'right' ? 'left' : v;
-  return parsed.blocks.map((b) => {
+  const place = (b) => {
     const [x, z] = transform(b.x + parsed.offset.x, b.z + parsed.offset.z);
     const props = {}, name = b.name.replace(/^minecraft:/, '');
     for (const [key, value] of Object.entries(b.props || {})) props[horizontal.includes(key) ? direction(key) : key] = value;
@@ -133,7 +137,8 @@ function placeSchematic(parsed, {origin, rotation = 0, mirror = 'none'}) {
       props.rotation = String((r + rotation / 90 * 4 + 16) % 16);
     }
     return {x: origin.x + x, y: origin.y + b.y + parsed.offset.y, z: origin.z + z, name: b.name, props, ...(b.items ? {items: b.items} : {})};
-  }).sort(byPosition);
+  };
+  return [...parsed.blocks.map(place), ...(air ? (parsed.air || []).map((a) => place({...a, name: 'air', props: {}})) : [])].sort(byPosition);
 }
 
 function buildOrder(targets) {

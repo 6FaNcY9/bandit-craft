@@ -213,7 +213,10 @@ const VALIDATE = {
     const subs = a.substitute ?? {};
     if (!subs || typeof subs !== 'object' || Array.isArray(subs) || Object.keys(subs).length > 16 || !Object.entries(subs).every(([k, v]) => /^[a-z_]{1,48}$/.test(k) && /^[a-z_]{1,48}$/.test(v))) throw new Error('substitute must map at most 16 block names to block names');
     // clearAll (the owner's choice for a site): anything in the site box may be dug, except containers.
-    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
+    const anySolid = a.anySolid ?? [];
+    if (!Array.isArray(anySolid) || anySolid.length > 8 || anySolid.some((n) => !/^[a-z_]{1,48}$/.test(n))) throw new Error('anySolid must be a list of at most 8 block names');
+    if (a.tight !== undefined && typeof a.tight !== 'boolean') throw new Error('tight must be true or false');
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.tight ? {tight: true} : {}), ...(anySolid.length ? {anySolid: [...new Set(anySolid)]} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
   },
   // The water and lava sources of that schematic build, poured from buckets once its blocks stand (fluids.js).
   fluids: (a) => VALIDATE.schematic(a),
