@@ -371,12 +371,16 @@ function loneChests(cells) {
 }
 
 // One parse per file and placement, shared by the bots of this process; so is what they saw in the chests.
-const SCHEMATIC_PLANS = new Map();
+// A file replaced under its name is parsed again: bot50 built a tunnel leg from the old copy until the process
+// restarted (sandbox 2026-10-18).
+const SCHEMATIC_PLANS = new Map(); // key -> {stamp, plan}
 const CHEST_STOCK = new Map(); // "dim:x,y,z" -> {items: Map(name -> count), t}
-function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substitute = {}, anySolid = []}) {
+async function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substitute = {}, anySolid = []}) {
   const k = JSON.stringify([file, origin, rotation, mirror, substitute, anySolid]);
-  if (!SCHEMATIC_PLANS.has(k)) {
-    SCHEMATIC_PLANS.set(k, (async () => {
+  const st = await fs.promises.stat(path.join(dir, file));
+  const stamp = `${st.mtimeMs}:${st.size}`;
+  if (SCHEMATIC_PLANS.get(k)?.stamp !== stamp) {
+    SCHEMATIC_PLANS.set(k, {stamp, plan: (async () => {
       const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
       const placed = schematicLib.placeSchematic(parsed, {origin, rotation, mirror}).map((c) => (substitute[c.name] ? {...c, name: substitute[c.name]} : c));
       // Water and lava are no blocks to place: the builders waited on 1436 "water" and 9 "lava" for the downloaded
@@ -402,9 +406,9 @@ function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', substi
     })().catch((e) => {
       SCHEMATIC_PLANS.delete(k);
       throw e;
-    }));
+    })});
   }
-  return SCHEMATIC_PLANS.get(k);
+  return SCHEMATIC_PLANS.get(k).plan;
 }
 
 const chestKey = (dim, c) => `${dim}:${c.x},${c.y},${c.z}`;
@@ -1153,6 +1157,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           if (asIs.size) r.emit?.('info', `schematic done; ${asIs.size} rails over hoppers keep another shape (no cart runs there): ${[...asIs].slice(0, 4).join(' ')}`);
           if (stuck.size) r.emit?.('info', `schematic done; ${stuck.size} cells in the way were left (not ours): ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}`);
           if (unreached.size) r.emit?.('info', `schematic done; ${unreached.size} supports no bot reached were left: ${[...unreached].slice(0, 3).join(', ')}`);
+          // Said, not hidden: a tunnel leg was "finished" with 6 walkway cells left, dug three times without a pickaxe
+          // (sandbox 2026-10-18).
+          const unclear = [...plan.leave].filter((k) => { const [x, y, z] = k.split(',').map(Number); const h = stateAt(x, y, z); return h && !free(h.name); });
+          if (unclear.length) r.emit?.('info', `schematic done; ${unclear.length} cells to clear were left after three tries: ${unclear.slice(0, 3).join(' ')}`);
           return;
         }
         first = false;

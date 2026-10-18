@@ -6911,6 +6911,10 @@ require('./crafting');
   assert.ok(plan.air.has('104,60,50') && plan.air.has('104,62,51') && !plan.air.has('104,63,50'), 'the walkway, not the ceiling, is air to clear');
   assert.ok(plan.byKey.get('104,59,50').anySolid && plan.byKey.get('104,63,50').anySolid, 'floor and ceiling take any rock');
   assert.ok(!plan.byKey.get('106,62,49')?.anySolid, 'a torch is a torch');
+  // A file replaced under its name is parsed again: a leg was built from the old copy (sandbox 2026-10-18).
+  fs.writeFileSync(path.join(dir, 'hw.litematic'), schematic([{x: 100, y: 60, z: 50}, {x: 104, y: 60, z: 50}]).buffer);
+  const again = await require('./build').schematicPlan(dir, {file: 'hw.litematic', origin: s.origin, anySolid: ['cobblestone']});
+  assert.ok(again.targets.length < plan.targets.length, 'the new file, not the cached plan');
   fs.rmSync(dir, {recursive: true, force: true});
   // Rock is as good as a cobblestone wall; gravel and water are not, nor rock where no anySolid was asked.
   assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'stone', props: {}}), true);
