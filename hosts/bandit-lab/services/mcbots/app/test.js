@@ -5221,6 +5221,36 @@ require('./crafting');
     assert.doesNotThrow(() => VALIDATE.level(boxJob('level', box(-58, -57), {length: 32, branch: 8})[1]));
   }
 })();
+{ // goLeg: the walk deadline runs while the pathfinder walks, not during a night's wait: a night used it up, and bot1
+  // swam against a cave wall for an hour with no deadline (main server 2026-10-18). Mock timers stop every clock in the
+  // process, so this runs in a child process of its own.
+  const night = async () => {
+    const assert = require('node:assert/strict');
+    const {mock} = require('node:test');
+    const {goNear} = require('./bots');
+    const {Vec3} = require('vec3');
+    mock.timers.enable({apis: ['setTimeout']});
+    const flush = () => new Promise((res) => setImmediate(res));
+    let pending = null, walks = 0, outcome = null;
+    const bot = {entity: {position: new Vec3(0, 64, 0)}, time: {timeOfDay: 18000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+      blockAt: () => ({name: 'air', boundingBox: 'empty'}),
+      pathfinder: {searchRadius: -1, stop() {}, setGoal: (g) => { if (g === null && pending) pending(new Error('The goal was changed')); },
+        goto: () => new Promise((_res, rej) => { walks++; pending = rej; })}};
+    const r = {bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []};
+    goNear(r, {type: 'grave', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => { outcome = 'arrived'; }, (e) => { outcome = e.message; });
+    for (let s = 0; s < 120; s += 5) { mock.timers.tick(5000); await flush(); } // two minutes of night
+    assert.strictEqual(walks, 0, 'no walk at night');
+    bot.time.timeOfDay = 1000;
+    mock.timers.tick(5000); await flush(); await flush();
+    assert.strictEqual(walks, 1, 'the walk starts in the morning');
+    mock.timers.tick(90000); await flush(); await flush(); await flush();
+    assert.match(String(outcome), /no way there within 90 s/, 'the deadline still bounds the walk after the night');
+    console.log('goLeg: deadline after a night wait ok');
+  };
+  const out = require('node:child_process').execFileSync(process.execPath, ['-e', `(${night})().catch((e) => { console.error(e); process.exit(1); })`], {cwd: __dirname, encoding: 'utf8'});
+  assert.match(out, /deadline after a night wait ok/);
+  process.stdout.write(out);
+}
 { // pillars: the steps a bot climbed to a log come down again, only its own and only if unchanged (2026-10-10)
   const P = require('./pillars');
   const feet = {x: 10.5, y: 66, z: 20.5};

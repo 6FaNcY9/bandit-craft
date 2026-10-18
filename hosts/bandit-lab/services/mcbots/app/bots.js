@@ -1096,15 +1096,22 @@ async function dropDown(r, walk, e) {
 
 async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null} = {}) {
   guard(job);
-  if (job.t) job.t.doing = doing || `walking to ${at({x, y, z})}`;
+  const label = doing || `walking to ${at({x, y, z})}`;
+  if (job.t) job.t.doing = label;
   // Unreachable goals make the pathfinder retry partial paths
-  // forever, so every walk has a deadline.
-  let timedOut = false;
-  const deadline = setTimeout(() => {
-    timedOut = true;
-    r.bot?.pathfinder.stop();
-    r.bot?.pathfinder.setGoal(null); // makes a pending goto() reject; stop() alone left one hanging for minutes (2026-10-08)
-  }, GOTO_TIMEOUT_MS);
+  // forever, so every walk has a deadline. Its clock runs while the pathfinder walks, armed anew for every try, not
+  // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
+  // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
+  let timedOut = false, deadline = null;
+  const arm = () => {
+    clearTimeout(deadline);
+    timedOut = false;
+    deadline = setTimeout(() => {
+      timedOut = true;
+      r.bot?.pathfinder.stop();
+      r.bot?.pathfinder.setGoal(null); // makes a pending goto() reject; stop() alone left one hanging for minutes (2026-10-08)
+    }, GOTO_TIMEOUT_MS);
+  };
   try {
     // Something else (combat, a block update) can stop the path mid-walk; walk
     // again instead of failing the job, unless the deadline or a stop hit.
@@ -1112,6 +1119,8 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
       const epoch = r.combat?.epoch;
       try {
         if (!brave) await waitSafe(r, job, x, z, y);
+        if (job.t) job.t.doing = label; // a night's wait wrote over it
+        arm();
         await r.bot.pathfinder.goto(goal || new goals.GoalNear(x, y, z, dist)); // settledGoto on a live bot
         return;
       } catch (e) {
