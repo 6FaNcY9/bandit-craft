@@ -2218,6 +2218,8 @@ const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, na
 // A step one bot works on is left to the others (this process's bots); a failed step rests 10 minutes.
 const productionLib = require('./production');
 const PRODUCING = new Map(); // step key -> {by, until}
+const TURNS = new Map(); // step key -> until: a step that just ran rests while others are open (production.js)
+const TURN_MS = 5 * 60000;
 const SUPPORT_STOCK = {glass: 320, dirt: 128}; // the crew climbs on glass over hoppers: some hundred a sorter
 // Glass only as the hoppers call for it: the iron farm's 9 hoppers would have had 320 glass made beside its own 68
 // (2026-10-16). One per hopper, 16 at least, the sorter's 320 at most.
@@ -2402,10 +2404,12 @@ function producer(r, job, args) {
     const now = Date.now();
     for (const [k, t] of PRODUCING) if (t.until < now || t.by === r.name) PRODUCING.delete(k);
     const taken = new Set(PRODUCING.keys());
-    let next = productionLib.nextChain({need, stock, taken, store});
+    for (const [k, until] of TURNS) if (until < now) TURNS.delete(k);
+    const resting = new Set(TURNS.keys());
+    let next = productionLib.nextChain({need, stock, taken, resting, store});
     while (!next.idle && r.world && !(await r.world.claim(r.name, `produce:${next.key}`))) {
       taken.add(next.key); // another worker's bot has it
-      next = productionLib.nextChain({need, stock, taken, store});
+      next = productionLib.nextChain({need, stock, taken, resting, store});
     }
     // What these chains cannot make, the planner may (acquire.js: white beds from sheep's wool), up to 16 a step.
     if (next.idle) next = getStep(next.left || [], need, stock, taken, store) || next;
@@ -2427,6 +2431,7 @@ function producer(r, job, args) {
         if (got > 0) {
           r.emit('info', `produce: took ${got} ${item} from storage`);
           await viaChests('deposit', {only: item});
+          TURNS.set(next.key, Date.now() + TURN_MS);
           return {ran: `took ${got} ${item} from storage`};
         }
         NONE_STORED.set(item, Date.now() + 10 * 60000);
@@ -2438,6 +2443,7 @@ function producer(r, job, args) {
         else await JOBS[type](r, child(job, {type, args: VALIDATE[type](a)}));
       }
       r.emit('info', `produce: done ${next.label}`);
+      TURNS.set(next.key, Date.now() + TURN_MS);
       return {ran: next.label};
     } catch (e) {
       guard(job);

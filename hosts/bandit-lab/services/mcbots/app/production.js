@@ -18,7 +18,14 @@ function gatherJob(how, n) {
 }
 
 // need, stock: {item: count}; taken: Set of step keys; store: {x,y,z}. -> {key, label, chain} | {idle: why}
-function nextChain({need, stock = {}, taken = new Set(), store, version = '26.1'}) {
+// resting: steps that just ran; they wait while another step is open. The builder used cobblestone up as fast as it
+// came, and "took 3 cobblestone from storage" ran every 2 min for hours while 9 hoppers never got a turn (main
+// server 2026-10-18).
+function nextChain({need, stock = {}, taken = new Set(), resting = new Set(), store, version = '26.1'}) {
+  if (resting.size) {
+    const other = nextChain({need, stock, taken: new Set([...taken, ...resting]), store, version});
+    if (!other.idle) return other;
+  }
   const plan = planMaterials(need, {version, have: stock});
   const has = (item) => stock[item] || 0;
   for (const c of plan.craft) {

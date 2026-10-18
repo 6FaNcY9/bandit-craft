@@ -6370,6 +6370,10 @@ require('./crafting');
   assert.deepStrictEqual(nextChain({need: {cobblestone: 1529}, store}).gather, {item: 'cobblestone', count: 1529});
   assert.deepStrictEqual(nextChain({need: {oak_planks: 4}, store}).chain[0], ['mine', {block: 'oak_log', count: 1}], 'oak stays oak');
   assert.deepStrictEqual(nextChain({need: {snowball: 64}, store}).chain[0], ['mine', {block: 'snow_block', count: 16}], 'four snowballs a snow block');
+  // a step that just ran rests while another one is open, and runs again when it is the only one (2026-10-18)
+  const both = {need: {cobblestone: 64, sand: 10}, store};
+  assert.deepStrictEqual([nextChain(both).key, nextChain({...both, resting: new Set(['gather:sand'])}).key], ['gather:sand', 'gather:cobblestone'], 'the other material gets its turn');
+  assert.strictEqual(nextChain({need: {sand: 10}, store, resting: new Set(['gather:sand'])}).key, 'gather:sand', 'alone it goes on');
   const {rawUnknown} = require('./recipes');
   assert.deepStrictEqual(rawUnknown({comparator: 5, sticky_piston: 2, shulker_box: 1}), {quartz: 5, slime_ball: 2, shulker_shell: 2}, 'the raw items the owner brings');
   assert.deepStrictEqual(rawUnknown({comparator: 5}, {have: {quartz: 3}}), {quartz: 2}, 'net of what the chests hold');
