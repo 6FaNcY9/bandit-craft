@@ -5662,6 +5662,27 @@ require('./crafting');
   await assert.rejects(makeCrafting({goNear: async () => {}, guard() {}}).ensureItem({bot}, {}, 'campfire', 10), /missing ingredient/);
 })();
 
+(async () => { // ensureItem: a fetch that walks far is followed by a table near the bot, not the one found first (2026-10-18)
+  const {makeCrafting} = require('./crafting');
+  const {Vec3} = require('vec3');
+  const items = [];
+  const at = (n) => items.find((i) => i.name === n);
+  const tables = [], craftedAt = [];
+  const bot = {
+    entity: {position: new Vec3(0.5, 64, 0.5)},
+    registry: {itemsByName: {furnace: {id: 1}, cobblestone: {id: 2}}, items: {1: {name: 'furnace'}, 2: {name: 'cobblestone'}}, blocksByName: {crafting_table: {id: 50}}},
+    inventory: {items: () => items},
+    recipesAll: (id) => (id === 1 ? [{requiresTable: true, result: {count: 1}, delta: [{id: 2, count: -8}, {id: 1, count: 1}]}] : []),
+    recipesFor: () => [{result: {count: 1}}],
+    findBlock: () => { const p = bot.entity.position.floored().offset(1, 0, 0); tables.push(p.x); return {name: 'crafting_table', position: p}; },
+    blockAt: (p) => ({name: 'crafting_table', position: p}),
+    craft: async (_recipe, _n, where) => { craftedAt.push(where.position.x); at('cobblestone').count -= 8; items.push({name: 'furnace', count: 1}); },
+  };
+  const fetch = async (_r, _job, item, n) => { items.push({name: item, count: n}); bot.entity.position = new Vec3(85.5, 64, 0.5); }; // the supply chest
+  await makeCrafting({goNear: async () => {}, guard() {}, fetch}).ensureItem({bot}, {}, 'furnace', 1);
+  assert.deepStrictEqual([tables, craftedAt], [[1, 86], [86]], 'crafted at the table by the supply chest');
+})();
+
 (async () => { // ensurePlanks: no logs in hand come from the base chest (bot3 could not make a hoe beside 87 logs, 2026-10-15)
   const {makeCrafting} = require('./crafting');
   const items = [];

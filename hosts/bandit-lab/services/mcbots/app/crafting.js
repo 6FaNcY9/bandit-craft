@@ -254,6 +254,10 @@ function makeCrafting({goNear, guard, fetch = null}) {
       if (isPlanks(ing) && !isPlanks(name)) await ensurePlanks(r, job, need);
       else await ensureItem(r, job, ing, need, depth + 1);
     }
+    // Fetching an ingredient can walk far (the supply chest is 85 blocks from the iron farm): the table found first is
+    // then out of reach, and its window never opened ("windowOpen did not fire" 1 to 3 times a day per bot since
+    // 2026-10-15; bot1 tried the table at -355 65 -194 from 84 blocks off, main server 2026-10-18). Look again.
+    if (where && bot.entity?.position && bot.entity.position.distanceTo(where.position.offset(0.5, 0.5, 0.5)) > 4) where = await station(r, job, 'crafting_table', depth);
     job.progress = `crafting ${name}`;
     if (job.t) job.t.doing = `crafting ${name}`;
     // One craft at a time, laid out by the server (bookCraft), then the inventory as the server has it. mineflayer's
