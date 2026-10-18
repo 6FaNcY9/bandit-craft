@@ -1708,7 +1708,9 @@ async function ensureGear(r, job) {
   const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
   const owned = [...bot.inventory.items(), ...worn].map((i) => i.name);
   let wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
-  if (!gearJob.gearPlan(n('iron_ingot'), owned).length) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
+  // Nothing to make at all: no need either. (gearPlan(n('iron_ingot'), ...) asked what the carried iron makes, and a bot
+  // with none returned before it fetched any, sandbox 2026-10-18.)
+  if (!gearJob.ingotsWanted(owned)) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
   if (wanted - n('raw_iron') >= 3 && r.supplyChest && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
     const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}))
@@ -1749,7 +1751,7 @@ async function ensureGear(r, job) {
     }
   }
   const wornNow = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
-  if (!gearJob.gearPlan(n('iron_ingot'), [...bot.inventory.items(), ...wornNow].map((i) => i.name)).length) r.world?.dropNeed?.(r.name, 'iron_ingot');
+  if (!gearJob.ingotsWanted([...bot.inventory.items(), ...wornNow].map((i) => i.name))) r.world?.dropNeed?.(r.name, 'iron_ingot');
 }
 
 const toolFor = (bot, id) => {
