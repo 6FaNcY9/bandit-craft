@@ -404,6 +404,14 @@ const {Combat, weaponScore, wantsToEat, deathCause, fightReady} = require('./com
   p = A.plan({item: 'stone_pickaxe', count: 1}, world({have: {wooden_pickaxe: 1, stick: 2, crafting_table: 1}, failed: new Set(['mine:stone'])}));
   assert.ok(!nodes(p.node).some((n) => n.key === 'mine:stone'), A.explain(p.node));
   assert.ok(nodes(p.node).some((n) => n.key === 'mine:deepslate'), A.explain(p.node)); // cobbled deepslate does too
+  // A way blocked by shared experience is left out like a failed one (world.learned).
+  p = A.plan({item: 'stone_pickaxe', count: 1}, world({have: {wooden_pickaxe: 1, stick: 2, crafting_table: 1}, learned: (k) => k === 'mine:stone' ? {blocked: true, pOk: 1} : null}));
+  assert.ok(!nodes(p.node).some((n) => n.key === 'mine:stone'), A.explain(p.node));
+  assert.ok(nodes(p.node).some((n) => n.key === 'mine:deepslate'), A.explain(p.node));
+  p = A.plan({item: 'white_bed', count: 1}, world({have: {crafting_table: 1, oak_planks: 3}, learned: (k) => k === 'kill:sheep' ? {each: 1000, pOk: 1} : null}));
+  assert.ok(nodes(p.node).some((n) => n.via === 'craft' && n.item === 'white_bed'), A.explain(p.node));
+  p = A.plan({item: 'cobblestone', count: 3}, world({learned: (k) => k === 'mine:stone' ? {pOk: 0.1} : null}));
+  assert.ok(p.node.cost > A.plan({item: 'cobblestone', count: 3}, world()).node.cost);
   // Wool from sheep (minecraft-data keeps it in loot tables it does not list); a bed from that and planks.
   p = A.plan({item: 'white_bed', count: 1}, world({have: {crafting_table: 1, oak_planks: 3}}));
   assert.deepStrictEqual(nodes(p.node).filter((n) => n.via === 'kill').map((n) => [n.mob, n.kills]), [['sheep', 3]]);
@@ -680,6 +688,32 @@ assert.deepStrictEqual(W.parsePlayers(bm, 'overworld'), [{name: 'steve', uuid: '
 assert.deepStrictEqual(W.parsePlayers(null, 'overworld'), []);
 let clock = 1000;
 const wm = new W.WorldModel({now: () => clock});
+assert.strictEqual(wm.learned('mine:stone'), null);
+wm.learn('mine:stone', {ok: true, secs: 12, units: 1});
+assert.strictEqual(wm.learned('mine:stone').each, null);
+wm.learn('mine:stone', {ok: true, secs: 8, units: 1});
+assert.deepStrictEqual(wm.learned('mine:stone'), {each: 10, pOk: 1, blocked: false, until: 0});
+wm.learn('kill:sheep', {ok: false}); wm.learn('kill:sheep', {ok: false});
+assert.strictEqual(wm.learned('kill:sheep').blocked, true);
+clock += 600001; assert.strictEqual(wm.learned('kill:sheep').blocked, false); clock -= 600001;
+wm.learn('kill:sheep', {ok: false}); assert.strictEqual(wm.learned('kill:sheep').blocked, true);
+clock += 1200001; assert.strictEqual(wm.learned('kill:sheep').blocked, false); clock -= 1200001;
+for (let i = 0; i < 200; i++) wm.learn('kill:sheep', {ok: false});
+assert.strictEqual(wm.learned('kill:sheep').blocked, true);
+clock += 86400001; assert.strictEqual(wm.learned('kill:sheep').blocked, false); clock -= 86400001;
+// A craft that keeps failing gets dearer but stays in the plan: often nothing else makes the item.
+wm.learn('craft:white_bed', {ok: false}); wm.learn('craft:white_bed', {ok: false}); wm.learn('craft:white_bed', {ok: false});
+assert.deepStrictEqual([wm.learned('craft:white_bed').blocked, wm.learned('craft:white_bed').pOk], [false, 0.25]);
+// A record from the hub is taken over whole; a bad one is dropped.
+wm.noteExperience('mine:sand', {ok: 3, fail: 1, streak: 0, secs: 30, units: 10, lastFail: 5, t: 6});
+assert.strictEqual(wm.learned('mine:sand').each, 3);
+wm.noteExperience('mine:gravel', {ok: -1, fail: 0, streak: 0, secs: 0, units: 0, lastFail: 0, t: 0});
+wm.noteExperience('mine:bad key', {ok: 1, fail: 0, streak: 0, secs: 0, units: 0, lastFail: 0, t: 0});
+assert.deepStrictEqual([wm.learned('mine:gravel'), wm.learned('mine:bad key')], [null, null]);
+assert.throws(() => wm.learn('chest:1,2.5,3:stone', {ok: true}), /invalid experience/);
+assert.throws(() => wm.learn('craft:stone', {ok: true, secs: Infinity}), /invalid experience/);
+for (let i = 0; i < 39; i++) wm.learn('mine:stone', {ok: false});
+assert.ok(wm.experience.get('mine:stone').ok + wm.experience.get('mine:stone').fail <= 40);
 wm.setPlayers(W.parsePlayers(bm, 'the_nether'));
 assert.strictEqual(wm.player('steve').dim, 'the_nether');
 wm.postNeed('bot2', 'hopper', 9, {x: -356, y: 72, z: -191}, 'waiting for material');
@@ -1554,6 +1588,17 @@ require('./crafting');
     await until(() => !world.needs.has('bot6:hopper'), 'worker need removal reached hub');
     hub.broadcastWorld();
     await until(() => !client.world.needs.has('bot6:hopper'), 'hub need removal reached worker');
+    client.world.learn('mine:stone', {ok: true, secs: 9, units: 3});
+    client.world.flush();
+    await until(() => world.learned('mine:stone')?.each === 3, 'worker experience reached hub');
+    hub.observe({bots: new Set(['bot6'])}, {learn: [{bot: 'bot6', key: 'mine:bad-key!', ok: true, secs: 1, units: 1}]});
+    assert.strictEqual(world.learned('mine:bad-key!'), null, 'hub rejects malformed worker experience');
+    hub.broadcastWorld();
+    await until(() => client.world.learned('mine:stone')?.each === 3, 'hub experience returned to worker');
+    assert.deepStrictEqual([client.world.outExperience.length, client.world.experience.get('mine:stone').ok], [0, 1], 'the hub copy is not sent back or counted twice');
+    client.world.learn('kill:sheep', {ok: false}); client.world.learn('kill:sheep', {ok: false});
+    client.world.flush();
+    await until(() => world.learned('kill:sheep')?.blocked === true, 'both outcomes of one interval reached the hub');
     hub.observe({bots: new Set(['bot6'])}, {needs: [
       {bot: 'bot6', item: 'stone', count: 0, to: {x: 1, y: 2, z: 3}, why: 'bad count'},
       {bot: 'bot6', item: 'stone', count: 1, to: {x: 1, y: 2, z: 3}, why: 'bad\ntext'},

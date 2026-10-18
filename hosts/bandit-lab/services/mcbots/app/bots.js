@@ -2375,6 +2375,7 @@ function acquireWorld(r) {
     canKill: (m) => Object.hasOwn(huntJob.ANIMALS, m),
     stationNear: (name) => /^(crafting_table|furnace)$/.test(name) && !!craftingLib.nearBlock(bot, name),
     failed: new Set(r.acquireFailed.keys()),
+    learned: (k) => r.world?.learned?.(k) ?? null,
   };
 }
 // The plan's nodes with this method whose inputs are all in hand: what the next step does together.
@@ -2410,10 +2411,15 @@ async function getItem(r, job) {
     if (!step) throw new Error(missing.length ? `no way to get ${missing.join(', ')} (for ${item})` : `nothing left to do but still ${job.target - held()} ${item} short`);
     job.progress = `${Math.max(0, count - (job.target - held()))}/${count}`;
     job.t.doing = `getting ${item}: ${acquire.explain({...step, children: []})}`;
+    const all = readySteps(node, step.key);
+    const units = step.via === 'mine' ? all.reduce((s, n) => s + n.blocks, 0) : step.via === 'kill' ? all.reduce((s, n) => s + n.kills, 0) : step.via === 'craft' ? all.reduce((s, n) => s + n.crafts, 0) : step.via === 'chest' ? 1 : all.reduce((s, n) => s + n.count, 0);
+    const started = Date.now();
     try {
-      await acquireStep(r, job, step, readySteps(node, step.key));
+      await acquireStep(r, job, step, all);
+      try { r.world?.learn?.(step.key, {ok: true, secs: (Date.now() - started) / 1000, units}); } catch {}
     } catch (e) {
-      guard(job);
+      guard(job); // a Stop, a death or a lost connection is no failure of the way (sandbox 2026-10-18)
+      try { r.world?.learn?.(step.key, {ok: false, secs: (Date.now() - started) / 1000}); } catch {}
       const fails = (job.fails ||= new Map()).set(step.key, (job.fails.get(step.key) || 0) + 1).get(step.key);
       const out = !/^(craft|smelt):/.test(step.key) || fails >= 2;
       if (out) r.acquireFailed.set(step.key, Date.now() + ACQUIRE_FAIL_MS);

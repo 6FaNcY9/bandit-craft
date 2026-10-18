@@ -54,6 +54,9 @@ function stairRing(x1, z1, x2, z2) {
   return ring;
 }
 
+const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-?\d+,-?\d+:[a-z_]{1,48})$/;
+const validExperience = (v) => !!v && [v.ok, v.fail, v.streak, v.secs, v.units, v.lastFail, v.t].every((n) => Number.isFinite(n) && n >= 0);
+
 class WorldModel {
   constructor({now = Date.now} = {}) {
     this.now = now;
@@ -68,6 +71,8 @@ class WorldModel {
     this.stock = null; // what a bot last saw in any chest it counted: {items: {name: count}, by, free (empty slots or null), chest, t}
     this.stocks = new Map(); // "x,y,z" (or "" with no coordinates) -> the same, per chest: the keeper and the plan read only their own
     this.needs = new Map(); // `${bot}:${item}` -> {bot,item,count,to,why,t}
+    this.experience = new Map(); // method key -> observed outcomes and time
+    this.experienceFile = null;
   }
 
   // A block change seen by one of this process' bots (blocklog.js); recorded when the hub set a log.
@@ -91,6 +96,48 @@ class WorldModel {
   }
   dropNeed(bot, item) { this.needs.delete(`${bot}:${item}`); }
   openNeeds(now = this.now()) { return [...this.needs.values()].filter((n) => now - n.t < 600000).sort((a,b) => a.t-b.t); }
+
+  // How a planner way (acquire.js key) went, for every bot: in 8 h `get white_bed` tried kill:sheep 12 times and
+  // cobwebs 22 times, each failure forgotten after 10 min by one bot only (main server 2026-10-18).
+  learn(key, input = {}) {
+    const {ok, secs = 0, units = 0} = input || {};
+    if (!EXPERIENCE_KEY.test(key) || !input || typeof ok !== 'boolean' || !Number.isFinite(secs) || secs < 0 || !Number.isFinite(units) || units < 0) throw new Error('invalid experience');
+    const r = this.experience.get(key) || {ok: 0, fail: 0, streak: 0, secs: 0, units: 0, lastFail: 0, t: 0};
+    if (ok) { r.ok++; r.streak = 0; r.secs += secs; r.units += units; }
+    else { r.fail++; r.streak++; r.lastFail = this.now(); }
+    r.t = this.now();
+    if (r.ok + r.fail > 40) { r.ok = Math.floor(r.ok / 2); r.fail = Math.floor(r.fail / 2); r.secs = Math.floor(r.secs / 2); r.units = Math.floor(r.units / 2); }
+    this.experience.set(key, r);
+    if (this.experienceFile && !this.experienceTimer) {
+      this.experienceTimer = setTimeout(() => {
+        this.experienceTimer = null;
+        try { fs.writeFileSync(`${this.experienceFile}.tmp`, JSON.stringify(Object.fromEntries(this.experience))); fs.renameSync(`${this.experienceFile}.tmp`, this.experienceFile); } catch {}
+      }, 5000);
+      this.experienceTimer.unref?.();
+    }
+  }
+
+  // pOk is 1 without a failure: a way that worked must not look dearer than one never tried (sandbox 2026-10-18).
+  // A craft or a smelt is only made dearer, never left out: it fails on the place (a table out of reach), and often
+  // nothing else makes the item.
+  learned(key, now = this.now()) {
+    const r = this.experience.get(key);
+    if (!r) return null;
+    const until = r.streak >= 2 && !/^(craft|smelt):/.test(key) ? r.lastFail + Math.min(86400000, 600000 * 2 ** (r.streak - 2)) : 0;
+    return {each: r.units >= 2 ? r.secs / r.units : null, pOk: (r.ok + 1) / (r.ok + r.fail + 1), blocked: now < until, until};
+  }
+
+  // A record as the hub has it (hubclient.js): taken over whole, nothing learned twice.
+  noteExperience(key, v) {
+    if (EXPERIENCE_KEY.test(key) && validExperience(v)) this.experience.set(key, {ok: v.ok, fail: v.fail, streak: v.streak, secs: v.secs, units: v.units, lastFail: v.lastFail, t: v.t});
+  }
+
+  persistExperience(file) {
+    this.experienceFile = file;
+    try {
+      for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(file, 'utf8')))) this.noteExperience(k, v);
+    } catch {}
+  }
 
   // What was last seen in this chest (an observation without coordinates counts for any chest: older callers and tests).
   stockAt(chest) {

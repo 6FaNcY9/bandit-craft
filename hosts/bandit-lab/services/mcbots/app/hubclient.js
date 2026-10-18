@@ -36,6 +36,7 @@ class RemoteWorld extends WorldModel {
     this.outChanges = [];
     this.outChests = new Map(); // storage index entries our bots saw, for the hub
     this.outNeeds = new Map();
+    this.outExperience = []; // every outcome, not the last per key: two in one report interval both count
   }
 
   get unreachable() {
@@ -113,6 +114,8 @@ class RemoteWorld extends WorldModel {
   }
   dropNeed(bot, item) { super.dropNeed(bot, item); this.outNeeds.set(`${bot}:${item}`, {bot, item, drop: true}); }
 
+  learn(key, record) { super.learn(key, record); this.outExperience.push({key, ok: record.ok, secs: record.secs, units: record.units, bot: [...this.mine][0]}); }
+
   noteChest(key, items, free = null) {
     super.noteChest(key, items, free);
     this.outChests.set(key, {key, items, free});
@@ -126,8 +129,8 @@ class RemoteWorld extends WorldModel {
 
   // One batched frame per report interval instead of one per observation.
   flush() {
-    if (!this.link || !(this.outMobs.size || this.outBlocks.size || this.gone.size || this.outStock || this.outChanges.length || this.outChests.size || this.outNeeds.size)) return;
-    this.link.send({t: 'observe', mobs: [...this.outMobs.values()], blocks: [...this.outBlocks.values()], gone: [...this.gone], stock: this.outStock, changes: this.outChanges, chests: [...this.outChests.values()], needs: [...this.outNeeds.values()]});
+    if (!this.link || !(this.outMobs.size || this.outBlocks.size || this.gone.size || this.outStock || this.outChanges.length || this.outChests.size || this.outNeeds.size || this.outExperience.length)) return;
+    this.link.send({t: 'observe', mobs: [...this.outMobs.values()], blocks: [...this.outBlocks.values()], gone: [...this.gone], stock: this.outStock, changes: this.outChanges, chests: [...this.outChests.values()], needs: [...this.outNeeds.values()], learn: this.outExperience.splice(0, 80)});
     this.outChests.clear();
     this.outNeeds.clear();
     this.outStock = null;
@@ -165,6 +168,8 @@ class RemoteWorld extends WorldModel {
         try { const v = super.postNeed(n.bot, n.item, n.count, n.to, n.why); v.t = t - n.age * 1000; } catch {}
       }
     }
+    // The hub's experience as it changed (our own outcomes come back from it counted once).
+    for (const e of Array.isArray(msg.experience) ? msg.experience : []) if (Array.isArray(e)) this.noteExperience(e[0], e[1]);
     // The hub's storage index: the newer look wins (our own bots' looks come back from it too).
     for (const c of Array.isArray(msg.chests) ? msg.chests : []) {
       if (typeof c?.key !== 'string' || !c.items || typeof c.items !== 'object') continue;

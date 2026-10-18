@@ -510,6 +510,10 @@ class Hub {
         try { this.world.postNeed(n.bot, n.item, n.count, n.to, n.why); } catch {}
       }
     }
+    for (const x of list(m.learn, 80, (v) => obj(v) || {})) {
+      if (!conn.bots.has(x.bot)) continue;
+      try { this.world.learn(x.key, {ok: x.ok, secs: x.secs, units: x.units}); } catch {}
+    }
     // Chests a worker's bot looked into: one storage index for every bot, so a plan (acquire.js) knows them all.
     for (const x of list(m.chests, 40, (v) => obj(v) || {})) {
       if (!CHEST_KEY_RE.test(String(x.key))) continue;
@@ -529,7 +533,10 @@ class Hub {
       // The storage index goes out as it changes: all of it to a new connection, then what changed since.
       const chests = [...(this.world.chests || [])].filter(([, v]) => v.t > (c.chestsAt ?? -Infinity)).map(([key, v]) => ({key, items: v.items, free: v.free, age: (now - v.t) / 1000}));
       c.chestsAt = now;
-      c.ws.send(JSON.stringify(chests.length ? {...shared, chests} : shared));
+      // The planner's experience the same way: all of it once, then what changed (acquire.js costs, world.learn).
+      const experience = [...(this.world.experience || [])].filter(([, v]) => v.t > (c.experienceAt ?? -Infinity)).sort((a, b) => b[1].t - a[1].t).slice(0, 300);
+      c.experienceAt = now;
+      c.ws.send(JSON.stringify({...shared, ...(chests.length ? {chests} : {}), ...(experience.length ? {experience} : {})}));
     }
   }
 

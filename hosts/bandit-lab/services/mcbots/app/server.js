@@ -36,6 +36,7 @@ const cfg = loadConfig();
 const log = (who, msg) => console.log(`${new Date().toISOString()} [${who}] ${msg}`);
 const world = new WorldModel();
 if (process.env.STATE_DIR) world.persistChests(path.join(process.env.STATE_DIR, 'chests.json')); // the storage index
+if (process.env.STATE_DIR) world.persistExperience(path.join(process.env.STATE_DIR, 'experience.json'));
 const notifier = new NtfyNotifier();
 let rescue = null; // set below, once the supply chest is known
 // Every event and, every 30 s, every bot's state go to STATE_DIR/archive for later evaluation and training
@@ -372,6 +373,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/needs') {
     const now = Date.now();
     return json(200, world.openNeeds(now).map((n) => ({...n, age: Math.max(0, Math.floor((now - n.t) / 1000))})));
+  }
+  if (req.method === 'GET' && url.pathname === '/api/experience') {
+    const now = Date.now();
+    return json(200, [...world.experience].map(([key, r]) => {
+      const learned = world.learned(key, now);
+      return {key, ok: r.ok, fail: r.fail, streak: r.streak, each: learned.each, pOk: learned.pOk, blockedS: learned.blocked ? Math.ceil((learned.until - now) / 1000) : 0, t: r.t};
+    }).sort((a, b) => b.t - a.t).map(({t, ...r}) => r));
   }
   if (req.method === 'GET' && url.pathname === '/vendor/three.min.js') {
     res.writeHead(200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'});

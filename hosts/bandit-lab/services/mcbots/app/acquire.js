@@ -88,6 +88,7 @@ function plan(goal, world) {
   const loot = lootIndex(data);
   const smelting = world.smelting || SMELT;
   const failed = world.failed || new Set();
+  const learned = (key) => world.learned?.(key) || null;
   const canMine = world.canMine || (() => true), canKill = world.canKill || (() => true);
   const near = new Map();
   const nearOf = (kind, name) => {
@@ -103,28 +104,30 @@ function plan(goal, world) {
   function methods(item) {
     const out = [];
     for (const r of recipes(item)) out.push({key: `craft:${item}`, kind: 'craft', recipe: r, inputs: Object.keys(r.ingredients),
-      unit: (c) => (CRAFT_S + Object.entries(r.ingredients).reduce((s, [n, k]) => s + k * c(n), 0)) / r.per});
+      unit: (c) => (CRAFT_S + Object.entries(r.ingredients).reduce((s, [n, k]) => s + k * c(n), 0)) / r.per / (learned(`craft:${item}`)?.pOk || 1)});
     const input = smelting[item];
-    if (input) out.push({key: `smelt:${item}`, kind: 'smelt', input, inputs: [input, FUEL], unit: (c) => SMELT_S + c(input) + c(FUEL) / PER_FUEL});
+    if (input) out.push({key: `smelt:${item}`, kind: 'smelt', input, inputs: [input, FUEL], unit: (c) => (SMELT_S + c(input) + c(FUEL) / PER_FUEL) / (learned(`smelt:${item}`)?.pOk || 1)});
     for (const {block, per} of loot.blocks.get(item) || []) {
       const hard = data.blocksByName[block]?.hardness ?? 1;
       if (!canMine(block) || hard < 0) continue; // bedrock and the like
       if (block === item && recipes(item).length) continue; // a block that is crafted and drops itself was placed: planks, wool
       const tools = toolsFor(block), dist = nearOf('block', block);
       if (dist === null && world.seenOnly) continue;
-      const each = DIG_S * hard + STEP_S + (dist === null ? EXPLORE_S : dist / SPEED) / 8;
+      const record = learned(`mine:${block}`);
+      const each = typeof record?.each === 'number' ? record.each : DIG_S * hard + STEP_S + (dist === null ? EXPLORE_S : dist / SPEED) / 8;
       // The tool counts once a plan (keep()), not per block: here only whether one can be had at all.
       out.push({key: `mine:${block}`, kind: 'mine', block, per, tools, each, inputs: tools,
-        unit: (c) => (tools.length && !tools.some((t) => Number.isFinite(c(t))) ? Infinity : each / per)});
+        unit: (c) => (tools.length && !tools.some((t) => Number.isFinite(c(t))) ? Infinity : each / per / (record?.pOk || 1))});
     }
     for (const {mob, per} of loot.mobs.get(item) || []) {
       if (!canKill(mob)) continue;
       const dist = nearOf('mob', mob);
       if (dist === null && world.seenOnly) continue;
-      const each = FIGHT_S + (dist === null ? EXPLORE_S : dist / SPEED);
-      out.push({key: `kill:${mob}`, kind: 'kill', mob, per, each, inputs: [], unit: () => each / per});
+      const record = learned(`kill:${mob}`);
+      const each = typeof record?.each === 'number' ? record.each : FIGHT_S + (dist === null ? EXPLORE_S : dist / SPEED);
+      out.push({key: `kill:${mob}`, kind: 'kill', mob, per, each, inputs: [], unit: () => each / per / (record?.pOk || 1)});
     }
-    return out.filter((m) => !failed.has(m.key));
+    return out.filter((m) => !failed.has(m.key) && !learned(m.key)?.blocked);
   }
 
   // The items that matter for this goal: its ingredients, smelt inputs, fuel and tools, all the way down.
@@ -164,8 +167,8 @@ function plan(goal, world) {
     let rest = Math.max(0, count - (have[item] || 0)), c = 0;
     for (const s of stock) {
       const k = Math.min(rest, s.stock[item] || 0);
-      if (!k || failed.has(chestKey(s, item))) continue;
-      c += 2 * s.dist / SPEED + CHEST_S;
+      if (!k || failed.has(chestKey(s, item)) || learned(chestKey(s, item))?.blocked) continue;
+      c += (2 * s.dist / SPEED + CHEST_S) / (learned(chestKey(s, item))?.pOk || 1);
       rest -= k;
     }
     return rest ? c + rest * pc(item) : c;
@@ -176,14 +179,14 @@ function plan(goal, world) {
     if (m.kind === 'craft') {
       if (m.inputs.some((i) => making.has(i))) return Infinity;
       const crafts = Math.ceil(count / m.recipe.per);
-      return crafts * CRAFT_S + (m.recipe.table ? toolCost(['crafting_table']) : 0) + Object.entries(m.recipe.ingredients).reduce((s, [n, k]) => s + estimate(n, k * crafts), 0);
+      return (crafts * CRAFT_S + (m.recipe.table ? toolCost(['crafting_table']) : 0) + Object.entries(m.recipe.ingredients).reduce((s, [n, k]) => s + estimate(n, k * crafts), 0)) / (learned(m.key)?.pOk || 1);
     }
     if (m.kind === 'smelt') {
       if (making.has(m.input) || making.has(FUEL)) return Infinity;
-      return count * SMELT_S + toolCost(['furnace']) + estimate(m.input, count) + estimate(FUEL, Math.ceil(count / PER_FUEL));
+      return (count * SMELT_S + toolCost(['furnace']) + estimate(m.input, count) + estimate(FUEL, Math.ceil(count / PER_FUEL))) / (learned(m.key)?.pOk || 1);
     }
     const n = Math.ceil(count / m.per);
-    return n * m.each + (m.kind === 'mine' ? toolCost(m.tools) : 0);
+    return (n * m.each + (m.kind === 'mine' ? toolCost(m.tools) : 0)) / (learned(m.key)?.pOk || 1);
   }
   // A tool or a station: one in hand (or a station standing near) will do; else the cheapest is made once and kept.
   function keep(items) {
@@ -206,8 +209,8 @@ function plan(goal, world) {
     }
     for (const s of stock) {
       const k = Math.min(rest, s.stock[item] || 0);
-      if (!k || failed.has(chestKey(s, item))) continue;
-      const trip = 2 * s.dist / SPEED + CHEST_S;
+      if (!k || failed.has(chestKey(s, item)) || learned(chestKey(s, item))?.blocked) continue;
+      const trip = (2 * s.dist / SPEED + CHEST_S) / (learned(chestKey(s, item))?.pOk || 1);
       if (trip >= k * pc(item)) continue; // making them is quicker than the walk
       s.stock[item] -= k;
       rest -= k;
@@ -257,20 +260,20 @@ function plan(goal, world) {
       if (t) kids.push(t);
       for (const [n, k] of Object.entries(m.recipe.ingredients)) kids.push(need(n, k * crafts));
       have[item] = (have[item] || 0) + crafts * m.recipe.per - count; // a stick craft gives 4
-      Object.assign(node, {crafts, cost: crafts * CRAFT_S});
+      Object.assign(node, {crafts, cost: crafts * CRAFT_S / (learned(m.key)?.pOk || 1)});
     } else if (m.kind === 'smelt') {
       const f = keep(['furnace']);
       if (f) kids.push(f);
       kids.push(need(m.input, count), need(FUEL, Math.ceil(count / PER_FUEL)));
-      Object.assign(node, {input: m.input, cost: count * SMELT_S});
+      Object.assign(node, {input: m.input, cost: count * SMELT_S / (learned(m.key)?.pOk || 1)});
     } else if (m.kind === 'mine') {
       const t = keep(m.tools);
       if (t) kids.push(t);
       const blocks = Math.ceil(count / m.per);
-      Object.assign(node, {block: m.block, blocks, cost: blocks * m.each});
+      Object.assign(node, {block: m.block, blocks, cost: blocks * m.each / (learned(m.key)?.pOk || 1)});
     } else {
       const kills = Math.ceil(count / m.per);
-      Object.assign(node, {mob: m.mob, kills, cost: kills * m.each});
+      Object.assign(node, {mob: m.mob, kills, cost: kills * m.each / (learned(m.key)?.pOk || 1)});
     }
     making.delete(item);
     node.cost += kids.reduce((s, c) => s + c.cost, 0);

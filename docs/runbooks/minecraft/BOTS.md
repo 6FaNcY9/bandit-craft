@@ -8,6 +8,15 @@ An idle bot, a producer with no project step, or a wheat farmer waiting for grow
 unclaimed need, gather up to 64 items with the normal `get` planner, and deposit them into that chest. Failed
 gather attempts rest for ten minutes; workers relay needs through the hub, which validates each post.
 
+## Learned costs
+
+Every `get` step reports how it went to the shared world (`world.learn`): time and planned units on success, a
+failure otherwise (a Stop, a death or a lost connection does not count). The planner (`acquire.js`) then uses the
+measured seconds per block or kill instead of its guesses and divides every cost by the success rate
+`(ok + 1) / (ok + fail + 1)`. A mine, kill or chest way that failed twice in a row is left out for 10 minutes, then
+20, 40 ... up to 24 hours; a craft or a smelt only gets dearer. Workers send their outcomes through the hub, which keeps
+`STATE_DIR/experience.json` and sends changes back. `GET /api/experience` lists the records.
+
 Mineflayer bots join Paper through Velocity and
 BotGate and are controlled from a small web dashboard. Code:
 `hosts/bandit-lab/services/mcbots/` (`app/` is the Node app, `default.nix` the
