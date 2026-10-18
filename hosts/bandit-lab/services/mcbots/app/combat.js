@@ -6,15 +6,17 @@
 const {goals} = require('mineflayer-pathfinder');
 const {mobLocation, isHostile, shouldFight, normDim, NOTABLE_BLOCKS} = require('./world');
 const {DEFAULTS} = require('./settings');
+const {weapon, armour: armourOdds, odds, NIGHT} = require('./odds');
 
 const TICK_MS = 500;
 
 // Health only regenerates at food 18+, so a hurt bot must eat earlier than a healthy one.
 const wantsToEat = (food, health, eatBelow) => food < eatBelow || (health < 20 && food < 18);
 
-// A bot with a sword or axe, two armour pieces and more than 12 health fights a mob near its target
-// instead of waiting for it to leave (5 of 8 lab bots stood still at night, 2026-10-10).
-const fightReady = (names, armour, health) => health > 12 && armour >= 2 && names.some((n) => /_(sword|axe)$/.test(n));
+// Fight instead of wait, from the numbers (odds.js) against a usual night: the old rule (a sword or axe, two armour
+// pieces, health above 12; 5 of 8 lab bots stood still at night, 2026-10-10) counted leather and iron alike.
+const bestWeapon = (names) => [...names].sort((a, b) => weaponScore(b) - weaponScore(a))[0];
+const fightReady = (names, worn, health) => odds({health, weapon: weapon(bestWeapon(names)), armour: armourOdds(worn), threats: NIGHT}).fight;
 // A shield held in the off-hand: the bot blocks with it between swings in close fights. It is no armour for fit():
 // a "fit" bot with only a shield walked up to two skeletons with it raised, slowed and turned to its path, and
 // fared worse than without one (lowest health 1, 14, 0 vs 18, 10, 15; sandbox 2026-10-17).
@@ -70,6 +72,7 @@ class Combat {
     this.eating = false;
     this.lastAttack = 0;
     this.ticks = 0;
+    this.lastOdds = null;
     this.timer = setInterval(() => this.tick().catch(() => {}), TICK_MS);
   }
 
@@ -84,11 +87,27 @@ class Combat {
     return this.r.current?.type === 'guard' && !s.defend ? {...s, defend: true} : s;
   }
 
-  // True when this bot should clear a nearby hostile itself rather than wait for it (see fightReady).
+  // The weapon it would fight with (the one in hand if no better is carried) and the armour it wears.
+  gear() {
+    const bot = this.r.bot, held = bot.heldItem?.name, best = bestWeapon(bot.inventory.items().map((i) => i.name));
+    const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]?.name).filter(Boolean);
+    return {weapon: weapon(held && weaponScore(held) >= weaponScore(best || '') ? held : best), armour: armourOdds(worn)};
+  }
+
+  // The odds against these hostiles (creepers aside: duel() kites them); with none, against a usual night if asked.
+  odds(mobs, night = false) {
+    const me = this.r.bot.entity?.position;
+    const threats = me ? mobs.filter((e) => e.name !== 'creeper').map((e) => ({name: e.name, dist: mobLocation(e).position.distanceTo(me)})) : [];
+    return odds({health: this.r.bot.health, ...this.gear(), threats: threats.length || !night ? threats : NIGHT});
+  }
+
+  // True when this bot can clear the hostiles it sees (or a usual night) and keep more than odds.KEEP health. Fists
+  // alone never: the numbers let a bare bot punch out one zombie for 7 health, and that walk gains nothing.
   fit() {
-    const bot = this.r.bot;
-    const armour = ['head', 'torso', 'legs', 'feet'].filter((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).length;
-    return this.settings().defend && fightReady(bot.inventory.items().map((i) => i.name), armour, bot.health);
+    const bot = this.r.bot, me = bot.entity?.position;
+    if (!weaponScore(bestWeapon(bot.inventory.items().map((i) => i.name)) || '')) return false;
+    const seen = me ? Object.values(bot.entities || {}).filter((e) => e !== bot.entity && shouldFight(e) && mobLocation(e).position.distanceTo(me) <= SEE_RANGE) : [];
+    return this.settings().defend && this.odds(seen, true).fight;
   }
 
   takeover(mode, target, dist) {
@@ -200,6 +219,13 @@ class Combat {
     const close = threats[0], closeDist = close ? mobLocation(close).position.distanceTo(me) : Infinity;
     const near = threats.find((e) => !this.ignore.has(e.id));
     const dist = near ? mobLocation(near).position.distanceTo(me) : Infinity;
+    // Numbers, not a fixed health line: three zombies cost an unarmoured bot 13 health, an iron one 2 (arena 2026-10-18).
+    const forecast = this.odds(threats.filter((e) => mobLocation(e).position.distanceTo(me) <= 16));
+    if (near && near.name !== 'creeper') {
+      const key = `${near.name}:${forecast.fight}`;
+      if (this.lastOdds !== key) r.log(r.name, `odds: ${threats.filter((e) => e.name !== 'creeper').length} ${near.name} -> ${forecast.fight ? 'fight' : 'keep away'} (loss ~${Math.round(forecast.loss)} of ${Math.round(bot.health)}, ${Math.round(forecast.secs)} s)`);
+      this.lastOdds = key;
+    } else this.lastOdds = null;
 
     if (this.mode && now - this.since > MODE_MAX_MS[this.mode]) {
       if (this.target) this.ignore.set(this.target.id, now + IGNORE_MS);
@@ -216,7 +242,7 @@ class Combat {
     // Hurt: it kites what comes close (backwards, striking from STRIKE_REACH; a zombie reaches 1.5). Running off turned
     // its back on them: bot1 and bot2 died some 20 times in one night "retreating to heal", 5 to 10 zombie hits each
     // (main server 2026-10-17). From archers alone it still walks off, out of their range.
-    if (near && bot.health < s.retreatHealth && dist <= 16 && !r.sheltered) {
+    if (near && (bot.health < s.retreatHealth || !forecast.fight) && dist <= 16 && !r.sheltered) {
       const melee = threats.find((e) => !RANGED.test(e.name) && mobLocation(e).position.distanceTo(me) < 8);
       return melee ? this.duel(melee, {all: true}) : this.takeover('retreat', near, 20);
     }

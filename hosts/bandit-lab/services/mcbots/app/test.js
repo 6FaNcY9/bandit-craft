@@ -364,6 +364,7 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '1,2,3'}));
 // ---- shared world / combat logic ----
 const W = require('./world');
 const {Combat, weaponScore, wantsToEat, deathCause, fightReady} = require('./combat');
+const O = require('./odds');
 {
   // Deep miners with coal but no wood cannot make torches (bot2 at y -55, 2026-10-10).
   const {needsWood} = require('./bots');
@@ -444,22 +445,35 @@ assert.equal(wantsToEat(17, 6.7, 15), true);
 assert.equal(wantsToEat(17, 20, 15), false);
 assert.equal(wantsToEat(14, 20, 15), true);
 assert.equal(wantsToEat(19, 10, 15), false);
-// fight instead of wait: sword or axe, 2+ armour pieces, health above 12
-assert.equal(fightReady(['stone_sword', 'bread'], 2, 20), true);
-assert.equal(fightReady(['iron_axe'], 4, 13), true);
-assert.equal(fightReady(['stone_sword'], 1, 20), false); // too little armour
-assert.equal(fightReady(['stone_pickaxe'], 4, 20), false); // unarmed
-assert.equal(fightReady(['stone_sword'], 4, 12), false); // hurt
+assert.equal(O.taken(3, {points: 15, toughness: 0}).toFixed(2), '1.38'); // vanilla: 3 * (1 - max(15 / 5, 15 - 4 * 3 / 8) / 25)
+assert.equal(O.taken(13, {points: 20, toughness: 8}).toFixed(2), '4.29');
+for (const [name, value] of Object.entries({wooden_sword: [4, 1.6], golden_sword: [4, 1.6], stone_sword: [5, 1.6], iron_sword: [6, 1.6], diamond_sword: [7, 1.6], netherite_sword: [8, 1.6], wooden_axe: [7, 0.8], golden_axe: [7, 1], stone_axe: [9, 0.8], iron_axe: [9, 0.9], diamond_axe: [9, 1], netherite_axe: [10, 1]})) assert.deepStrictEqual(O.weapon(name), {dmg: value[0], speed: value[1]}, name);
+assert.deepStrictEqual(O.weapon('stone_pickaxe'), {dmg: 1, speed: 4});
+assert.equal(O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour(['iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots']), threats: [{name: 'zombie', dist: 3}]}).fight, true);
+assert.equal(O.odds({health: 20, weapon: O.weapon('fist'), armour: O.armour([]), threats: [{name: 'zombie', dist: 1}, {name: 'zombie', dist: 1}, {name: 'zombie', dist: 1}]}).fight, false);
+// An archer hurts from the start, a zombie only once it walked up; unknown and creeper threats are not counted.
+const shot = O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'skeleton', dist: 15}]});
+const walked = O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'zombie', dist: 15}]});
+assert.ok(shot.loss > walked.loss, `${shot.loss} ${walked.loss}`);
+assert.deepStrictEqual(O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'creeper', dist: 3}]}), {secs: 0, loss: 0, fight: true});
+// Ready for a usual night (two zombies, a skeleton) from the numbers: full iron and an iron sword at full health only.
+const IRON = ['iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots'];
+assert.equal(fightReady(['iron_sword', 'bread'], IRON, 20), true);
+assert.equal(fightReady(['iron_sword'], IRON, 12), false); // hurt
+assert.equal(fightReady(['stone_sword'], ['leather_chestplate', 'leather_leggings'], 20), false); // the old two-piece rule said yes
+assert.equal(fightReady(['stone_pickaxe'], IRON, 20), false); // unarmed
+assert.equal(fightReady(['iron_sword'], [], 20), false); // unarmoured
 {
-  const slots = {5: {}, 7: {}};
-  const mk = (defend, health, items) => {
+  const mk = (defend, health, items, worn = []) => {
+    const slots = Object.fromEntries(worn.map((name, i) => [5 + i, {name}]));
     const c = Object.create(Combat.prototype);
     c.r = {getSettings: () => ({defend}), bot: {health, getEquipmentDestSlot: (s) => ({head: 5, torso: 6, legs: 7, feet: 8})[s], inventory: {slots, items: () => items.map((name) => ({name}))}}};
     return c;
   };
-  assert.equal(mk(true, 20, ['wooden_sword']).fit(), true);
-  assert.equal(mk(false, 20, ['wooden_sword']).fit(), false); // defend off: combat will not fight, so the bot waits
-  assert.equal(mk(true, 8, ['wooden_sword']).fit(), false);
+  assert.equal(mk(true, 20, ['iron_sword'], IRON).fit(), true); // no mob in sight: a usual night
+  assert.equal(mk(true, 20, ['iron_sword']).fit(), false);
+  assert.equal(mk(false, 20, ['iron_sword'], IRON).fit(), false); // defend off: combat will not fight, so the bot waits
+  assert.equal(mk(true, 8, ['iron_sword'], IRON).fit(), false);
 }
 {
   const {EventEmitter} = require('node:events');
