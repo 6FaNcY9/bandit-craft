@@ -6870,7 +6870,7 @@ require('./crafting');
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
   const {writeLitematic} = require('./litematic-write');
   const {parseLitematic} = require('./schematic');
-  const {tunnel, schematic} = require('./highway');
+  const {tunnel, schematic, legs} = require('./highway');
   const {matches} = require('./placing');
   // Round trip: 6 states (3 bits, entries spanning two longs), props kept, air returned, structure_void (unset) not.
   const names = ['stone', 'cobblestone', 'oak_planks', 'glass', 'dirt'];
@@ -6918,5 +6918,15 @@ require('./crafting');
   assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'gravel', props: {}}), false);
   assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'water', props: {}}), false);
   assert.strictEqual(matches({name: 'cobblestone', props: {}}, {name: 'stone', props: {}}), false);
-  console.log('highways: litematic round trip, tunnel shape, rock walls ok');
+  // Legs cut from one route never wall what another leg walks through: made apart, two legs narrowed their corner to
+  // one block (sandbox 2026-10-18).
+  const air = new Set(), solid = new Set();
+  for (const leg of legs([{x: 0, y: 60, z: 0}, {x: 10, y: 60, z: 0}, {x: 10, y: 60, z: 10}])) {
+    const p = await parseLitematic(leg.buffer), k = (c) => `${c.x + leg.origin.x},${c.y + leg.origin.y},${c.z + leg.origin.z}`;
+    for (const c of p.air) air.add(k(c));
+    for (const c of p.blocks) if (c.name !== 'wall_torch') solid.add(k(c));
+  }
+  assert.deepStrictEqual([...air].filter((c) => solid.has(c)), [], 'no cell is wall in one leg and walkway in another');
+  assert.ok(air.has('8,60,1') && air.has('10,60,2'), 'the corner stays 3 wide');
+  console.log('highways: litematic round trip, tunnel shape, rock walls, joined legs ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

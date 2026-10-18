@@ -56,7 +56,23 @@ function tunnel(points, {width = 3, height = 3, block = 'cobblestone', stairs = 
 
 // The schematic for one tunnel, its region at 0,0,0: build it with the returned `origin`.
 function schematic(points, opts = {}) {
-  const {blocks, air} = tunnel(points, opts);
+  return pack(tunnel(points, opts), opts.name);
+}
+
+// One schematic per leg, cut from the whole route: a long L in one box is a huge build site, and two legs made
+// apart walled each other's walkway at their corner down to one block (sandbox 2026-10-18).
+function legs(points, opts = {}) {
+  const whole = tunnel(points, opts);
+  return points.slice(1).map((p, i) => {
+    const own = tunnel([points[i], p], opts), cells = [...own.blocks, ...own.air];
+    const lo = {}, hi = {};
+    for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(...cells.map((c) => c[ax])); hi[ax] = Math.max(...cells.map((c) => c[ax])); }
+    const inBox = (c) => ['x', 'y', 'z'].every((ax) => c[ax] >= lo[ax] && c[ax] <= hi[ax]);
+    return pack({blocks: whole.blocks.filter(inBox), air: whole.air.filter(inBox)}, `${opts.name || 'Tunnel highway'} ${i + 1}`);
+  });
+}
+
+function pack({blocks, air}, name = 'Tunnel highway') {
   const all = [...blocks, ...air], lo = {}, hi = {};
   for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(...all.map((c) => c[ax])); hi[ax] = Math.max(...all.map((c) => c[ax])); }
   const rel = (c) => ({...c, x: c.x - lo.x, y: c.y - lo.y, z: c.z - lo.z});
@@ -64,7 +80,7 @@ function schematic(points, opts = {}) {
   const cells = [...blocks.map(rel), ...air.map((c) => ({...rel(c), name: 'air', props: {}}))];
   const counts = {};
   for (const c of cells) counts[c.name] = (counts[c.name] || 0) + 1;
-  return {origin: lo, size, counts, buffer: writeLitematic({name: opts.name || 'Tunnel highway', regions: [{name: 'Highway', position: {x: 0, y: 0, z: 0}, size, blocks: cells}]})};
+  return {origin: lo, size, counts, buffer: writeLitematic({name, regions: [{name: 'Highway', position: {x: 0, y: 0, z: 0}, size, blocks: cells}]})};
 }
 
 if (require.main === module) {
@@ -74,10 +90,13 @@ if (require.main === module) {
     if (p.length !== 3 || !p.every(Number.isInteger)) throw new Error(`invalid point: ${s}`);
     return {x: p[0], y: p[1], z: p[2]};
   });
-  if (!out || points.length < 2) throw new Error('usage: node highway.js out.litematic x,y,z x,y,z ...');
-  const s = schematic(points, {name: require('node:path').basename(out, '.litematic')});
-  fs.writeFileSync(out, s.buffer);
-  const length = points.slice(1).reduce((t, p, i) => t + Math.abs(p.x - points[i].x) + Math.abs(p.z - points[i].z), 0);
-  console.log(JSON.stringify({origin: s.origin, size: s.size, counts: s.counts, length}));
+  if (!out || points.length < 2) throw new Error('usage: node highway.js out.litematic x,y,z x,y,z ... (one file per leg: out-1, out-2, ...)');
+  const base = out.replace(/\.litematic$/, ''), parts = legs(points, {name: require('node:path').basename(base)});
+  parts.forEach((s, i) => {
+    const file = parts.length === 1 ? out : `${base}-${i + 1}.litematic`;
+    fs.writeFileSync(file, s.buffer);
+    const length = Math.abs(points[i + 1].x - points[i].x) + Math.abs(points[i + 1].z - points[i].z);
+    console.log(JSON.stringify({file, origin: s.origin, size: s.size, counts: s.counts, length}));
+  });
 }
-module.exports = {tunnel, schematic};
+module.exports = {tunnel, schematic, legs};
