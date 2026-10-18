@@ -131,6 +131,10 @@ function makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at}) {
     const before = held(bot, ANIMALS[animal]);
     job.t.total = count;
     job.t.done = job.collected || 0;
+    // The server sends animals some 48 blocks out: a point farther off is walked to first. bot3, sent from the wheat
+    // fields to sheep 170 blocks west, failed "no more within 40 blocks" at once (main server 2026-10-18).
+    const me = bot.entity.position;
+    if (Math.hypot(me.x - x, me.z - z) > 32) await goNear(r, job, x, y, z, 8, {xz: true, doing: `walking to the ${animal} near ${x} ${z}`});
     while ((job.collected || 0) < count) {
       guard(job);
       await waitCalm(r, job);

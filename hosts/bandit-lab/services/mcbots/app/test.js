@@ -2851,6 +2851,19 @@ require('./crafting');
     await assert.rejects(bot.dig(blk(0, 60, 0)), /stopped/);
     assert.strictEqual(dug, 1);
   }
+  { // the water of a field is never filled, other water is (main server 2026-10-18)
+    const {guardDigs} = require('./bots');
+    const {Vec3} = require('vec3');
+    let field = true, placed = 0;
+    const bot = {dig: async () => {}, equip: async () => {}, placeBlock: async () => { placed++; }, lookAt: async () => {}, entity: {position: new Vec3(0.5, 66, 3.5)},
+      blockAt: (p) => ({name: p.x === 0 && p.y === 66 && p.z === 0 ? 'water' : field && p.y === 66 && Math.abs(p.x) <= 4 ? 'farmland' : 'air', position: p, getProperties: () => ({})})};
+    guardDigs({current: {cancelled: false, type: 'wheatfarm'}, protectedAreas: [], pillars: new Map()}, bot);
+    const below = {name: 'dirt', position: new Vec3(0, 65, 0)};
+    await assert.rejects(bot.placeBlock(below, new Vec3(0, 1, 0)), /waters a field/);
+    field = false;
+    await bot.placeBlock(below, new Vec3(0, 1, 0));
+    assert.strictEqual(placed, 1, 'a lake can still be bridged');
+  }
   { // pillar steps are remembered in any job out in the open, not under a stone roof (main server 2026-10-18)
     const {guardDigs} = require('./bots');
     const {Vec3} = require('vec3');
@@ -3789,6 +3802,15 @@ require('./crafting');
     f = fake({sheeps: [{id: 1, position: new Vec3(2, 64, 0)}, {id: 2, position: new Vec3(3, 64, 0)}], areas: [[2.5, -5, 10, 5]]});
     await assert.rejects(JOBS.hunt(f.r, hunt()), /1 of 2 sheep hunted: no more within 20 blocks/);
     assert.strictEqual(f.hits[2], undefined, 'nothing attacked inside the protected area');
+    // a point beyond what the server sends is walked to first (bot3 from the wheat fields to sheep 170 blocks off, 2026-10-18)
+    f = fake({inv: [{name: 'iron_sword', count: 1, type: 99}]});
+    f.bot.pathfinder.goto = async (g) => {
+      if (g.x !== undefined) f.bot.entity.position = new Vec3(g.x, 64, g.z);
+      if (Math.abs(f.bot.entity.position.x - 120) < 12) f.entities[7] ||= {id: 7, name: 'sheep', height: 1.3, position: new Vec3(121, 64, 1)};
+    };
+    job = hunt({args: {animal: 'sheep', count: 1, x: 120, y: 64, z: 0, radius: 20}});
+    await JOBS.hunt(f.r, job);
+    assert.strictEqual(job.collected, 1);
     // shears: the sheep lives and the wool counts; a sheep that gives no wool is left and does not count
     f = fake({sheeps: [{id: 1, position: new Vec3(2, 64, 0)}, {id: 2, position: new Vec3(2, 64, 1)}], inv: [{name: 'shears', count: 1, type: 7}]});
     job = hunt({args: {animal: 'sheep', count: 2, x: 0, y: 64, z: 0, radius: 20}});

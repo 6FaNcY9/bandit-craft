@@ -1273,6 +1273,13 @@ function guardDigs(runner, bot) {
     const p = ref?.position && face ? ref.position.plus(face) : null;
     if (runner.current?.cancelled || stale) return 'Placing aborted: the job was stopped';
     if (p && insideAreas(runner.protectedAreas, p.x, p.z)) return 'Placing aborted: protected area';
+    // Water that waters a field (farmland within 4 blocks) is never filled: the pathfinder bridged both new water
+    // holes of the wheat fields with cobblestone, and the fields dried out again (main server 2026-10-18).
+    if (p && bot.blockAt(p)?.name === 'water') {
+      for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (const dy of [0, -1]) {
+        if (bot.blockAt(p.offset(dx, dy, dz))?.name === 'farmland') return 'Placing aborted: that water waters a field';
+      }
+    }
     return null;
   };
   const nativeDig = withLook('Digging', dig, digRefusal);
