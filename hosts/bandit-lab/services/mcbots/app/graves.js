@@ -12,7 +12,8 @@ const REACH = 3; // the grave entity lies within this many blocks of the death p
 const FAR = 1500; // a death further than this from the base is not worth the walk
 const NOT_GRAVE = new Set(['item', 'experience_orb', 'arrow', 'trident', 'falling_block']);
 const DEATH = /^died at (-?\d+) (-?\d+) (-?\d+):/;
-const FETCHED = /^finished: grave(?: at)? (-?\d+) (-?\d+) (-?\d+)/;
+// A grave job's end, or a grave taken inside a graves run ("grave at X Y Z: N items back").
+const FETCHED = /^(?:finished: grave(?: at)?|grave at) (-?\d+) (-?\d+) (-?\d+)(?: \(|: \d+ items back)/;
 
 function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [], from} = {}) {
   const rows = [...events];
@@ -29,7 +30,7 @@ function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [
     const t = typeof e.t === 'number' ? e.t : Date.parse(e.t);
     if (e.bot !== bot || !Number.isFinite(t) || t < now - 24 * 60 * 60 * 1000 || t > now) continue;
     const m = e.kind === 'death' && DEATH.exec(e.text);
-    const f = e.kind === 'done' && FETCHED.exec(e.text);
+    const f = (e.kind === 'done' || e.kind === 'info') && FETCHED.exec(e.text);
     if (m) deaths.set(m.slice(1).map(Number).join(' '), {x: +m[1], y: +m[2], z: +m[3], t});
     if (f) fetched.push({x: +f[1], y: +f[2], z: +f[3], t});
   }

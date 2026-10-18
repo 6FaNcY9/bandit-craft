@@ -3942,6 +3942,11 @@ require('./crafting');
       'bot1', {now, chest: {x: -271, y: 66, z: -214}}), []);
     assert.deepStrictEqual(G.openGraves([ev('bot1', 'done', 'finished: grave -383 71 -239 (227 s)', 2000), ev('bot1', 'death', 'died at -382 71 -238: shot', 1000)],
       'bot1', {now, chest: {x: -271, y: 66, z: -214}}), [{x: -382, y: 71, z: -238}]);
+    // a grave taken inside a graves run counts too; its "N candidates" line does not
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -351 62 -173: shot', 3000), ev('bot1', 'info', 'grave at -351 62 -173: 4 candidates (armor_stand)', 2000)],
+      'bot1', {now, chest: {x: -271, y: 66, z: -214}}), [{x: -351, y: 62, z: -173}]);
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -351 62 -173: shot', 3000), ev('bot1', 'info', 'grave at -351 62 -173: 8 items back', 2000)],
+      'bot1', {now, chest: {x: -271, y: 66, z: -214}}), []);
 
     // graveCandidates: nearest first within 3 blocks; never players, items, orbs, invalid or far entities
     const ent = (id, name, x, y, z, extra = {}) => ({id, name, type: 'other', position: new Vec3(x, y, z), ...extra});
