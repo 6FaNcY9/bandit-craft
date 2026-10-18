@@ -6754,6 +6754,19 @@ require('./crafting');
   t = mk('stone_shovel', ['stone_shovel'], 0);
   await unarm(t.bot); assert.deepStrictEqual(t.calls, [], 'a real tool stays');
 
+  // The pathfinder digs its way with a tool only when it is faster than a hand, else with a plain block (bot50 dug
+  // stone with its sword, sandbox 2026-10-18).
+  const {pathTool} = require('./bots');
+  const inv = (names) => ({entity: {effects: {}}, registry: {foodsByName: {bread: {}}}, inventory: {items: () => names.map((name, i) => ({name, type: i}))}});
+  const firstItem = (b) => (bb) => b.inventory.items()[0];
+  const block = (fast) => ({digTime: (type) => (type !== null && fast.includes(type) ? 400 : 7500)});
+  let b = inv(['iron_sword', 'bread', 'cobblestone']);
+  assert.strictEqual(pathTool(b, block([]), firstItem(b)).name, 'cobblestone', 'stone without a pickaxe: no sword');
+  b = inv(['iron_sword', 'stone_pickaxe']);
+  assert.strictEqual(pathTool(b, block([1]), (bb) => b.inventory.items()[1]).name, 'stone_pickaxe', 'a pickaxe that helps is used');
+  assert.strictEqual(pathTool(b, block([0]), firstItem(b)).name, 'iron_sword', 'a sword where it is faster (cobweb)');
+  assert.strictEqual(pathTool(b, block([]), firstItem(b)), null, 'only tools: none chosen');
+
   const crafted = [], infos = [];
   const r = {bot: {inventory: {items: () => [item('cobblestone'), item('stick')]}}, emit: (k, x) => infos.push(x)};
   const make = async () => { crafted.push('stone_shovel'); };

@@ -404,6 +404,7 @@ class BotRunner {
     this.bindOwner(bot);
     require('./blocklog').watchBlocks(bot, this.name, (c) => this.world.noteChange?.(c));
     bot.once('spawn', () => guardDigs(this, bot)); // bot.dig exists only once the plugins loaded
+    bot.once('spawn', () => { const best = bot.pathfinder.bestHarvestTool; bot.pathfinder.bestHarvestTool = (b) => pathTool(bot, b, best); });
     bot.loadPlugin(pathfinder);
     useSettledGoto(bot);
     // The bot's own air: mineflayer 4.39 sets bot.oxygenLevel from ANY entity's air_supply, so a swimming sheep or a
@@ -1344,6 +1345,15 @@ async function unarm(bot) {
   if (plain) await bot.equip(plain, 'hand');
 }
 
+// The pathfinder digs its way with the first inventory item when none is faster than a hand, often the sword: bot50
+// dug a tunnel's stone with it after its pickaxe wore out (sandbox 2026-10-18). Then a plain block, as in unarm.
+function pathTool(bot, block, best) {
+  const tool = best(block);
+  const time = (i) => block.digTime(i ? i.type : null, false, false, false, [], bot.entity?.effects || {});
+  if (tool && time(tool) < time(null)) return tool;
+  return bot.inventory.items().find((i) => !TOOL_RE.test(i.name) && !bot.registry.foodsByName?.[i.name]) || null;
+}
+
 // Soil wears out shovels: clearing the iron farm site (800 dirt) used up bot2's diamond and wooden ones, and it dug on
 // with its sword (2026-10-16). A stone shovel costs a cobblestone and two sticks; tried at most once in 10 min.
 async function ensureShovel(r, job, block, make = (rr, j) => crafting.ensureItem(rr, child(j), 'stone_shovel', 1)) {
@@ -1795,6 +1805,12 @@ async function care(r, job) {
   // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
   // and 4.7 health went on without armour while the iron lay in storage, 2026-10-15).
   if (bot.food >= FOOD_BELOW || !bot.inventory.items().some((i) => edible(bot, i))) await ensureGear(r, job);
+  // No pickaxe at all: only mining jobs replaced one, so bot50's wore out in a tunnel and the build job dug on by hand,
+  // slowly and for no drops (sandbox 2026-10-18). One try per 5 minutes; the timer is set first, as the try runs jobs.
+  if (!bot.inventory.items().some((i) => /_pickaxe$/.test(i.name)) && Date.now() - (r.pickaxeTriedAt || 0) > 300000) {
+    r.pickaxeTriedAt = Date.now();
+    await replacePickaxe(r, job, bot.registry.blocksByName.stone.id).catch((e) => { guard(job); r.emit('info', e.message.slice(0, 120)); });
+  }
 }
 
 async function upkeep(r, job, ids) {
@@ -1941,7 +1957,8 @@ async function replacePickaxe(r, job, need) {
   if (enough('wooden_pickaxe') && !bot.inventory.items().some((i) => /_log$/.test(i.name))) { // planks alone (2 of the 3 needed) are no reason to stay without a pickaxe
     try {
       await collect(r, child(job), logs, 3, 'logs');
-      await crafting.ensureItem(r, child(job), 'wooden_pickaxe', 1);
+      // Stone when it carries some: bot50 had 368 cobblestone (sandbox 2026-10-18), a stone pickaxe lasts twice as long.
+      await crafting.ensureItem(r, child(job), enough('stone_pickaxe') && craftingLib.count(bot, 'cobblestone') >= 3 ? 'stone_pickaxe' : 'wooden_pickaxe', 1);
       if (has()) return;
     } catch (e) {
       guard(job);
@@ -3256,4 +3273,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
