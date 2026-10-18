@@ -158,8 +158,14 @@ shows the player's moderation history. `fancy8869` passes the menu permission ch
 `/kit` also opens with `bandit.admin.menu`: categories Survival (Start, Eisen, Diamant,
 the Netherite kits), Bauen (blocks and build tools only), Situationen (Bergbau, Nether,
 Ende, Farm, Reise, Redstone, Unterwasser, Brauen, Verzaubern, Kampf, Bogen, Angeln,
-Notfall), Bots (boxes for the bot chest) and OP. Left click puts a kit in the
-inventory, right click gives it as one named shulker box; the lore lists the contents.
+Notfall), Bots (boxes for the bot chest) and OP, then the shop categories modelled on the
+2b2t kit shops (`kits-shop.nix`): PvP, Ausruestung, Bloecke (Farben, Holz, Stein), Rohstoffe,
+Mob-Drops, Buecher, Traenke, Essen, Redstone, Natur, Seltenes. Left click puts a kit in the
+inventory, right click gives it as one named shulker box in the category's colour; the lore
+lists the contents. Outside OP every kit is survival-legal: the evaluation fails on an
+enchantment above its survival level, on an item that cannot take it or next to one it
+excludes, and stacks are split at the real stack size (`item-limits.json`, from
+minecraft-data 26.1).
 The menus are generated from `hosts/bandit-lab/services/minecraft/kits.nix`; after an
 edit, `tools/minecraft-kit-check` tries every give command on the server against a name
 nobody has and prints what does not parse. `minecraft-panels` installs the menus while

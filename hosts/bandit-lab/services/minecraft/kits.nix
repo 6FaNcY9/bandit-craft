@@ -9,14 +9,19 @@
   inherit (lib) concatStringsSep concatMapStringsSep mapAttrsToList imap0 toUpper;
   admin = "%player_name% $HASPERM bandit.admin.menu";
   owner = "%player_name% $HASPERM bandit.owner";
+  # minecraft-data 26.1: stack sizes below 64, what each item can be enchanted with, every enchantment's survival
+  # level and exclusions. Regenerate from mcbots' node_modules (minecraft-data) when the server version moves.
+  limits = builtins.fromJSON (builtins.readFile ./item-limits.json);
 
   # An item: id without "minecraft:", count, data components (rendered as SNBT); `max` is the stack
-  # size when below 64, so the shulker box splits the count over several slots.
-  i = id: n: {
-    inherit id n;
-    c = {};
-  };
-  ic = id: n: c: {inherit id n c;};
+  # size when below 64 (item-limits.json), so the shulker box splits the count over several slots.
+  i = id: n:
+    {
+      inherit id n;
+      c = {};
+    }
+    // lib.optionalAttrs (limits.stack ? ${id}) {max = limits.stack.${id};};
+  ic = id: n: c: i id n // {inherit c;};
   ench = id: e: ic id 1 {enchantments = e;};
   potion = kind: p: n: ic kind n {potion_contents = {potion = "minecraft:${p}";};} // {max = 1;};
   few = id: n: max: i id n // {inherit max;};
@@ -51,7 +56,26 @@
     if it.n <= m
     then [it]
     else [(it // {n = m;})] ++ stacksOf (it // {n = it.n - m;});
-  box = kit: let
+  # Each category has its shulker colour, the box name that colour in text (owner 2026-10-18: "in shulkers mit farbe").
+  textColor = {
+    white = "white";
+    orange = "gold";
+    magenta = "light_purple";
+    light_blue = "aqua";
+    yellow = "yellow";
+    lime = "green";
+    pink = "light_purple";
+    gray = "dark_gray";
+    light_gray = "gray";
+    cyan = "dark_aqua";
+    purple = "dark_purple";
+    blue = "blue";
+    brown = "gold";
+    green = "dark_green";
+    red = "red";
+    black = "dark_red";
+  };
+  box = color: kit: let
     stacks = lib.concatMap stacksOf kit.items;
   in
     assert lib.assertMsg (builtins.length stacks <= 27) "kit ${kit.name}: more than 27 stacks do not fit a shulker box"; let
@@ -64,9 +88,22 @@
           }
           // lib.optionalAttrs (it.c != {}) {components = it.c;};
       };
-    in "[console] give %player_name% minecraft:shulker_box[custom_name=${builtins.toJSON kit.name},container=${snbt (imap0 slot stacks)}] 1";
+      name = snbt {
+        text = kit.name;
+        color = textColor.${color};
+        italic = false;
+      };
+    in "[console] give %player_name% minecraft:${color}_shulker_box[custom_name=${name},container=${snbt (imap0 slot stacks)}] 1";
 
-  pretty = it: "&7${toString it.n}x ${builtins.replaceStrings ["_"] [" "] it.id}" + lib.optionalString (it.c ? enchantments) " &d*";
+  pretty = it: let
+    what =
+      if it.c ? stored_enchantments
+      then "book " + concatStringsSep ", " (mapAttrsToList (e: l: "${e} ${toString l}") it.c.stored_enchantments)
+      else if it.c ? potion_contents
+      then "${it.id} ${lib.removePrefix "minecraft:" it.c.potion_contents.potion}"
+      else it.id;
+  in
+    "&7${toString it.n}x ${builtins.replaceStrings ["_"] [" "] what}" + lib.optionalString (it.c ? enchantments) " &d*";
   lore = items:
     lib.take 12 (map pretty items)
     ++ lib.optional (builtins.length items > 12) "&7... und ${toString (builtins.length items - 12)} weitere"
@@ -78,19 +115,19 @@
     inherit name icon parts;
     items = lib.concatMap (p: p.items) parts;
   };
-  button = cond: k: {
+  button = cond: color: k: {
     material = toUpper k.icon;
     name = "&b${k.name}";
     lore = lore k.items;
     conditions = cond;
     left-click.commands = map give k.items ++ ["[msg] &a${k.name}: ins Inventar gelegt."];
     right-click.commands =
-      map box (k.parts or [k])
+      map (box color) (k.parts or [k])
       ++ ["[msg] &a${k.name}: Box bekommen - ab in die Endertruhe."];
   };
 
   # A category panel: kits in reading order, back button bottom right.
-  category = id: title: cond: kits: extra: let
+  category = id: title: cond: color: kits: extra: let
     n = builtins.length kits + builtins.length extra;
     rows = (n + 8) / 9 + 1;
   in
@@ -103,7 +140,7 @@
           (imap0 (j: _: "k${toString j}") kits ++ map (e: e.id) extra))
         // {"${toString (rows * 9 - 1)}" = ["back"];};
       items =
-        builtins.listToAttrs (imap0 (j: k: lib.nameValuePair "k${toString j}" (button cond k)) kits)
+        builtins.listToAttrs (imap0 (j: k: lib.nameValuePair "k${toString j}" (button cond color k)) kits)
         // builtins.listToAttrs (map (e: lib.nameValuePair e.id (removeAttrs e ["id"])) extra)
         // {
           back = {
@@ -665,62 +702,88 @@
     ])
   ];
 
-  categories = [
-    {
-      id = "survival";
-      title = "&8Kits: Survival";
-      name = "Survival";
-      icon = "iron_chestplate";
-      cond = admin;
-      kits = survival;
-      text = "Start, Eisen, Diamant, Netherite";
-    }
-    {
-      id = "bauen";
-      title = "&8Kits: Bauen";
-      name = "Bauen";
-      icon = "bricks";
-      cond = admin;
-      kits = bauen;
-      text = "Bloecke und Bauwerkzeug, ohne Survival-Kram";
-    }
-    {
-      id = "situation";
-      title = "&8Kits: Situationen";
-      name = "Situationen";
-      icon = "compass";
-      cond = admin;
-      kits = situationen;
-      text = "Bergbau, Nether, Ende, Farm, Reise, ...";
-    }
-    {
-      id = "bots";
-      title = "&8Kits: Bots";
-      name = "Bots";
-      icon = "armor_stand";
-      cond = admin;
-      kits = bots;
-      text = "Boxen fuer die Bot-Kiste";
-    }
-    {
-      id = "op";
-      title = "&8Kits: OP";
-      name = "&cOP (nur Owner)";
-      icon = "nether_star";
-      cond = owner;
-      kits = op;
-      text = "Admin-Bau und die Owner-Ausruestung";
-      extra = [
-        {
-          id = "owner";
-          material = "BEACON";
-          name = "&cOwner-Ausruestung (/owner)";
-          conditions = owner;
-          left-click.commands = ["[open] owner"];
-        }
-      ];
-    }
-  ];
+  # No hack stuff (owner 2026-10-18): outside OP an enchantment is at most its survival level, on an item that can
+  # take it (any on a book), never next to one it excludes (item-limits.json). -> the offending enchantments
+  illegal = it: let
+    es = (it.c.enchantments or {}) // (it.c.stored_enchantments or {});
+    bad = e: let
+      l = limits.enchant.${e} or null;
+    in
+      l
+      == null
+      || es.${e} > l.max
+      || lib.any (x: es ? ${x}) l.exclude
+      || (it.id != "enchanted_book" && !lib.elem l.category (limits.accepts.${it.id} or []));
+  in
+    builtins.filter bad (builtins.attrNames es);
+  legal = c: let
+    bad = lib.concatMap (k: lib.concatMap (it: map (e: "${k.name}/${it.id}/${e}") (illegal it)) k.items) c.kits;
+  in
+    c.id == "op" || bad == [] || throw "kit category ${c.id}: not survival-legal: ${concatStringsSep ", " bad}";
+
+  categories =
+    [
+      {
+        id = "survival";
+        color = "light_blue";
+        title = "&8Kits: Survival";
+        name = "Survival";
+        icon = "iron_chestplate";
+        cond = admin;
+        kits = survival;
+        text = "Start, Eisen, Diamant, Netherite";
+      }
+      {
+        id = "bauen";
+        color = "orange";
+        title = "&8Kits: Bauen";
+        name = "Bauen";
+        icon = "bricks";
+        cond = admin;
+        kits = bauen;
+        text = "Bloecke und Bauwerkzeug, ohne Survival-Kram";
+      }
+      {
+        id = "situation";
+        color = "cyan";
+        title = "&8Kits: Situationen";
+        name = "Situationen";
+        icon = "compass";
+        cond = admin;
+        kits = situationen;
+        text = "Bergbau, Nether, Ende, Farm, Reise, ...";
+      }
+      {
+        id = "bots";
+        color = "gray";
+        title = "&8Kits: Bots";
+        name = "Bots";
+        icon = "armor_stand";
+        cond = admin;
+        kits = bots;
+        text = "Boxen fuer die Bot-Kiste";
+      }
+      {
+        id = "op";
+        color = "black";
+        title = "&8Kits: OP";
+        name = "&cOP (nur Owner)";
+        icon = "nether_star";
+        cond = owner;
+        kits = op;
+        text = "Admin-Bau und die Owner-Ausruestung";
+        extra = [
+          {
+            id = "owner";
+            material = "BEACON";
+            name = "&cOwner-Ausruestung (/owner)";
+            conditions = owner;
+            left-click.commands = ["[open] owner"];
+          }
+        ];
+      }
+    ]
+    ++ import ./kits-shop.nix {inherit lib i ic ench potion maxed rocket stacks kit bundle admin;};
 in
   {
     kit = {
@@ -728,8 +791,9 @@ in
       type = "inventory";
       command = "kit";
       conditions = admin;
-      rows = 3;
-      layout = builtins.listToAttrs (imap0 (j: c: lib.nameValuePair (toString (10 + 2 * j)) [c.id]) categories);
+      # Seven a row inside a border: 18 categories in three rows.
+      rows = 2 + (builtins.length categories + 6) / 7;
+      layout = builtins.listToAttrs (imap0 (j: c: lib.nameValuePair (toString (10 + 9 * (j / 7) + lib.mod j 7)) [c.id]) categories);
       items = builtins.listToAttrs (map (c:
         lib.nameValuePair c.id {
           material = toUpper c.icon;
@@ -741,5 +805,5 @@ in
       categories);
     };
   }
-  // builtins.listToAttrs (map (c: lib.nameValuePair "kit-${c.id}" (category c.id c.title c.cond c.kits (c.extra or [])))
+  // builtins.listToAttrs (map (c: assert legal c; lib.nameValuePair "kit-${c.id}" (category c.id c.title c.cond c.color c.kits (c.extra or [])))
     categories)
