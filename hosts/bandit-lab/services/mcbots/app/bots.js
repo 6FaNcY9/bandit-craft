@@ -2314,8 +2314,10 @@ async function helpOnce(r, job) {
     const limits = {digOnly: r.digOnly, digBox: r.digBox};
     r.digOnly = r.digBox = null;
     try {
-      const childJob = child(job, {type: 'get', args: {item: need.item, count: Math.min(need.count, 64)}});
-      try { await JOBS.get(r, childJob); }
+      // What the helper carries goes first; get makes only the rest.
+      const want = Math.min(need.count, 64), carried = r.bot ? crafting.count(r.bot, need.item) : 0;
+      const childJob = child(job, {type: 'get', args: {item: need.item, count: want - carried}});
+      try { if (carried < want) await JOBS.get(r, childJob); }
       catch (e) {
         guard(job);
         fails.set(`${need.bot}:${need.item}`, Date.now() + ACQUIRE_FAIL_MS);
@@ -2387,7 +2389,11 @@ async function getItem(r, job) {
   for (let steps = 0; held() < job.target; steps++) {
     guard(job);
     if (steps >= 80) throw new Error(`still ${job.target - held()} ${item} short after 80 steps`);
-    const {node, missing} = acquire.plan({item, count: job.target - held()}, acquireWorld(r));
+    // What it holds of the item is the base the goal counts from, not a source: bot51 held 30 iron, was asked for 30
+    // more, planned "all in hand" and stopped "still 30 short" (sandbox 2026-10-18).
+    const world = acquireWorld(r);
+    world.have[item] = 0;
+    const {node, missing} = acquire.plan({item, count: job.target - held()}, world);
     if (steps === 0) {
       r.emit('info', `get ${count} ${item}: ${acquire.summary(node)}`);
       r.log(r.name, `get plan:\n${acquire.explain(node)}`);

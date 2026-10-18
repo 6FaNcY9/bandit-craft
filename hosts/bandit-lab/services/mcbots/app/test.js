@@ -6725,7 +6725,7 @@ require('./crafting');
         inventory: {items: () => [{name: 'iron_ingot', count: 5}]}, findBlock: () => null, findBlocks: () => [], nearestEntity: () => null}};
       calls.length = 0;
       assert.strictEqual(await helpOnce(helper, parent), true);
-      assert.deepStrictEqual(calls, [['get', 'iron_ingot', 5], ['deposit', 'iron_ingot', 1]], 'soul sand skipped, the iron delivered');
+      assert.deepStrictEqual(calls, [['deposit', 'iron_ingot', 1]], 'soul sand skipped, the iron it carries delivered without a get');
     } finally { JOBS.get = oldGet; JOBS.deposit = oldDeposit; }
   }
   console.log('tools: no sword digging, shovel replaced ok');
