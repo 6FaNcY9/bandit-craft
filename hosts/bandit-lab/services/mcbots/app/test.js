@@ -5247,9 +5247,11 @@ require('./crafting');
     assert.match(String(outcome), /no way there within 90 s/, 'the deadline still bounds the walk after the night');
     console.log('goLeg: deadline after a night wait ok');
   };
-  const out = require('node:child_process').execFileSync(process.execPath, ['-e', `(${night})().catch((e) => { console.error(e); process.exit(1); })`], {cwd: __dirname, encoding: 'utf8'});
-  assert.match(out, /deadline after a night wait ok/);
-  process.stdout.write(out);
+  // execFile, not execFileSync: a blocked event loop failed the combat timing test next door (lastFight < 1 s).
+  require('node:child_process').execFile(process.execPath, ['-e', `(${night})().catch((e) => { console.error(e); process.exit(1); })`], {cwd: __dirname, encoding: 'utf8'}, (e, out, err) => {
+    if (e || !/deadline after a night wait ok/.test(out)) { console.error(err || e); process.exitCode = 1; return; }
+    process.stdout.write(out);
+  });
 }
 { // pillars: the steps a bot climbed to a log come down again, only its own and only if unchanged (2026-10-10)
   const P = require('./pillars');
@@ -5606,6 +5608,10 @@ require('./crafting');
   assert.strictEqual(await bookCraft(bot, 999, {}), false); // not in the book: bot.craft() does it
   client.emit('recipe_book_remove', {recipeIds: [7, 8]});
   assert.strictEqual(await bookCraft(bot, 145, {}), false);
+  // a table that does not open is named, with how far it is from the eyes
+  const {Vec3} = require('vec3');
+  const shut = {entity: {position: new Vec3(0, 64, 0)}, recipeBook: new Map([[5, new Set([1])]]), openBlock: async () => { throw new Error('Event windowOpen did not fire'); }};
+  await assert.rejects(bookCraft(shut, 5, {name: 'crafting_table', position: new Vec3(3, 64, 0)}), /did not fire \(the crafting_table at 3 64 0, 3\.7 from the eyes\)/);
 })();
 
 (async () => { // ensureItem: bot.craft(recipe, 9) made 1 campfire and threw "missing ingredient"; the rest come in more rounds (sandbox 2026-10-17)

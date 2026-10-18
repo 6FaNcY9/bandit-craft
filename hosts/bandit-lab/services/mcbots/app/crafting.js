@@ -23,6 +23,18 @@ async function holding(r, fn) {
   }
 }
 
+// Opening a station, naming it when the window does not come: "Event windowOpen did not fire within timeout of
+// 20000ms" left glass unsmelted and tools uncrafted 1 to 3 times a day per bot since 2026-10-15 with no clue which
+// table or furnace, or how far off.
+async function openStation(bot, block, open) {
+  try {
+    return await open(block);
+  } catch (e) {
+    const eyes = bot.entity?.position?.offset(0, 1.62, 0), d = eyes ? eyes.distanceTo(block.position.offset(0.5, 0.5, 0.5)).toFixed(1) : '?';
+    throw new Error(`${e.message} (the ${block.name} at ${block.position.x} ${block.position.y} ${block.position.z}, ${d} from the eyes)`);
+  }
+}
+
 // The crafted item shows up a moment after bot.craft() resolves on 26.x.
 async function arrived(test, ms = 3000) {
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((res) => setTimeout(res, 100))) if (test()) return true;
@@ -121,7 +133,7 @@ function trackRecipeBook(bot) {
 async function bookCraft(bot, itemId, where) {
   const ids = [...(bot.recipeBook?.get(itemId) || [])];
   if (!ids.length) return false;
-  const window = where ? await bot.openBlock(where) : bot.inventory;
+  const window = where ? await openStation(bot, where, (b) => bot.openBlock(b)) : bot.inventory;
   try {
     for (const recipeId of ids) { // a recipe per wood and the like: the first the server can lay out
       const filled = new Promise((res) => {
@@ -277,7 +289,7 @@ function makeCrafting({goNear, guard, fetch = null}) {
       r.inventoryBusy = (r.inventoryBusy || 0) + 1;
       let furnace;
       try {
-        furnace = await bot.openFurnace(block);
+        furnace = await openStation(bot, block, (b) => bot.openFurnace(b));
       } catch (e) {
         r.inventoryBusy--;
         throw e;
