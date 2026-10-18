@@ -961,7 +961,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           try {
             job.t.doing = `clearing ${clear.name} at ${clear.x} ${clear.y} ${clear.z} from the build site`;
             // A support taken out of a schematic cell may drop what it held: those drops are picked up.
-            if (await digAt(r, job, v(clear), (n) => n === clear.name, {pickup: plan.byKey.has(clear.k)})) { placed.delete(clear.k); pillars.delete(clear.k); tempFor.delete(clear.k); lastProgress = Date.now(); }
+            if (await digAt(r, job, v(clear), (n) => n === clear.name, {pickup: plan.byKey.has(clear.k)})) { placed.delete(clear.k); pillars.delete(clear.k); tempFor.delete(clear.k); lastProgress = Date.now(); first = false; } // dug: not "already complete"
             else skip.set(clear.k, Date.now() + 30000);
           } catch (e) {
             guard(job);
