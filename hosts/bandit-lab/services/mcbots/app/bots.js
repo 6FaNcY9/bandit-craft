@@ -1555,7 +1555,8 @@ async function openChest(r, job, block) {
     const above = bot.blockAt(p);
     // Only a solid, light-blocking block keeps a chest shut: a chest stacked on a chest (the storage
     // walls are two high) or glass does not (filechests refused the lower row, 2026-10-10).
-    if (!above || above.boundingBox !== 'block' || /(^|_)chest$|glass/.test(above.name)) continue;
+    // A hopper neither: the iron storage hall's pullers sit on its chests (main server 2026-10-19).
+    if (!above || above.boundingBox !== 'block' || /(^|_)chest$|glass|^hopper$/.test(above.name)) continue;
     if (!SCAFFOLD.has(above.name) || insideAreas(r.protectedAreas, p.x, p.z)) throw new Error(`${block.name} at ${at(half.position)} is covered by ${above.name}`);
     job.t.doing = `clearing ${above.name} off the chest`;
     r.emit('info', `chest at ${at(half.position)} was covered by ${above.name}: digging it away`);

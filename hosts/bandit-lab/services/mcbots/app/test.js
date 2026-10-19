@@ -2883,6 +2883,11 @@ require('./crafting');
     const r = {bot, world: {hostilesNear: () => []}, emit() {}, protectedAreas: []};
     assert.strictEqual(await openChest(r, {t: {}, cancelled: false}, chest), 'box');
     assert.deepStrictEqual(log, ['dig diorite', 'open chest']);
+    // a hopper on top does not keep it shut (the iron storage hall, 2026-10-19): opened, nothing dug
+    cover = {name: 'hopper', position: chest.position.offset(0, 1, 0), boundingBox: 'block'};
+    log.length = 0;
+    assert.strictEqual(await openChest(r, {t: {}, cancelled: false}, chest), 'box');
+    assert.deepStrictEqual(log, ['open chest']);
   }
   { // openChest: a Stop between two covers digs no more and opens nothing; a single chest has no partner
     const {openChest, Cancelled} = require('./bots');
