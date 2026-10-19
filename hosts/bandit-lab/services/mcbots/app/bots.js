@@ -1377,14 +1377,40 @@ function pathTool(bot, block, best) {
   return bot.inventory.items().find((i) => !TOOL_RE.test(i.name) && !bot.registry.foodsByName?.[i.name]) || null;
 }
 
-// Soil wears out shovels: clearing the iron farm site (800 dirt) used up bot2's diamond and wooden ones, and it dug on
-// with its sword (2026-10-16). A stone shovel costs a cobblestone and two sticks; tried at most once in 10 min.
-async function ensureShovel(r, job, block, make = (rr, j) => crafting.ensureItem(rr, child(j), 'stone_shovel', 1)) {
-  const {bot} = r;
-  if (block.material !== 'mineable/shovel' || bot.inventory.items().some((i) => i.name.endsWith('_shovel'))) return;
-  if (Date.now() - (r.shovelTried || 0) < 600000) return;
-  r.shovelTried = Date.now();
-  await make(r, job).catch((e) => { guard(job); r.emit('info', `no shovel: ${e.message.slice(0, 80)}`); });
+// The right tool for every dig, made from what the bot carries, best first: iron (3 ingots), stone (cobblestone or
+// cobbled deepslate), else wood; a wooden one held is replaced as soon as the stone or iron is there. Soil wore out
+// bot2's shovels and it dug on with its sword (2026-10-16); bot2 chopped by hand between wooden axes with no cobblestone
+// left (2026-10-19). Golden tools wear out first: they count as wood. Stone or better held: nothing to do.
+const TOOL_TIERS = ['wooden', 'stone', 'iron', 'diamond', 'netherite'];
+const TOOL_HEADS = {pickaxe: 3, axe: 3, shovel: 1};
+function toolsToMake(items, kind) {
+  const n = (re) => items.filter((i) => re.test(i.name)).reduce((s, i) => s + (i.count ?? 1), 0);
+  const held = Math.max(-1, ...items.filter((i) => i.name.endsWith(`_${kind}`)).map((i) => Math.max(0, TOOL_TIERS.indexOf(i.name.slice(0, -kind.length - 1)))));
+  if (held >= 1) return [];
+  const planks = n(/_planks$/) + 4 * n(/_(log|stem)$/), handle = n(/^stick$/) >= 2 ? 0 : 2; // 2 planks make the sticks
+  const heads = TOOL_HEADS[kind];
+  return [['iron', n(/^iron_ingot$/) >= heads && planks >= handle], ['stone', n(/^(cobblestone|cobbled_deepslate|blackstone)$/) >= heads && planks >= handle],
+    ['wooden', held < 0 && planks >= heads + handle]].filter(([, ok]) => ok).map(([tier]) => `${tier}_${kind}`);
+}
+async function ensureTool(r, job, block, make = (rr, j, item) => crafting.ensureItem(rr, child(j), item, 1)) {
+  const kind = /mineable\/(pickaxe|axe|shovel)/.exec(block?.material || '')?.[1]; // also "plant;mineable/axe"
+  const tried = (r.toolTriedAt ||= {});
+  if (!kind || Date.now() - (tried[kind] || 0) < 120000) return;
+  const items = toolsToMake(r.bot.inventory.items(), kind);
+  if (!items.length) return;
+  tried[kind] = Date.now();
+  let why = '';
+  for (const item of items) {
+    try {
+      await make(r, job, item);
+      r.emit('info', `made a ${item} for digging`);
+      return;
+    } catch (e) {
+      guard(job);
+      why ||= e.message;
+    }
+  }
+  r.emit('info', `no ${kind} made: ${why.slice(0, 80)}`); // the dig goes on with what there is
 }
 
 async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
@@ -1402,7 +1428,7 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
     const names = tools.map((t) => bot.registry.items[t]?.name).filter(Boolean).sort();
     throw new Error(`needs a tool that can harvest ${block.name}: ${names.join(', ') || 'a pickaxe'}`);
   }
-  await ensureShovel(r, job, block);
+  await ensureTool(r, job, block);
   guard(job);
   try {
     await goNear(r, job, pos.x, pos.y, pos.z, 4, {goal: new goals.GoalLookAtBlock(pos, bot.world, {reach: 4}), doing: `walking to ${block.name} near ${at(pos)}${tally(job)}`});
@@ -1717,6 +1743,9 @@ async function lightUp(r, job, ids = [], {wall = false} = {}) {
 // Stone and dirt that ore and log jobs dig through (an idea from the Jarvis plugin):
 // keep one stack of cobblestone for torches, crafting and patching, throw the rest
 // away so the bot goes to the chest for ore, not for rubble.
+// What a deposit leaves with the bot for the next tool (ensureTool): bot2 handed all its cobblestone to the plaza store
+// and chopped on with wooden axes (2026-10-19).
+const TOOL_STOCK = {cobblestone: 6};
 const JUNK = new Set(['cobblestone', 'cobbled_deepslate', 'dirt', 'gravel', 'granite', 'diorite', 'andesite', 'tuff', 'netherrack', 'calcite', 'dripstone_block', 'rooted_dirt', 'leaf_litter']);
 const jobWants = (job, item) => [job.args?.block, job.args?.item].some((n) => n && (n === item || (item === 'cobblestone' && n === 'stone')));
 async function tossJunk(r, job) {
@@ -1746,25 +1775,6 @@ async function wearArmour(r) {
   if (shield) await bot.equip(shield, 'off-hand').catch(() => {});
 }
 
-// Chopping by hand is slow: make a stone (else wooden) axe from what the bot
-// carries, at most one try per 5 min.
-// Make a stone (else wooden) axe or shovel once the job digs blocks that tool is for; equipForBlock
-// then picks it. One try per kind every 5 minutes, failures only cost the slower dig.
-async function getTool(r, job, kind) {
-  const {bot} = r;
-  const tried = (r.toolTriedAt ||= {});
-  if (bot.inventory.items().some((i) => i.name.endsWith(`_${kind}`)) || Date.now() - (tried[kind] || 0) < 300000) return;
-  tried[kind] = Date.now();
-  for (const item of [`stone_${kind}`, `wooden_${kind}`]) {
-    try {
-      await crafting.ensureItem(r, child(job), item, 1);
-      r.emit('info', `made a ${item} for digging`);
-      return;
-    } catch (e) {
-      guard(job);
-    }
-  }
-}
 // Iron the bot carries becomes ingots (coal, charcoal, logs or planks burn; the job's own ore is left
 // for the chest), then the missing iron pickaxe, sword and armour are crafted and worn. Iron it lacks
 // comes from storage first, with logs to burn: a bot that died has nothing left, and 39 raw iron sat in
@@ -1823,12 +1833,6 @@ async function ensureGear(r, job) {
   if (!gearJob.ingotsWanted([...bot.inventory.items(), ...wornNow].map((i) => i.name))) r.world?.dropNeed?.(r.name, 'iron_ingot');
 }
 
-const toolFor = (bot, id) => {
-  const b = bot.registry.blocks[id];
-  if (/_(log|stem)$/.test(b?.name || '') || /mineable\/axe/.test(b?.material || '')) return 'axe';
-  return /mineable\/shovel/.test(b?.material || '') ? 'shovel' : null;
-};
-
 // Food and gear, for every job's upkeep and for a builder between its cells (build.js).
 async function care(r, job) {
   const {bot} = r;
@@ -1873,7 +1877,7 @@ async function upkeep(r, job, ids) {
     const {bot} = r;
     await lightUp(r, job, ids).catch((e) => { guard(job); r.emit('info', `no torch placed: ${e.message.slice(0, 80)}`); });
     await wearArmour(r);
-    for (const kind of new Set(ids.map((id) => toolFor(bot, id)).filter(Boolean))) await getTool(r, job, kind);
+    for (const id of ids) await ensureTool(r, job, bot.registry.blocks[id]); // the axe before the first log, not after
     const need = ids.find((id) => !canHarvest(bot, id));
     if (need !== undefined) await replacePickaxe(r, job, need);
     await care(r, job);
@@ -2852,7 +2856,7 @@ const JOBS = {
     // What a normal deposit files away; `only` (the keeper's coal and torches) puts just that kind into the chest.
     // `keep` ({name: n}): that many of a kind stay with the bot (the wheat farm's 64 seeds to replant from).
     const keepBack = (items) => {
-      const spare = {...job.args.keep};
+      const spare = {...TOOL_STOCK, ...job.args.keep};
       return items.map((it) => { const k = Math.min(spare[it.name] || 0, it.count); spare[it.name] = (spare[it.name] || 0) - k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
     };
     const junk = () => keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name))));
@@ -3399,4 +3403,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

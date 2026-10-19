@@ -6792,7 +6792,7 @@ require('./crafting');
 
 (async () => { // tools: never dig with a sword; a stone shovel for soil when the shovels are worn out (bot2, 2026-10-16)
   const assert = require('node:assert/strict');
-  const {unarm, ensureShovel} = require('./bots');
+  const {unarm} = require('./bots');
   const item = (name) => ({name});
   const mk = (held, items, empty) => {
     const calls = [];
@@ -6820,21 +6820,37 @@ require('./crafting');
   assert.strictEqual(pathTool(b, block([0]), firstItem(b)).name, 'iron_sword', 'a sword where it is faster (cobweb)');
   assert.strictEqual(pathTool(b, block([]), firstItem(b)), null, 'only tools: none chosen');
 
+  // the right tool, best first from what is carried (bot2 chopped by hand between wooden axes, 2026-10-19)
+  const {toolsToMake} = require('./bots');
+  const stack = (name, count = 1) => ({name, count});
+  assert.deepStrictEqual(toolsToMake([stack('oak_log', 4), stack('cobblestone', 2)], 'axe'), ['wooden_axe'], 'too little stone: wood');
+  assert.deepStrictEqual(toolsToMake([stack('oak_log', 4), stack('cobblestone', 6)], 'axe'), ['stone_axe', 'wooden_axe'], 'stone first, wood if that fails');
+  assert.deepStrictEqual(toolsToMake([stack('stick', 2), stack('iron_ingot', 3), stack('cobblestone', 3)], 'pickaxe'), ['iron_pickaxe', 'stone_pickaxe'], 'iron before stone');
+  assert.deepStrictEqual(toolsToMake([stack('wooden_axe'), stack('oak_planks', 2), stack('cobbled_deepslate', 3)], 'axe'), ['stone_axe'], 'a wooden one is replaced, not by wood');
+  assert.deepStrictEqual(toolsToMake([stack('golden_shovel'), stack('stick', 2), stack('cobblestone')], 'shovel'), ['stone_shovel'], 'gold counts as wood');
+  assert.deepStrictEqual(toolsToMake([stack('stone_axe'), stack('iron_ingot', 9), stack('stick', 9)], 'axe'), [], 'stone held: the iron stays for armour');
+  assert.deepStrictEqual(toolsToMake([stack('iron_pickaxe'), stack('oak_log', 9)], 'axe'), ['wooden_axe'], 'a pickaxe is no axe');
+  assert.deepStrictEqual(toolsToMake([stack('bread')], 'shovel'), [], 'nothing to make it from');
+  const {ensureTool} = require('./bots');
   const crafted = [], infos = [];
-  const r = {bot: {inventory: {items: () => [item('cobblestone'), item('stick')]}}, emit: (k, x) => infos.push(x)};
-  const make = async () => { crafted.push('stone_shovel'); };
-  await ensureShovel(r, {t: {}}, {material: 'mineable/pickaxe'}, make);
-  assert.deepStrictEqual(crafted, [], 'stone needs no shovel');
-  await ensureShovel(r, {t: {}}, {material: 'mineable/shovel'}, make);
-  assert.deepStrictEqual(crafted, ['stone_shovel'], 'grass without a shovel: one is made');
-  await ensureShovel(r, {t: {}}, {material: 'mineable/shovel'}, make);
-  assert.equal(crafted.length, 1, 'not again within 10 min');
-  r.shovelTried = 0; r.bot.inventory.items = () => [item('iron_shovel')];
-  await ensureShovel(r, {t: {}}, {material: 'mineable/shovel'}, make);
-  assert.equal(crafted.length, 1, 'a shovel at hand: nothing to make');
-  r.bot.inventory.items = () => []; r.shovelTried = 0;
-  await ensureShovel(r, {t: {}, cancelled: false}, {material: 'mineable/shovel'}, async () => { throw new Error('need 1 more cobblestone'); });
-  assert.match(infos.at(-1), /^no shovel: need 1 more cobblestone/, 'a failed craft is reported, the dig goes on');
+  let carried = [stack('cobblestone', 6), stack('stick', 4)];
+  const r = {bot: {inventory: {items: () => carried}}, emit: (k, x) => infos.push(x)};
+  const make = async (rr, j, it) => { crafted.push(it); };
+  await ensureTool(r, {t: {}}, {material: 'mineable/pickaxe'}, make);
+  assert.deepStrictEqual(crafted, ['stone_pickaxe'], 'stone without a pickaxe: one is made');
+  await ensureTool(r, {t: {}}, {material: 'mineable/shovel'}, make);
+  await ensureTool(r, {t: {}}, {material: 'plant;mineable/axe'}, make);
+  assert.deepStrictEqual(crafted, ['stone_pickaxe', 'stone_shovel', 'stone_axe'], 'each kind on its own timer, any material string');
+  await ensureTool(r, {t: {}}, {material: 'mineable/shovel'}, make);
+  assert.equal(crafted.length, 3, 'not again within 2 min');
+  await ensureTool(r, {t: {}}, {material: 'leaves;mineable/hoe'}, make);
+  assert.equal(crafted.length, 3, 'no hoes');
+  r.toolTriedAt = {}; carried = [stack('stone_shovel')];
+  await ensureTool(r, {t: {}}, {material: 'mineable/shovel'}, make);
+  assert.equal(crafted.length, 3, 'a stone shovel at hand: nothing to make');
+  carried = [stack('cobblestone', 3), stack('oak_planks', 5)]; r.toolTriedAt = {};
+  await ensureTool(r, {t: {}, cancelled: false}, {material: 'mineable/axe'}, async () => { throw new Error('no crafting table'); });
+  assert.match(infos.at(-1), /^no axe made: no crafting table/, 'a failed craft is reported, the dig goes on');
   // bread from stored wheat (104 hungry bots in 48 h beside 106 stored wheat, 2026-10-16)
   const {storedBread} = require('./bots');
   let wheat = 0;
