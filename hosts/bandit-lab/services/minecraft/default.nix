@@ -423,11 +423,12 @@ in {
       # Bump deliberately, after a backup (docs/runbooks/minecraft/PANEL.md).
       PAPER_BUILD = "130";
       TZ = config.time.timeZone;
-      # 8 GiB heap (Xms = Xmx) + Aikar GC flags = no GC stutter; container
-      # cap below leaves headroom for off-heap/metaspace.
-      MEMORY = "8G";
+      # 12 GiB heap (Xms = Xmx) + Aikar GC flags = no GC stutter; container
+      # cap below leaves headroom for off-heap/metaspace. Raised from 8/12 GiB for
+      # seven bots beside the players (owner 2026-10-19: 9.7 of 12 GiB used with four).
+      MEMORY = "12G";
       USE_AIKAR_FLAGS = "true";
-      MAX_PLAYERS = "12";
+      MAX_PLAYERS = "16";
       OPS = "fancy8869";
       # Authentication happens at the proxy (Mojang, or BotGate for bots); the
       # Velocity forwarding secret is what keeps everyone else out of Paper.
@@ -454,8 +455,8 @@ in {
     volumes = ["/srv/containers/minecraft/data:/data"];
     extraOptions = [
       "--network=minecraft"
-      "--memory=12g"
-      "--cpus=4"
+      "--memory=16g"
+      "--cpus=6"
       # Room for a full world save on SIGTERM (docker's default is 10 s).
       "--stop-timeout=60"
     ];
