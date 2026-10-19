@@ -5461,6 +5461,8 @@ require('./crafting');
     assert.strictEqual(c2.size, 0);
     assert.deepStrictEqual(P.due(c2, {blockAt: (x, y, z) => ({name: w2.get(`${x},${y},${z}`)})}), [], 'the replacement is not dug');
   }
+  const {insideAreas} = require('./world');
+  assert.strictEqual(due({protectedAt: (x, z, y) => insideAreas([[0, 0, 40, 40, 70, 80]], x, z, y)}).length, 3, 'under a zone with a height: still dug back');
   assert.deepStrictEqual(due({protectedAt: (x) => x === 10}), ['30,66,20'], 'never in a protected area');
   assert.strictEqual(cells.size, 1);
   // open above: sky or a tree's leaves yes; a stone roof or unloaded blocks no

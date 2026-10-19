@@ -1212,7 +1212,8 @@ async function sealFluids(r, job, pos) {
   // Decide before touching anything: one forbidden neighbour means no sealing at all.
   for (const d of dirs) {
     const n = bot.blockAt(pos.offset(...d));
-    if (n && FLUID.test(n.name) && insideAreas(r.protectedAreas, n.position.x, n.position.z)) return false;
+    // A zone keeps its height: water in the shaft under the Hauptplatz zone (y65-75) is sealed (review 2026-10-19).
+    if (n && FLUID.test(n.name) && insideAreas(r.protectedAreas, n.position.x, n.position.z, n.position.y)) return false;
   }
   for (const d of dirs) {
     guard(job);
@@ -1514,7 +1515,7 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
 // ground at reach; a taller one may need a new step, which the next call removes.
 async function unpillar(r, job, target = null) {
   if (!r.pillars?.size) return;
-  const cells = pillars.due(r.pillars, {blockAt: (x, y, z) => r.bot.blockAt(new Vec3(x, y, z)), protectedAt: (x, z) => insideAreas(r.protectedAreas, x, z), target});
+  const cells = pillars.due(r.pillars, {blockAt: (x, y, z) => r.bot.blockAt(new Vec3(x, y, z)), protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), target});
   for (const c of cells) {
     guard(job);
     r.pillars.delete(pillars.key(c.x, c.y, c.z));

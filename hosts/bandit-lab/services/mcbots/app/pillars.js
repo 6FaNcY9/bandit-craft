@@ -24,7 +24,7 @@ function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4
   const out = [];
   for (const [k, c] of cells) {
     if (blockAt(c.x, c.y, c.z)?.name !== c.name) { cells.delete(k); continue; }
-    if (protectedAt(c.x, c.z)) { cells.delete(k); continue; }
+    if (protectedAt(c.x, c.z, c.y)) { cells.delete(k); continue; }
     if (target && Math.hypot(c.x - target.x, c.z - target.z) <= near) continue;
     out.push(c);
   }
