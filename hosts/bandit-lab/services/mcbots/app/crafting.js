@@ -310,8 +310,9 @@ function makeCrafting({goNear, guard, fetch = null}) {
         // A furnace left with another input or fuel, or a full output, refuses ours ("destination full", the
         // sandbox furnace 2026-10-15): take that out first; it goes into the bot's inventory.
         if (furnace.outputItem()) await furnace.takeOutput();
-        if (furnace.inputItem() && furnace.inputItem().name !== input) await furnace.takeInput();
-        if (furnace.fuelItem() && furnace.fuelItem().name !== fuel) await furnace.takeFuel();
+        // The same input or fuel left over refuses ours too once both pass 64 (38 cobblestone, bot1 and bot2 2026-10-19).
+        if (furnace.inputItem() && (furnace.inputItem().name !== input || furnace.inputItem().count + n > 64)) await furnace.takeInput();
+        if (furnace.fuelItem() && (furnace.fuelItem().name !== fuel || furnace.fuelItem().count + needOf(fuel) > 64)) await furnace.takeFuel();
         guard(job);
         await furnace.putFuel(bot.registry.itemsByName[fuel].id, null, needOf(fuel));
         guard(job);

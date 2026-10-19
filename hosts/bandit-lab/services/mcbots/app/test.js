@@ -5365,6 +5365,18 @@ require('./crafting');
     f6.fuelItem = () => ({name: 'oak_planks'});
     await crafting.smelt(mkRunner('bot1', f6), {cancelled: false, t: {}}, 'raw_iron', 3);
     assert.deepStrictEqual(log, ['takeFuel', 'fuel', 'input', 'close'], 'another fuel comes out too');
+    log = [];
+    const f7 = mkFurnace(log);
+    f7.inputItem = () => ({name: 'raw_iron', count: 62});
+    f7.fuelItem = () => ({name: 'coal', count: 64});
+    await crafting.smelt(mkRunner('bot1', f7), {cancelled: false, t: {}}, 'raw_iron', 3);
+    assert.deepStrictEqual(log, ['takeInput', 'takeFuel', 'fuel', 'input', 'close'], 'the same kind comes out when it would pass 64');
+    log = [];
+    const f8 = mkFurnace(log);
+    f8.inputItem = () => ({name: 'raw_iron', count: 2});
+    f8.fuelItem = () => ({name: 'coal', count: 5});
+    await crafting.smelt(mkRunner('bot1', f8), {cancelled: false, t: {}}, 'raw_iron', 3);
+    assert.deepStrictEqual(log, ['fuel', 'input', 'close'], 'what still fits stays');
   }
   { // R6-7: the 3D panel's level order is one the server accepts, or says why not
     const html = require('node:fs').readFileSync(require('node:path').join(__dirname, 'public/legacy.html'), 'utf8');
