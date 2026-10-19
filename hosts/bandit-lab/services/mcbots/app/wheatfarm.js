@@ -219,11 +219,16 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       job.progress = `${harvested} wheat harvested, ${planted} planted, ${bread} bread`;
     };
     const handIn = async () => {
-      // Seeds above 64 too: bot3 carried 1154 and failed every 6 min on "inventory still full" (main server 2026-10-19); the farm replants from the 64.
-      for (const [what, keep] of [['bread', 0], ['wheat', 0], ['wheat_seeds', 64]]) {
-        if (held(bot, new RegExp(`^${what}$`)) <= keep) continue;
+      for (const what of ['bread', 'wheat']) {
+        if (!held(bot, new RegExp(`^${what}$`))) continue;
         job.progress = `depositing ${what}`;
-        await deposit(r, job, what, keep);
+        await deposit(r, job, what);
+      }
+      // Seeds above 64 too: bot3 carried 1154 and failed every 6 min on "inventory still full" (main server 2026-10-19).
+      // A plain deposit files them (and other junk) into the storage hall, not the supply chest; the farm replants from the 64.
+      if (held(bot, /^wheat_seeds$/) > 64) {
+        job.progress = 'depositing wheat_seeds';
+        await deposit(r, job, null, {wheat_seeds: 64});
       }
     };
     const next = () => { fi = (fi + 1) % fields.length; };

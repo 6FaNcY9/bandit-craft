@@ -12,7 +12,7 @@ const {Combat, AVOID_FOOD, deathCause} = require('./combat');
 require('./physicsfix');
 const {cacheGetBlock} = require('./pathcache');
 const {BotTrace, SAMPLE_MS, round} = require('./debug');
-const {normDim, deadlineMs, insideAreas, shouldFight, stairRing} = require('./world');
+const {normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
 const {zoneNamed, inZone} = require('./places');
 const buildJob = require('./build');
 const huntJob = require('./hunt');
@@ -953,7 +953,8 @@ async function waitSafe(r, job, x, z, y = null) {
   // here (main server 2026-10-19): 30 s in total, then it goes.
   const until = Date.now() + 30000;
   // Mobs 30 blocks below in the dark under a build held a crew 10 s at every walk (sandbox, 2026-10-13).
-  for (let i = 0; i < 10 && Date.now() < until && r.world.hostilesNear(x, z, dim, 8, y).length; i++) {
+  // Endermen and the like (NO_FIGHT) never come for the bot: bot1 waited on one in a cave at every leg (main server 2026-10-19).
+  for (let i = 0; i < 10 && Date.now() < until && r.world.hostilesNear(x, z, dim, 8, y).some((m) => !NO_FIGHT.has(m.type)); i++) {
     job.progress = 'waiting: hostile near target';
     job.t.doing = 'waiting: a hostile mob is near the target';
     await waitCalm(r, job, until);
@@ -2651,7 +2652,8 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
   base: planConfig.BASE.chest,
   helpOnce,
   craftTable: (r) => !!craftingLib.nearBlock(r.bot, 'crafting_table'),
-  // `only` is needed: a plain deposit keeps food. Bread and wheat go to the base chest, where the plan reads them.
+  // `only` is needed: a plain deposit keeps food. Bread and wheat go to the base chest, where the plan reads them;
+  // seeds go without `only` (filed into the hall), `keep` holding back the farm's own.
   deposit: (r, job, only, keep) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...planConfig.BASE.chest, only, keep}})),
   // A field without water: a bucket (supply chest, else crafted) filled at a source outside every field, so no
   // field's own centre water is taken.
@@ -2836,13 +2838,13 @@ const JOBS = {
     const only = job.args.only && itemMatcher(job.args.only);
     const isFood = (n) => !!bot.registry.foodsByName[n];
     // What a normal deposit files away; `only` (the keeper's coal and torches) puts just that kind into the chest.
-    const junk = () => bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name)));
-    // `keep` (with `only`): that many of the kind stay with the bot (the wheat farm's seed stock).
-    const eligible = () => {
-      if (!only) return junk();
-      let spare = job.args.keep || 0;
-      return bot.inventory.items().filter((it) => only(it.name)).map((it) => { const k = Math.min(spare, it.count); spare -= k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
+    // `keep` ({name: n}): that many of a kind stay with the bot (the wheat farm's 64 seeds to replant from).
+    const keepBack = (items) => {
+      const spare = {...job.args.keep};
+      return items.map((it) => { const k = Math.min(spare[it.name] || 0, it.count); spare[it.name] = (spare[it.name] || 0) - k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
     };
+    const junk = () => keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name))));
+    const eligible = () => (only ? keepBack(bot.inventory.items().filter((it) => only(it.name))) : junk());
     let moved = 0;
     const byName = {};
     // Put items into the open chest; returns the ones that did not fit (the caller decides what a full chest means).
@@ -2998,7 +3000,8 @@ const JOBS = {
     const away = (r.unreachableChests ||= new Map());
     // far: after the hall, any indexed chest holding the item near the supply chest (ensureGear's iron); a dead end there only skips the chest.
     const list = [{x, y, z}, ...rooms];
-    if (job.args.far) for (const c of layout.farChests({match, chests: r.world?.chests || new Map(), near: {x, z}, from: bot.entity.position})) if (!list.some((o) => layout.keyOf(o) === layout.keyOf(c))) list.push(c);
+    // Only by day or fit: up to 200 blocks into the dark to the iron farm would be a new night trap for an unarmed bot (review 2026-10-19).
+    if (job.args.far && (!isNight(bot) || r.combat?.fit?.())) for (const c of layout.farChests({match, chests: r.world?.chests || new Map(), near: {x, z}, from: bot.entity.position})) if (!list.some((o) => layout.keyOf(o) === layout.keyOf(c))) list.push(c);
     let taken = 0, skipped = 0;
     for (const [i, c] of list.entries()) {
       if (taken >= count) break;
@@ -3384,4 +3387,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureShovel, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

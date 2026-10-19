@@ -4674,7 +4674,11 @@ require('./crafting');
         },
         crafting: {count: (b, n) => inv.filter((i) => i.name === n).reduce((a, i) => a + i.count, 0), ensureItem: async (r, j, name, want) => { calls.craft.push(`${name} ${want}`); if (chestFail) throw new Error('no logs'); if (name === 'bread') { give('wheat', -3 * (want - inv.filter((i) => i.name === 'bread').reduce((a, i) => a + i.count, 0))); give('bread', want); } else give(name, 1); }},
         craftTable: () => true, base: {x: -9, y: 65, z: -9},
-        deposit: async (r, j, what) => { calls.deposit.push(what); for (const i of inv) if (i.name === what) i.count = 0; },
+        deposit: async (r, j, what, keep) => {
+          calls.deposit.push(keep ? `${what} keep ${JSON.stringify(keep)}` : what);
+          for (const i of inv) if (i.name === what) i.count = 0;
+          if (keep) for (const i of inv) if (keep[i.name] != null) i.count = Math.min(i.count, keep[i.name]);
+        },
         getWater: getWater && (async (...a) => { await getWater(...a); give('water_bucket', 1); }),
         care,
       });
@@ -4714,6 +4718,10 @@ require('./crafting');
     f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'bread', count: 16, type: 3}, {name: 'wheat', count: 2, type: 4}]});
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(f.calls.deposit.slice(0, 2), ['bread', 'wheat']);
+    // seeds above 64 go out with a plain deposit (filed in the hall), 64 stay to replant (bot3 with 1154, main server 2026-10-19)
+    f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'bread', count: 16, type: 3}, {name: 'wheat_seeds', count: 200, type: 2}]});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.deposit.slice(0, 2), ['bread', 'null keep {"wheat_seeds":64}']);
     // no hoe and nothing craftable: the job waits instead of failing; a Stop at the equip tills nothing
     f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'wheat_seeds', count: 3, type: 2}], chestFail: true});
     await assert.rejects(f.run(), Cancelled);
@@ -7035,6 +7043,27 @@ require('./crafting');
     assert.ok(!walks.some((w) => w.startsWith('-800')), 'beyond 200 blocks of the supply chest: not visited');
     await JOBS.withdraw(r, job(5, true)); // 1 left in the nearest; the gone chest after it is skipped, not fatal
     assert.ok(r.unreachableChests.has('-354,66,-100'), 'the dead chest is passed over for 30 min');
+    // at night only a fit bot goes that far (review 2026-10-19: no walk into the dark to the iron farm unarmed)
+    held['-354,66,-163'] = [it('iron_ingot', 4)];
+    world.noteChest('-354,66,-163', {iron_ingot: 4}, 0);
+    walks.length = 0;
+    bot.time = {timeOfDay: 18000};
+    r.combat = {busy: false, fit: () => false};
+    await assert.rejects(JOBS.withdraw(r, job(3, true)), /no iron_ingot/);
+    assert.deepStrictEqual(walks.filter((w) => w.startsWith('-354')), [], 'unfit at night: the far chests wait for the day');
+    r.combat.fit = () => true;
+    await JOBS.withdraw(r, job(3, true));
+    assert.deepStrictEqual(held['-354,66,-163'].map((i) => i.count), [1], 'fit at night: it goes');
+  }
+  { // waitSafe: an enderman by the target does not hold the walk (bot1 in a cave, main server 2026-10-19)
+    const {waitSafe} = require('./bots');
+    const {WorldModel} = require('./world');
+    const world = new WorldModel();
+    world.noteMob('bot2', {id: 1, name: 'enderman', position: {x: 2, y: 64, z: 0}}, 'overworld');
+    const r = {bot: {game: {dimension: 'overworld'}, time: {timeOfDay: 1000}, entity: {}}, combat: {busy: false, fit: () => false}, world, emit() {}};
+    const t0 = Date.now();
+    await waitSafe(r, {t: {}, cancelled: false, type: 'goto'}, 0, 0, 64);
+    assert.ok(Date.now() - t0 < 500, 'no wait for an enderman');
   }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
 

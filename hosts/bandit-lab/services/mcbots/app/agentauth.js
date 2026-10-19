@@ -162,4 +162,4 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
 
 const validBackend = (backend) => typeof backend === 'string' && /^[a-zA-Z0-9_.:\[\]-]{1,128}$/.test(backend);
 
-module.exports = {deathLoop, DEATH_LOOP, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
+module.exports = {deathLoop, DEATH_LOOP, DEATH_WINDOW_MS, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};

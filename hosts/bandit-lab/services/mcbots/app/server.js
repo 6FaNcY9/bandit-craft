@@ -61,7 +61,7 @@ const orderEnded = (e) => {
     deathTimes.set(e.bot, d.times);
     if (d.hold) {
       orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
-      events.add('base', 'alert', `${e.bot} died ${agentauth.DEATH_LOOP} times in ${agentauth.DEATH_HOLD_MS / 60000} min: its ${order.type} order waits ${agentauth.DEATH_HOLD_MS / 60000} min`);
+      events.add('base', 'alert', `${e.bot} died ${agentauth.DEATH_LOOP} times in ${agentauth.DEATH_WINDOW_MS / 60000} min: its ${order.type} order waits ${agentauth.DEATH_HOLD_MS / 60000} min`);
     }
   }
 };
