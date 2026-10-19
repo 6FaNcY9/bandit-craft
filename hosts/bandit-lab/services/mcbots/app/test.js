@@ -3618,6 +3618,9 @@ require('./crafting');
     mv2.getBlock = () => ({liquid: false, canFall: false});
     assert.ok(!mv2.safeToBreak(bot.blockAt(new Vec3(0, 60, 0))), 'a retained step is never planned as a dig');
     assert.ok(mv2.safeToBreak(bot.blockAt(new Vec3(1, 60, 0))), 'other natural ground still is');
+    blocks.set('5,60,5', 'chest');
+    const placeCost = (x, y, z) => Math.max(...mv2.exclusionAreasPlace.map((f) => f(bot.blockAt(new Vec3(x, y, z)))));
+    assert.deepStrictEqual([placeCost(5, 61, 5), placeCost(1, 61, 0)], [100, 0], 'no block on a chest, on stone it may');
 
     // a shaft that could not dig everything is incomplete, not finished (Codex R4-5)
     runner.keepCells = null; runner.digOnly = null;

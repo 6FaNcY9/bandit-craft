@@ -827,7 +827,9 @@ function safeMovements(bot, areas, runner = null) {
   const veto = (blk) => (inside(blk) ? 100 : 0);
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
-  mv.exclusionAreasPlace = [veto];
+  // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
+  const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
+  mv.exclusionAreasPlace = [veto, lid];
   const spawner = bot.registry.blocksByName.spawner?.id;
   if (spawner !== undefined) mv.blocksCantBreak.add(spawner); // not on the way either (see digAt)
   // A landing block without a position (a cell the pathfinder could not read) threw in getMoveDropDown and took the
