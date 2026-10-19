@@ -79,6 +79,15 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   const waits = new Map([['bot5', 2000]]);
   assert.deepStrictEqual(A.ordersToStart(orders, (b) => snaps[b], waits, 1000).map(([b]) => b), ['bot1'], 'idle and online only, with args, after the wait');
   assert.deepStrictEqual(A.ordersToStart(orders, (b) => snaps[b], waits, 3000).map(([b]) => b), ['bot1', 'bot5'], 'the wait is over');
+  // Three deaths within 30 min hold the order for 30 min (bot1 died 19 times in 3 h, main server 2026-10-19).
+  const MIN = 60000;
+  let d = A.deathLoop([], 0);
+  assert.deepStrictEqual(d, {times: [0], hold: false});
+  d = A.deathLoop(d.times, 10 * MIN);
+  assert.strictEqual(d.hold, false);
+  assert.strictEqual(A.deathLoop(d.times, 29 * MIN).hold, true, 'the third within 30 min');
+  assert.deepStrictEqual(A.deathLoop(d.times, 29 * MIN).times, [], 'counting starts over after a hold');
+  assert.strictEqual(A.deathLoop(d.times, 31 * MIN).hold, false, 'the first death is 31 min old: out of the window');
   // Three failed jobs in a row: no agent order for REST_MS after the newest (bot3, main server 2026-10-14).
   const ev = (kind, t, bot = 'bot1') => ({bot, kind, t, text: `${kind === 'fail' ? 'failed' : 'finished'}: chop 1 - no free logs`});
   const now = 1e6;

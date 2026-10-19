@@ -51,10 +51,19 @@ const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'own
 const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
 const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
 const orderRetryAt = new Map(); // bot -> before then a failed order does not start again
+const deathTimes = new Map(); // bot -> its recent deaths (agentauth.deathLoop)
 const orderEnded = (e) => {
   const order = ownerOrders.get(e.bot), out = agentauth.orderOutcome(e, order);
   if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
-  if (out?.retry) orderRetryAt.set(e.bot, Date.now() + out.retry);
+  if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + out.retry)); // never cuts a death hold short
+  if (e.kind === 'death' && order) {
+    const d = agentauth.deathLoop(deathTimes.get(e.bot) || [], e.t);
+    deathTimes.set(e.bot, d.times);
+    if (d.hold) {
+      orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
+      events.add('base', 'alert', `${e.bot} died ${agentauth.DEATH_LOOP} times in ${agentauth.DEATH_HOLD_MS / 60000} min: its ${order.type} order waits ${agentauth.DEATH_HOLD_MS / 60000} min`);
+    }
+  }
 };
 // Every minute an owner order whose bot is online and idle starts again (after a failure's wait, also after a restart).
 setInterval(() => {

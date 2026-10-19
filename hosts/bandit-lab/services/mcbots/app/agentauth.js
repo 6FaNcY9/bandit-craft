@@ -126,6 +126,17 @@ function ordersToStart(orders, snapshotOf, retryAt, now = Date.now()) {
   return out;
 }
 
+// A bot that dies DEATH_LOOP times within DEATH_WINDOW_MS is not sent back at its order for DEATH_HOLD_MS: bot1 died 19 times in
+// 3 h on the owner's produce order, as every failure of the resumed job let the order start fresh and reset the interruption
+// count (main server 2026-10-19). `times`: its recent deaths; -> {times: to keep, hold: true when the loop is on}.
+const DEATH_LOOP = 3;
+const DEATH_WINDOW_MS = 30 * 60000;
+const DEATH_HOLD_MS = 30 * 60000;
+function deathLoop(times, t) {
+  const kept = [...times, t].filter((x) => t - x <= DEATH_WINDOW_MS);
+  return kept.length >= DEATH_LOOP ? {times: [], hold: true} : {times: kept, hold: false};
+}
+
 function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const {agentBots, supplyChest} = policy;
   if (solver === true && Array.isArray(bots) && bots.length === 1 && !agentBots.includes(bots[0])) return solverRefusal({bots, type, args, replace}, policy);
@@ -151,4 +162,4 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
 
 const validBackend = (backend) => typeof backend === 'string' && /^[a-zA-Z0-9_.:\[\]-]{1,128}$/.test(backend);
 
-module.exports = {ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
+module.exports = {deathLoop, DEATH_LOOP, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
