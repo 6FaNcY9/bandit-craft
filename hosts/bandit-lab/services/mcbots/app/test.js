@@ -3717,6 +3717,13 @@ require('./crafting');
     await nightShelter(fitB.r, {...job, type: 'schematic'});
     await nightShelter(bare.r, {...job, type: 'schematic'});
     assert.deepStrictEqual([fitB.dug.size, bare.placed], [0, [90]], 'with gear it builds on, without it shelters');
+    // the same for chopping and mining: in full iron the crew sat in holes all night (main server 2026-10-19)
+    const fitC = mk(), bareC = mk();
+    fitC.r.combat = {fit: () => true};
+    bareC.r.combat = {fit: () => false};
+    await nightShelter(fitC.r, job);
+    await nightShelter(bareC.r, job);
+    assert.deepStrictEqual([fitC.dug.size, bareC.placed], [0, [90]], 'a fit bot chops on, an unfit one shelters');
     // An agent's new job replaced the waiting one (main server 2026-10-14): back in tonight's hole it waits on
     // without digging a new one, and digs only the lid out in the morning.
     const d = mk({sky: 0});

@@ -893,7 +893,11 @@ async function nightShelter(r, job) {
     }
     return;
   }
-  if (!NIGHT_JOBS.has(job.type) && !(UNFIT_NIGHT_JOBS.has(job.type) && r.combat && !r.combat.fit())) return;
+  // Every job shelters only while unfit: with iron armour and swords the crew still sat in holes all night chopping and
+  // mining (main server 2026-10-19); a fit bot works on and the numbers (odds.js) decide each fight. No combat: as before.
+  if (!NIGHT_JOBS.has(job.type) && !UNFIT_NIGHT_JOBS.has(job.type)) return;
+  if (r.combat?.fit?.()) return;
+  if (!r.combat && !NIGHT_JOBS.has(job.type)) return;
   const feet = bot.entity.position.floored();
   // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.
   const back = !!r.shelterAt && feet.x === r.shelterAt.x && feet.z === r.shelterAt.z && feet.y === r.shelterAt.y - 2;
@@ -1466,7 +1470,9 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
   // lying: three bots chased each other's dirt for a minute per block (sandbox, 2026-10-13).
   if (!pickup) return true;
   await sleep(400);
-  const drops = Object.values(bot.entities).filter((e) => e.name === 'item' && e.position.distanceTo(pos) <= 4);
+  // A drop that fell more than 1.5 below the block is left (one dug at eye level lands at the feet): over the shaft each
+  // dig's cobblestone fell into the pit and the plaza's builder spent up to 90 s on every one (main server 2026-10-19).
+  const drops = Object.values(bot.entities).filter((e) => e.name === 'item' && e.position.distanceTo(pos) <= 4 && e.position.y >= pos.y - 1.5);
   for (const d of drops) {
     guard(job);
     await goNear(r, job, d.position.x, d.position.y, d.position.z, 0.8, {doing: 'picking up the drops'}).catch(() => {});
