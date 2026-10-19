@@ -286,6 +286,7 @@ class BotRunner {
     this.hits = []; // {t, by}: who hurt this bot lately, for the death line
     this.acquireFailed = new Map(); // acquire.js method key -> until: the "get" job leaves that way out meanwhile
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
+    this.unreachable = new Map(); // block key -> times collect() could not reach it
     this.conflicts = {n: 0, at: 0};
     this.hostLabel = hostLabel; // machine this bot runs on, shown in the dashboard
     this.lastSeen = 0;
@@ -827,7 +828,9 @@ function safeMovements(bot, areas, runner = null) {
   const veto = (blk) => (inside(blk) ? 100 : 0);
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
-  mv.exclusionAreasPlace = [veto];
+  // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
+  const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
+  mv.exclusionAreasPlace = [veto, lid];
   const spawner = bot.registry.blocksByName.spawner?.id;
   if (spawner !== undefined) mv.blocksCantBreak.add(spawner); // not on the way either (see digAt)
   // A landing block without a position (a cell the pathfinder could not read) threw in getMoveDropDown and took the
@@ -1177,8 +1180,8 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
 // Why digging pos would hurt the bot, or null: a fluid would flow in (water
 // drowns, lava burns), or the bot stands on it and would fall more than 3.
 const FLUID = /^(water|lava|bubble_column)$/;
-function unsafeDig(bot, pos) {
-  for (const d of [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) {
+function unsafeDig(bot, pos, below = true) {
+  for (const d of [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], ...(below ? [[0, -1, 0]] : [])]) {
     const n = bot.blockAt(pos.offset(...d))?.name || '';
     if (FLUID.test(n) || bot.blockAt(pos.offset(...d))?.getProperties?.().waterlogged) return `${n || 'waterlogged block'} next to it`;
   }
@@ -1290,7 +1293,9 @@ function guardDigs(runner, bot) {
     // A walk may dig only what the job allows (excavate: natural ground, never its own walls).
     if (runner.digOnly && bot.pathfinder?.isMining?.() && !runner.digOnly.test(block.name)) return `Digging aborted: ${block.name} is not part of the job`;
     if (p && bot.pathfinder?.isMining?.() && outsideBox(runner.digBox, p)) return 'Digging aborted: a walk may not dig outside the farm or the shaft strip';
-    const danger = p && unsafeDig(bot, p); // a fluid next to it, or a drop of more than 3 below the bot
+    // The roof over a bot surfacing for air (combat.js surface) has its pocket's water under it, and water does not
+    // rise into the hole: it was refused, and bot50 drowned under it (sandbox 2026-10-19).
+    const danger = p && unsafeDig(bot, p, runner.combat?.mode !== 'air'); // a fluid next to it, or a drop of more than 3 below the bot
     return danger ? `Digging aborted: ${danger}` : null;
   };
   const placeRefusal = (ref, face) => {
@@ -2192,10 +2197,15 @@ async function collect(r, job, matching, count, what) {
       }
       if (!/could not reach|Digging aborted/.test(e.message) || ++misses > 5) throw e;
       for (const [k, until] of r.skip) if (until < Date.now()) r.skip.delete(k);
-      r.skip.set(key, Date.now() + 300000);
+      // Three times out of reach: left for a day. The coal at -205 33 -208 behind a water pocket drew produce back
+      // every 5 min, 90 s each (main server 2026-10-19).
+      const tries = /could not reach/.test(e.message) ? (r.unreachable.get(key) || 0) + 1 : 0;
+      if (tries) r.unreachable.set(key, tries);
+      const leave = Date.now() + (tries >= 3 ? 86400000 : 300000);
+      r.skip.set(key, leave);
       // The rest of that vein sits behind the same water or wall: skip it too,
       // or each of its blocks costs another full walk timeout.
-      if (/could not reach/.test(e.message)) for (const q of found) if (q.distanceTo(pos) <= 4) r.skip.set(keyOf(q), Date.now() + 300000);
+      if (tries) for (const q of found) if (q.distanceTo(pos) <= 4) r.skip.set(keyOf(q), leave);
       r.emit('info', `skipped a ${what} block (${e.message.slice(0, 40)}) at ${at(pos)}`);
       continue;
     } finally {

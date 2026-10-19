@@ -2338,6 +2338,9 @@ require('./crafting');
   assert.strictEqual(unsafeDig(fake({}, [0, 10, 0]), new Vec3(3, 10, 0)), null, 'plain stone is fine');
   assert.match(unsafeDig(fake({'4,10,0': 'water'}, [0, 10, 0]), new Vec3(3, 10, 0)), /water next to it/);
   assert.match(unsafeDig(fake({'3,11,0': 'lava'}, [0, 10, 0]), new Vec3(3, 10, 0)), /lava/);
+  assert.match(unsafeDig(fake({'3,9,0': 'water'}, [0, 10, 0]), new Vec3(3, 10, 0)), /water next to it/);
+  assert.strictEqual(unsafeDig(fake({'3,9,0': 'water'}, [0, 10, 0]), new Vec3(3, 10, 0), false), null, 'the roof of a pocket: its water stays below');
+  assert.match(unsafeDig(fake({'3,11,0': 'lava'}, [0, 10, 0]), new Vec3(3, 10, 0), false), /lava/, 'not under lava');
   assert.strictEqual(unsafeDig(fake({'0,8,0': 'air', '0,7,0': 'air'}, [0, 10, 0]), new Vec3(0, 9, 0)), null, 'a drop of 3 is fine');
   assert.match(unsafeDig(fake({'0,8,0': 'air', '0,7,0': 'air', '0,6,0': 'air', '0,5,0': 'air'}, [0, 10, 0]), new Vec3(0, 9, 0)), /drop/);
   assert.match(unsafeDig(fake({'0,8,0': 'air', '0,7,0': 'lava'}, [0, 10, 0]), new Vec3(0, 9, 0)), /lava below/);
@@ -3618,6 +3621,9 @@ require('./crafting');
     mv2.getBlock = () => ({liquid: false, canFall: false});
     assert.ok(!mv2.safeToBreak(bot.blockAt(new Vec3(0, 60, 0))), 'a retained step is never planned as a dig');
     assert.ok(mv2.safeToBreak(bot.blockAt(new Vec3(1, 60, 0))), 'other natural ground still is');
+    blocks.set('5,60,5', 'chest');
+    const placeCost = (x, y, z) => Math.max(...mv2.exclusionAreasPlace.map((f) => f(bot.blockAt(new Vec3(x, y, z)))));
+    assert.deepStrictEqual([placeCost(5, 61, 5), placeCost(1, 61, 0)], [100, 0], 'no block on a chest, on stone it may');
 
     // a shaft that could not dig everything is incomplete, not finished (Codex R4-5)
     runner.keepCells = null; runner.digOnly = null;
@@ -5920,6 +5926,53 @@ require('./crafting');
   bot.oxygenLevel = 5;
   await c.tick();
   assert.strictEqual(c.mode, null, 'head in the air: no surfacing');
+})();
+
+(async () => { // air in a sealed pocket: one air cell beside the head is swum to directly, no air at all digs the roof (bot1 drowned at -220 46 -211, 2026-10-19)
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const {EventEmitter} = require('node:events');
+  // water at 0 46 0, 0 47 0 and -1 46 0; the one air cell at -1 47 0; stone all round, roof at 0 48 0
+  const cells = new Map([['0,46,0', 'water'], ['0,47,0', 'water'], ['-1,46,0', 'water'], ['-1,47,0', 'air']]);
+  const blockAt = (v) => { const p = v.floored(), name = cells.get(`${p.x},${p.y},${p.z}`) || 'stone'; return {name, position: p, boundingBox: name === 'stone' || name === 'chest' ? 'block' : 'empty', diggable: true}; };
+  const mk = (areas = []) => {
+    const controls = {}, goals = [], looks = [], dug = [], log = [];
+    const bot = Object.assign(new EventEmitter(), {health: 20, food: 20, ownAir: 6, entity: {position: new Vec3(0.5, 46.2, 0.5), onGround: true}, entities: {}, game: {dimension: 'overworld'},
+      registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt, setControlState: (k, v) => { controls[k] = v; },
+      findBlock: ({useExtraInfo}) => [...cells].filter(([, n]) => n === 'air').map(([k]) => ({position: new Vec3(...k.split(',').map(Number))})).find(useExtraInfo) ?? null,
+      lookAt: async (p) => { looks.push(p); }, canDigBlock: (b) => b.diggable, dig: async (b) => { dug.push(b.position.toString()); cells.set(`${b.position.x},${b.position.y},${b.position.z}`, 'air'); },
+      tool: {equipForBlock: async () => {}}, pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5});
+    const c = new Combat({bot, online: true, name: 'bot1', protectedAreas: areas, world: {noteMob() {}}, log: (n, m) => log.push(m), getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
+    c.stop();
+    return {bot, c, controls, goals, looks, dug, log};
+  };
+  let t = mk();
+  await t.c.tick();
+  assert.deepStrictEqual([t.c.mode, t.goals.at(-1), t.controls.forward, t.controls.jump], ['air', null, true, true], `no pathfinder, it swims: ${t.log}`);
+  assert.deepStrictEqual([t.looks.at(-1).x, t.looks.at(-1).z], [-0.5, 0.5], 'towards the air cell');
+  t.bot.entity.position = new Vec3(-0.4, 46.2, 0.5); // under the air cell
+  t.bot.emit('physicsTick');
+  assert.deepStrictEqual([t.controls.forward, t.controls.jump], [false, true], 'there: only up');
+  t.bot.entity.position = new Vec3(-0.5, 46.2, 0.5); // head in the air cell, 6 air
+  await t.c.tick();
+  assert.strictEqual(t.c.mode, 'air', 'not done at the first breath');
+  t.bot.ownAir = 19;
+  await t.c.tick();
+  assert.deepStrictEqual([t.c.mode, t.bot.listenerCount('physicsTick'), t.controls.forward, t.controls.jump], [null, 0, false, false], 'breathing: steering off');
+  // no air anywhere: it stands and digs the roof over its head, then swims up into the hole
+  cells.delete('-1,47,0');
+  t = mk();
+  await t.c.tick();
+  await new Promise((res) => setImmediate(res));
+  assert.deepStrictEqual([t.dug, t.controls.jump, t.c.straightUp], [['(0, 48, 0)'], true, true], `${t.log}`);
+  // a roof in a protected area, or one that holds items, stays
+  for (const [roof, areas] of [['stone', [[-5, -5, 5, 5]]], ['chest', []]]) {
+    cells.set('0,48,0', roof);
+    t = mk(areas);
+    await t.c.tick();
+    await new Promise((res) => setImmediate(res));
+    assert.deepStrictEqual([t.dug, t.log.at(-1)], [[], 'air 6: surfacing with no air in sight'], roof);
+  }
 })();
 
 { // a guard job fights even with the defend setting off
