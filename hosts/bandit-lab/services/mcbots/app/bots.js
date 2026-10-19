@@ -224,7 +224,8 @@ const VALIDATE = {
     const anySolid = a.anySolid ?? [];
     if (!Array.isArray(anySolid) || anySolid.length > 8 || anySolid.some((n) => !/^[a-z_]{1,48}$/.test(n))) throw new Error('anySolid must be a list of at most 8 block names');
     if (a.tight !== undefined && typeof a.tight !== 'boolean') throw new Error('tight must be true or false');
-    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.tight ? {tight: true} : {}), ...(anySolid.length ? {anySolid: [...new Set(anySolid)]} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
+    if (a.digInside !== undefined && typeof a.digInside !== 'boolean') throw new Error('digInside must be true or false');
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.tight ? {tight: true} : {}), ...(anySolid.length ? {anySolid: [...new Set(anySolid)]} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(a.digInside === true ? {digInside: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
   },
   // The water and lava sources of that schematic build, poured from buckets once its blocks stand (fluids.js).
   fluids: (a) => VALIDATE.schematic(a),
@@ -848,7 +849,7 @@ function safeMovements(bot, areas, runner = null) {
 }
 
 // true when a walk's dig target lies outside the job's box ({x1, z1, x2, z2}; no box: no limit)
-const outsideBox = (box, p) => !!box && (p.x < box.x1 || p.x > box.x2 || p.z < box.z1 || p.z > box.z2);
+const outsideBox = (box, p) => !!box && (p.x < box.x1 || p.x > box.x2 || p.z < box.z1 || p.z > box.z2 || (box.y1 != null && (p.y < box.y1 || p.y > box.y2)));
 
 // ---- job implementations: (runner, job) => Promise; throw on failure ----
 const guard = (job) => {

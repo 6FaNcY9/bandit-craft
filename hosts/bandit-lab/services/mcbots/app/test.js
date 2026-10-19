@@ -4914,6 +4914,11 @@ require('./crafting');
     assert.ok(mv.safeToBreak(bot.blockAt(new Vec3(11, 65, 11))), 'natural ground inside the farm may still be dug');
     await bot.dig(bot.blockAt(new Vec3(11, 65, 11)), true);
     assert.deepStrictEqual(dug, ['dirt']);
+    // digInside: a box with a height keeps the walk out of the roof above a fill (bot51, sandbox 2026-10-20)
+    assert.strictEqual(VALIDATE.schematic({file: 'fill-1.litematic', origin: {x: 0, y: 0, z: 0}, tight: true, digInside: true}).digInside, true);
+    runner.digOnly = null; runner.digBox = {x1: 5, x2: 15, y1: 50, y2: 60, z1: 5, z2: 15};
+    blocks.set('11,61,11', 'stone'); blocks.set('11,58,11', 'stone');
+    assert.deepStrictEqual([mv.safeToBreak(bot.blockAt(new Vec3(11, 61, 11))), mv.safeToBreak(bot.blockAt(new Vec3(11, 58, 11)))], [false, true], 'the roof above the box no, the fill inside yes');
   }
   console.log('ok');
 })();

@@ -599,6 +599,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     let idle = false; // last loop found nothing to place: the cells left to clear are tried again
     const total = plan.targets.length;
     let lastProgress = Date.now(), lastDone = -1, first = true, final = false, helped = 0;
+    // digInside: the walks dig nothing outside the site, so a fill under the base comes in by its openings instead of
+    // through the floor above (bot51 dug through the roof of a test cavity, sandbox 2026-10-20). The runner clears it.
+    if (job.args.digInside) r.digBox = {x1: lo.x - 1, x2: hi.x + 1, y1: lo.y - 1, y2: hi.y + 1, z1: lo.z - 1, z2: hi.z + 1};
     const stalled = (what) => {
       if (Date.now() - lastProgress > waitMs) throw new Error(`no progress for ${Math.round(waitMs / 1000)} s: ${what}`);
     };
