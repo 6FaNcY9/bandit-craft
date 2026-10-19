@@ -1771,7 +1771,7 @@ async function ensureGear(r, job) {
   if (!gearJob.ingotsWanted(owned)) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
   if (wanted - n('raw_iron') >= 3 && r.supplyChest && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
-    const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}))
+    const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, far: true, ...r.supplyChest}}))
       .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from storage: ${e.message.slice(0, 80)}`); });
     // Ingots first: 21 lay in the supply chest while bot2 went without armour or sword, as only raw iron was fetched
     // (2026-10-16).
@@ -2988,10 +2988,13 @@ const JOBS = {
     // A storage chest with no way to it is passed over for 30 min: bot2 spent 90 s at the walled-in -272 58 -219
     // every few minutes and fetched no iron at all, while -251 58 -216 held some (main server 2026-10-18).
     const away = (r.unreachableChests ||= new Map());
+    // far: after the hall, any indexed chest holding the item near the supply chest (ensureGear's iron); a dead end there only skips the chest.
+    const list = [{x, y, z}, ...rooms];
+    if (job.args.far) for (const c of layout.farChests({match, chests: r.world?.chests || new Map(), near: {x, z}, from: bot.entity.position})) if (!list.some((o) => layout.keyOf(o) === layout.keyOf(c))) list.push(c);
     let taken = 0, skipped = 0;
-    for (const c of [{x, y, z}, ...rooms]) {
+    for (const [i, c] of list.entries()) {
       if (taken >= count) break;
-      const room = rooms.includes(c);
+      const room = i > 0, farOne = i > rooms.length;
       if (room && Date.now() - (away.get(layout.keyOf(c)) || -Infinity) < UNREACHABLE_CHEST_MS) { skipped++; continue; }
       const where = room ? `the storage chest at ${at(c)}` : place(r, job.args);
       const stand = c.stand; // hall chests carry their aisle cell
@@ -3000,16 +3003,21 @@ const JOBS = {
         else await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `walking to ${where} to take ${item}`});
       } catch (e) {
         guard(job);
-        if (!room || !/^could not reach/.test(e.message)) throw e;
+        if (!room || !(farOne || /^could not reach/.test(e.message))) throw e;
         away.set(layout.keyOf(c), Date.now());
         r.emit('info', `${where} is out of reach, passed over for 30 min: ${e.message.slice(0, 80)}`);
         skipped++;
         continue;
       }
       const block = bot.blockAt(new Vec3(c.x, c.y, c.z));
-      if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z} (found ${block?.name})`);
+      const chest = block && /chest|barrel/.test(block.name) ? await openChest(r, job, block).catch((e) => { guard(job); if (!farOne) throw e; return null; }) : null;
+      if (!chest) {
+        if (!farOne) throw new Error(`no chest at ${c.x} ${c.y} ${c.z} (found ${block?.name})`);
+        away.set(layout.keyOf(c), Date.now());
+        skipped++;
+        continue;
+      }
       job.t.doing = `taking ${item} from ${where}`;
-      const chest = await openChest(r, job, block);
       try {
         for (const it of chest.containerItems().filter((i) => match(i.name))) {
           guard(job);

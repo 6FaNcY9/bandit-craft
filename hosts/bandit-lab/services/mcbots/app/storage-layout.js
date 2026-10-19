@@ -52,4 +52,17 @@ function withdrawOrder({item, match, chests, wall, exists, from}) {
   return out;
 }
 
-module.exports = {SLOTS, LAYOUT, BY_CAT, categoryOf, chestsFor, keyOf, order, withdrawOrder};
+// Indexed chests anywhere that hold `item`, nearest `from` first, within `range` blocks (x/z) of `near` (the supply chest):
+// the iron farm's 1672 ingots sat ~100 blocks off while bot1 went without gear (main server 2026-10-19). The index has no
+// dimension, so the range keeps the Nether gold farm (~800 away) out. Not checked for existence: an unloaded chunk reads null.
+function farChests({match, chests, near, from, range = 200}) {
+  const dist = (c) => Math.abs(c.x - from.x) + Math.abs(c.z - from.z);
+  const out = [];
+  for (const [k, v] of chests) {
+    const [x, y, z] = k.split(',').map(Number);
+    if ([x, y, z].every(Number.isFinite) && Math.abs(x - near.x) <= range && Math.abs(z - near.z) <= range && Object.entries(v?.items || {}).some(([n, c]) => c > 0 && match(n))) out.push({x, y, z});
+  }
+  return out.sort((a, b) => dist(a) - dist(b));
+}
+
+module.exports = {SLOTS, LAYOUT, BY_CAT, categoryOf, chestsFor, keyOf, order, withdrawOrder, farChests};

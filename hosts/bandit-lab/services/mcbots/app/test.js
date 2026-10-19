@@ -6996,3 +6996,35 @@ require('./crafting');
   assert.strictEqual(runner.sent.some(([type, args]) => type === 'light' && args.spawner), true, 'known spawner goes to a fit bot');
 }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+(async () => { // night fixes 2026-10-19: the gear fetches iron from far storage
+  { // withdraw far: indexed chests near the supply chest, nearest first; Nether-far and dead ones never end the withdraw
+    const {JOBS} = require('./bots');
+    const {Vec3} = require('vec3');
+    const {WorldModel} = require('./world');
+    const pc = require('./plan-config'), L = require('./storage-layout');
+    const world = new WorldModel();
+    world.noteChest('-354,66,-165', {iron_ingot: 7}, 0);
+    world.noteChest('-354,66,-163', {iron_ingot: 5}, 0);
+    world.noteChest('-354,66,-100', {iron_ingot: 4}, 0); // its chest is gone
+    world.noteChest('-800,66,-165', {iron_ingot: 99}, 0); // out of the 200 range
+    const it = (name, count) => ({name, count, type: 7, metadata: null});
+    const held = {[L.keyOf(pc.BASE.chest)]: [], '-354,66,-165': [it('iron_ingot', 7)], '-354,66,-163': [it('iron_ingot', 5)]};
+    const walks = [];
+    const bot = {
+      entity: {position: new Vec3(-271, 66, -214), onGround: true}, game: {dimension: 'overworld'}, entities: {}, inventory: {items: () => []},
+      blockAt: (p) => (held[L.keyOf(p)] ? {name: 'chest', position: p, boundingBox: 'block', getProperties: () => ({})} : p.x === -354 && p.z === -100 ? {name: 'air', position: p} : null),
+      pathfinder: {searchRadius: -1, stop() {}, setGoal() {}, goto: async (g) => { walks.push(`${g.x},${g.z}`); }},
+      openContainer: async (b) => { const items = held[L.keyOf(b.position)]; return {containerItems: () => items, close() {}, withdraw: async (_t, _m, n) => { items[0].count -= n; if (!items[0].count) items.shift(); }}; },
+    };
+    const r = {bot, world, sheltered: true, emit() {}, protectedAreas: []};
+    const job = (count, far) => ({type: 'withdraw', t: {}, cancelled: false, args: {...pc.BASE.chest, item: 'iron_ingot', count, ...(far ? {far} : {})}});
+    await assert.rejects(JOBS.withdraw(r, job(3, false)), /no iron_ingot/, 'without far the farm chests are not looked at');
+    assert.deepStrictEqual(walks.filter((w) => w.startsWith('-354')), []);
+    await JOBS.withdraw(r, job(11, true));
+    assert.deepStrictEqual([held['-354,66,-163'], held['-354,66,-165']].map((l) => l.map((i) => i.count)), [[1], []], 'nearest first (-165 is nearer the bot), 11 taken');
+    assert.ok(!walks.some((w) => w.startsWith('-800')), 'beyond 200 blocks of the supply chest: not visited');
+    await JOBS.withdraw(r, job(5, true)); // 1 left in the nearest; the gone chest after it is skipped, not fatal
+    assert.ok(r.unreachableChests.has('-354,66,-100'), 'the dead chest is passed over for 30 min');
+  }
+})().catch((e) => { console.error(e); process.exitCode = 1; });
