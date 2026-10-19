@@ -2038,9 +2038,20 @@ async function replacePickaxe(r, job, need) {
 
 // Dig down (or climb) into the ore's Y band, 16 levels per walk so every leg
 // fits the walk deadline. The pathfinder digs the stairs and never into fluids.
+// Nothing is mined under the base: the nearest stone and ore, mined there for days, hollowed out 11 500 cells beneath
+// it, and the bots fell in (main server 2026-10-19). Trees stand on the surface: wood is still taken there.
+const BASE_NO_MINE = 48;
+const underBase = (home, p) => !!home && Math.hypot(p.x - home.x, p.z - home.z) < BASE_NO_MINE;
 async function toBand(r, job, band, what) {
   const {bot} = r;
   const target = Math.round((band[0] + band[1]) / 2);
+  // Down (or up) only outside the base: walk out first, away from the supply chest.
+  const home = r.supplyChest, me = bot.entity.position;
+  if (underBase(home, me)) {
+    const d = Math.hypot(me.x - home.x, me.z - home.z) || 1, k = (BASE_NO_MINE + 8) / d;
+    const [x, z] = d > 1 ? [Math.round(home.x + (me.x - home.x) * k), Math.round(home.z + (me.z - home.z) * k)] : [home.x + BASE_NO_MINE + 8, home.z];
+    await goNear(r, job, x, Math.floor(me.y), z, 3, {xz: true, doing: `walking out of the base before digging down for ${what}`});
+  }
   for (let leg = 0; leg < 12 && outside(band, bot.entity.position.y) > 2; leg++) {
     const y = bot.entity.position.y > target ? Math.max(target, Math.floor(bot.entity.position.y) - 16) : Math.min(target, Math.floor(bot.entity.position.y) + 16);
     const p = bot.entity.position;
@@ -2144,7 +2155,7 @@ async function collect(r, job, matching, count, what) {
     const cost = (p) => p.distanceTo(me) + (ore ? 4 * outside(band, p.y) : 2 * Math.max(0, Math.floor(me.y) - p.y));
     // Zones out before the nearest 64 are kept: beside the base those were all dirt under it, and the plaza's 64 dirt
     // failed with "no free dirt" (bot1 and bot2, 2026-10-19). Digging a target is direct (not pathfinder), hence here.
-    let found = bot.findBlocks({matching: ids, maxDistance: range, count: 1024}).filter((p) => !insideAreas(r.protectedAreas, p.x, p.z))
+    let found = bot.findBlocks({matching: ids, maxDistance: range, count: 1024}).filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood || !underBase(r.supplyChest, p)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore job, nothing inside the band near enough, and the bot is not in the band: go there first.
     if (band && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
@@ -3409,4 +3420,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

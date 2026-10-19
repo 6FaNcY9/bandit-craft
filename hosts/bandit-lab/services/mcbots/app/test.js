@@ -6870,6 +6870,10 @@ require('./crafting');
   assert.deepStrictEqual(toolsToMake([stack('stone_axe'), stack('iron_ingot', 9), stack('stick', 9)], 'axe'), [], 'stone held: the iron stays for armour');
   assert.deepStrictEqual(toolsToMake([stack('iron_pickaxe'), stack('oak_log', 9)], 'axe'), ['wooden_axe'], 'a pickaxe is no axe');
   assert.deepStrictEqual(toolsToMake([stack('bread')], 'shovel'), [], 'nothing to make it from');
+  // nothing mined under the base: 11 500 hollow cells beneath it (main server 2026-10-19)
+  const {underBase} = require('./bots');
+  const home = {x: -271, y: 66, z: -214};
+  assert.deepStrictEqual([underBase(home, {x: -258, z: -196}), underBase(home, {x: -271, z: -160}), underBase(null, {x: 0, z: 0})], [true, false, false]);
   const {ensureTool} = require('./bots');
   const crafted = [], infos = [];
   let carried = [stack('cobblestone', 6), stack('stick', 4)];
