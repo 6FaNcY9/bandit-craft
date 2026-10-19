@@ -38,7 +38,7 @@ const world = new WorldModel();
 if (process.env.STATE_DIR) world.persistChests(path.join(process.env.STATE_DIR, 'chests.json')); // the storage index
 if (process.env.STATE_DIR) world.persistExperience(path.join(process.env.STATE_DIR, 'experience.json'));
 const notifier = new NtfyNotifier();
-let rescue = null; // set below, once the supply chest is known
+const rescuers = []; // filled below, once the supply chest is known (rescue.js)
 // Every event and, every 30 s, every bot's state go to STATE_DIR/archive for later evaluation and training
 // (archive.js); the 200-entry ring alone lost the night's deaths. SESSION tells server runs apart (dataset.js).
 const ARCHIVE = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'archive') : null;
@@ -85,13 +85,14 @@ setInterval(() => {
     }
   }
 }, 60000).unref();
-const events = new EventLog({onAdd: (e) => { notifier.event(e); rescue?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
+const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.
 const decisions = new EventLog();
 const slayer = new Slayer({url: cfg.slayerUrl, cmd: cfg.slayerStatusCmd, decisions});
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
-const admin = cfg.rcon ? new Admin({call: queued(cfg.rcon), events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()]}) : null;
+const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
+const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()]}) : null;
 const agentStatuses = new Map(); // agent -> its last POST /api/agentstatus (goal, workers, role, t)
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
 const demoLog = require('./owner').makeDemoLog(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'demonstrations.jsonl') : null);
@@ -130,9 +131,13 @@ world.blocklog = blocklog;
 const overlay = process.env.BLOCKLOG_EXPORT_DIR ? new Exporter({log: blocklog, places: () => places.list, dir: process.env.BLOCKLOG_EXPORT_DIR, say: (m) => log('blocklog', m)}) : null;
 const blocklogTimer = setInterval(() => (overlay ? overlay.tick() : blocklog.flush()), 15000);
 let supplyChest = cfg.supplyChest;
-// Stranded bots go back to the base over the sandbox console (rescue.js); off without SANDBOX_RCON_HOST.
-// ponytail: they land one block east and two north of the supply chest, on the base floor; a landing place if that ever moves.
-if (cfg.sandboxRcon) rescue = new (require('./rescue').Rescue)({call: queued(cfg.sandboxRcon), events, target: () => supplyChest && {x: supplyChest.x + 1, y: supplyChest.y, z: supplyChest.z - 2}});
+// Stranded bots go back to the base over the console of their server (rescue.js): the sandbox's without more ado,
+// the main server's only with RESCUE_SPOT (owner 2026-10-19), and there only the rescue's guarded tp.
+// ponytail: in the sandbox they land one block east and two north of the supply chest; a landing place if that ever moves.
+const {Rescue} = require('./rescue');
+if (cfg.sandboxRcon) rescuers.push(new Rescue({call: queued(cfg.sandboxRcon), events, target: () => supplyChest && {x: supplyChest.x + 1, y: supplyChest.y, z: supplyChest.z - 2}}));
+if (mainConsole && cfg.rescueSpot) rescuers.push(new Rescue({call: mainConsole, events, label: 'main server', target: () => cfg.rescueSpot}));
+if (rescuers.length) setInterval(() => { const snaps = [...runners.values()].map((r) => r.snapshot()); for (const r of rescuers) r.watch(snaps); }, 60000).unref();
 const supplyStock = () => (supplyChest ? world.stockAt(supplyChest) : world.stock); // the supply chest's numbers, not the plan's base chest's
 const staticAreas = cfg.protectedAreas.slice();
 function applyPlaces() {

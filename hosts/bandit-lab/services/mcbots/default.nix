@@ -141,6 +141,9 @@ in {
             # Server panel (admin.js): RCON to Paper over the minecraft network; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
             RCON_HOST = "minecraft";
+            # Stranded bots on the main server are teleported here (app/rescue.js, owner 2026-10-19): grass west of
+            # the supply chest with room to stand; the rescue checks the ground before each tp.
+            RESCUE_SPOT = "-273,66,-211";
             # Rescue of stranded bots (app/rescue.js) over the sandbox's own console; password in seed.env.
             SANDBOX_RCON_HOST = "minecraft-sandbox";
             # What the bots changed in the world, as a BlueMap overlay (app/blocklog.js).

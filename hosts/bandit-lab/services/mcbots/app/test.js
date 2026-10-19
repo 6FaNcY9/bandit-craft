@@ -5936,37 +5936,60 @@ require('./crafting');
   assert.strictEqual(c.settings().defend, false);
 }
 
-(async () => { // rescue: three no-path failures in a row teleport the bot to the base, once per 10 min
-  const {Rescue} = require('./rescue');
+(async () => { // rescue: three no-path failures in a row, or 8 min climbing on one spot, teleport the bot to the base
+  const {Rescue, STUCK_MS} = require('./rescue');
   const sent = [], said = [];
-  let t = 0;
+  let t = 0, online = ['bot4', 'bot2'];
   let reply = 'Teleported bot4 to -269.500000, 66.000000, -215.500000';
-  const r = new Rescue({call: async (c) => { sent.push(...c); return [reply]; }, events: {add: (b, k, x) => said.push(x)}, target: () => ({x: -270, y: 66, z: -216}), now: () => t});
+  const call = async (c) => (c[0] === 'minecraft:list' ? [`There are ${online.length} of a max of 12 players online: ${online.join(', ')}`] : (sent.push(...c), [reply]));
+  const r = new Rescue({call, events: {add: (b, k, x) => said.push(x)}, target: () => ({x: -270, y: 66, z: -216}), now: () => t});
+  const settle = () => new Promise((res) => setImmediate(() => setImmediate(res)));
   const fail = (bot, why = 'could not reach 1 2 3: No path to the goal!') => r.event({bot, kind: 'fail', text: `failed: goto 1 2 3 - ${why}`});
   fail('bot4'); fail('bot4');
   r.event({bot: 'bot4', kind: 'done', text: 'finished: mine stone 2'}); // a success in between resets
   fail('bot4'); fail('bot4');
   fail('bot4', 'chest full'); // another failure too
   fail('bot4'); fail('bot4'); fail('bot4');
-  await new Promise((res) => setImmediate(res));
-  assert.deepStrictEqual(sent, ['minecraft:tp bot4 -270 66 -216']);
-  assert.match(said[0], /rescued: no path 3 times/);
+  await settle();
+  // only onto ground with room to stand (the old landing on the main server had air under it, 2026-10-19)
+  assert.deepStrictEqual(sent, ['execute unless block -270 65 -216 #minecraft:air if block -270 66 -216 #minecraft:air if block -270 67 -216 #minecraft:air run minecraft:tp bot4 -269.5 66 -215.5']);
+  assert.match(said[0], /rescued: no path 3 times in a row, teleported to the base \(sandbox\)/);
   fail('bot4'); fail('bot4'); fail('bot4'); // within 10 min: not again
-  await new Promise((res) => setImmediate(res));
+  await settle();
   assert.strictEqual(sent.length, 1);
   t += 600000; fail('bot4'); fail('bot4'); fail('bot4');
-  await new Promise((res) => setImmediate(res));
+  await settle();
   assert.strictEqual(sent.length, 2);
   r.event({bot: 'bad name;op x', kind: 'fail', text: 'No path to the goal'}); r.event({bot: 'bad name;op x', kind: 'fail', text: 'No path to the goal'}); r.event({bot: 'bad name;op x', kind: 'fail', text: 'No path to the goal'});
-  await new Promise((res) => setImmediate(res));
+  await settle();
   assert.strictEqual(sent.length, 2, 'only bot names reach the console');
-  // a bot on the real server is not in the sandbox: the console finds nobody, and nothing claims a rescue
-  // (bot2 and bot3 "rescued" on the main server, 2026-10-15)
-  reply = 'No entity was found';
-  said.length = 0;
+  // a bot on the other server is left alone: no tp, nothing claimed (bot2 and bot3 "rescued" by the sandbox, 2026-10-15)
+  online = ['bot4']; said.length = 0;
   fail('bot2'); fail('bot2'); fail('bot2');
-  await new Promise((res) => setImmediate(res));
-  assert.deepStrictEqual([sent.at(-1), said], ['minecraft:tp bot2 -270 66 -216', []]);
+  await settle();
+  assert.deepStrictEqual([sent.length, said], [2, []]);
+  // no room to land: said, not claimed
+  online = ['bot2']; reply = '';
+  fail('bot2'); fail('bot2'); fail('bot2');
+  await settle();
+  assert.match(said.at(-1), /rescue failed \(sandbox\): no room to land at -270 66 -216/);
+
+  // stuck: climbing on one spot for 8 min (bot2 in the shaft under the plaza, 2026-10-19); waiting or a move resets it
+  const m = new Rescue({call, events: {add: (b, k, x) => said.push(x)}, target: () => ({x: -273, y: 66, z: -211}), now: () => t, label: 'main server'});
+  online = ['bot2', 'bot3']; reply = 'Teleported bot2 to -272.5, 66, -210.5'; sent.length = 0; said.length = 0;
+  const snap = (name, pos, activity = 'climbing to Y 58 towards -252 58 -197') => ({name, online: true, job: {type: 'light'}, pos, activity});
+  m.watch([snap('bot2', [-276, 47, -213]), snap('bot3', [-254, 66, -241], 'waiting for the wheat to grow')]);
+  t += STUCK_MS - 60000; m.watch([snap('bot2', [-276, 48, -213]), snap('bot3', [-254, 66, -241], 'waiting for the wheat to grow')]);
+  await settle();
+  assert.strictEqual(sent.length, 0, 'not yet');
+  t += 60000; m.watch([snap('bot2', [-276, 47, -213]), snap('bot3', [-254, 66, -241], 'waiting for the wheat to grow')]);
+  await settle();
+  assert.deepStrictEqual([sent.length, /tp bot2 -272.5 66 -210.5$/.test(sent[0])], [1, true], 'bot2 out, the waiting bot3 left alone');
+  assert.match(said[0], /rescued: stuck 8 min at -276 47 -213 \(climbing to Y 58/);
+  m.watch([snap('bot3', [0, 64, 0], 'walking to 1 2 3')]);
+  t += STUCK_MS; m.watch([snap('bot3', [8, 64, 0], 'walking to 1 2 3')]);
+  await settle();
+  assert.strictEqual(sent.length, 1, 'a bot that moves is not stuck');
 })();
 
 (async () => { // litematic: packed states cross longs; signed sizes locate the min corner
