@@ -3034,7 +3034,10 @@ const JOBS = {
         guard(job);
         if (!room || !(farOne || /^could not reach/.test(e.message))) throw e;
         away.set(layout.keyOf(c), Date.now());
-        r.emit('info', `${where} is out of reach, passed over for 30 min: ${e.message.slice(0, 80)}`);
+        // Its neighbours sit behind the same walls: bot1 walked 90 s to each of 12 chests of the closed sorter hall
+        // (main server 2026-10-19).
+        if (/^could not reach/.test(e.message)) for (const o of list.slice(i + 1)) if (Math.hypot(o.x - c.x, o.y - c.y, o.z - c.z) <= 6) away.set(layout.keyOf(o), Date.now());
+        r.emit('info', `${where} is out of reach, passed over for 30 min with its neighbours: ${e.message.slice(0, 80)}`);
         skipped++;
         continue;
       }

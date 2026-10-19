@@ -3263,8 +3263,9 @@ require('./crafting');
     const world = new WorldModel();
     world.noteChest('-251,59,-214', {iron_ingot: 9}, 0); // its aisle cell -251 58 -215 is walled in
     world.noteChest('-263,58,-219', {iron_ingot: 5}, 0);
+    world.noteChest('-251,58,-216', {iron_ingot: 4}, 0); // its neighbour behind the same wall
     const it = (name, count) => ({name, count, type: 7, metadata: null});
-    const held = {[L.keyOf(pc.BASE.chest)]: [], '-251,59,-214': [it('iron_ingot', 9)], '-263,58,-219': [it('iron_ingot', 5)]};
+    const held = {[L.keyOf(pc.BASE.chest)]: [], '-251,59,-214': [it('iron_ingot', 9)], '-263,58,-219': [it('iron_ingot', 5)], '-251,58,-216': [it('iron_ingot', 4)]};
     const walks = [];
     const bot = {
       entity: {position: new Vec3(-250, 58, -214), onGround: true}, game: {dimension: 'overworld'}, entities: {},
@@ -3285,8 +3286,9 @@ require('./crafting');
     await JOBS.withdraw(r, job(12));
     assert.deepStrictEqual(held['-263,58,-219'], [], 'the reachable chest gave its 5');
     assert.ok(infos.some((m) => /-251 59 -214 is out of reach, passed over for 30 min/.test(m)), infos.join('\n'));
+    assert.deepStrictEqual([held['-251,58,-216'][0].count, infos.filter((m) => /out of reach/.test(m)).length], [4, 1], 'its neighbour is not walked to');
     walks.length = 0;
-    await assert.rejects(JOBS.withdraw(r, job(3)), /no iron_ingot in the chest or the storage room \(1 storage chests out of reach\)/);
+    await assert.rejects(JOBS.withdraw(r, job(3)), /no iron_ingot in the chest or the storage room \(2 storage chests out of reach\)/);
     assert.ok(!walks.includes('-251,-215'), `no second walk to the walled-in chest: ${walks}`);
     // goNear under a chest up in the air: the ground cell under it or one beside it, not 3 around (a level lower is
     // out of the server's reach); a chest on the ground keeps its distance
