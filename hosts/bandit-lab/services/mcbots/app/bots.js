@@ -2135,7 +2135,10 @@ async function collect(r, job, matching, count, what) {
     // below the bot counts 2 extra per level.
     const me = bot.entity.position;
     const cost = (p) => p.distanceTo(me) + (ore ? 4 * outside(band, p.y) : 2 * Math.max(0, Math.floor(me.y) - p.y));
-    let found = bot.findBlocks({matching: ids, maxDistance: range, count: 64}).sort((a, b) => cost(a) - cost(b));
+    // Zones out before the nearest 64 are kept: beside the base those were all dirt under it, and the plaza's 64 dirt
+    // failed with "no free dirt" (bot1 and bot2, 2026-10-19). Digging a target is direct (not pathfinder), hence here.
+    let found = bot.findBlocks({matching: ids, maxDistance: range, count: 1024}).filter((p) => !insideAreas(r.protectedAreas, p.x, p.z))
+      .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore job, nothing inside the band near enough, and the bot is not in the band: go there first.
     if (band && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
       descents++; // twice at most, then mine what is in reach
@@ -2151,8 +2154,6 @@ async function collect(r, job, matching, count, what) {
     if (anchor) found = found.filter((p) => Math.hypot(p.x - anchor.x, p.z - anchor.z) <= leash);
     for (const p of found) {
       if ((r.skip.get(keyOf(p)) || 0) > Date.now()) continue; // could not get there lately
-      // Digging a target is direct (not pathfinder), so protection is checked here too.
-      if (insideAreas(r.protectedAreas, p.x, p.z)) continue;
       const k = keyOf(p);
       if (r.world && !(await r.world.claim(r.name, k))) {
         r.conflict();
