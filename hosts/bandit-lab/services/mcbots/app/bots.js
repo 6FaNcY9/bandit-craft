@@ -2618,7 +2618,11 @@ async function produce(r, job) {
     if (/all it needs/.test(s.idle)) return;
     job.t.doing = `waiting: ${s.idle}`;
     if (await helpOnce(r, job).catch(() => false)) continue;
-    await sleep(60000);
+    // A minute, in slices: a replacing job waited out the whole minute behind it (main server 2026-10-19).
+    for (let i = 0; i < 12; i++) {
+      guard(job);
+      await sleep(5000);
+    }
   }
 }
 
