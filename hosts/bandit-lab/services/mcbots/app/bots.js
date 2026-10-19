@@ -1285,7 +1285,7 @@ function guardDigs(runner, bot) {
   const digRefusal = (block) => {
     const p = block?.position;
     if (runner.current?.cancelled || stale) return 'Digging aborted: the job was stopped';
-    if (p && insideAreas(runner.protectedAreas, p.x, p.z)) return 'Digging aborted: protected area';
+    if (p && insideAreas(runner.protectedAreas, p.x, p.z, p.y)) return 'Digging aborted: protected area'; // as the pathfinder: a zone keeps its height
     if (p && runner.reserved?.(p.x, p.y, p.z)) return 'Digging aborted: that block holds up the base or a shaft step';
     const live = p && bot.blockAt(p);
     if (p && (!live || live.name !== block.name || (block.stateId !== undefined && live.stateId !== block.stateId))) return 'Digging aborted: the block changed';
@@ -1298,7 +1298,7 @@ function guardDigs(runner, bot) {
   const placeRefusal = (ref, face) => {
     const p = ref?.position && face ? ref.position.plus(face) : null;
     if (runner.current?.cancelled || stale) return 'Placing aborted: the job was stopped';
-    if (p && insideAreas(runner.protectedAreas, p.x, p.z)) return 'Placing aborted: protected area';
+    if (p && insideAreas(runner.protectedAreas, p.x, p.z, p.y)) return 'Placing aborted: protected area';
     // Water that waters a field (farmland within 4 blocks) is never filled: the pathfinder bridged both new water
     // holes of the wheat fields with cobblestone, and the fields dried out again (main server 2026-10-18).
     if (p && bot.blockAt(p)?.name === 'water') {

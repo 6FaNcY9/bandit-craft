@@ -48,7 +48,7 @@ function validate(bp, areas = []) {
     const k = `${p.x},${p.y},${p.z}`;
     if (seen.has(k)) throw new Error(`block ${i}: two blocks at ${k}`);
     seen.add(k);
-    if (insideAreas(areas, p.x, p.z)) throw new Error(`block ${i}: ${p.x} ${p.z} is inside a protected area`);
+    if (insideAreas(areas, p.x, p.z, p.y)) throw new Error(`block ${i}: ${p.x} ${p.y} ${p.z} is inside a protected area`);
     return p;
   });
   for (const ax of ['x', 'y', 'z']) {
@@ -499,7 +499,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const {bot} = r;
     const plan = await schematicPlan(dir, job.args);
     if (plan.unsupported.length) throw new Error(`cannot place ${plan.unsupported.length} blocks yet: ${[...new Set(plan.unsupported.map((u) => u.name))].join(', ')}`);
-    for (const t of plan.targets) if (insideAreas(r.protectedAreas, t.x, t.z)) throw new Error(`${t.x} ${t.z} is inside a protected area`);
+    // Zones keep their height: highway route1 leg 4 runs at y56-59 under the iron hall's y60-64 (2026-10-19).
+    for (const t of plan.targets) if (insideAreas(r.protectedAreas, t.x, t.z, t.y)) throw new Error(`${t.x} ${t.y} ${t.z} is inside a protected area`);
     const {lo, hi} = plan;
     const chests = job.args.chests || [];
     const dim = normDim(bot.game?.dimension);

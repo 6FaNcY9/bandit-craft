@@ -3623,6 +3623,15 @@ require('./crafting');
     blocks.set('5,60,5', 'chest');
     const placeCost = (x, y, z) => Math.max(...mv2.exclusionAreasPlace.map((f) => f(bot.blockAt(new Vec3(x, y, z)))));
     assert.deepStrictEqual([placeCost(5, 61, 5), placeCost(1, 61, 0)], [100, 0], 'no block on a chest, on stone it may');
+    // a zone keeps its height for digs too: a tunnel under the iron hall (y60-64) may be dug (highway route1, 2026-10-19)
+    const kept = [runner.keepCells, runner.digOnly];
+    runner.keepCells = null; runner.digOnly = null; runner.protectedAreas = [[0, 0, 10, 10, 60, 64]];
+    blocks.set('3,57,3', 'stone'); blocks.set('3,61,3', 'stone');
+    dug.length = 0;
+    await bot.dig(bot.blockAt(new Vec3(3, 57, 3)), true);
+    await assert.rejects(bot.dig(bot.blockAt(new Vec3(3, 61, 3)), true), /protected area/);
+    assert.deepStrictEqual(dug, [new Vec3(3, 57, 3).toString()], 'under the zone yes, in it no');
+    [runner.keepCells, runner.digOnly] = kept; runner.protectedAreas = [];
 
     // a shaft that could not dig everything is incomplete, not finished (Codex R4-5)
     runner.keepCells = null; runner.digOnly = null;
