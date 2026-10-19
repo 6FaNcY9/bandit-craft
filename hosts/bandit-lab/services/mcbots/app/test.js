@@ -1350,6 +1350,12 @@ require('./crafting');
     assert.ok([...world.claims.values()].filter((c) => c.by === 'bot5').length <= 8, 'claims per bot are capped');
     a.send({t: 'release', key: 'overworld:6,60,5', by: 'bot5'});
     await until(() => !world.claims.has('overworld:6,60,5'), 'release');
+    // a production step is a key too: bot2 on worker-2 never got one and waited for good (main server 2026-10-19)
+    assert.strictEqual(await ask('produce:craft:stone_bricks'), true);
+    assert.ok(world.claimedByOther('bot1', 'produce:craft:stone_bricks'), 'the lab bots see the step taken');
+    assert.strictEqual(await ask('produce:format:disk'), false);
+    a.send({t: 'release', key: 'produce:craft:stone_bricks', by: 'bot5'});
+    await until(() => !world.claims.has('produce:craft:stone_bricks'), 'release a step');
 
     // observations and the picture sent back
     a.send({t: 'observe', mobs: [{id: 77, type: 'zombie', x: 1, y: 2, z: 3, dim: 'overworld', by: 'bot5'}, {id: 'x', type: 'zombie'}], blocks: [{type: 'chest', x: 4, y: 5, z: 6, dim: 'overworld', by: 'bot5'}], gone: []});

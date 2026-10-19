@@ -30,6 +30,10 @@ const MAX_CONNS = 24; // authenticated sockets, hello or not
 const MAX_MSGS_PER_S = 200; // a real worker sends a handful per second
 const AUTH_FAILS = 20; // per minute, then 429 until the window passes
 const KEY_RE = /^[a-z_]{1,32}:-?\d{1,9},-?\d{1,4},-?\d{1,9}$/;
+// A production step (bots.js produce): a worker's bot2 got no step claimed and waited on "the other bots have the open
+// steps" for good, as only coordinates were taken (main server 2026-10-19).
+const PRODUCE_KEY_RE = /^produce:(craft|smelt|gather|get):[a-z_]{1,48}$/;
+const claimKey = (key) => KEY_RE.test(key) || PRODUCE_KEY_RE.test(key);
 const HOST_RE = /^[\w.-]{1,40}$/;
 const WID_RE = /^[0-9a-f]{32}$/;
 const RESUME_MS = 300000; // a restarted worker's bot has this long to log in before its old jobs are dropped
@@ -374,14 +378,14 @@ class Hub {
         const by = conn.bots.has(m.by) ? m.by : null;
         const key = String(m.key);
         let ok = false;
-        if (by && KEY_RE.test(key)) {
+        if (by && claimKey(key)) {
           ok = (this.world.held(by) < MAX_CLAIMS_PER_BOT || this.world.claims.get(key)?.by === by) && this.world.claim(by, key);
         }
         conn.ws.send(JSON.stringify({t: 'claim_result', id: int(m.id), ok}));
         return;
       }
       case 'release':
-        if (conn.bots.has(m.by) && KEY_RE.test(String(m.key))) this.world.release(m.by, String(m.key));
+        if (conn.bots.has(m.by) && claimKey(String(m.key))) this.world.release(m.by, String(m.key));
         return;
       case 'ping':
         conn.ws.send(JSON.stringify({t: 'pong'}));
