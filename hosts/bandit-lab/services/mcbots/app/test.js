@@ -7055,6 +7055,8 @@ require('./crafting');
     await JOBS.withdraw(r, job(3, true));
     assert.deepStrictEqual(held['-354,66,-163'].map((i) => i.count), [1], 'fit at night: it goes');
   }
+  // a light block counts as empty for every build (it cannot be dug in survival; plaza sandbox build 2026-10-19)
+  assert.ok(require('./build').REPLACEABLE.has('light'));
   { // waitSafe: an enderman by the target does not hold the walk (bot1 in a cave, main server 2026-10-19)
     const {waitSafe} = require('./bots');
     const {WorldModel} = require('./world');

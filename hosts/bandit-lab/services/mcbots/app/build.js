@@ -13,8 +13,10 @@ const NAME_RE = /^[a-z_]{1,48}$/;
 // Plain full blocks only: no containers, gravity blocks, fluids, doors, or
 // blocks whose facing/state matters (stairs, slabs, redstone, ...).
 const REFUSED = /chest|barrel|shulker|furnace|hopper|dispenser|dropper|door|gate|bed$|sign|banner|(^|_)sand$|gravel|concrete_powder|anvil|water|lava|torch|lantern|stairs|slab|wall$|fence|pane|rail|button|lever|pressure_plate|redstone|piston|observer|repeater|comparator|scaffolding|carpet|^air$/;
+// `light`: the invisible light block cannot be dug in survival ("dig time for light is Infinity" ended the plaza's
+// sandbox build over the shaft, 2026-10-19); a block is placed straight into it.
 const REPLACEABLE = new Set(['air', 'cave_air', 'short_grass', 'tall_grass', 'grass', 'fern', 'large_fern',
-  'dandelion', 'poppy', 'snow', 'dead_bush']);
+  'dandelion', 'poppy', 'snow', 'dead_bush', 'light']);
 // Plants a build may break to free a target cell (an explicit list: torches and redstone wire
 // also have hardness 0 and no collision box, and they are a player's, MC-3 review 2026-10-10).
 const PLANTS = new Set(['short_grass', 'tall_grass', 'grass', 'fern', 'large_fern', 'dead_bush', 'bush',
@@ -1333,4 +1335,4 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
 }
 
 module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
-  makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList};
+  makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList, REPLACEABLE};
