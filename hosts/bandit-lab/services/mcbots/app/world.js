@@ -24,8 +24,10 @@ const mobLocation = (e) => e.vehicle && e.vehicle.isValid !== false ? e.vehicle 
 // 'minecraft:the_nether' / 'the_nether' / 'overworld' -> canonical name.
 const normDim = (d) => String(d || '').replace(/^minecraft:/, '');
 
-// Is the block column x,z inside one of the [x1,z1,x2,z2] boxes where bots never dig or place?
-const insideAreas = (areas, x, z) => areas.some(([x1, z1, x2, z2]) => x >= x1 && x <= x2 && z >= z1 && z <= z2);
+// Is the block column x,z inside one of the [x1,z1,x2,z2(,y1,y2)] boxes where bots never dig or place? With y, a box that
+// has y bounds only covers those levels (bot2 sat 24 h under a hall zone: the 2D box walled off bedrock to sky, main server 2026-10-19);
+// callers that pass no y stay 2D, the conservative reading.
+const insideAreas = (areas, x, z, y) => areas.some(([x1, z1, x2, z2, y1, y2]) => x >= x1 && x <= x2 && z >= z1 && z <= z2 && (y === undefined || y1 === undefined || (y >= y1 && y <= y2)));
 
 // Walking time budget: 90 s, plus 1 s per block of distance, capped at 10 min.
 const deadlineMs = (dist) => Math.min(600000, 90000 + Math.max(0, Math.floor(dist || 0)) * 1000);

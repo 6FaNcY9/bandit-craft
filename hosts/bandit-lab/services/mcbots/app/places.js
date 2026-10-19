@@ -43,8 +43,8 @@ const zoneBox = (kind, fallback = null) => active?.zone(kind)?.box || fallback;
 // Is the block inside any overworld zone of this kind?
 const inZone = (kind, x, y, z) => !!active?.list.some((p) => p.kind === kind && p.box && p.dim === 'overworld' && x >= p.box.x1 && x <= p.box.x2 && y >= p.box.y1 && y <= p.box.y2 && z >= p.box.z1 && z <= p.box.z2);
 const zoneNamed = (name) => active?.list.find((p) => p.box && p.name === name)?.box || null;
-// Zone boxes the build/dig jobs must keep out of, as protectedAreas entries [x1, z1, x2, z2].
-const protectedBoxes = (list) => list.filter((p) => p.kind === 'protected' && p.box && p.dim === 'overworld').map(({box: b}) => [b.x1, b.z1, b.x2, b.z2]);
+// Zone boxes the build/dig jobs must keep out of, as protectedAreas entries [x1, z1, x2, z2, y1, y2] (the pathfinder checks y, everything else the column).
+const protectedBoxes = (list) => list.filter((p) => p.kind === 'protected' && p.box && p.dim === 'overworld').map(({box: b}) => [b.x1, b.z1, b.x2, b.z2, b.y1, b.y2]);
 
 class Places {
   constructor(dir) {

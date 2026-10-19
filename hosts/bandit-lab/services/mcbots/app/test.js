@@ -804,6 +804,11 @@ assert.deepStrictEqual(claims.claimStats('nobody'), {granted: 0, refused: 0, tim
 const boxes = [[-80, -144, 80, 80], [112, 368, 272, 592]];
 assert.ok(W.insideAreas(boxes, 0, 0) && W.insideAreas(boxes, 80, 80) && W.insideAreas(boxes, 200, 400));
 assert.ok(!W.insideAreas(boxes, 81, 0) && !W.insideAreas(boxes, -36, -197) && !W.insideAreas([], 0, 0));
+// A box with y bounds only covers those levels when the caller passes y (the pathfinder); without y it stays the whole column.
+const hall = [[-265, -221, -248, -212, 57, 61]];
+assert.ok(W.insideAreas(hall, -257, -220) && W.insideAreas(hall, -257, -220, 57) && W.insideAreas(hall, -257, -220, 61), 'no y: the column; y inside: covered');
+assert.ok(!W.insideAreas(hall, -257, -220, 44) && !W.insideAreas(hall, -257, -220, 62), 'bedrock to y 56 and above y 61 may be dug');
+assert.ok(W.insideAreas(boxes, 0, 0, 44) && !W.insideAreas(hall, -300, -220, 58), 'a 4-element entry covers every level');
 // Login passwords are stable per seed and name, and differ between bots.
 const pw = (n) => new BotRunner(n, {host: 'x', port: 1, log: () => {}, world: null, loginSeed: 'seed'}).password;
 assert.strictEqual(pw('bot1'), pw('bot1'));
@@ -4999,7 +5004,7 @@ require('./crafting');
   const n = fresh.list.length;
   fresh.seed(pc.seedZones());
   assert.strictEqual(fresh.list.length, n, 'seeded once');
-  assert.deepStrictEqual(P.protectedBoxes(fresh.list), [[-265, -221, -248, -212]], 'the hall walls are protected');
+  assert.deepStrictEqual(P.protectedBoxes(fresh.list), [[-265, -221, -248, -212, 57, 61]], 'the hall walls are protected, with their height');
   const was = {...pc.BASE.shaft};
   P.use(fresh);
   assert.deepStrictEqual(pc.BASE.shaft, was, 'seeded zones equal the shipped geometry');

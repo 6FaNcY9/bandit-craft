@@ -823,7 +823,7 @@ function safeMovements(bot, areas, runner = null) {
   mv.allow1by1towers = true;
   mv.getMoveDiagonal = () => {};
   mv.scafoldingBlocks = PILLAR_BLOCKS.map((n) => bot.registry.itemsByName[n]?.id).filter((id) => id !== undefined);
-  const inside = (blk) => insideAreas(areas, blk.position.x, blk.position.z);
+  const inside = (blk) => insideAreas(areas, blk.position.x, blk.position.z, blk.position.y);
   const veto = (blk) => (inside(blk) ? 100 : 0);
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
