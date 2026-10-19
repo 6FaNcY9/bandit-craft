@@ -2652,7 +2652,7 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
   helpOnce,
   craftTable: (r) => !!craftingLib.nearBlock(r.bot, 'crafting_table'),
   // `only` is needed: a plain deposit keeps food. Bread and wheat go to the base chest, where the plan reads them.
-  deposit: (r, job, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...planConfig.BASE.chest, only}})),
+  deposit: (r, job, only, keep) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...planConfig.BASE.chest, only, keep}})),
   // A field without water: a bucket (supply chest, else crafted) filled at a source outside every field, so no
   // field's own centre water is taken.
   getWater: async (r, job, fields) => {
@@ -2837,7 +2837,12 @@ const JOBS = {
     const isFood = (n) => !!bot.registry.foodsByName[n];
     // What a normal deposit files away; `only` (the keeper's coal and torches) puts just that kind into the chest.
     const junk = () => bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name)));
-    const eligible = () => (only ? bot.inventory.items().filter((it) => only(it.name)) : junk());
+    // `keep` (with `only`): that many of the kind stay with the bot (the wheat farm's seed stock).
+    const eligible = () => {
+      if (!only) return junk();
+      let spare = job.args.keep || 0;
+      return bot.inventory.items().filter((it) => only(it.name)).map((it) => { const k = Math.min(spare, it.count); spare -= k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
+    };
     let moved = 0;
     const byName = {};
     // Put items into the open chest; returns the ones that did not fit (the caller decides what a full chest means).
