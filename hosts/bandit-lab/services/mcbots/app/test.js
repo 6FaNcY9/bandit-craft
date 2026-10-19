@@ -7037,3 +7037,22 @@ require('./crafting');
     assert.ok(r.unreachableChests.has('-354,66,-100'), 'the dead chest is passed over for 30 min');
   }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+(async () => { // night fixes 2026-10-19: the keeper remembers on/off
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  { // keeper: on/off survives a restart; a bad or missing file is off
+    const {Keeper} = require('./keeper');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'keeper-')), file = path.join(dir, 'keeper.json');
+    const mk = (extra = {}) => new Keeper({runners: new Map(), world: new (require('./world').WorldModel)(), chest: {x: 1, y: 2, z: 3}, quotas: [], file, ...extra});
+    assert.strictEqual(mk().enabled, false, 'no file: off');
+    mk().setEnabled(true);
+    assert.strictEqual(mk().enabled, true, 'on stays on after a restart');
+    mk().setEnabled(true); // already on: no change
+    const k = mk(); k.setEnabled(false);
+    assert.strictEqual(mk().enabled, false);
+    fs.writeFileSync(file, '{nope');
+    assert.strictEqual(mk().enabled, false, 'bad file: off');
+    fs.writeFileSync(file, JSON.stringify({enabled: true}));
+    assert.strictEqual(mk({chest: null}).enabled, false, 'no supply chest: nothing to keep, off');
+  }
+})().catch((e) => { console.error(e); process.exitCode = 1; });

@@ -682,7 +682,8 @@ A switch on the dashboard ("Standing orders") that keeps the supply chest stocke
 `logs:64,cobblestone:128,coal:32,torch:64,raw_iron:16,iron_pickaxe:2,iron_sword:1`; optional `KEEPER_SITE=x,y,z` to walk to
 before chopping or mining). Without `SUPPLY_CHEST` or quotas the panel is absent.
 
-- **Off after every restart.** Switching on does nothing but read the chest and
+- **Off on first start, then as you left it** (`STATE_DIR/keeper.json`, 2026-10-19: it came back off after a deploy and no
+  standing order ran all night). Switching on does nothing but read the chest and
   plan; switching off stops planning (bots finish their jobs; use Stop to end them).
 - **Stock** comes from whichever bot last opened the chest (`deposit`,
   `withdraw`, `stock` jobs, also from laptop workers). Numbers older than 15 min

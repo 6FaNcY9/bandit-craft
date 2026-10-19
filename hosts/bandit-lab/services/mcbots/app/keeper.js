@@ -9,9 +9,10 @@
 //   2. for the first quota below its target with nobody on it, gives an idle
 //      bot a short job chain (chop/mine ..., deposit) through the same enqueue()
 //      the dashboard uses, so everything a human can see or stop works here too.
-// It starts switched off after every restart and never takes a bot that has a
+// It starts switched off (or as it was, with a state file: server.js passes one) and never takes a bot that has a
 // job or a queue. A bot that finishes without raising the stock puts that item
 // on a cooldown, so a missing ore never turns into a loop.
+const fs = require('node:fs');
 const MAX_BOTS = 2; // bots the keeper may use at once
 const IDLE_MS = 10000; // a bot must be idle this long before it is taken
 const STOCK_MAX_AGE_MS = 15 * 60 * 1000;
@@ -74,7 +75,7 @@ for (const [item, ingots] of [['iron_pickaxe', 3], ['iron_sword', 2]]) {
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
 class Keeper {
-  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}}) {
+  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}, file = null}) {
     this.runners = runners;
     this.world = world;
     this.chest = chest; // {x,y,z} of the supply chest, or null: nothing to keep
@@ -84,7 +85,10 @@ class Keeper {
     this.events = events;
     this.now = now;
     this.log = log;
-    this.enabled = false;
+    this.file = file;
+    // On/off survives a restart: it came back off after the deploy and no standing order ran all night (main server 2026-10-18/19).
+    // A missing or bad file means off.
+    try { this.enabled = !!chest && JSON.parse(fs.readFileSync(file, 'utf8')).enabled === true; } catch { this.enabled = false; }
     this.work = new Map(); // item -> {bot, n, at, before, seen}
     this.counting = null; // {bot, at}: a bot is on its way to count the chest
     this.cooldown = new Map(); // item -> until
@@ -103,6 +107,7 @@ class Keeper {
     if (on && !this.chest) throw new Error('no supply chest is configured, so there is nothing to keep stocked');
     if (this.enabled === !!on) return;
     this.enabled = !!on;
+    if (this.file) try { fs.writeFileSync(`${this.file}.tmp`, JSON.stringify({enabled: this.enabled})); fs.renameSync(`${this.file}.tmp`, this.file); } catch {}
     this.work.clear();
     this.counting = null;
     this.cooldown.clear();

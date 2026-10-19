@@ -118,7 +118,7 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log}) : null;
+const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null}) : null;
 // Map markers: the first 'supply' place is the supply chest for every bot, the
 // hub's workers and the keeper; the first 'site' place is where the keeper works.
 const places = new Places(process.env.STATE_DIR || '');
