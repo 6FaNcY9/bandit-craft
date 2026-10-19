@@ -6937,6 +6937,13 @@ require('./crafting');
   fs.writeFileSync(path.join(dir, 'hw.litematic'), schematic([{x: 100, y: 60, z: 50}, {x: 104, y: 60, z: 50}]).buffer);
   const again = await require('./build').schematicPlan(dir, {file: 'hw.litematic', origin: s.origin, anySolid: ['cobblestone']});
   assert.ok(again.targets.length < plan.targets.length, 'the new file, not the cached plan');
+  // A clean-up schematic is air alone: its site spans that air ("NaN Infinity NaN" before, sandbox 2026-10-19).
+
+  fs.writeFileSync(path.join(dir, 'clean.litematic'), writeLitematic({name: 'clean', regions: [{name: 'c', size: {x: 1, y: 3, z: 2}, position: {x: 0, y: 0, z: 0},
+    blocks: [{x: 0, y: 0, z: 0, name: 'air'}, {x: 0, y: 2, z: 1, name: 'air'}]}]}));
+  const clean = await require('./build').schematicPlan(dir, {file: 'clean.litematic', origin: {x: -244, y: 60, z: -184}});
+  assert.strictEqual(clean.targets.length, 0);
+  assert.deepStrictEqual([clean.lo, clean.hi], [{x: -244, y: 60, z: -184}, {x: -244, y: 62, z: -183}]);
   fs.rmSync(dir, {recursive: true, force: true});
   // Rock is as good as a cobblestone wall; gravel and water are not, nor rock where no anySolid was asked.
   assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'stone', props: {}}), true);

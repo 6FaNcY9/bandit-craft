@@ -392,8 +392,10 @@ async function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', 
       const fluids = placed.filter((c) => fluid(c) && (c.name === 'bubble_column' || String(c.props?.level ?? '0') === '0')).map((c) => ({x: c.x, y: c.y, z: c.z, name: c.name === 'lava' ? 'lava' : 'water'}));
       const cells = loneChests(placed.filter((c) => !fluid(c))).map((t) => anySolid.includes(t.name) ? {...t, anySolid: true} : t);
       const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
+      const airCells = schematicLib.placeSchematic(parsed, {origin, rotation, mirror, air: true}).filter((c) => c.name === 'air');
+      // A schematic of air alone (a clean-up) spans its air: its site was "NaN Infinity NaN" (sandbox 2026-10-19).
       const lo = {x: Infinity, y: Infinity, z: Infinity}, hi = {x: -Infinity, y: -Infinity, z: -Infinity};
-      for (const c of cells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
+      for (const c of cells.length ? cells : airCells) for (const ax of ['x', 'y', 'z']) { lo[ax] = Math.min(lo[ax], c[ax]); hi[ax] = Math.max(hi[ax], c[ax]); }
       const targets = order.map((t) => ({...t, p: placing.placement(t.name, t.props), late: deferred.has(keyOf(t))}));
       // Containers filled: kept in the state directory, merged with what other processes wrote (the lab runs
       // bot1 and bot2-3 in two), so a restart does not send the crew to every chest again.
@@ -403,7 +405,7 @@ async function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', 
       const saveFilled = () => { try { fs.writeFileSync(filledFile, JSON.stringify([...new Set([...readFilled(), ...filled])])); } catch {} };
       // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
       // both for the whole crew, until the end
-      const air = schematicLib.placeSchematic(parsed, {origin, rotation, mirror, air: true}).filter((c) => c.name === 'air').map(keyOf);
+      const air = airCells.map(keyOf);
       return {targets, fluids, air: new Set(air), byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
     })().catch((e) => {
       SCHEMATIC_PLANS.delete(k);
