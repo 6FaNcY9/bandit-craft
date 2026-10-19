@@ -855,8 +855,8 @@ const guard = (job) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Jobs pause while combat has the pathfinder (retreating from a hostile).
-async function waitCalm(r, job) {
-  while (r.combat.busy) {
+async function waitCalm(r, job, until = Infinity) {
+  while (r.combat.busy && Date.now() < until) {
     guard(job);
     await sleep(300);
   }
@@ -949,11 +949,14 @@ async function waitSafe(r, job, x, z, y = null) {
   await nightShelter(r, job);
   if (r.combat?.fit?.()) return; // armed and healthy: combat clears the mob when it comes close
   const dim = normDim(r.bot.game?.dimension);
+  // Unarmed bot1 kept retreating from zombies in a cave below, combat was busy nearly always and the rearm job hung 4.6 h
+  // here (main server 2026-10-19): 30 s in total, then it goes.
+  const until = Date.now() + 30000;
   // Mobs 30 blocks below in the dark under a build held a crew 10 s at every walk (sandbox, 2026-10-13).
-  for (let i = 0; i < 10 && r.world.hostilesNear(x, z, dim, 8, y).length; i++) {
+  for (let i = 0; i < 10 && Date.now() < until && r.world.hostilesNear(x, z, dim, 8, y).length; i++) {
     job.progress = 'waiting: hostile near target';
     job.t.doing = 'waiting: a hostile mob is near the target';
-    await waitCalm(r, job);
+    await waitCalm(r, job, until);
     await sleep(1000);
   }
 }
