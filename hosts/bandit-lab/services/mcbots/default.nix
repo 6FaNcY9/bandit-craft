@@ -37,6 +37,11 @@
       bots = "bot2,bot3";
       label = "bandit-lab-worker-2";
     };
+    # A fourth helper (owner 2026-10-19): a name VeloAuth has never seen (bot1-18 and bot50-59 are in its database).
+    mcbots-worker-3 = {
+      bots = "bot19";
+      label = "bandit-lab-worker-3";
+    };
   };
   # Worker processes: each shares mcbots' network namespace, so it reaches the
   # hub on 127.0.0.1 (plain ws:// is accepted only there) and Velocity from
@@ -81,7 +86,7 @@ in {
           image = "${image.imageName}:${image.imageTag}";
           imageFile = image;
           environment = {
-            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
+            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
             # No MC_VHOST: the three helpers play on the main server next to the owner (spec 2026-10-12, step 3);
             # test bots join the sandbox with the virtual host sandbox.bots (../minecraft/sandbox.nix).
             MC_HOST = "velocity";
