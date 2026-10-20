@@ -123,6 +123,7 @@ const BASE_DOC = ['Get the state of the base: each worker with its job and last 
 
 // A foreman (an agent with workers) gets few commands: the workers do the gathering, crafting and smelting.
 const FOREMAN = new Set(['assign', 'baseStatus', 'buildBlueprint', 'digRoom', 'digShaft', 'huntAnimals', 'placeBed', 'setHomeBed', 'placeBlockAt', 'viewChest', 'nearbyBlocks', 'stats', 'inventory', 'goToCoordinates', 'stop', 'startConversation']);
+const SHIFT_DWELL_S = 600;
 const GATHERING = new Set(['collectBlocks', 'collectBlock', 'startShift']);
 // Project jobs run until done; the owner decides who works on them (lab 2026-10-10: the lead pulled a worker off the shaft).
 const PROJECTS = {shaft: 'digging the shaft', level: 'mining a level of the shaft', excavate: 'digging a room', build: 'building', grave: 'collecting its grave', homebed: 'setting its bed', treefarm: 'tending the tree farm', wheatfarm: 'tending the wheat field', rim: 'walling the shaft', seal: 'sealing cave openings'};
@@ -902,6 +903,12 @@ async function decide(agent, agents, getState, budget) {
     if (isRoutine(bot.job) && bot.job.label === jobLabelOf(t.job)) {
       agent.push('system', `Already running: ${same}. Let it work, or do something else.`);
       return settle(d, 'neutral', 'already running');
+    }
+    // bot1 switched coal, logs and stone shifts every minute and gathered nothing: no shift lasted past its walk out
+    // (live 2026-10-20). A shift that is still young is left alone; the live job is compared, as above.
+    if (bot.job?.type === 'shift' && t.job[0] === 'shift' && bot.job.runningS < SHIFT_DWELL_S) {
+      agent.push('system', `Your ${bot.job.label} shift started ${Math.round(bot.job.runningS / 60)} min ago; let it work for ${SHIFT_DWELL_S / 60} min before you switch to ${same}.`);
+      return settle(d, 'neutral', 'shift too young');
     }
     agent.lastCommand = same;
     try {

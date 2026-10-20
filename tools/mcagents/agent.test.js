@@ -374,6 +374,18 @@ assert.ok(!new Agent('bot1', 'g', null).system({bots: [], places: [], world: {}}
       onEvent(new Map([['bot2', other]]), {bot: 'bot2', kind: 'stop', text: 'stopped: shift stone 1 64 1'});
       assert.strictEqual(other.wake, true, 'a stop from the owner still wakes the agent');
     }
+    { // bot1, 2026-10-20: a shift is not swapped for another one within 10 min
+      const agent = new Agent('bot1', 'mine coal', null);
+      const jobs = [];
+      globalThis.fetch = async (url, opt = {}) => ({ok: true, status: 200, json: async () => (url.endsWith('/api/chat') ? {message: {content: '!startShift("coal")'}} : (url.endsWith('/api/job') && jobs.push(JSON.parse(opt.body)), {}))});
+      const state = {bots: [{name: 'bot1', online: true, pos: [0, 64, 0], inventory: [], queue: [], job: {type: 'shift', label: 'shift stone 1 64 1', runningS: 60}}], places: [], supplyChest: {x: 1, y: 64, z: 1}};
+      await decide(agent, new Map([['bot1', agent]]), async () => state, {take: () => true});
+      assert.strictEqual(jobs.length, 0, 'a one-minute-old shift stays');
+      assert.match(agent.history.at(-1).content, /let it work for 10 min/);
+      state.bots[0].job.runningS = 601;
+      await decide(agent, new Map([['bot1', agent]]), async () => state, {take: () => true});
+      assert.strictEqual(jobs.length, 1, 'an old shift may be swapped');
+    }
     { // same job type failing with the same reason twice: a different command of that type is refused too
       const a = {};
       trackError(a, 'failed: build at -272 65 -219 22 blocks false - could not reach -260 63 -213: No path to the goal!');
