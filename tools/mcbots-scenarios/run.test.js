@@ -1,7 +1,7 @@
 'use strict';
 // Unit test for the pure parts of run.js: node tools/mcbots-scenarios/run.test.js
 const assert = require('node:assert/strict');
-const {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount} = require('./run');
+const {soakSummary, maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount} = require('./run');
 const {SCENARIOS} = require('./scenarios');
 
 // every shipped scenario is valid and stays inside the box
@@ -68,4 +68,8 @@ assert.equal(chestItemCount('The block has data: [{Slot: 0b, count: 64, id: "min
 assert.equal(chestItemCount('No such data', 'cobblestone'), 0);
 assert.equal(maxGap([[0, 'a'], [1, 'a'], [2, 'b'], [6, 'b'], [7, 'c']]), 4);
 assert.equal(maxGap([]), 0);
+const soak = soakSummary([{pass: true, metrics: {mined: 10, could_not_reach: 1, no_path: 1, no_progress_30s: 2, deaths: 0}}, {pass: false, metrics: {mined: 10, deaths: 1}}], 2);
+assert.deepEqual([soak.runs, soak.pass, soak.failed_walks_per_block, soak.stuck_per_hour, soak.deaths_per_hour], [2, 1, 0.1, 1, 0.5]);
+assert.equal(soakSummary([], 0).failed_walks_per_block, null);
+assert.doesNotThrow(() => checkCommand('time set midnight'));
 console.log('ok');

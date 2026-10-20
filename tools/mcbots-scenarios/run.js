@@ -29,7 +29,7 @@ function checkCommand(cmd) {
   if ((m = new RegExp(`^forceload add ${num} ${num}$`).exec(c)) || (m = new RegExp(`^forceload add ${num} ${num} ${num} ${num}$`).exec(c))) return checkPoint(cmd, m[1], BOX.y1, m[2]) && checkPoint(cmd, m[3] ?? m[1], BOX.y1, m[4] ?? m[2]);
   if ((m = new RegExp(`^kill @e\\[type=item,x=${num},y=${num},z=${num},dx=${num},dy=${num},dz=${num}\\]$`).exec(c))) return checkPoint(cmd, m[1], m[2], m[3]) && checkPoint(cmd, +m[1] + +m[4], +m[2] + +m[5], +m[3] + +m[6]);
   if ((m = new RegExp(`^data get block ${num} ${num} ${num} Items$`).exec(c))) return checkPoint(cmd, m[1], m[2], m[3]);
-  if (/^(gamemode survival bot50|clear bot50|time set noon|effect clear bot50|effect give bot50 minecraft:[a-z_]+ \d+ \d+|give bot50 minecraft:[a-z_]+ \d+)$/.test(c)) return true;
+  if (/^(gamemode survival bot50|clear bot50|time set (?:noon|midnight)|effect clear bot50|effect give bot50 minecraft:[a-z_]+ \d+ \d+|give bot50 minecraft:[a-z_]+ \d+)$/.test(c)) return true;
   throw new Error(`rcon command not allowed: ${cmd}`);
 }
 function checkPoint(cmd, x, y, z) {
@@ -172,12 +172,23 @@ async function runScenario(s) {
   return {s, bot, events, sawZero, elapsedS, chests, cells, timedOut, mined, maxGapS: Math.round(maxGap(samples)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
 }
 
+// Soak totals: failed walks (could not reach + no path) per mined block, stuck events (no progress 30 s) and deaths per hour.
+function soakSummary(rows, hours) {
+  const sum = (k) => rows.reduce((n, r) => n + (r.metrics?.[k] || 0), 0);
+  const mined = sum('mined'), walks = sum('could_not_reach') + sum('no_path');
+  return {runs: rows.length, pass: rows.filter((r) => r.pass).length, hours: +hours.toFixed(2), mined, failed_walks: walks, failed_walks_per_block: mined ? +(walks / mined).toFixed(3) : null,
+    stuck: sum('no_progress_30s'), stuck_per_hour: hours ? +(sum('no_progress_30s') / hours).toFixed(2) : null, deaths: sum('deaths'), deaths_per_hour: hours ? +(sum('deaths') / hours).toFixed(2) : null};
+}
+
 async function main() {
   const filter = process.argv[2];
   const list = SCENARIOS.filter((s) => !filter || s.name.includes(filter)).map(validateScenario);
   fs.mkdirSync(path.dirname(RESULTS), {recursive: true});
   const rows = [];
-  for (const s of list) {
+  const soakS = Number(process.env.SOAK_MIN || 0) * 60, t0 = Date.now(); // SOAK_MIN=120 repeats the list for 2 h; NIGHT=1 runs it at midnight
+  if (process.env.NIGHT) BOT_SETUP.splice(BOT_SETUP.indexOf('time set noon'), 1, 'time set midnight');
+  do for (const s of list) {
+    if (soakS && Date.now() - t0 >= soakS * 1000) break;
     let row;
     try {
       let r;
@@ -190,11 +201,16 @@ async function main() {
     fs.appendFileSync(RESULTS, JSON.stringify(row) + '\n');
     rows.push(row);
     console.log(`${row.pass ? 'PASS' : 'FAIL'} ${row.name} ${row.seconds}s ${JSON.stringify(row.metrics)}${row.pass ? '' : ` -> ${row.failed.join('; ')} err=${row.lastError || "-"} counts=${Object.values(row.cells || {}).join(",")}`}`);
+  } while (soakS && Date.now() - t0 < soakS * 1000);
+  if (soakS) {
+    const summary = {t: new Date().toISOString(), name: `soak${process.env.NIGHT ? '-night' : ''}`, filter: filter || 'all', ...soakSummary(rows, (Date.now() - t0) / 3600000)};
+    fs.appendFileSync(RESULTS, JSON.stringify(summary) + '\n');
+    console.log(JSON.stringify(summary));
   }
   console.log('\nname\t\t\tresult\tsec\tmetrics');
   for (const r of rows) console.log(`${r.name.padEnd(20)}\t${r.pass ? 'PASS' : 'FAIL'}\t${r.seconds}\t${Object.entries(r.metrics).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   process.exit(rows.some((r) => !r.pass) ? 1 : 0);
 }
 
-module.exports = {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount};
+module.exports = {soakSummary, maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount};
 if (require.main === module) main();
