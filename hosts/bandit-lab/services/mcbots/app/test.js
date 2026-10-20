@@ -2970,7 +2970,10 @@ require('./crafting');
     runner.pillars.clear(); roof = 75;
     await bot.placeBlock(under, new Vec3(0, 1, 0));
     assert.strictEqual(runner.pillars.size, 0, 'under a stone roof it is the way back up');
-    roof = null; building = false;
+    roof = null;
+    await bot.placeBlock({name: 'dirt', position: new Vec3(12, 66, 20)}, new Vec3(1, 0, 0));
+    assert.deepStrictEqual([...runner.pillars.keys()], ['13,66,20'], 'a bridge block under the sky is remembered too (2026-10-20)');
+    runner.pillars.clear(); building = false;
     await bot.placeBlock(under, new Vec3(0, 1, 0));
     assert.strictEqual(runner.pillars.size, 0, 'a block the job itself places (a build) is no pillar');
   }

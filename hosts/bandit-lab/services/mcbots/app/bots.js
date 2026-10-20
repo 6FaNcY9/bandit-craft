@@ -1356,13 +1356,14 @@ function guardDigs(runner, bot) {
   bot.placeBlock = (ref, face, ...rest) => {
     const why = placeRefusal(ref, face);
     if (why) return Promise.reject(new Error(why));
-    // A step straight up from the bot's own column is a pillar: remember it (pillars.js) while it chops, and in any
-    // job when the pathfinder built it out in the open or under leaves (towers to drops and out of dips: 146 left
-    // above y 67 in 2.3 days, none dug back, main server 2026-10-18). Under a roof of stone it is the way back up and
-    // stays; a job's own placements (a build, a shelter lid) are never pillars.
+    // A step straight up from the bot's own column is a pillar: remember it (pillars.js) while it chops; and in any
+    // job every block the pathfinder places out in the open or under leaves, a tower step or a bridge (146 towers left
+    // above y 67 in 2.3 days, main server 2026-10-18; bridges of cobblestone and dirt among 857 junk blocks round the
+    // base, 2026-10-20). Under a roof of stone it is the way back and stays; a job's own placements (a build, a shelter
+    // lid) are never scaffolding.
     const p = ref.position.plus(face), held = bot.heldItem?.name;
-    const climb = PILLAR_BLOCKS.includes(held) && pillars.isPillarStep(face, ref.position, bot.entity.position) &&
-      (PILLAR_JOBS.has(runner.current?.type) ||
+    const climb = PILLAR_BLOCKS.includes(held) &&
+      ((PILLAR_JOBS.has(runner.current?.type) && pillars.isPillarStep(face, ref.position, bot.entity.position)) ||
         (!!bot.pathfinder?.isBuilding?.() && pillars.openAbove((x, y, z) => bot.blockAt(new Vec3(x, y, z)), p.x, p.y, p.z)));
     return nativePlace(ref, face, ...rest).then((out) => {
       if (climb) pillars.record(runner.pillars, p.x, p.y, p.z, held);

@@ -2,7 +2,8 @@
 // Bookkeeping for the pillars a bot builds to climb to the logs of a tall tree (the pathfinder places dirt or
 // cobblestone under its feet; the tree farm was full of the leftovers, 2026-10-10). The placement wrapper in
 // bots.js records each such block (cells: Map "x,y,z" -> {x, y, z, name}); once the bot is done with the tree
-// it digs them back down. Pure and tested in test.js with plain objects.
+// it digs them back down. The pathfinder's bridges out in the open are recorded the same way (2026-10-20).
+// Pure and tested in test.js with plain objects.
 const key = (x, y, z) => `${x},${y},${z}`;
 
 // A block placed straight up onto the block under the bot's own column is a pillar step; bridges and walls are not.
