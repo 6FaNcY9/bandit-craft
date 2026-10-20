@@ -100,13 +100,13 @@ const SCENARIOS = [
     job: {type: 'get', args: {item: 'iron_pickaxe', count: 1}}, success: [finished, noError, alive, {kind: 'inv', item: 'iron_pickaxe', min: 1}, {kind: 'inv', item: 'shield', min: 1}, {kind: 'inv', item: 'furnace', min: 1}]},
   {name: '15-wheat-plot', timeoutS: 200, stopAfterS: 150,
     // 8x4 ripe wheat on farmland (y 201/202), a stone-walled water strip along the north edge hydrates it. The job never ends on its own: stopped after 150 s. A crafting table stands by the field (else the bot walks to the real base for bread) and the bot starts without bread (16 bread would be handed in at the base chest).
-    // Replanted = wheat at age 0..1 (a fresh seed may have grown one stage); harvested = no age 7 left. Farmland count must stay 32 (no trampling).
+    // Replanted = wheat at age 0..3 (hydrated farmland grows a fresh seed up to two stages in 150 s; ripe is 7); harvested = no age 7 left. Farmland count must stay 32 (no trampling).
     // wheatfarm.js looks for ground within 20 blocks of the supply chest's y (or the job's y): the job passes y 201 so the bot needs no SUPPLY_CHEST.
     setup: [fill(3519, 201, 3023, 3528, 201, 3023, 'stone'), fill(3519, 201, 3024, 3519, 201, 3029, 'stone'), fill(3528, 201, 3024, 3528, 201, 3029, 'stone'), fill(3520, 201, 3024, 3527, 201, 3024, 'water'),
       fill(3520, 201, 3025, 3527, 201, 3028, 'farmland[moisture=7]'), fill(3520, 202, 3025, 3527, 202, 3028, 'wheat[age=7]'), 'setblock 3525 201 3031 minecraft:crafting_table', 'clear bot50', 'give bot50 minecraft:stone_pickaxe 1', 'give bot50 minecraft:stone_axe 1', 'give bot50 minecraft:wheat_seeds 16', 'give bot50 minecraft:stone_hoe 1', 'tp bot50 3523.5 201 3032.5'],
     job: {type: 'wheatfarm', args: {x1: 3520, z1: 3025, x2: 3527, z2: 3028, y: 201}},
     success: [alive, {kind: 'cells', x1: 3520, y1: 202, z1: 3025, x2: 3527, y2: 202, z2: 3028, specs: ['minecraft:wheat[age=7]'], max: 0},
-      {kind: 'cells', x1: 3520, y1: 202, z1: 3025, x2: 3527, y2: 202, z2: 3028, specs: ['minecraft:wheat[age=0]', 'minecraft:wheat[age=1]'], min: 31},
+      {kind: 'cells', x1: 3520, y1: 202, z1: 3025, x2: 3527, y2: 202, z2: 3028, specs: ['minecraft:wheat[age=0]', 'minecraft:wheat[age=1]', 'minecraft:wheat[age=2]', 'minecraft:wheat[age=3]'], min: 31},
       {kind: 'cells', x1: 3520, y1: 201, z1: 3025, x2: 3527, y2: 201, z2: 3028, specs: ['minecraft:farmland'], min: 32}]},
   {name: '16-blueprint-small', timeoutS: 240,
     // 5x5 hut, walls 3 high from oak_planks, a 2 high door gap in the south wall and one glass window in the north wall (46 blocks, MAX_SIZE is 5x3x5).
