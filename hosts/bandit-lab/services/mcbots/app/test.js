@@ -1873,7 +1873,7 @@ require('./crafting');
   const runners = new Map(bots.map((b) => [b.name, b]));
   const {EventLog} = require('./events');
   const events = new EventLog();
-  const k = new Keeper({runners, world, chest, quotas: [['logs', 64], ['cobblestone', 128], ['torch', 16], ['diamond', 5]], events, now: () => now});
+  const k = new Keeper({runners, world, chest, quotas: [['logs', 64], ['cobblestone', 128], ['torch', 16]], events, now: () => now});
   assert.throws(() => new Keeper({runners, world, chest: null, quotas: [], now: () => now}).setEnabled(true), /no supply chest/);
   k.tick();
   assert.strictEqual(bots.every((b) => !b.sent.length), true, 'off by default: nothing is assigned');
@@ -1893,14 +1893,13 @@ require('./crafting');
   now += 6000;
   k.tick();
   const st = k.state();
-  assert.deepStrictEqual(st.quotas.map((q) => [q.item, q.have, q.want]), [['logs', 24, 64], ['cobblestone', 200, 128], ['torch', 0, 16], ['diamond', 0, 5]]);
+  assert.deepStrictEqual(st.quotas.map((q) => [q.item, q.have, q.want]), [['logs', 24, 64], ['cobblestone', 200, 128], ['torch', 0, 16]]);
   // logs are short: a chop of the missing 40 and a deposit of logs only, on an idle bot (not the one that just finished)
   const logBot = bots.find((b) => b.sent.some((x) => x[0] === 'chop'));
   assert.ok(logBot && logBot !== bots[0]);
   assert.deepStrictEqual(logBot.sent, [['chop', {count: 40}], ['deposit', {...chest, only: 'logs'}]]);
   assert.strictEqual(k.state().quotas[0].bot, logBot.name);
   assert.match(k.state().quotas[2].note, /needs 4 coal/); // torches wait for coal
-  assert.match(k.state().quotas[3].note, /no way to make/);
   assert.strictEqual(k.state().quotas[1].bot, null, 'cobblestone is above its target: no job');
   // cobblestone falls short: a second chain, on another bot
   world.noteStock('bot1', {oak_log: 24, cobblestone: 20, coal: 8});
@@ -1908,6 +1907,17 @@ require('./crafting');
   const stoneBot = bots.find((b) => b.sent.some((x) => x[0] === 'mine'));
   assert.ok(stoneBot && stoneBot !== logBot);
   assert.deepStrictEqual(stoneBot.sent, [['mine', {block: 'stone', count: 64}], ['deposit', {...chest, only: 'cobblestone'}]]);
+  // 2026-10-20: a quota item without a PLANS entry is fetched by the acquire planner (get) and shelved
+  {
+    let t2 = Date.now();
+    const solo = fake('bot9'), w2 = new WorldModel({now: () => t2});
+    const k2 = new Keeper({runners: new Map([[solo.name, solo]]), world: w2, chest, quotas: [['diamond', 5]], now: () => t2});
+    k2.setEnabled(true);
+    t2 += IDLE_MS; k2.tick();
+    w2.noteStock('bot9', {cobblestone: 1});
+    solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
+    assert.deepStrictEqual(solo.sent, [['get', {item: 'diamond', count: 5}], ['deposit', {...chest, only: 'diamond'}]]);
+  }
   // the third bot is never used: at most two at once
   now += IDLE_MS; k.tick();
   assert.strictEqual(bots.filter((b) => b.sent.length).length, 3, 'bot1 counted, two worked');

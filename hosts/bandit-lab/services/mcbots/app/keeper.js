@@ -76,6 +76,9 @@ for (const [item, ingots] of [['iron_pickaxe', 3], ['iron_sword', 2]]) {
     return [...need.map(([what, k]) => ['withdraw', {item: what, count: k, ...c}]), ['smelt', {item: 'raw_iron', count: raw}], ['craft', {item, count: n}], ['deposit', {...c, only: item}]];
   };
 }
+// Any quota item without a chain above: let the acquire planner (bots.js getItem) find its own way, then shelve the result.
+// shortcut: it does not know the keeper's reserves (128 logs, supply chest only); give an item its own PLANS entry when that matters.
+const getPlan = (item) => (n, c) => [['get', {item, count: n}], ['deposit', {...c, only: item}]];
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
 class Keeper {
@@ -166,11 +169,7 @@ class Keeper {
         this.notes.set(item, `no progress last time, retrying in ${Math.ceil((this.cooldown.get(item) - t) / 60000)} min`);
         continue;
       }
-      const plan = PLANS[item];
-      if (!plan) {
-        this.notes.set(item, 'the keeper has no way to make this');
-        continue;
-      }
+      const plan = PLANS[item] || getPlan(item);
       const n = Math.min(missing, MAX_JOB);
       const jobs = plan(n, this.chest, stock.items);
       if (!Array.isArray(jobs)) {
