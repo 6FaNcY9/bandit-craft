@@ -100,6 +100,10 @@ function maxGap(samples) {
   return gap;
 }
 // Items of a chest from `data get block ... Items` output, summed for one item.
+// Largest yaw change per tick (deg) outside combat in the bot's look windows since t0 (file written by bots.js when LOOK_STATS_FILE is set).
+function lookMax(wins, t0) { return (wins || []).filter((w) => w.t >= t0).reduce((m, w) => Math.max(m, w.out || 0), 0); }
+const LOOK_FILE = process.env.LOOK_STATS_FILE || path.join(os.homedir(), '.cache/bandit-bot-test/look-stats.json');
+const readLook = () => { try { return JSON.parse(fs.readFileSync(LOOK_FILE, 'utf8')); } catch { return []; } };
 function chestItemCount(out, item) {
   let n = 0;
   for (const e of out.match(/\{[^{}]*\}/g) || []) if (new RegExp(`id: ?"minecraft:${item}"`).test(e)) n += Number(/(?:count|Count): ?(\d+)/.exec(e)?.[1] || 0);
@@ -169,7 +173,7 @@ async function runScenario(s) {
   for (const c of s.success.filter((x) => x.kind === 'cells')) cells[cellKey(c)] = countPassed(rcon(cellCommands(c)));
   const events = (await api(`/api/events?since=${since}`)).events.filter((e) => e.bot === BOT);
   if (!process.env.KEEP) rcon(CLEAR.concat(s.teardown || [])); // KEEP=1 leaves the lab standing for a look
-  return {s, bot, events, sawZero, elapsedS, chests, cells, timedOut, mined, maxGapS: Math.round(maxGap(samples)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
+  return {s, bot, events, sawZero, elapsedS, chests, cells, timedOut, mined, maxGapS: Math.round(maxGap(samples)), lookMaxDeg: Math.round(lookMax(readLook(), t0)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
 }
 
 // Soak totals: failed walks (could not reach + no path) per mined block, stuck events (no progress 30 s) and deaths per hour.
@@ -194,7 +198,7 @@ async function main() {
       let r;
       try { r = await runScenario(s); } finally { await zonesCall(s, 'delete').catch(() => {}); }
       const failed = r.reason ? [r.reason] : evalSuccess(s, {bot: r.bot, timedOut: r.timedOut, elapsedS: r.elapsedS, chests: r.chests, cells: r.cells});
-      row = {t: new Date().toISOString(), name: s.name, pass: !failed.length, seconds: r.elapsedS, metrics: {...countMetrics(r.events, r.sawZero), mined: r.mined, placed: r.placed, max_gap_s: r.maxGapS}, failed, timedOut: r.timedOut, pos: r.bot?.pos, lastError: r.bot?.lastError, chests: r.chests, cells: r.cells};
+      row = {t: new Date().toISOString(), name: s.name, pass: !failed.length, seconds: r.elapsedS, metrics: {...countMetrics(r.events, r.sawZero), mined: r.mined, placed: r.placed, max_gap_s: r.maxGapS, look_max_deg: r.lookMaxDeg}, failed, timedOut: r.timedOut, pos: r.bot?.pos, lastError: r.bot?.lastError, chests: r.chests, cells: r.cells};
     } catch (e) {
       row = {t: new Date().toISOString(), name: s.name, pass: false, seconds: 0, metrics: countMetrics([]), failed: [`runner error: ${e.message}`]};
     }
@@ -212,5 +216,5 @@ async function main() {
   process.exit(rows.some((r) => !r.pass) ? 1 : 0);
 }
 
-module.exports = {soakSummary, maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount};
+module.exports = {lookMax, soakSummary, maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount};
 if (require.main === module) main();

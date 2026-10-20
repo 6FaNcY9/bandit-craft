@@ -1,7 +1,7 @@
 'use strict';
 // Unit test for the pure parts of run.js: node tools/mcbots-scenarios/run.test.js
 const assert = require('node:assert/strict');
-const {soakSummary, maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount} = require('./run');
+const {lookMax, soakSummary, maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount} = require('./run');
 const {SCENARIOS} = require('./scenarios');
 
 // every shipped scenario is valid and stays inside the box
@@ -72,4 +72,6 @@ const soak = soakSummary([{pass: true, metrics: {mined: 10, could_not_reach: 1, 
 assert.deepEqual([soak.runs, soak.pass, soak.failed_walks_per_block, soak.stuck_per_hour, soak.deaths_per_hour], [2, 1, 0.1, 1, 0.5]);
 assert.equal(soakSummary([], 0).failed_walks_per_block, null);
 assert.doesNotThrow(() => checkCommand('time set midnight'));
+assert.equal(lookMax([{t: 1, out: 90}, {t: 5, out: 30}, {t: 6, out: 12}], 5), 30);
+assert.equal(lookMax(undefined, 0), 0);
 console.log('ok');
