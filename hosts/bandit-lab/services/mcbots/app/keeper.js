@@ -34,7 +34,11 @@ const have = (items, key) => Object.entries(items || {}).filter(([n]) => matcher
 const PLANS = {
   logs: (n, c) => [['chop', {count: n}], ['deposit', {...c, only: 'logs'}]],
   cobblestone: (n, c) => [['mine', {block: 'stone', count: n}], ['deposit', {...c, only: 'cobblestone'}]],
-  coal: (n, c) => [['mine', {block: 'coal_ore', count: n}], ['deposit', {...c, only: 'coal'}]],
+  // Plenty of logs in the chest: burn charcoal instead of mining (coal veins ran dry, 2026-10-20). 2n logs: n smelted, the rest fuel;
+  // 128 stay for torches and tools. KINDS.coal counts charcoal.
+  coal: (n, c, stock) => have(stock, 'oak_log') >= 2 * n + 128
+    ? [['withdraw', {item: 'oak_log', count: 2 * n, ...c}], ['smelt', {item: 'oak_log', count: n}], ['deposit', {...c, only: 'coal'}], ['deposit', {...c, only: 'logs'}]]
+    : [['mine', {block: 'coal_ore', count: n}], ['deposit', {...c, only: 'coal'}]],
   // 1 coal + 1 stick make 4 torches; sticks need planks, planks need a log.
   torch: (n, c, stock) => {
     const coal = Math.ceil(n / 4);

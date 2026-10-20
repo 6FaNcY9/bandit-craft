@@ -1966,6 +1966,11 @@ require('./crafting');
   assert.strictEqual(PLANS.iron_pickaxe(2, chest, kitStock).at(-1)[1].only, 'iron_pickaxe');
   assert.match(PLANS.iron_pickaxe(2, chest, {...kitStock, raw_iron: 5}).blocked, /6 raw_iron/);
   assert.match(PLANS.iron_sword(1, chest, {...kitStock, coal: 0}).blocked, /1 coal/);
+  assert.deepStrictEqual(PLANS.coal(32, chest, {oak_log: 500}).map((j) => j[0]), ['withdraw', 'smelt', 'deposit', 'deposit'], 'logs to spare: charcoal');
+  assert.deepStrictEqual([PLANS.coal(32, chest, {oak_log: 500})[0][1].count, PLANS.coal(32, chest, {oak_log: 500})[1][1].count], [64, 32]);
+  assert.deepStrictEqual(PLANS.coal(32, chest, {oak_log: 191}).map((j) => j[0]), ['mine', 'deposit'], 'too few logs: mine');
+  assert.deepStrictEqual(PLANS.coal(32, chest, {coal: 0}).map((j) => j[0]), ['mine', 'deposit']);
+  assert.deepStrictEqual(PLANS.coal(32, chest).map((j) => j[0]), ['mine', 'deposit'], 'no stock: mine');
   assert.match(PLANS.iron_sword(1, chest, {...kitStock, cobblestone: 7}).blocked, /8 cobblestone/);
   assert.deepStrictEqual(PLANS.raw_iron(16, chest).map((j) => [j[0], j[1].block || j[1].only]), [['mine', 'iron_ore'], ['deposit', 'raw_iron']]);
   // gear: pickaxe, sword, then the cheapest armour; never what is already held or worn
