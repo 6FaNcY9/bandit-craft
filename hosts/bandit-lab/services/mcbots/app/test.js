@@ -5424,6 +5424,11 @@ require('./crafting');
     assert.doesNotThrow(() => VALIDATE.level(boxJob('level', box(-58, -57), {length: 32, branch: 8})[1]));
   }
 })();
+{ // an unreachable block waits 5 min, then twice as long each time, at most 2 h (2026-10-20)
+  const {backoff} = require('./bots');
+  assert.deepStrictEqual([1, 2, 3, 5, 6, 9].map((n) => backoff(n) / 60000), [5, 10, 20, 80, 120, 120]);
+}
+
 (async () => { // goLeg: "No path" at the usual budget looks further (250, then 600) and puts the budget back (2026-10-20)
   const {goNear} = require('./bots');
   const {Vec3} = require('vec3');

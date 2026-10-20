@@ -287,6 +287,7 @@ class BotRunner {
     this.hits = []; // {t, by}: who hurt this bot lately, for the death line
     this.acquireFailed = new Map(); // acquire.js method key -> until: the "get" job leaves that way out meanwhile
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
+    this.unreached = new Map(); // block key -> {n: walks there that failed, t: the last}: the next wait doubles
     this.conflicts = {n: 0, at: 0};
     this.hostLabel = hostLabel; // machine this bot runs on, shown in the dashboard
     this.lastSeen = 0;
@@ -2143,6 +2144,9 @@ async function fetchWood(r, job, force) {
   }
 }
 
+// A block no walk reaches waits longer each time, 5 min doubling up to 2 h: a coal ore in a cave at -208 44 -169 cost
+// three bots 90 s every 5 min all night (main server 2026-10-20).
+const backoff = (n) => Math.min(7200000, 300000 * 2 ** (n - 1));
 async function collect(r, job, matching, count, what) {
   const {bot} = r;
   // An ore below Y 0 is the deepslate variant: mining iron_ore also takes deepslate_iron_ore.
@@ -2240,11 +2244,16 @@ async function collect(r, job, matching, count, what) {
         continue;
       }
       if (!/could not reach|Digging aborted/.test(e.message) || ++misses > 5) throw e;
-      for (const [k, until] of r.skip) if (until < Date.now()) r.skip.delete(k);
-      r.skip.set(key, Date.now() + 300000);
+      const now = Date.now(), away = /could not reach/.test(e.message);
+      for (const [k, until] of r.skip) if (until < now) r.skip.delete(k);
+      for (const [k, u] of r.unreached) if (now - u.t > 4 * 3600000) r.unreached.delete(k);
+      const n = away ? (r.unreached.get(key)?.n || 0) + 1 : 1;
+      if (away) r.unreached.set(key, {n, t: now});
+      const until = now + backoff(n);
+      r.skip.set(key, until);
       // The rest of that vein sits behind the same water or wall: skip it too,
       // or each of its blocks costs another full walk timeout.
-      if (/could not reach/.test(e.message)) for (const q of found) if (q.distanceTo(pos) <= 4) r.skip.set(keyOf(q), Date.now() + 300000);
+      if (away) for (const q of found) if (q.distanceTo(pos) <= 4) r.skip.set(keyOf(q), until);
       r.emit('info', `skipped a ${what} block (${e.message.slice(0, 40)}) at ${at(pos)}`);
       continue;
     } finally {
@@ -3451,4 +3460,4 @@ const JOBS = {
   },
 };
 
-module.exports = {WIDER, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
