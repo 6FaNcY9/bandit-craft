@@ -5943,6 +5943,29 @@ require('./crafting');
   assert.strictEqual(c.mode, null, 'head in the air: no surfacing');
 })();
 
+(async () => { // air within reach: it swims there itself; no air at all: it digs the roof (bot1 drowned beside air, 2026-10-19)
+  const {Combat} = require('./combat');
+  const {Vec3} = require('vec3');
+  const controls = {}, goals = [], ticks = [], dug = [];
+  let air = [new Vec3(1, 57, 0)];
+  const blockAt = (p) => (p.y === 57 && p.x === 0 ? {name: 'stone', boundingBox: 'block', position: p} : p.y < 58 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
+  const bot = {health: 20, food: 20, ownAir: 6, oxygenLevel: 20, entity: {position: new Vec3(0.5, 55, 0.5), onGround: true}, entities: {}, game: {dimension: 'overworld'},
+    registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt, setControlState: (k, v) => { controls[k] = v; },
+    findBlock: ({useExtraInfo}) => air.map((p) => ({position: p})).find(useExtraInfo) ?? null, lookAt: async () => {},
+    on: (e, f) => ticks.push(f), removeListener: (e, f) => ticks.splice(ticks.indexOf(f), 1), canDigBlock: () => true, dig: async (b) => dug.push(b.name),
+    pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
+  const c = new Combat({bot, online: true, name: 'bot1', protectedAreas: [], world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
+  c.stop();
+  await c.tick();
+  assert.deepStrictEqual([c.mode, goals.at(-1), ticks.length, controls.forward, controls.jump], ['air', null, 1, true, true], 'air 1.3 away: swims, no pathfinder');
+  c.release();
+  assert.deepStrictEqual([ticks.length, controls.forward], [0, false], 'steering ends with the mode');
+  air = [];
+  await c.tick();
+  await new Promise((res) => setImmediate(res));
+  assert.deepStrictEqual([c.mode, dug, controls.jump, c.straightUp], ['air', ['stone'], true, true], 'no air: the roof is dug, then up');
+})();
+
 { // a guard job fights even with the defend setting off
   const {Combat} = require('./combat');
   const c = Object.create(Combat.prototype);

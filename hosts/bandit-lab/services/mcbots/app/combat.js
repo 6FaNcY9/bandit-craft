@@ -4,7 +4,8 @@
 // pathfinder (retreat / creeper back-off); `epoch` then changes so the running
 // job knows to re-issue its goal, and `busy` makes jobs wait until calm.
 const {goals} = require('mineflayer-pathfinder');
-const {mobLocation, isHostile, shouldFight, normDim, NOTABLE_BLOCKS} = require('./world');
+const {mobLocation, isHostile, shouldFight, normDim, insideAreas, NOTABLE_BLOCKS} = require('./world');
+const {CONTAINER} = require('./build');
 const {DEFAULTS} = require('./settings');
 const {weapon, armour: armourOdds, odds, NIGHT} = require('./odds');
 
@@ -156,32 +157,76 @@ class Combat {
     const bot = this.r.bot;
     if (bot.targetDigBlock) bot.stopDigging();
     this.block(false); // a raised shield slows the swim
+    this.unsteer?.();
     // Open water up to the air: swimming up is enough, and the pathfinder would only fight the jump (it let go of it,
     // and bot50 hung at y 60 in a pool with no air left, sandbox 2026-10-17). Under a roof: the nearest air it reaches.
     const at = bot.entity.position.floored();
     this.straightUp = false;
+    let roof = null;
     for (let dy = 1; dy <= 24; dy++) {
       const b = bot.blockAt(at.offset(0, dy, 0));
       if (/^(cave_)?air$/.test(b?.name || '')) { this.straightUp = true; break; }
-      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) break;
+      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) { roof = b; break; }
     }
     const ids = ['air', 'cave_air'].map((n) => bot.registry.blocksByName[n]?.id).filter((i) => i !== undefined);
     // Only above its feet: the nearest air was a cave under the pool floor (sandbox 2026-10-17).
     const feet = bot.entity.position.y;
     const spot = this.straightUp ? null : bot.findBlock({matching: ids, maxDistance: 12, useExtraInfo: (b) => { const under = bot.blockAt(b.position.offset(0, -1, 0)); return b.position.y > feet && !!under && (under.name === 'water' || under.boundingBox === 'empty'); }});
+    // Air within about 2 blocks: it swims there itself. The pathfinder never made the one block to -221 47 -211, and
+    // bot1 drowned beside it (main server 2026-10-19).
+    const near = !!spot && spot.position.offset(0.5, 0.5, 0.5).distanceTo(bot.entity.position.offset(0, 1.62, 0)) <= 2.5;
+    // No air at all: it digs out the roof over its head, and the hole is the air. Not in a protected area, not a block
+    // that holds items, and not under water or lava.
+    const dig = !this.straightUp && !spot && !!roof && bot.canDigBlock(roof) && !CONTAINER.test(roof.name)
+      && !insideAreas(this.r.protectedAreas, roof.position.x, roof.position.z, roof.position.y)
+      && !/water|lava/.test(bot.blockAt(roof.position.offset(0, 1, 0))?.name || '');
     this.mode = 'air';
     this.target = null;
     this.since = Date.now();
     this.busy = true;
-    this.epoch++;
-    this.r.log(this.r.name, `air ${bot.ownAir ?? bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${spot.position.x} ${spot.position.y} ${spot.position.z}` : 'with no air in sight'}`);
-    bot.pathfinder.setGoal(spot ? new goals.GoalBlock(spot.position.x, spot.position.y - 1, spot.position.z) : null, !!spot);
+    const epoch = ++this.epoch;
+    const p = (v) => `${v.x} ${v.y} ${v.z}`;
+    this.r.log(this.r.name, `air ${bot.ownAir ?? bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${p(spot.position)}${near ? ', swimming' : ''}` : dig ? `through the ${roof.name} at ${p(roof.position)}` : 'with no air in sight'}`);
+    bot.pathfinder.setGoal(spot && !near ? new goals.GoalBlock(spot.position.x, spot.position.y - 1, spot.position.z) : null, !!spot && !near);
+    bot.setControlState('jump', !dig); // a bot on the ground digs 5 times faster than a floating one
+    if (near) this.steer(spot.position.offset(0.5, 0, 0.5));
+    if (dig) this.digUp(roof, epoch).catch((e) => this.r.log(this.r.name, `air: could not dig the ${roof.name}: ${e.message}`));
+  }
+
+  // Swims at the air cell every physics tick: forward until the bot is under it, and up all along.
+  steer(to) {
+    const bot = this.r.bot;
+    const go = () => {
+      const far = Math.hypot(to.x - bot.entity.position.x, to.z - bot.entity.position.z) > 0.3;
+      if (far) bot.lookAt(to, true).catch(() => {});
+      bot.setControlState('forward', far);
+      bot.setControlState('jump', true);
+    };
+    bot.on('physicsTick', go);
+    this.unsteer = () => { bot.removeListener('physicsTick', go); bot.setControlState('forward', false); this.unsteer = null; };
+    go();
+  }
+
+  // Stands on the floor first (under water a floating bot digs 25 times slower than on land, a standing one 5 times),
+  // digs the roof, then swims up into the hole.
+  async digUp(roof, epoch) {
+    const bot = this.r.bot;
+    for (let i = 0; i < 6 && !bot.entity.onGround; i++) await new Promise((res) => setTimeout(res, 250));
+    if (this.epoch !== epoch) return;
+    await bot.tool?.equipForBlock(roof, {}).catch(() => {});
+    if (this.epoch !== epoch) return;
+    await bot.dig(roof, true);
+    if (this.epoch !== epoch) return;
+    this.straightUp = true;
     bot.setControlState('jump', true);
   }
 
   release() {
     if (!this.mode) return;
-    if (this.mode === 'air') this.r.bot.setControlState('jump', false);
+    if (this.mode === 'air') {
+      this.unsteer?.();
+      this.r.bot.setControlState('jump', false);
+    }
     this.block(false);
     this.mode = null;
     this.target = null;
@@ -201,7 +246,8 @@ class Combat {
     const eye = bot.blockAt?.(bot.entity.position.offset(0, 1.62, 0));
     const wet = /^(water|bubble_column|kelp|kelp_plant|seagrass|tall_seagrass)$/.test(eye?.name || '') || eye?.getProperties?.().waterlogged === true;
     const air = wet ? bot.ownAir ?? bot.oxygenLevel ?? 20 : 20;
-    if (this.mode === 'air' && air >= 18) this.release();
+    // Done by its own air, not by the first breath: else a job takes it back under with next to none left.
+    if (this.mode === 'air' && (wet ? air : bot.ownAir ?? 20) >= 18) this.release();
     else if (this.mode === 'air' && Date.now() - this.since <= MODE_MAX_MS.air) return void (this.straightUp && bot.setControlState('jump', true));
     if (air <= AIR_LOW) return this.surface(); // also again after MODE_MAX_MS: another search from where it is now
     const dim = normDim(bot.game?.dimension);
