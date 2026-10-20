@@ -2850,6 +2850,7 @@ require('./crafting');
     assert.strictEqual(f.log.placed, 2);
     assert.ok(!f.job.noop, 'a build that placed blocks is not "already complete"');
     assert.deepStrictEqual(B.finishOf(true, []), {noop: true}, 'nothing to do: already complete');
+    assert.deepStrictEqual([B.stacksPerKind([{p: {item: 'cobblestone'}}, {p: {item: 'cobblestone'}}]), B.stacksPerKind([{p: {item: 'cobblestone'}}, {p: {item: 'oak_planks'}}])], [8, 2], 'a fill takes 8 stacks a trip, a mixed build 2 (2026-10-20)');
     assert.deepStrictEqual(B.finishOf(false, ['1,2,3']), {noop: false}, 'some work done, a cell left: done, the cell reported');
     assert.match(B.finishOf(true, ['1,68,3', '2,68,3']).error, /no way to any of the 2 cells to clear: 1,68,3 2,68,3/, 'nothing reached: a failure (2026-10-20)');
     const again = {t: {}, cancelled: false, args: pad({x: 600, y: 64, z: 600})};

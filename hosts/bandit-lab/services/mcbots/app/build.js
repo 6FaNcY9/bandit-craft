@@ -11,6 +11,9 @@ const MAX_BLOCKS = 75;
 // The end of a schematic run: nothing done while cells to clear are left that no way reached is a failure, not "already
 // complete" (a clean-up of 14 junk blocks up in the air "finished" with all 14 still there, main server 2026-10-20).
 const finishOf = (first, unclear) => (first && unclear.length ? {error: `no way to any of the ${unclear.length} cells to clear: ${unclear.slice(0, 3).join(' ')}`} : {noop: first});
+// Stacks of one item a bot takes per trip: two while a build has several kinds (a crew shares the chests), eight for
+// a single kind (a fill or a clean-up of one material).
+const stacksPerKind = (targets) => (new Set(targets.map((t) => t.p.item)).size === 1 ? 8 : 2);
 const DIG_INSIDE_SEARCH = 400; // pathfinder search budget (cost over the straight distance) for a digInside build
 const MAX_SIZE = {x: 5, y: 3, z: 5}; // height 3: every target is in reach from the ground, no scaffolding
 const NAME_RE = /^[a-z_]{1,48}$/;
@@ -722,6 +725,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     }
 
     // Fill the inventory with what the next open cells take, from the material chests in order.
+    // A fill of 1972 cobblestone took 16 trips to the chest at two stacks each, and smelted sand into glass for hoppers
+    // it did not have (bot21, main server 2026-10-20).
+    const perKind = stacksPerKind(plan.targets), hoppers = plan.targets.some((t) => /hopper/.test(t.name));
     async function restock(want) {
       let slots = freeSlots();
       if (slots < 2 && chests.length) {
@@ -735,8 +741,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         if (!h || placing.matches(t, h) || (lacking.get(t.p.item) || 0) > Date.now()) continue;
         const stack = bot.registry.itemsByName[t.p.item]?.stackSize || 64;
         // At most two stacks of a kind: a crew shares the chests (one bot took 268 of 334 chests, the
-        // others then walked all 57 filler chests for one).
-        const was = need.get(t.p.item) || 0, n = Math.min(was + (t.p.again ? 2 : 1), 2 * stack);
+        // others then walked all 57 filler chests for one). One kind alone (a fill) takes up to 8.
+        const was = need.get(t.p.item) || 0, n = Math.min(was + (t.p.again ? 2 : 1), perKind * stack);
         const more = Math.ceil(n / stack) - Math.ceil(was / stack);
         if (stacks + more > slots) break;
         stacks += more;
@@ -744,7 +750,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       }
       if (!need.has(want)) need.set(want, want === GLASS ? 16 : 1);
       if ((count()[SCAFFOLD] || 0) < 32) need.set(SCAFFOLD, Math.max(need.get(SCAFFOLD) || 0, 64)); // to climb and to prop
-      if ((count()[GLASS] || 0) < 16) need.set(GLASS, Math.max(need.get(GLASS) || 0, 64)); // to climb over hoppers
+      if (hoppers && (count()[GLASS] || 0) < 16) need.set(GLASS, Math.max(need.get(GLASS) || 0, 64)); // to climb over hoppers
       for (const [item, n] of need) {
         await take(item, n, (left) => `taking ${left} ${item} for the build`);
         if (!count()[item]) lacking.set(item, Date.now() + 300000);
@@ -1352,5 +1358,5 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
   };
 }
 
-module.exports = {finishOf, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
+module.exports = {finishOf, stacksPerKind, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
   makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList, REPLACEABLE, CONTAINER};
