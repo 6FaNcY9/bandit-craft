@@ -6,7 +6,7 @@ const {SCENARIOS} = require('./scenarios');
 
 // every shipped scenario is valid and stays inside the box
 for (const s of SCENARIOS) validateScenario(s);
-assert.equal(SCENARIOS.length, 9);
+assert.equal(SCENARIOS.length, 13);
 
 // rcon guard: outside the box, unknown verbs and unguarded shapes are refused
 assert.throws(() => checkCommand('fill 3499 201 3000 3510 205 3010 minecraft:stone'), /outside/);

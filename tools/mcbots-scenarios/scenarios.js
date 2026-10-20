@@ -65,6 +65,23 @@ const SCENARIOS = [
     // behind the wall (no line of sight), so the bot must walk around (T04 top-k walk) instead of failing on the closest one.
     setup: [fill(3544, 201, 3026, 3551, 203, 3033, 'bedrock'), fill(3545, 201, 3027, 3550, 203, 3032, 'air'), fill(3545, 201, 3027, 3550, 201, 3032, 'stone'), fill(3551, 201, 3030, 3551, 202, 3030, 'air'), START],
     job: {type: 'mine', args: {block: 'stone', count: 8}}, success: [finished, noError, alive, {kind: 'inv', item: 'cobblestone', min: 8}]},
+  {name: '10-lava-beside-path', timeoutS: 120,
+    // 3 wide lava strip on the floor across the box with a 1 block stone bridge; the straight line crosses the lava
+    setup: [fill(3525, 200, 3000, 3527, 200, 3060, 'lava'), fill(3525, 200, 3030, 3527, 200, 3030, 'stone'), START],
+    job: {type: 'goto', args: {x: 3540, y: 201, z: 3030}}, success: [finished, noError, alive, near(3540, 201, 3030)]},
+  {name: '11-water-pool', timeoutS: 150,
+    // start in a 2 deep water basin (3 high stone ring, 9x9 inside) with a shore step (1 high, then 2 high) on the east side: swim out, no drowning.
+    // A fully walled basin (4 high) is a known gap (T53): the bot refuses to dig next to water and stays swimming.
+    setup: [fill(3505, 201, 3025, 3515, 203, 3035, 'stone'), fill(3515, 203, 3025, 3515, 203, 3035, 'air'), fill(3506, 201, 3026, 3514, 205, 3034, 'air'), fill(3506, 201, 3026, 3514, 202, 3034, 'water'), fill(3513, 201, 3026, 3513, 201, 3034, 'stone'), fill(3514, 201, 3026, 3514, 202, 3034, 'stone'), 'tp bot50 3510.5 202 3030.5'],
+    job: {type: 'goto', args: {x: 3527, y: 201, z: 3030}}, success: [finished, noError, alive, near(3527, 201, 3030)]},
+  {name: '12-high-ledge', timeoutS: 120,
+    // start on an 8 high plateau, target on the platform floor: a straight drop is 8 blocks (fatal-ish), the bot must climb down
+    setup: [fill(3505, 201, 3025, 3515, 208, 3035, 'stone'), 'tp bot50 3510.5 209 3030.5'],
+    job: {type: 'goto', args: {x: 3530, y: 201, z: 3030}}, success: [finished, noError, alive, near(3530, 201, 3030)]},
+  {name: '13-dark-tunnel', timeoutS: 150,
+    // 25 long 1x2 tunnel inside solid stone, no light at all
+    setup: [fill(3505, 201, 3028, 3540, 205, 3032, 'stone'), fill(3508, 201, 3030, 3533, 202, 3030, 'air'), 'tp bot50 3508.5 201 3030.5'],
+    job: {type: 'goto', args: {x: 3533, y: 201, z: 3030}}, success: [finished, noError, alive, near(3533, 201, 3030)]},
 ];
 
 module.exports = {BOX, SCENARIOS, CLEAR, PLATFORM, BOT};
