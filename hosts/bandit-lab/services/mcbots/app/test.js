@@ -5504,6 +5504,40 @@ require('./crafting');
   assert.strictEqual(hops3.length, 2, 'two hops at most');
 })();
 
+{ // a walk with no path is remembered per start chunk and goal chunk for 10 min (2026-10-20)
+  const {noPathAge, chunkKey} = require('./bots');
+  const {Vec3} = require('vec3');
+  const k = chunkKey(40, 64, 5, new Vec3(1, 64, 1));
+  assert.notStrictEqual(k, chunkKey(41, 64, 5, new Vec3(1, 64, 1)));
+  const m = new Map([[k, 1000]]);
+  assert.strictEqual(noPathAge(m, k, 6000), 5000);
+  assert.strictEqual(noPathAge(m, k, 1000 + 600000), null);
+  assert.strictEqual(noPathAge(undefined, k), null);
+}
+(async () => { // goLeg: the second identical failing walk fails at once without searching; arrival clears it (2026-10-20)
+  const {goNear} = require('./bots');
+  const {Vec3} = require('vec3');
+  let calls = 0, ok = false;
+  const pf = {searchRadius: 600, stop() {}, setGoal() {}, goto: async () => { calls++; if (!ok) throw new Error('No path to the goal!'); }};
+  const bot = {entity: {position: new Vec3(0, 64, 0)}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+    blockAt: () => ({name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+  const r = {bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []};
+  const go = () => goNear(r, {type: 'goto', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => 'ok', (e) => e.message);
+  assert.match(await go(), /could not reach 3 64 3: No path/);
+  const n = calls;
+  assert.match(await go(), /no path \(cached, \d+ s ago\)/);
+  assert.strictEqual(calls, n, 'the cached failure did not search');
+  ok = true;
+  r.noPath.clear(); // arrival at the goal drops the entry
+  assert.strictEqual(await go(), 'ok');
+  assert.strictEqual(r.noPath.size, 0);
+  const stopped = {type: 'goto', t: {}, cancelled: false};
+  ok = false;
+  pf.goto = async () => { stopped.cancelled = true; throw new Error('The goal was changed'); };
+  await goNear(r, stopped, 3, 64, 3, 2).catch(() => {});
+  assert.strictEqual(r.noPath.size, 0, 'a stop is no failed walk');
+})();
+
 (async () => { // walled in by its own fill: after the widest search one try without the dig box, which comes back (2026-10-20)
   const {goNear} = require('./bots');
   const {Vec3} = require('vec3');
@@ -5542,13 +5576,13 @@ require('./crafting');
     mock.timers.tick(90000); await flush(); await flush(); await flush();
     assert.match(String(outcome), /no way there within 90 s/, 'the deadline still bounds the walk after the night');
     // A bot that does not move is given up after 30 s, one that keeps moving only at the 90 s deadline (2026-10-20).
-    outcome = null;
+    outcome = null; r.noPath = null; // each phase is a fresh walk, not the cached failure
     goNear(r, {type: 'grave', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => { outcome = 'arrived'; }, (e) => { outcome = e.message; });
     await flush();
     for (let s = 0; s < 30; s += 5) { mock.timers.tick(5000); await flush(); }
     await flush(); await flush();
     assert.match(String(outcome), /no progress for 30 s/, 'a standing bot is given up early');
-    outcome = null;
+    outcome = null; r.noPath = null; // each phase is a fresh walk, not the cached failure
     goNear(r, {type: 'grave', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => { outcome = 'arrived'; }, (e) => { outcome = e.message; });
     await flush();
     for (let s = 0; s < 85; s += 5) { bot.entity.position = new Vec3(s, 64, 0); mock.timers.tick(5000); await flush(); }

@@ -1034,7 +1034,7 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
         const goal = new goals.GoalY(up);
         if (hand) goal.heuristic = (node) => HAND_LEVEL * Math.abs(up - node.y);
         try {
-          await goLeg(r, job, p.x, up, p.z, 2, {...opts, goal, doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
+          await goLeg(r, job, p.x, up, p.z, 2, {...opts, again: true, goal, doing: `climbing to Y ${up} towards ${at({x, y, z})}`});
         } catch (e) {
           // Under sand or gravel the search digs no way up at all: open the column from beside, climb again.
           guard(job);
@@ -1071,10 +1071,10 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     if (opts.goal || !/No path|Took to long/.test(e.message) || !r.bot?.entity) throw e;
     if (y - r.bot.entity.position.y > 4) {
       await climb(() => true);
-      return goLeg(r, job, x, y, z, dist, opts);
+      return goLeg(r, job, x, y, z, dist, {...opts, again: true});
     }
     if (!/No path/.test(e.message)) throw e;
-    return dropDown(r, () => goLeg(r, job, x, y, z, dist, opts), e);
+    return dropDown(r, () => goLeg(r, job, x, y, z, dist, {...opts, again: true}), e);
   }
 }
 
@@ -1139,15 +1139,27 @@ async function dropDown(r, walk, e) {
   }
 }
 
+// A walk that found no way is not tried again from the same chunk to the same goal block for 10 min: every try burned a full
+// search or deadline (chests and build sites outside the reach memory, 2026-10-20). key -> time of the failure.
+const NOPATH_MS = 600000;
+const chunkKey = (x, y, z, p) => `${p.x >> 4},${p.z >> 4}>${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; // exact goal: a chunk's neighbour block may well be reachable
+function noPathAge(map, key, now = Date.now()) {
+  const t = map?.get(key);
+  return t !== undefined && now - t < NOPATH_MS ? now - t : null;
+}
 const WIDER = [250, 600]; // search budgets tried after a "No path" at the usual 80
-async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null} = {}) {
+async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null, again = false} = {}) {
   guard(job);
+  const known = r.bot?.entity ? chunkKey(x, y, z, r.bot.entity.position.floored()) : null;
+  const age = again || !known ? null : noPathAge(r.noPath, known);
+  if (age !== null) throw new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: no path (cached, ${Math.round(age / 1000)} s ago)`);
   const label = doing || `walking to ${at({x, y, z})}`;
   if (job.t) job.t.doing = label;
   // Unreachable goals make the pathfinder retry partial paths
   // forever, so every walk has a deadline. Its clock runs while the pathfinder walks, armed anew for every try, not
   // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
   // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
+  const noted = (err) => { if (known) (r.noPath ||= new Map()).set(known, Date.now()); return err; }; // a stop threw Cancelled in guard() before
   let timedOut = false, stalled = false, deadline = null, watch = null, wider = false, boxed = null, hops = 0;
   const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
   const halt = () => {
@@ -1181,6 +1193,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         if (job.t) job.t.doing = label; // a night's wait wrote over it
         arm();
         await r.bot.pathfinder.goto(goal || new goals.GoalNear(x, y, z, dist)); // settledGoto on a live bot
+        r.noPath?.delete(known);
         return;
       } catch (e) {
         guard(job);
@@ -1215,9 +1228,9 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
           arm();
           await r.bot.pathfinder.goto(new goals.GoalBlock(e.best.x, e.best.y, e.best.z)).catch(() => guard(job));
           tries--;
-        } else if (timedOut || tries >= 3) throw fail();
+        } else if (timedOut || tries >= 3) throw noted(fail());
         else await sleep(1000);
-        if (timedOut) throw fail();
+        if (timedOut) throw noted(fail());
       }
     }
   } finally {
@@ -3507,4 +3520,4 @@ const JOBS = {
   },
 };
 
-module.exports = {shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
