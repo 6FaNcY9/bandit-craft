@@ -6877,7 +6877,7 @@ require('./crafting');
   const storeChest = {x: 1, y: 64, z: 2}, job = {type: 'produce', args: {file: 'fake.litematic', origin: {x: 0, y: 64, z: 0}, store: storeChest, chests: [storeChest]}};
   let scans = 0;
   const pos = {x: 0, y: 64, z: 0, distanceTo: () => 20};
-  const bot = {entity: {position: pos}, game: {dimension: 'overworld'}, registry: data, inventory: {items: () => []}, blockAt: () => ({}), findBlock: () => null, findBlocks: () => [],
+  const bot = {entity: {position: pos}, game: {dimension: 'overworld'}, registry: data, inventory: {items: () => []}, blockAt: () => ({}), findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null},
     nearestEntity: (match) => { const sheep = {name: 'sheep', position: pos}; return match(sheep) ? sheep : null; }};
   const runner = {current: job, bot, world: {chests: new Map()}, acquireFailed: new Map(), protectedAreas: []};
   build.schematicPlan = async () => ({lo: {x: 0, y: 64, z: 0}, hi: {x: 1, y: 64, z: 0}, targets: [{p: {item: 'white_wool'}}, {p: {item: 'white_wool'}}]});
@@ -7216,7 +7216,7 @@ require('./crafting');
       const helper = {name: 'bot3', world: {...world, chests: new Map(), openNeeds: () => [
         {bot: 'bot2', item: 'soul_sand', count: 4, to: {x: 1, y: 2, z: 3}, t: 1}, {bot: 'bot2', item: 'iron_ingot', count: 5, to: {x: 1, y: 2, z: 3}, t: 2}]},
       emit() {}, acquireFailed: new Map(), protectedAreas: [], bot: {entity: {position: new Vec3(0, 64, 0)}, registry: require('minecraft-data')('26.1'),
-        inventory: {items: () => [{name: 'iron_ingot', count: 5}]}, findBlock: () => null, findBlocks: () => [], nearestEntity: () => null}};
+        inventory: {items: () => [{name: 'iron_ingot', count: 5}]}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null}};
       calls.length = 0;
       assert.strictEqual(await helpOnce(helper, parent), true);
       assert.deepStrictEqual(calls, [['deposit', 'iron_ingot', 1]], 'soul sand skipped, the iron it carries delivered without a get');
@@ -7483,4 +7483,12 @@ require('./crafting');
   assert.strictEqual(asked.useExtraInfo, undefined, 'no useExtraInfo: the palette scan stays fast');
   assert.strictEqual(nearestOutside(bot, 5, [[0, -5, 20, 5]]), null, 'every find protected: none');
   assert.strictEqual(nearestOutside(bot, 5, []), 3);
+  assert.strictEqual(nearestOutside(bot, 5, [], new Set([4])), null, 'a type no section holds: no scan at all');
+  asked = null; assert.strictEqual(nearestOutside(bot, 5, [], new Set([5])), 3); assert.ok(asked, 'a type that is present is searched');
+  const world = {getColumn: (x, z) => (x === 0 && z === 0 ? {sections: [null, {palette: [10, 11]}, {palette: [12]}]} : null)};
+  const reg = {blocksByStateId: {10: {id: 1}, 11: {id: 2}, 12: {id: 1}}};
+  const b2 = {entity: {position: new Vec3(0, 64, 0)}, world, registry: reg};
+  assert.deepStrictEqual([...require('./bots').presentTypes(b2)].sort(), [1, 2], 'block types from the section palettes');
+  world.getColumn = () => ({sections: [{}]});
+  assert.strictEqual(require('./bots').presentTypes(b2), null, 'a section without a palette: nothing can be ruled out');
 }

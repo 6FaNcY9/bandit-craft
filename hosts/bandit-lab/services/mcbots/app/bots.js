@@ -2583,10 +2583,29 @@ async function helpOnce(r, job) {
 // Walls and floors somewhere even though nothing crafts them: never mined for their drops. Tripwire too: it only lies
 // where someone strung it, and the planner wanted 192 of it for the string of 16 beds (main server 2026-10-18).
 const PLACED_RE = /^(cobblestone|mossy_cobblestone|cobbled_deepslate|glass|terracotta|[a-z_]+_terracotta|[a-z_]+_concrete|tripwire)$/;
-// Distance to the nearest block of this id outside the protected areas, or null. No `useExtraInfo`: that makes
-// mineflayer test every position in range with blockAt (sandbox 2026-10-20: ~40 s per get plan, the keepalive timed out).
+// Block type ids found in the loaded sections within `radius` blocks (every y), or null when a section has no palette
+// (then nothing can be ruled out). One pass over the palettes: a plan asks for ~100 block names, and mineflayer's
+// findBlocks rebuilds a Block per palette entry per section for each of them (sandbox 2026-10-20: 20 s per get plan, the keepalive timed out).
+function presentTypes(bot, radius = 64) {
+  const me = bot.entity.position, r = Math.ceil((radius + 8) / 16), cx = Math.floor(me.x / 16), cz = Math.floor(me.z / 16);
+  const out = new Set();
+  for (let x = cx - r; x <= cx + r; x++) {
+    for (let z = cz - r; z <= cz + r; z++) {
+      const column = bot.world.getColumn(x, z);
+      for (const section of column?.sections || []) {
+        if (!section) continue;
+        if (!section.palette) return null;
+        for (const st of section.palette) { const id = bot.registry.blocksByStateId[st]?.id; if (id !== undefined) out.add(id); }
+      }
+    }
+  }
+  return out;
+}
+// Distance to the nearest block of this id outside the protected areas, or null; `present` is presentTypes() (null: unknown).
+// No `useExtraInfo` (it makes mineflayer test every position in range with blockAt).
 // shortcut: only the 32 nearest are looked at, so a find ringed by 32 protected blocks reads as none; raise count if that ever shows.
-function nearestOutside(bot, id, areas) {
+function nearestOutside(bot, id, areas, present = null) {
+  if (present && !present.has(id)) return null;
   const me = bot.entity.position;
   const p = bot.findBlocks({matching: id, maxDistance: 64, count: 32}).find((q) => !insideAreas(areas, q.x, q.z));
   return p ? p.distanceTo(me) : null;
@@ -2601,13 +2620,16 @@ function acquireWorld(r) {
     const dist = Math.hypot(x - me.x, y - me.y, z - me.z);
     if (dist <= 256) stores.push({at: {x, y, z}, dist, stock: c.items || {}});
   }
+  let present; // presentTypes(), taken once per plan, at the first block name asked for
   const now = Date.now();
   for (const [k, until] of r.acquireFailed) if (until < now) r.acquireFailed.delete(k);
   return {
     data: bot.registry, have, stores,
     blockNear: (name) => {
       const id = bot.registry.blocksByName[name]?.id;
-      return id === undefined ? null : nearestOutside(bot, id, r.protectedAreas);
+      if (id === undefined) return null;
+      present ??= {types: presentTypes(bot)};
+      return nearestOutside(bot, id, r.protectedAreas, present.types);
     },
     mobNear: (name) => {
       const e = bot.nearestEntity((x) => x.name === name);
@@ -3574,4 +3596,4 @@ const JOBS = {
   },
 };
 
-module.exports = {nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
