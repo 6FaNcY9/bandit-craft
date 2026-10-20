@@ -2167,7 +2167,7 @@ async function collect(r, job, matching, count, what) {
   const leash = wood ? WOOD_LEASH : LEASH;
   const range = ore || wood ? 128 : 64; // the bot sees every block within its view distance (no anti-xray)
   const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] : null;
-  let explored = 0, descents = 0, left = false;
+  let explored = 0, descents = 0, left = 0;
   if (names.some((n) => ORE_BAND[n.replace(/^deepslate_/, '')])) await fetchWood(r, job);
   let got = job.collected || 0; // survives a combat interruption + resume
   let misses = 0;
@@ -2222,8 +2222,8 @@ async function collect(r, job, matching, count, what) {
     if (!pos) {
       // At the base everything in sight is under it (keeper's "mine stone 64" there failed at once, 2026-10-20): walk
       // out once, 4 past the circle so a shift anchored at the supply chest still has its ring up to the leash.
-      if (!wood && !left && underBase(r.supplyChest, me)) {
-        left = true;
+      if (!wood && left < 3 && underBase(r.supplyChest, me)) { // again when the digging led back in (bot2: 9 of 41, 2026-10-20)
+        left++;
         await leaveBase(r, job, what, 4);
         continue;
       }
