@@ -2043,16 +2043,20 @@ async function replacePickaxe(r, job, need) {
 // it, and the bots fell in (main server 2026-10-19). Trees stand on the surface: wood is still taken there.
 const BASE_NO_MINE = 48;
 const underBase = (home, p) => !!home && Math.hypot(p.x - home.x, p.z - home.z) < BASE_NO_MINE;
+// `margin` blocks outside the circle, straight out from the supply chest past the bot.
+function outOfBase(home, me, margin) {
+  const d = Math.hypot(me.x - home.x, me.z - home.z), k = (BASE_NO_MINE + margin) / d;
+  return d > 1 ? [Math.round(home.x + (me.x - home.x) * k), Math.round(home.z + (me.z - home.z) * k)] : [home.x + BASE_NO_MINE + margin, home.z];
+}
+async function leaveBase(r, job, what, margin) {
+  const me = r.bot.entity.position, [x, z] = outOfBase(r.supplyChest, me, margin);
+  await goNear(r, job, x, Math.floor(me.y), z, 3, {xz: true, doing: `walking out of the base for ${what} (nothing is mined under it)`});
+}
 async function toBand(r, job, band, what) {
   const {bot} = r;
   const target = Math.round((band[0] + band[1]) / 2);
   // Down (or up) only outside the base: walk out first, away from the supply chest.
-  const home = r.supplyChest, me = bot.entity.position;
-  if (underBase(home, me)) {
-    const d = Math.hypot(me.x - home.x, me.z - home.z) || 1, k = (BASE_NO_MINE + 8) / d;
-    const [x, z] = d > 1 ? [Math.round(home.x + (me.x - home.x) * k), Math.round(home.z + (me.z - home.z) * k)] : [home.x + BASE_NO_MINE + 8, home.z];
-    await goNear(r, job, x, Math.floor(me.y), z, 3, {xz: true, doing: `walking out of the base before digging down for ${what}`});
-  }
+  if (underBase(r.supplyChest, bot.entity.position)) await leaveBase(r, job, what, 8);
   for (let leg = 0; leg < 12 && outside(band, bot.entity.position.y) > 2; leg++) {
     const y = bot.entity.position.y > target ? Math.max(target, Math.floor(bot.entity.position.y) - 16) : Math.min(target, Math.floor(bot.entity.position.y) + 16);
     const p = bot.entity.position;
@@ -2131,7 +2135,7 @@ async function collect(r, job, matching, count, what) {
   const leash = wood ? WOOD_LEASH : LEASH;
   const range = ore || wood ? 128 : 64; // the bot sees every block within its view distance (no anti-xray)
   const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] : null;
-  let explored = 0, descents = 0;
+  let explored = 0, descents = 0, left = false;
   if (names.some((n) => ORE_BAND[n.replace(/^deepslate_/, '')])) await fetchWood(r, job);
   let got = job.collected || 0; // survives a combat interruption + resume
   let misses = 0;
@@ -2184,6 +2188,13 @@ async function collect(r, job, matching, count, what) {
       break;
     }
     if (!pos) {
+      // At the base everything in sight is under it (keeper's "mine stone 64" there failed at once, 2026-10-20): walk
+      // out once, 4 past the circle so a shift anchored at the supply chest still has its ring up to the leash.
+      if (!wood && !left && underBase(r.supplyChest, me)) {
+        left = true;
+        await leaveBase(r, job, what, 4);
+        continue;
+      }
       // Mined out around here: tunnel on at the same height and look again.
       if ((ore || wood) && explored < EXPLORE_MAX) {
         explored++;
@@ -3421,4 +3432,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
