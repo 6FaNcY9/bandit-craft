@@ -7489,6 +7489,16 @@ require('./crafting');
   const reg = {blocksByStateId: {10: {id: 1}, 11: {id: 2}, 12: {id: 1}}};
   const b2 = {entity: {position: new Vec3(0, 64, 0)}, world, registry: reg};
   assert.deepStrictEqual([...require('./bots').presentTypes(b2)].sort(), [1, 2], 'block types from the section palettes');
+  { // makeBlockNear: a plan's scans stay inside the budget, finds are remembered
+    let t = 0, scans = 0;
+    const r = {bot: {entity: {position: new Vec3(0, 64, 0)}, registry: {blocksByName: {a: {id: 1}, b: {id: 2}, c: {id: 3}}}, world: {getColumn: () => ({sections: [{}]})}, findBlocks: () => { scans++; t += 200; return [new Vec3(4, 64, 0)]; }}, protectedAreas: []};
+    const near = require('./bots').makeBlockNear(r, {now: () => t, budgetMs: 300});
+    assert.deepStrictEqual([near('a'), near('b'), near('c')], [4, 4, null], 'the third name finds the budget spent');
+    assert.strictEqual(scans, 2);
+    assert.strictEqual(near('a'), 4); assert.strictEqual(scans, 2, 'a find is remembered');
+    const next = require('./bots').makeBlockNear(r, {now: () => t, budgetMs: 300});
+    assert.strictEqual(next('c'), 4, 'the next plan gets a new budget');
+  }
   world.getColumn = () => ({sections: [{}]});
   assert.strictEqual(require('./bots').presentTypes(b2), null, 'a section without a palette: nothing can be ruled out');
 }

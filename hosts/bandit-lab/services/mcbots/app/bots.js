@@ -2603,12 +2603,33 @@ function presentTypes(bot, radius = 64) {
 }
 // Distance to the nearest block of this id outside the protected areas, or null; `present` is presentTypes() (null: unknown).
 // No `useExtraInfo` (it makes mineflayer test every position in range with blockAt).
-// shortcut: only the 32 nearest are looked at, so a find ringed by 32 protected blocks reads as none; raise count if that ever shows.
+// shortcut: only the 8 nearest are looked at, so a find ringed by 8 protected blocks reads as none; raise count if that ever shows.
 function nearestOutside(bot, id, areas, present = null) {
   if (present && !present.has(id)) return null;
   const me = bot.entity.position;
-  const p = bot.findBlocks({matching: id, maxDistance: 64, count: 32}).find((q) => !insideAreas(areas, q.x, q.z));
+  const p = bot.findBlocks({matching: id, maxDistance: 64, count: 8}).find((q) => !insideAreas(areas, q.x, q.z));
   return p ? p.distanceTo(me) : null;
+}
+// acquire.plan asks blockNear for ~100 block names; findBlocks tests every position of each section that holds the type,
+// so one plan took 60 s in the sandbox and the keepalive timed out. A plan gets `budgetMs` for these scans, finds are
+// remembered for 30 s, and names the budget left no time for read as "not near" until the next plan (the next step).
+// shortcut: a name that is not near within the budget is planned as a trip to explore; raise budgetMs if plans start exploring needlessly.
+function makeBlockNear(r, {now = Date.now, budgetMs = 300} = {}) {
+  const {bot} = r;
+  const cache = (r.nearCache ??= new Map());
+  const end = now() + budgetMs;
+  let present;
+  return (name) => {
+    const id = bot.registry.blocksByName[name]?.id;
+    if (id === undefined) return null;
+    const hit = cache.get(name);
+    if (hit && hit.until > now()) return hit.d;
+    if (now() > end) return null;
+    present ??= {types: presentTypes(bot)};
+    const d = nearestOutside(bot, id, r.protectedAreas, present.types);
+    cache.set(name, {d, until: now() + 30000});
+    return d;
+  };
 }
 function acquireWorld(r) {
   const {bot} = r, me = bot.entity.position;
@@ -2620,17 +2641,11 @@ function acquireWorld(r) {
     const dist = Math.hypot(x - me.x, y - me.y, z - me.z);
     if (dist <= 256) stores.push({at: {x, y, z}, dist, stock: c.items || {}});
   }
-  let present; // presentTypes(), taken once per plan, at the first block name asked for
   const now = Date.now();
   for (const [k, until] of r.acquireFailed) if (until < now) r.acquireFailed.delete(k);
   return {
     data: bot.registry, have, stores,
-    blockNear: (name) => {
-      const id = bot.registry.blocksByName[name]?.id;
-      if (id === undefined) return null;
-      present ??= {types: presentTypes(bot)};
-      return nearestOutside(bot, id, r.protectedAreas, present.types);
-    },
+    blockNear: makeBlockNear(r),
     mobNear: (name) => {
       const e = bot.nearestEntity((x) => x.name === name);
       return e ? e.position.distanceTo(me) : null;
@@ -3596,4 +3611,4 @@ const JOBS = {
   },
 };
 
-module.exports = {presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
