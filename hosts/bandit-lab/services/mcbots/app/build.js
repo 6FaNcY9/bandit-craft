@@ -351,6 +351,16 @@ const RESERVE_SLOTS = 4; // inventory slots a restock leaves free (drops, a tool
 // click) get a pillar of this under them, in cells that are air in the schematic; dirt, so the clear pass
 // takes it out again at the end, and after a restart, when the record of the pillars is gone.
 const SCAFFOLD = 'dirt';
+// What a restock stows first, by item: natural blocks the build does not use, and dirt over a stack (to climb and prop).
+// bot21 carried 186 andesite, diorite and granite and 110 dirt it had dug out, and a trip held 37 cobblestone
+// (hohlraum-6, main server 2026-10-20).
+const SCAFFOLD_KEEP = 64;
+function bycatch(items, uses, natural) {
+  const n = {};
+  for (const it of items) if (natural.test(it.name) && !uses.has(it.name)) n[it.name] = (n[it.name] || 0) + it.count;
+  if ((n[SCAFFOLD] || 0) <= SCAFFOLD_KEEP) delete n[SCAFFOLD];
+  return Object.keys(n);
+}
 // A support whose drop would land in a hopper is glass, which drops nothing: dirt and rails fell into the sorter's
 // hoppers and went round it into 30 of its containers (sandbox 2026-10-13).
 const GLASS = 'glass';
@@ -705,22 +715,25 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const freeSlots = () => 36 - bot.inventory.items().length - RESERVE_SLOTS;
     // Into the first chest with room: the material chest filled up and took 18 of 96 shears (one a slot).
     const fullUntil = new Map(); // chest key -> until: a deposit found it full or out of reach
+    async function stow(only, keep) {
+      for (const c of chests.filter((q) => (fullUntil.get(ckOf(q)) || 0) < Date.now()).slice(0, 8)) {
+        try {
+          await deposit(r, job, c, only, keep);
+          return;
+        } catch (e) {
+          guard(job);
+          fullUntil.set(ckOf(c), Date.now() + 600000);
+          r.emit?.('info', `could not make room at ${c.x} ${c.y} ${c.z}: ${e.message.slice(0, 80)}`);
+        } finally {
+          forgetChestHere(c);
+        }
+      }
+    }
     async function makeRoom(slots = 8) {
       const spare = new Set(bot.inventory.items().map((it) => it.name).filter((n) => FILLS.has(n)));
       for (const only of [...spare, null]) {
         if (only === null && freeSlots() >= slots) break; // the build blocks it carries stay when that made room
-        for (const c of chests.filter((q) => (fullUntil.get(ckOf(q)) || 0) < Date.now()).slice(0, 8)) {
-          try {
-            await deposit(r, job, c, only);
-            break;
-          } catch (e) {
-            guard(job);
-            fullUntil.set(ckOf(c), Date.now() + 600000);
-            r.emit?.('info', `could not make room at ${c.x} ${c.y} ${c.z}: ${e.message.slice(0, 80)}`);
-          } finally {
-            forgetChestHere(c);
-          }
-        }
+        await stow(only);
       }
     }
 
@@ -728,7 +741,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // A fill of 1972 cobblestone took 16 trips to the chest at two stacks each, and smelted sand into glass for hoppers
     // it did not have (bot21, main server 2026-10-20).
     const perKind = stacksPerKind(plan.targets), hoppers = plan.targets.some((t) => /hopper/.test(t.name));
+    const uses = new Set(plan.targets.map((t) => t.p.item));
     async function restock(want) {
+      if (chests.length) for (const only of bycatch(bot.inventory.items(), uses, natural)) await stow(only, only === SCAFFOLD ? {[SCAFFOLD]: SCAFFOLD_KEEP} : undefined);
       let slots = freeSlots();
       if (slots < 2 && chests.length) {
         await makeRoom();
@@ -1358,5 +1373,5 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
   };
 }
 
-module.exports = {finishOf, stacksPerKind, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
+module.exports = {finishOf, stacksPerKind, bycatch, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
   makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList, REPLACEABLE, CONTAINER};

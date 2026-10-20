@@ -2365,7 +2365,7 @@ const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, na
     const s = await producer(r, child(job, {type: 'produce', t: {}}), {...a, store: a.chests[0]}).step();
     return !s.idle;
   },
-  deposit: (r, job, c, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {})}}))});
+  deposit: (r, job, c, only, keep) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {}), ...(keep ? {keep} : {})}}))});
 
 // Material production for a schematic build (production.js): one short chain at a time (gather, smelt,
 // craft, each into the store), until the store and the build's chests hold what the build still needs.
