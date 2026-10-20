@@ -6877,7 +6877,7 @@ require('./crafting');
   const storeChest = {x: 1, y: 64, z: 2}, job = {type: 'produce', args: {file: 'fake.litematic', origin: {x: 0, y: 64, z: 0}, store: storeChest, chests: [storeChest]}};
   let scans = 0;
   const pos = {x: 0, y: 64, z: 0, distanceTo: () => 20};
-  const bot = {entity: {position: pos}, game: {dimension: 'overworld'}, registry: data, inventory: {items: () => []}, blockAt: () => ({}), findBlock: () => null,
+  const bot = {entity: {position: pos}, game: {dimension: 'overworld'}, registry: data, inventory: {items: () => []}, blockAt: () => ({}), findBlock: () => null, findBlocks: () => [],
     nearestEntity: (match) => { const sheep = {name: 'sheep', position: pos}; return match(sheep) ? sheep : null; }};
   const runner = {current: job, bot, world: {chests: new Map()}, acquireFailed: new Map(), protectedAreas: []};
   build.schematicPlan = async () => ({lo: {x: 0, y: 64, z: 0}, hi: {x: 1, y: 64, z: 0}, targets: [{p: {item: 'white_wool'}}, {p: {item: 'white_wool'}}]});
@@ -7473,3 +7473,14 @@ require('./crafting');
   smp.tick(0, false); smp.tick(Math.PI / 2, false); smp.tick(Math.PI / 2 + 0.1, true); smp.tick(-Math.PI + 0.1, false);
   assert.deepStrictEqual(smp.flush(), {t: 5, out: 90, fight: 5.7}, 'sampler keeps the largest turn per tick, fights apart; seam handled');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+{ // nearestOutside: the get plan must not use mineflayer's per-position scan (useExtraInfo), which stalled the event loop ~40 s
+  const {nearestOutside} = require('./bots');
+  const {Vec3} = require('vec3');
+  let asked;
+  const bot = {entity: {position: new Vec3(0, 64, 0)}, findBlocks: (o) => { asked = o; return [new Vec3(3, 64, 0), new Vec3(10, 64, 0)]; }};
+  assert.strictEqual(nearestOutside(bot, 5, [[0, -5, 5, 5]]), 10, 'the nearest find inside a protected area is skipped');
+  assert.strictEqual(asked.useExtraInfo, undefined, 'no useExtraInfo: the palette scan stays fast');
+  assert.strictEqual(nearestOutside(bot, 5, [[0, -5, 20, 5]]), null, 'every find protected: none');
+  assert.strictEqual(nearestOutside(bot, 5, []), 3);
+}

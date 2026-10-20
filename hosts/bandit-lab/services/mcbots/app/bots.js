@@ -2583,6 +2583,14 @@ async function helpOnce(r, job) {
 // Walls and floors somewhere even though nothing crafts them: never mined for their drops. Tripwire too: it only lies
 // where someone strung it, and the planner wanted 192 of it for the string of 16 beds (main server 2026-10-18).
 const PLACED_RE = /^(cobblestone|mossy_cobblestone|cobbled_deepslate|glass|terracotta|[a-z_]+_terracotta|[a-z_]+_concrete|tripwire)$/;
+// Distance to the nearest block of this id outside the protected areas, or null. No `useExtraInfo`: that makes
+// mineflayer test every position in range with blockAt (sandbox 2026-10-20: ~40 s per get plan, the keepalive timed out).
+// shortcut: only the 32 nearest are looked at, so a find ringed by 32 protected blocks reads as none; raise count if that ever shows.
+function nearestOutside(bot, id, areas) {
+  const me = bot.entity.position;
+  const p = bot.findBlocks({matching: id, maxDistance: 64, count: 32}).find((q) => !insideAreas(areas, q.x, q.z));
+  return p ? p.distanceTo(me) : null;
+}
 function acquireWorld(r) {
   const {bot} = r, me = bot.entity.position;
   const have = {};
@@ -2599,8 +2607,7 @@ function acquireWorld(r) {
     data: bot.registry, have, stores,
     blockNear: (name) => {
       const id = bot.registry.blocksByName[name]?.id;
-      const b = id === undefined ? null : bot.findBlock({matching: id, maxDistance: 64, useExtraInfo: (bl) => !insideAreas(r.protectedAreas, bl.position.x, bl.position.z)});
-      return b ? b.position.distanceTo(me) : null;
+      return id === undefined ? null : nearestOutside(bot, id, r.protectedAreas);
     },
     mobNear: (name) => {
       const e = bot.nearestEntity((x) => x.name === name);
@@ -3567,4 +3574,4 @@ const JOBS = {
   },
 };
 
-module.exports = {topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
