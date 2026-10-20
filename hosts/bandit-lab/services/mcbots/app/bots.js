@@ -2146,6 +2146,8 @@ const EXPLORE_STEP = 32;
 const LEASH = 64; // blocks a shift may work from its chest (more for logs: forests thin out)
 const WOOD_LEASH = 192; // the main base's forest was felled within 128; the next one starts 80-190 blocks south (2026-10-14)
 const EXPLORE_MAX = 6;
+// A shift anchored inside the base circle gets the circle's width on top: its ore starts 48 out, so 64 left a 16-wide ring (coal "no free", 2026-10-20).
+const shiftLeash = (home, anchor, wood) => (wood ? WOOD_LEASH : LEASH) + (anchor && underBase(home, anchor) ? BASE_NO_MINE : 0);
 
 // Torches need wood (2 planks, or a log). A deep miner carries coal but never chops, so it runs dry.
 const needsWood = (items) => {
@@ -2175,7 +2177,7 @@ async function collect(r, job, matching, count, what) {
   if (!ids.length) throw new Error(`unknown block: ${what}`);
   const ore = names.some((n) => n.endsWith('_ore'));
   const wood = names.every((n) => /_(log|stem)$/.test(n));
-  const leash = wood ? WOOD_LEASH : LEASH;
+  const leash = shiftLeash(r.supplyChest, job.type === 'shift' ? job.args : null, wood);
   const range = ore || wood ? 128 : 64; // the bot sees every block within its view distance (no anti-xray)
   const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] : null;
   let explored = 0, descents = 0, left = 0;
@@ -2203,7 +2205,8 @@ async function collect(r, job, matching, count, what) {
     const cost = (p) => p.distanceTo(me) + (ore ? 4 * outside(band, p.y) : 2 * Math.max(0, Math.floor(me.y) - p.y));
     // Zones out before the nearest 64 are kept: beside the base those were all dirt under it, and the plaza's 64 dirt
     // failed with "no free dirt" (bot1 and bot2, 2026-10-19). Digging a target is direct (not pathfinder), hence here.
-    let found = bot.findBlocks({matching: ids, maxDistance: range, count: 1024}).filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood || !underBase(r.supplyChest, p)))
+    const seen = bot.findBlocks({matching: ids, maxDistance: range, count: 1024});
+    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood || !underBase(r.supplyChest, p)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore job, nothing inside the band near enough, and the bot is not in the band: go there first.
     if (band && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
@@ -2217,11 +2220,18 @@ async function collect(r, job, matching, count, what) {
       await goNear(r, job, anchor.x, anchor.y, anchor.z, 3, {doing: `walking back to the shift's chest ${at(anchor)}`});
       continue;
     }
+    const filtered = found.length;
     if (anchor) found = found.filter((p) => Math.hypot(p.x - anchor.x, p.z - anchor.z) <= leash);
+    const inLeash = found.length;
+    let blocked = 0, claimed = 0;
     for (const p of found) {
-      if ((r.skip.get(keyOf(p)) || 0) > Date.now() || r.world?.learned?.(`reach:${keyOf(p)}`)?.blocked) continue; // could not get there lately, any bot
+      if ((r.skip.get(keyOf(p)) || 0) > Date.now() || r.world?.learned?.(`reach:${keyOf(p)}`)?.blocked) { // could not get there lately, any bot
+        blocked++;
+        continue;
+      }
       const k = keyOf(p);
       if (r.world && !(await r.world.claim(r.name, k))) {
+        claimed++;
         r.conflict();
         continue;
       }
@@ -2244,7 +2254,7 @@ async function collect(r, job, matching, count, what) {
         await explore(r, job, what, explored, leash, wood);
         continue;
       }
-      throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''})`);
+      throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''}; seen ${seen.length}, ${filtered} outside base and protected areas, ${inLeash} within leash ${leash}, ${blocked} blocked, ${claimed} claimed)`);
     }
     try {
       if (wood) await unpillar(r, job, pos);
@@ -3480,4 +3490,4 @@ const JOBS = {
   },
 };
 
-module.exports = {WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

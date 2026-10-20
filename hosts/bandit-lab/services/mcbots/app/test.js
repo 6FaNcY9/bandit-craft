@@ -7011,6 +7011,8 @@ require('./crafting');
   const [ox, oz] = outOfBase(home, {x: -258, z: -210}, 4);
   assert.ok(!underBase(home, {x: ox, z: oz}) && Math.hypot(ox - home.x, oz - home.z) < 53 && ox > home.x && oz > home.z, `${ox} ${oz}`);
   assert.deepStrictEqual(outOfBase(home, home, 4), [home.x + 52, home.z]);
+  const {shiftLeash} = require('./bots');
+  assert.deepStrictEqual([shiftLeash(home, {x: -269, z: -211}, false), shiftLeash(home, {x: home.x + 100, z: home.z}, false), shiftLeash(home, {x: -269, z: -211}, true), shiftLeash(home, null, false)], [112, 64, 240, 64], 'a shift anchored under the base reaches past the circle');
   const {ensureTool} = require('./bots');
   const crafted = [], infos = [];
   let carried = [stack('cobblestone', 6), stack('stick', 4)];
