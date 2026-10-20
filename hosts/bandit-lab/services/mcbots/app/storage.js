@@ -6,7 +6,10 @@ const BASE_RE = /^(stick|[a-z_]+_(log|planks|sapling|wool|bed|pickaxe|axe|shovel
 // The base chest keeps an item only up to its keeper quota (cobblestone 569 / logs 509 / saplings 310 filled it and
 // left no room for torches, 2026-10-10): the rest goes to the hall like 'room' items. Mirrors KEEPER_QUOTAS
 // (default.nix) and the plan's stock-basics; saplings are no quota but capped too. Kinds: any *_log is "logs".
-const CAPS = [['logs', 64], ['cobblestone', 128], ['stone_bricks', 128], ['coal', 32], ['torch', 64], ['raw_iron', 32], ['sapling', 32]];
+// Bread and spare pickaxes too: 193 bread in 4 slots and 3 iron pickaxes in 3 left the chest 3 slots free, and the
+// carry-out never ran (main server 2026-10-20).
+const CAPS = [['logs', 64], ['cobblestone', 128], ['stone_bricks', 128], ['coal', 32], ['torch', 64], ['raw_iron', 32], ['sapling', 32],
+  ['bread', 128], ['iron_pickaxe', 2]];
 const kindOf = (n) => (n.endsWith('_log') ? 'logs' : n.endsWith('_sapling') ? 'sapling' : n === 'charcoal' ? 'coal' : n);
 // Is the chest already at (or, with delta < 0, would it stay at) the cap of this item's kind? stock: {name: count}.
 const overCap = (name, stock, delta = 0, caps = CAPS) => {

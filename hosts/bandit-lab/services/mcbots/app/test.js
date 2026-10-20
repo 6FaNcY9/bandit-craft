@@ -2531,6 +2531,7 @@ require('./crafting');
     assert.ok(overCap('charcoal', {coal: 32}) && !overCap('charcoal', {coal: 31}), 'charcoal counts as coal');
     assert.ok(overCap('cobblestone', {cobblestone: 192}, -64) && !overCap('cobblestone', {cobblestone: 191}, -64), 'carry-out stops at the quota');
     assert.ok(!overCap('granite', {granite: 9999}), 'no quota: the base/room split decides');
+    assert.ok(overCap('bread', {bread: 193}, -64) && overCap('iron_pickaxe', {iron_pickaxe: 3}, -1) && !overCap('iron_pickaxe', {iron_pickaxe: 2}, -1), 'bread above 128 and a third pickaxe go to the hall (2026-10-20)');
   }
   { // the Keeper can make stone bricks from the chest's cobblestone
     const {PLANS} = require('./keeper');
