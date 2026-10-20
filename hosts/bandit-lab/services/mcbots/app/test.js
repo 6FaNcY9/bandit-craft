@@ -7442,3 +7442,34 @@ require('./crafting');
     assert.strictEqual(mk({chest: null}).enabled, false, 'no supply chest: nothing to keep, off');
   }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+(async () => { // humanlook: bounded turn rate outside a fight, instant in one (2026-10-20)
+  const H = require('./humanlook');
+  const fake = (yaw0) => {
+    const bot = {entity: {yaw: yaw0}, calls: [], waitForTicks: async () => {}};
+    bot.look = async (yaw, pitch) => { bot.calls.push(yaw); bot.entity.yaw = yaw; };
+    return bot;
+  };
+  const maxDelta = (bot, from) => bot.calls.reduce((m, y, i) => Math.max(m, Math.abs(Math.atan2(Math.sin(y - (i ? bot.calls[i - 1] : from)), Math.cos(y - (i ? bot.calls[i - 1] : from))))), 0);
+  let b = fake(0);
+  H.install(b);
+  await b.look(Math.PI, 0);
+  assert.ok(maxDelta(b, 0) <= H.MAX_STEP + 1e-9, 'a 180 degree turn goes in steps of at most 40 degrees');
+  assert.ok(b.calls.length >= 5 && b.calls.at(-1) === Math.PI, 'and ends exactly on the target');
+  b = fake(3);
+  H.install(b);
+  await b.look(-3, 0);
+  assert.ok(b.calls.length === 1 && b.calls[0] === -3, 'across the +-pi seam the short way (0.28 rad) is one step');
+  b = fake(0);
+  H.install(b, {fighting: () => true});
+  await b.look(Math.PI, 0);
+  assert.deepStrictEqual(b.calls, [Math.PI], 'in a fight the turn is instant');
+  b = fake(0);
+  H.install(b);
+  const first = b.look(Math.PI, 0);
+  await b.look(0.1, 0);
+  await first;
+  assert.ok(Math.abs(b.entity.yaw - 0.1) < 1e-9, 'the latest look wins');
+  const smp = new H.Sampler(() => 5);
+  smp.tick(0, false); smp.tick(Math.PI / 2, false); smp.tick(Math.PI / 2 + 0.1, true); smp.tick(-Math.PI + 0.1, false);
+  assert.deepStrictEqual(smp.flush(), {t: 5, out: 90, fight: 5.7}, 'sampler keeps the largest turn per tick, fights apart; seam handled');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
