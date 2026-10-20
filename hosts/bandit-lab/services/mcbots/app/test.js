@@ -463,6 +463,12 @@ for (const [name, value] of Object.entries({wooden_sword: [4, 1.6], golden_sword
 assert.deepStrictEqual(O.weapon('stone_pickaxe'), {dmg: 1, speed: 4});
 assert.equal(O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour(['iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots']), threats: [{name: 'zombie', dist: 3}]}).fight, true);
 assert.equal(O.odds({health: 20, weapon: O.weapon('fist'), armour: O.armour([]), threats: [{name: 'zombie', dist: 1}, {name: 'zombie', dist: 1}, {name: 'zombie', dist: 1}]}).fight, false);
+{ // four provoked endermen are no fight even in iron; they were weighed at nothing (bot19, 2026-10-20)
+  const iron = {health: 16, weapon: O.weapon('iron_sword'), armour: O.armour(['iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots'])};
+  const four = O.odds({...iron, threats: [1, 2, 2, 3].map((dist) => ({name: 'enderman', dist}))});
+  assert.equal(four.fight, false);
+  assert.ok(four.loss > 10, `loss ${four.loss}`);
+}
 // An archer hurts from the start, a zombie only once it walked up; unknown and creeper threats are not counted.
 const shot = O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'skeleton', dist: 15}]});
 const walked = O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'zombie', dist: 15}]});

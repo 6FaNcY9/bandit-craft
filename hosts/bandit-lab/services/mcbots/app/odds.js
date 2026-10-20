@@ -5,6 +5,9 @@ const MOBS = Object.freeze({
   spider: {health: 16, dmg: 2, every: 1}, cave_spider: {health: 12, dmg: 2, every: 1},
   skeleton: {health: 20, dmg: 3, every: 2, ranged: true}, stray: {health: 20, dmg: 3, every: 2, ranged: true}, bogged: {health: 20, dmg: 3, every: 2, ranged: true},
   pillager: {health: 24, dmg: 4, every: 2, ranged: true}, witch: {health: 26, dmg: 6, every: 3, ranged: true}, vindicator: {health: 24, dmg: 13, every: 1},
+  // Provoked neutrals (combat.js provoked): an enderman hits 7 and has 40 health; unknown, it was weighed at nothing,
+  // and bot19 fought four (main server 2026-10-20).
+  enderman: {health: 40, dmg: 7, every: 1}, piglin: {health: 16, dmg: 5, every: 1}, zombified_piglin: {health: 20, dmg: 5, every: 1},
   silverfish: {health: 8, dmg: 1, every: 1}, endermite: {health: 8, dmg: 2, every: 1}, phantom: {health: 20, dmg: 2, every: 2}, slime: {health: 16, dmg: 4, every: 1}, magma_cube: {health: 16, dmg: 4, every: 1},
 });
 const KEEP = 6;
