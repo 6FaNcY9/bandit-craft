@@ -8,6 +8,10 @@ const {Vec3} = require('vec3');
 const {insideAreas, normDim} = require('./world');
 
 const MAX_BLOCKS = 75;
+// The end of a schematic run: nothing done while cells to clear are left that no way reached is a failure, not "already
+// complete" (a clean-up of 14 junk blocks up in the air "finished" with all 14 still there, main server 2026-10-20).
+const finishOf = (first, unclear) => (first && unclear.length ? {error: `no way to any of the ${unclear.length} cells to clear: ${unclear.slice(0, 3).join(' ')}`} : {noop: first});
+const DIG_INSIDE_SEARCH = 400; // pathfinder search budget (cost over the straight distance) for a digInside build
 const MAX_SIZE = {x: 5, y: 3, z: 5}; // height 3: every target is in reach from the ground, no scaffolding
 const NAME_RE = /^[a-z_]{1,48}$/;
 // Plain full blocks only: no containers, gravity blocks, fluids, doors, or
@@ -584,6 +588,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     };
     const mv = bot.pathfinder.movements;
     const scaffold = mv.scafoldingBlocks;
+    const radius = bot.pathfinder.searchRadius;
     const avoidSet = mv.blocksToAvoid;
     const avoidIds = ['comparator', 'repeater'].map((n) => bot.registry.blocksByName[n]?.id).filter((id) => id != null && !avoidSet.has(id));
     const skip = new Map(); // key -> until
@@ -904,6 +909,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       // took the same comparator out three times in five minutes (sandbox 2026-10-13). Only while a way is found:
       // at the sorter's far end the only way led over comparators, and the whole crew gave up there.
       mv.blocksToAvoid = {has: (id) => avoidSet.has(id) || (noPath < 2 && avoidIds.includes(id)), add: (id) => avoidSet.add(id), delete: (id) => avoidSet.delete(id)};
+      // digInside walks the long way round, which needs a larger search: 80 over the straight distance gave "No path"
+      // into the cavity under the base once its west half was filled (bot21, main server 2026-10-20). Safe: outside the
+      // box a block's exclusion is 100, which the pathfinder reads as unbreakable, so the search finds only more walks.
+      if (job.args.digInside && radius >= 0) bot.pathfinder.searchRadius = Math.max(radius, DIG_INSIDE_SEARCH);
       for (;;) {
         await new Promise((res) => setImmediate(res)); // let packets in: a loop whose awaits all resolve at once starves them
         guard(job);
@@ -1160,14 +1169,16 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         }
         if (!open) {
           if (!final) { final = true; continue; } // all placed: check rail shapes and double chests once more
-          job.noop = first;
+          // Said, not hidden: a tunnel leg was "finished" with 6 walkway cells left, dug three times without a pickaxe
+          // (sandbox 2026-10-18).
+          const unclear = [...plan.leave].filter((k) => { const [x, y, z] = k.split(',').map(Number); const h = stateAt(x, y, z); return h && !free(h.name); });
+          const end = finishOf(first, unclear);
+          if (end.error) throw new Error(end.error);
+          job.noop = end.noop;
           if (unfillable.size) r.emit?.('info', `schematic done; ${unfillable.size} containers no bot reached were left empty: ${[...unfillable].slice(0, 3).join(', ')}`);
           if (asIs.size) r.emit?.('info', `schematic done; ${asIs.size} rails over hoppers keep another shape (no cart runs there): ${[...asIs].slice(0, 4).join(' ')}`);
           if (stuck.size) r.emit?.('info', `schematic done; ${stuck.size} cells in the way were left (not ours): ${[...stuck].slice(0, 3).map(([k, n]) => `${n} at ${k}`).join(', ')}`);
           if (unreached.size) r.emit?.('info', `schematic done; ${unreached.size} supports no bot reached were left: ${[...unreached].slice(0, 3).join(', ')}`);
-          // Said, not hidden: a tunnel leg was "finished" with 6 walkway cells left, dug three times without a pickaxe
-          // (sandbox 2026-10-18).
-          const unclear = [...plan.leave].filter((k) => { const [x, y, z] = k.split(',').map(Number); const h = stateAt(x, y, z); return h && !free(h.name); });
           if (unclear.length) r.emit?.('info', `schematic done; ${unclear.length} cells to clear were left after three tries: ${unclear.slice(0, 3).join(' ')}`);
           return;
         }
@@ -1332,6 +1343,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       }
       mv.scafoldingBlocks = scaffold;
       mv.blocksToAvoid = avoidSet;
+      bot.pathfinder.searchRadius = radius;
       bot.setControlState('sneak', false);
       bot.removeListener('blockUpdate', dropState);
       bot.removeListener('chunkColumnLoad', dropStates);
@@ -1340,5 +1352,5 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
   };
 }
 
-module.exports = {validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
+module.exports = {finishOf, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
   makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList, REPLACEABLE, CONTAINER};
