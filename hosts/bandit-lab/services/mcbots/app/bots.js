@@ -1511,7 +1511,10 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
   await ensureTool(r, job, block);
   guard(job);
   try {
-    await goNear(r, job, pos.x, pos.y, pos.z, 4, {goal: new goals.GoalLookAtBlock(pos, bot.world, {reach: 4}), doing: `walking to ${block.name} near ${at(pos)}${tally(job)}`});
+    // GoalLookAtBlock raycasts against collision shapes: a block without one (wheat, flowers, grass) is never seen, so
+    // every walk ran to the 4 s search timeout, some 20 s a cell (sandbox wheat plot, 2026-10-20).
+    const sight = block.boundingBox === 'empty' ? {} : {goal: new goals.GoalLookAtBlock(pos, bot.world, {reach: 4})};
+    await goNear(r, job, pos.x, pos.y, pos.z, 4, {...sight, doing: `walking to ${block.name} near ${at(pos)}${tally(job)}`});
   } catch (e) {
     // No spot within 4 (the last cells of a shaft layer, seen from its stair step): the server takes a dig
     // up to its interaction range (4.5) plus a margin, so a block within DIG_REACH of the eyes is dug from

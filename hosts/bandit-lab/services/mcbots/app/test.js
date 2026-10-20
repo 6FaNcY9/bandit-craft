@@ -3812,16 +3812,17 @@ require('./crafting');
       const blocks = new Map([['5,64,5', 'blue_orchid']]);
       const job = {t: {}, cancelled: false};
       let digs = 0;
+      const goalsSeen = [];
       const bot = {
-        blockAt: (p) => (blocks.get(`${p.x},${p.y},${p.z}`) ? {name: blocks.get(`${p.x},${p.y},${p.z}`), position: p, getProperties: () => ({})} : null),
+        blockAt: (p) => (blocks.get(`${p.x},${p.y},${p.z}`) ? {name: blocks.get(`${p.x},${p.y},${p.z}`), position: p, boundingBox: blocks.get(`${p.x},${p.y},${p.z}`) === 'stone' ? 'block' : 'empty', getProperties: () => ({})} : null),
         entity: {position: new Vec3(3, 64, 3), onGround: true}, game: {dimension: 'overworld'}, entities: {}, inventory: {items: () => []},
-        pathfinder: {goto: async () => onWalk(blocks, job), stop() {}, setGoal() {}},
+        pathfinder: {goto: async (g) => { goalsSeen.push(g.constructor.name); return onWalk(blocks, job); }, stop() {}, setGoal() {}},
         tool: {equipForBlock: async () => onEquip(blocks, job)},
         dig: async () => { digs++; blocks.delete('5,64,5'); },
         stopDigging() {},
       };
       const r = {bot, world: {hostilesNear: () => []}, emit() {}};
-      return {go: () => digAt(r, job, pos, expect), digs: () => digs};
+      return {go: () => digAt(r, job, pos, expect), digs: () => digs, goalsSeen, blocks};
     };
     let x = run({onEquip: (_, job) => (job.cancelled = true)});
     await assert.rejects(x.go(), Cancelled);
@@ -3838,6 +3839,12 @@ require('./crafting');
     x = run({expect: plant});
     assert.strictEqual(await x.go(), true);
     assert.strictEqual(x.digs(), 1);
+    // a block with no collision shape is never seen by GoalLookAtBlock's raycast (wheat plot: 4 s search timeouts per cell)
+    assert.deepStrictEqual(x.goalsSeen, ['GoalNear']);
+    x = run({});
+    x.blocks.set('5,64,5', 'stone');
+    assert.strictEqual(await x.go(), true);
+    assert.deepStrictEqual(x.goalsSeen, ['GoalLookAtBlock']);
   }
   { // hunt and bed (R5): validation, the pure picks, then both jobs against a fake bot
     const {JOBS, VALIDATE, Cancelled} = require('./bots');
