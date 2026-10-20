@@ -1739,18 +1739,37 @@ const child = (job, extra = {}) => Object.assign(Object.create(job), {collected:
 // between gets back to light 0, where monsters spawn). Out of torches: craft 4
 // when there is coal or charcoal (sticks come from planks).
 const TORCH_BELOW = 7;
+// A torch shines 14 and loses 1 per block of walking distance; a floor spot is lit enough from 8 up. A fixed grid of 8
+// left the middle of four torches at 6 (2026-10-20): torches are chosen so that every dark spot is within 6 of one,
+// each time the one that lights the most spots still dark.
+const LIGHT_GOAL = 8, LIGHT_REACH = 14 - LIGHT_GOAL;
+const REACH_OFFSETS = [];
+for (let dx = -LIGHT_REACH; dx <= LIGHT_REACH; dx++) for (let dy = -LIGHT_REACH; dy <= LIGHT_REACH; dy++) for (let dz = -LIGHT_REACH; dz <= LIGHT_REACH; dz++) if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) <= LIGHT_REACH) REACH_OFFSETS.push([dx, dy, dz]);
 function lightCandidates(box, blockAt, protectedAt = () => false, torchNear = () => false, chestNear = () => false) {
-  const out = [];
-  for (let x = box.x1; x <= box.x2; x += 8) for (let z = box.z1; z <= box.z2; z += 8) {
-    let found = null;
+  const dark = new Map(); // "x,y,z" -> {x, y, z, host}: a floor spot below LIGHT_GOAL; host: a torch may stand there
+  const air = ['air', 'cave_air'];
+  for (let x = box.x1; x <= box.x2; x++) for (let z = box.z1; z <= box.z2; z++) {
+    if (protectedAt(x, z)) continue;
     for (let y = box.y1; y + 2 <= box.y2; y++) {
       const ground = blockAt(x, y, z), feet = blockAt(x, y + 1, z), head = blockAt(x, y + 2, z);
-      if (!ground || ground.boundingBox !== 'block' || !feet || !head || !['air', 'cave_air'].includes(feet.name) || !['air', 'cave_air'].includes(head.name)) continue;
-      if (/farmland|leaves|_leaves|_slab|glass|water|lava|wheat|crop/.test(ground.name)) continue;
-      if ((feet.light ?? 15) !== 0 || protectedAt(x, z) || torchNear(x, y + 1, z) || chestNear(x, z)) continue;
-      found = {x, y: y + 1, z}; break;
+      if (!ground || ground.boundingBox !== 'block' || !feet || !head || !air.includes(feet.name) || !air.includes(head.name)) continue;
+      if ((feet.light ?? 15) >= LIGHT_GOAL || torchNear(x, y + 1, z)) continue;
+      dark.set(`${x},${y + 1},${z}`, {x, y: y + 1, z, host: !/farmland|leaves|_leaves|_slab|glass|water|lava|wheat|crop/.test(ground.name) && !chestNear(x, z)});
     }
-    if (found) out.push(found);
+  }
+  const out = [];
+  const near = (p) => REACH_OFFSETS.map(([dx, dy, dz]) => dark.get(`${p.x + dx},${p.y + dy},${p.z + dz}`)).filter(Boolean);
+  for (const first of dark.values()) {
+    if (!dark.has(`${first.x},${first.y},${first.z}`)) continue; // lit by a torch picked meanwhile
+    let best = null;
+    for (const c of near(first)) {
+      if (!c.host) continue;
+      const n = near(c).length;
+      if (!best || n > best.n) best = {c, n};
+    }
+    if (!best) { dark.delete(`${first.x},${first.y},${first.z}`); continue; } // nowhere to put a torch for it
+    out.push({x: best.c.x, y: best.c.y, z: best.c.z});
+    for (const q of near(best.c)) dark.delete(`${q.x},${q.y},${q.z}`);
   }
   return out;
 }
@@ -2872,7 +2891,7 @@ const JOBS = {
       guard(job);
       if (bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) > 3) continue;
       const here = bot.blockAt(new Vec3(p.x, p.y, p.z)), below = bot.blockAt(new Vec3(p.x, p.y - 1, p.z));
-      if (!here || !below || !['air', 'cave_air'].includes(here.name) || below.boundingBox !== 'block' || (here.light ?? 15) !== 0) continue;
+      if (!here || !below || !['air', 'cave_air'].includes(here.name) || below.boundingBox !== 'block' || (here.light ?? 15) >= LIGHT_GOAL) continue;
       try {
         await bot.equip(bot.inventory.items().find((i) => i.name === 'torch'), 'hand');
         await bot.placeBlock(below, new Vec3(0, 1, 0));

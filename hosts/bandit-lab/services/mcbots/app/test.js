@@ -7292,6 +7292,17 @@ require('./crafting');
   put(16, 1, 0, 'water');
   const picks = lightCandidates({x1: 0, y1: 0, z1: 0, x2: 40, y2: 2, z2: 0}, at, (x) => x === 32, (x) => x === 24);
   assert.deepStrictEqual(picks, [{x: 0, y: 1, z: 0}, {x: 40, y: 1, z: 0}], 'only safe dark grass remains: farmland, water, nearby torch and protected zone are skipped');
+  { // a dark flat floor: every spot ends with light >= 8 (a torch shines 14, 1 less per block), with few torches (2026-10-20)
+    const floor = new Map(), dim = 25;
+    for (let x = 0; x < dim; x++) for (let z = 0; z < dim; z++) { floor.set(`${x},0,${z}`, {name: 'stone', boundingBox: 'block'}); floor.set(`${x},1,${z}`, {name: 'air', boundingBox: 'empty', light: 0}); floor.set(`${x},2,${z}`, {name: 'air', boundingBox: 'empty', light: 0}); }
+    const spots = lightCandidates({x1: 0, y1: 0, z1: 0, x2: dim - 1, y2: 2, z2: dim - 1}, (x, y, z) => floor.get(`${x},${y},${z}`) || null);
+    let worst = 0;
+    for (let x = 0; x < dim; x++) for (let z = 0; z < dim; z++) worst = Math.max(worst, Math.min(...spots.map((p) => Math.abs(p.x - x) + Math.abs(p.z - z))));
+    assert.ok(worst <= 6, `a spot ${worst} from the nearest torch is lit ${14 - worst} only`);
+    assert.ok(spots.length <= 15, `${spots.length} torches for a ${dim} x ${dim} floor`);
+    const lit = lightCandidates({x1: 0, y1: 0, z1: 0, x2: dim - 1, y2: 2, z2: dim - 1}, (x, y, z) => { const b = floor.get(`${x},${y},${z}`); return b && y === 1 ? {...b, light: 9} : b || null; });
+    assert.deepStrictEqual(lit, [], 'a floor already at 9 needs nothing');
+  }
   assert.deepStrictEqual(spawnerTorchSpot({x: 0, y: 1, z: 0}, (x, y, z) => at(x, y, z)), {spot: {x: 0, y: 2, z: 0}, face: new (require('vec3').Vec3)(0, 1, 0)});
   put(0, 2, 0, 'stone', 'block'); put(1, 1, 0, 'air');
   assert.deepStrictEqual(spawnerTorchSpot({x: 0, y: 1, z: 0}, at).spot, {x: 1, y: 1, z: 0}, 'blocked top selects an open side');
