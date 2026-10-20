@@ -1137,7 +1137,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   // forever, so every walk has a deadline. Its clock runs while the pathfinder walks, armed anew for every try, not
   // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
   // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
-  let timedOut = false, deadline = null, wider = false;
+  let timedOut = false, deadline = null, wider = false, boxed = null;
   const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
   const arm = () => {
     clearTimeout(deadline);
@@ -1178,6 +1178,13 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
           pf.searchRadius = WIDER.find((b) => b > pf.searchRadius);
           wider = true;
           tries--;
+        } else if (!timedOut && /No path/.test(e.message) && r.digBox && !boxed) {
+          // Walled in by its own fill: bot21 sat in the filled half of the cavity under the base, and the next tile's
+          // box forbade digging the way out (main server 2026-10-20). One more try digging anything but protected areas.
+          boxed = r.digBox;
+          r.digBox = null;
+          r.emit?.('info', `no way out within the dig limits: digging out once (from ${at(r.bot.entity.position.floored())})`);
+          tries--;
         } else if (timedOut || tries >= 3) throw fail();
         else await sleep(1000);
         if (timedOut) throw fail();
@@ -1186,6 +1193,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   } finally {
     clearTimeout(deadline);
     if (wider) pf.searchRadius = budget;
+    if (boxed && !r.digBox) r.digBox = boxed;
   }
 }
 

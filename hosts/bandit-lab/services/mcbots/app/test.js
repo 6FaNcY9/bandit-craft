@@ -5444,6 +5444,19 @@ require('./crafting');
   assert.deepStrictEqual([tried, pf.searchRadius], [[80, 250, 600], 80]);
 })();
 
+(async () => { // walled in by its own fill: after the widest search one try without the dig box, which comes back (2026-10-20)
+  const {goNear} = require('./bots');
+  const {Vec3} = require('vec3');
+  const box = {x1: 0, x2: 9, z1: 0, z2: 9}, seen = [], said = [];
+  const r = {emit: (k, x) => said.push(x), world: {hostilesNear: () => []}, combat: {fit: () => false}, protectedAreas: [], digBox: box};
+  const pf = {searchRadius: 80, stop() {}, setGoal() {}, goto: async () => { seen.push(r.digBox ? pf.searchRadius : 'free'); if (r.digBox) throw new Error('No path to the goal!'); }};
+  r.bot = {entity: {position: new Vec3(0, 64, 0)}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+    blockAt: () => ({name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+  await goNear(r, {type: 'schematic', t: {}, cancelled: false}, 3, 64, 3, 2);
+  assert.deepStrictEqual([seen, r.digBox, pf.searchRadius], [[80, 250, 600, 'free'], box, 80]);
+  assert.match(said[0], /digging out once/);
+})();
+
 { // goLeg: the walk deadline runs while the pathfinder walks, not during a night's wait: a night used it up, and bot1
   // swam against a cave wall for an hour with no deadline (main server 2026-10-18). Mock timers stop every clock in the
   // process, so this runs in a child process of its own.
