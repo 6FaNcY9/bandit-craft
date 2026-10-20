@@ -5645,6 +5645,8 @@ require('./crafting');
     P.record(c2, 5, 60, 5, 'cobblestone');
     P.changed(c2, 5, 60, 5, 'air', 'cobblestone'); // the bot's own placement arriving
     assert.strictEqual(c2.size, 1, 'own placement keeps the record');
+    P.changed(c2, 5, 60, 5, 'cobblestone', 'cobblestone'); // the server sends the same block again (sandbox hut build left its bridge block standing)
+    assert.strictEqual(c2.size, 1, 'a repeated update keeps the record');
     P.changed(c2, 5, 60, 5, 'cobblestone', 'air'); // a player removes it ...
     P.changed(c2, 5, 60, 5, 'air', 'cobblestone'); // ... and places their own
     assert.strictEqual(c2.size, 0);

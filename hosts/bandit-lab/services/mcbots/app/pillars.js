@@ -27,7 +27,7 @@ function take(cells) {
 // same-type replacement after a removal is then not ours). Our own placement (air -> recorded name) keeps it.
 function changed(cells, x, y, z, oldName, newName) {
   const c = cells.get(key(x, y, z));
-  if (c && (oldName === c.name || newName !== c.name)) cells.delete(key(x, y, z));
+  if (c && oldName !== newName && (oldName === c.name || newName !== c.name)) cells.delete(key(x, y, z)); // same block again (a resend) is no change
 }
 
 // The cells to dig now, tallest first. Only a cell this bot placed and that is still the same block (a player's

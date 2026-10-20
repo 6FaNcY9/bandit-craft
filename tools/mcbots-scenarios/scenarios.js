@@ -116,7 +116,7 @@ const SCENARIOS = [
     success: [finished, noError, alive,
       {kind: 'cells', x1: 3530, y1: 201, z1: 3030, x2: 3534, y2: 203, z2: 3034, specs: ['minecraft:oak_planks'], min: 45, max: 45},
       {kind: 'cells', x1: 3530, y1: 201, z1: 3030, x2: 3534, y2: 203, z2: 3034, specs: ['minecraft:glass'], min: 1, max: 1},
-      {kind: 'cells', x1: 3532, y1: 201, z1: 3030, x2: 3532, y2: 202, z2: 3030, specs: ['minecraft:air'], min: 2},
+      {kind: 'cells', x1: 3532, y1: 201, z1: 3030, x2: 3532, y2: 202, z2: 3030, specs: ['minecraft:air', 'minecraft:snow'], min: 2}, // snow: the sandbox weather lays a layer in the gap
       {kind: 'cells', x1: 3528, y1: 201, z1: 3028, x2: 3536, y2: 206, z2: 3036, specs: ['minecraft:dirt', 'minecraft:cobblestone'], max: 0}]},
 ];
 
