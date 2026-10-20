@@ -1099,8 +1099,12 @@ function settledGoto(bot, goal) {
     };
     const reached = () => done();
     const update = (res) => {
-      if (res.status === 'noPath') done(new Error('No path to the goal!'));
-      else if (res.status === 'timeout') done(new Error('Took to long to decide path to goal!'));
+      if (res.status === 'noPath' || res.status === 'timeout') {
+        const err = new Error(res.status === 'noPath' ? 'No path to the goal!' : 'Took to long to decide path to goal!');
+        const best = res.path?.at(-1); // the node nearest the goal: a walk there is progress (goLeg)
+        if (best) err.best = {x: best.x, y: best.y, z: best.z};
+        done(err);
+      }
       // On a block lower than a full one (farmland, a dirt path) the search starts one up and finds the goal
       // reached, but the plugin checks the floored position, one too low, and never says goal_reached: bot50
       // waited 5 min on farmland to pick up a drop (sandbox wheat field, 2026-10-15). That empty path is an arrival.
@@ -1144,7 +1148,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   // forever, so every walk has a deadline. Its clock runs while the pathfinder walks, armed anew for every try, not
   // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
   // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
-  let timedOut = false, stalled = false, deadline = null, watch = null, wider = false, boxed = null;
+  let timedOut = false, stalled = false, deadline = null, watch = null, wider = false, boxed = null, hops = 0;
   const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
   const halt = () => {
     timedOut = true;
@@ -1203,6 +1207,13 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
           boxed = r.digBox;
           r.digBox = null;
           r.emit?.('info', `no way out within the dig limits: digging out once (from ${at(r.bot.entity.position.floored())})`);
+          tries--;
+        } else if (!timedOut && e.best && hops < 2 && r.bot.entity && Math.hypot(r.bot.entity.position.x - x, r.bot.entity.position.y - y, r.bot.entity.position.z - z) - Math.hypot(e.best.x - x, e.best.y - y, e.best.z - z) >= 5) {
+          // "No path" still leaves the node nearest the goal: walk there and plan again from the new spot, twice at most
+          // (a long way that needed a hop of its own failed whole; the hop never counts as arrival, 2026-10-20).
+          hops++;
+          arm();
+          await r.bot.pathfinder.goto(new goals.GoalBlock(e.best.x, e.best.y, e.best.z)).catch(() => guard(job));
           tries--;
         } else if (timedOut || tries >= 3) throw fail();
         else await sleep(1000);

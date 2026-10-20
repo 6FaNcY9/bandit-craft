@@ -5480,6 +5480,30 @@ require('./crafting');
   assert.deepStrictEqual([tried, pf.searchRadius], [[80, 250, 600], 80]);
 })();
 
+(async () => { // goLeg: "No path" carries the node nearest the goal: walk there (twice at most), then plan again (2026-10-20)
+  const {goNear} = require('./bots');
+  const {Vec3} = require('vec3');
+  const run = async (gain, finish) => {
+    const hops = [], pos = new Vec3(0, 64, 0), calls = {n: 0};
+    const pf = {searchRadius: 600, stop() {}, setGoal() {}, goto: async (goal) => {
+      if (goal.constructor.name === 'GoalBlock') { hops.push(goal.x); pos.x = goal.x; return; }
+      if (finish(++calls.n)) return;
+      throw Object.assign(new Error('No path to the goal!'), {best: {x: pos.x + gain, y: 64, z: 0}});
+    }};
+    const bot = {entity: {position: pos}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+      blockAt: () => ({name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+    const out = await goNear({bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []}, {type: 'goto', t: {}, cancelled: false}, 60, 64, 0, 2).then(() => 'ok', (e) => e.message);
+    return [out, hops];
+  };
+  assert.deepStrictEqual(await run(10, (n) => n === 3), ['ok', [10, 20]], 'two partial hops, then the real goal is reached');
+  const [out2, hops2] = await run(2, () => false);
+  assert.match(out2, /could not reach/);
+  assert.deepStrictEqual(hops2, [], 'a hop of 2 blocks is no progress');
+  const [out3, hops3] = await run(10, () => false);
+  assert.match(out3, /could not reach/);
+  assert.strictEqual(hops3.length, 2, 'two hops at most');
+})();
+
 (async () => { // walled in by its own fill: after the widest search one try without the dig box, which comes back (2026-10-20)
   const {goNear} = require('./bots');
   const {Vec3} = require('vec3');
