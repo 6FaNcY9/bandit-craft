@@ -79,6 +79,12 @@ function countMetrics(events, sawZeroHealth = false) {
   m.deaths = Math.max(deaths, sawZeroHealth ? 1 : 0);
   return m;
 }
+// Longest time (s) the same key (position + job progress) stayed unchanged; samples = [[tSeconds, key], ...].
+function maxGap(samples) {
+  let gap = 0, since = samples.length ? samples[0][0] : 0, key = samples.length ? samples[0][1] : null;
+  for (const [t, k] of samples) { if (k !== key) { key = k; since = t; } gap = Math.max(gap, t - since); }
+  return gap;
+}
 // Items of a chest from `data get block ... Items` output, summed for one item.
 function chestItemCount(out, item) {
   let n = 0;
@@ -104,14 +110,15 @@ async function runScenario(s) {
   const since = (await api('/api/events')).lastId;
   const t0 = Date.now();
   const posted = await api('/api/job', {bots: [BOT], type: s.job.type, args: s.job.args, replace: true});
-  let timedOut = false, sawJob = false, sawZero = false, stopped = false, bot = startState;
+  let timedOut = false, sawJob = false, sawZero = false, stopped = false, bot = startState, mined = 0;
+  const samples = [];
   if (posted.error || posted.ok === false) return {s, reason: `job refused: ${JSON.stringify(posted).slice(0, 200)}`, bot, events: [], sawZero, elapsedS: 0, chests: {}, timedOut};
   for (;;) {
     await sleep(1000);
     bot = await botState();
     const el = (Date.now() - t0) / 1000;
     if (process.env.TRACE) console.log(`  t=${el.toFixed(0)} pos=${bot.pos} ${bot.activity}`);
-    if (bot.job) sawJob = true;
+    if (bot.job) { sawJob = true; mined = Math.max(mined, bot.job.done || 0); samples.push([el, `${bot.pos}|${bot.job.progress}`]); }
     if (bot.health <= 0 || bot.dead) sawZero = true;
     if (s.stopAfterS && el >= s.stopAfterS && !stopped) { stopped = true; await api('/api/job', {bots: [BOT], type: 'stop'}); }
     if (!bot.job && (sawJob || el >= 5) && (!s.stopAfterS || stopped)) break;
@@ -127,7 +134,7 @@ async function runScenario(s) {
   }
   const events = (await api(`/api/events?since=${since}`)).events.filter((e) => e.bot === BOT);
   rcon(CLEAR.concat(s.teardown || []));
-  return {s, bot, events, sawZero, elapsedS, chests, timedOut};
+  return {s, bot, events, sawZero, elapsedS, chests, timedOut, mined, maxGapS: Math.round(maxGap(samples)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
 }
 
 async function main() {
@@ -140,7 +147,7 @@ async function main() {
     try {
       const r = await runScenario(s);
       const failed = r.reason ? [r.reason] : evalSuccess(s, {bot: r.bot, timedOut: r.timedOut, elapsedS: r.elapsedS, chests: r.chests});
-      row = {t: new Date().toISOString(), name: s.name, pass: !failed.length, seconds: r.elapsedS, metrics: countMetrics(r.events, r.sawZero), failed, timedOut: r.timedOut, pos: r.bot?.pos, lastError: r.bot?.lastError, chests: r.chests};
+      row = {t: new Date().toISOString(), name: s.name, pass: !failed.length, seconds: r.elapsedS, metrics: {...countMetrics(r.events, r.sawZero), mined: r.mined, placed: r.placed, max_gap_s: r.maxGapS}, failed, timedOut: r.timedOut, pos: r.bot?.pos, lastError: r.bot?.lastError, chests: r.chests};
     } catch (e) {
       row = {t: new Date().toISOString(), name: s.name, pass: false, seconds: 0, metrics: countMetrics([]), failed: [`runner error: ${e.message}`]};
     }
@@ -153,5 +160,5 @@ async function main() {
   process.exit(rows.some((r) => !r.pass) ? 1 : 0);
 }
 
-module.exports = {checkCommand, validateScenario, evalCondition, evalSuccess, countMetrics, invCount, chestItemCount};
+module.exports = {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, countMetrics, invCount, chestItemCount};
 if (require.main === module) main();

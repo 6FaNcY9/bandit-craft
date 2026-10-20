@@ -22,6 +22,7 @@ const BOT = ['gamemode survival bot50', 'clear bot50', 'time set noon', 'effect 
   'effect give bot50 minecraft:instant_health 1 5', 'effect give bot50 minecraft:saturation 1 20',
   'give bot50 minecraft:iron_pickaxe 1', 'give bot50 minecraft:iron_axe 1', 'give bot50 minecraft:bread 8'];
 
+const SEALED = {x: 3549 + (Date.now() % 3), y: 201 + (Math.floor(Date.now() / 3) % 3), z: 3049 + (Math.floor(Date.now() / 9) % 3)};
 const alive = {kind: 'alive'}, finished = {kind: 'finished'}, noError = {kind: 'noError'};
 const near = (x, y, z, r = 2.5) => ({kind: 'near', x, y, z, r});
 
@@ -43,8 +44,9 @@ const SCENARIOS = [
   {name: '5-sealed-target', timeoutS: 120,
     // Target inside a bedrock cell (cannot be dug) with a 3 thick shell, so "stood next to the wall" is far from the target.
     // Its own spot: the bot remembers a walk with no path for 10 min per target, which would fail scenarios 1 and 2 otherwise.
+    // The target rotates over the 27 cell blocks per run, so a cached "no path" from an earlier run (<10 min) cannot answer for this one.
     setup: [fill(3546, 200, 3046, 3554, 206, 3054, 'bedrock'), fill(3549, 201, 3049, 3551, 203, 3051, 'air'), START],
-    job: {type: 'goto', args: {x: 3550, y: 201, z: 3050}}, success: [finished, alive, {kind: 'error', re: 'could not reach|no path'}, {kind: 'notNear', x: 3550, y: 201, z: 3050, r: 3.5}]},
+    job: {type: 'goto', args: SEALED}, success: [finished, alive, {kind: 'error', re: 'could not reach|no path'}, {kind: 'notNear', ...SEALED, r: 3.5}]},
   {name: '6-mine-cobble', timeoutS: 120,
     // one layer only: a taller field makes the bot pillar up with its own cobblestone and the count never grows
     setup: [fill(3520, 201, 3028, 3525, 201, 3032, 'stone'), START],
@@ -58,6 +60,11 @@ const SCENARIOS = [
     setup: [fill(3520, 201, 3025, 3530, 203, 3035, 'stone'), 'setblock 3515 201 3030 minecraft:chest', 'give bot50 minecraft:cobblestone 768', 'give bot50 minecraft:torch 1280', START],
     job: {type: 'shift', args: {block: 'stone', x: 3515, y: 201, z: 3030}},
     success: [alive, noError, {kind: 'chest', x: 3515, y: 201, z: 3030, item: 'cobblestone', min: 16}, {kind: 'inv', item: 'cobblestone', min: 1}]},
+  {name: '9-far-sealed-field', timeoutS: 180,
+    // 6x6 stone layer 35 blocks away inside a bedrock ring (3 high) whose only gap is on the far side: the nearest blocks are
+    // behind the wall (no line of sight), so the bot must walk around (T04 top-k walk) instead of failing on the closest one.
+    setup: [fill(3544, 201, 3026, 3551, 203, 3033, 'bedrock'), fill(3545, 201, 3027, 3550, 203, 3032, 'air'), fill(3545, 201, 3027, 3550, 201, 3032, 'stone'), fill(3551, 201, 3030, 3551, 202, 3030, 'air'), START],
+    job: {type: 'mine', args: {block: 'stone', count: 8}}, success: [finished, noError, alive, {kind: 'inv', item: 'cobblestone', min: 8}]},
 ];
 
 module.exports = {BOX, SCENARIOS, CLEAR, PLATFORM, BOT};
