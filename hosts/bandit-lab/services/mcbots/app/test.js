@@ -88,6 +88,9 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.strictEqual(A.deathLoop(d.times, 29 * MIN).hold, true, 'the third within 30 min');
   assert.deepStrictEqual(A.deathLoop(d.times, 29 * MIN).times, [], 'counting starts over after a hold');
   assert.strictEqual(A.deathLoop(d.times, 31 * MIN).hold, false, 'the first death is 31 min old: out of the window');
+  assert.strictEqual(A.deathLoopAlert('bot1', {type: 'produce'}, 0), 'bot1 died 3 times in 30 min: its produce order waits 30 min');
+  assert.strictEqual(A.deathLoopAlert('bot1', undefined, 9), 'bot1 died 3 times in 30 min: its 9 queued jobs are dropped', 'graves queued one by one (2026-10-20)');
+  assert.match(A.deathLoopAlert('bot1', undefined, 0), /: nothing queued$/);
   // Three failed jobs in a row: no agent order for REST_MS after the newest (bot3, main server 2026-10-14).
   const ev = (kind, t, bot = 'bot1') => ({bot, kind, t, text: `${kind === 'fail' ? 'failed' : 'finished'}: chop 1 - no free logs`});
   const now = 1e6;

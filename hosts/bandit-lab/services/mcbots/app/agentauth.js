@@ -136,6 +136,10 @@ function deathLoop(times, t) {
   const kept = [...times, t].filter((x) => t - x <= DEATH_WINDOW_MS);
   return kept.length >= DEATH_LOOP ? {times: [], hold: true} : {times: kept, hold: false};
 }
+// The alert for a death loop: its order is held, its queued jobs are dropped (they went on after each respawn, and the
+// next grave in the same dark wood killed bot1 five times in 11 min, main server 2026-10-20).
+const deathLoopAlert = (bot, order, queued) => `${bot} died ${DEATH_LOOP} times in ${DEATH_WINDOW_MS / 60000} min: ${
+  [order && `its ${order.type} order waits ${DEATH_HOLD_MS / 60000} min`, queued && `its ${queued} queued jobs are dropped`].filter(Boolean).join(', ') || 'nothing queued'}`;
 
 function agentJobRefusal({bots, type, args, replace, solver}, policy) {
   const {agentBots, supplyChest} = policy;
@@ -162,4 +166,4 @@ function agentJobRefusal({bots, type, args, replace, solver}, policy) {
 
 const validBackend = (backend) => typeof backend === 'string' && /^[a-zA-Z0-9_.:\[\]-]{1,128}$/.test(backend);
 
-module.exports = {deathLoop, DEATH_LOOP, DEATH_WINDOW_MS, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};
+module.exports = {deathLoop, deathLoopAlert, DEATH_LOOP, DEATH_WINDOW_MS, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS, SolverLimiter, solverAction, SOLVER_JOBS, validBackend, agentStatus, hash, bearerMatches, agentEndpoint, agentJobRefusal, AGENT_JOBS, resting, REST_MS};

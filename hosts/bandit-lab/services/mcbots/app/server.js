@@ -56,12 +56,18 @@ const orderEnded = (e) => {
   const order = ownerOrders.get(e.bot), out = agentauth.orderOutcome(e, order);
   if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
   if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + out.retry)); // never cuts a death hold short
-  if (e.kind === 'death' && order) {
+  if (e.kind === 'death') { // every bot's, not only one with an order: a queue of jobs kills it just as well
     const d = agentauth.deathLoop(deathTimes.get(e.bot) || [], e.t);
     deathTimes.set(e.bot, d.times);
     if (d.hold) {
-      orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
-      events.add('base', 'alert', `${e.bot} died ${agentauth.DEATH_LOOP} times in ${agentauth.DEATH_WINDOW_MS / 60000} min: its ${order.type} order waits ${agentauth.DEATH_HOLD_MS / 60000} min`);
+      const r = runners.get(e.bot), queued = r?.snapshot().queue?.length || 0;
+      if (order) orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
+      if (queued) {
+        r.enqueue('stop');
+        delete toResume[e.bot];
+        projects.pause(e.bot);
+      }
+      events.add('base', 'alert', agentauth.deathLoopAlert(e.bot, order, queued));
     }
   }
 };
