@@ -5512,6 +5512,20 @@ require('./crafting');
     assert.strictEqual(walks, 1, 'the walk starts in the morning');
     mock.timers.tick(90000); await flush(); await flush(); await flush();
     assert.match(String(outcome), /no way there within 90 s/, 'the deadline still bounds the walk after the night');
+    // A bot that does not move is given up after 30 s, one that keeps moving only at the 90 s deadline (2026-10-20).
+    outcome = null;
+    goNear(r, {type: 'grave', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => { outcome = 'arrived'; }, (e) => { outcome = e.message; });
+    await flush();
+    for (let s = 0; s < 30; s += 5) { mock.timers.tick(5000); await flush(); }
+    await flush(); await flush();
+    assert.match(String(outcome), /no progress for 30 s/, 'a standing bot is given up early');
+    outcome = null;
+    goNear(r, {type: 'grave', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => { outcome = 'arrived'; }, (e) => { outcome = e.message; });
+    await flush();
+    for (let s = 0; s < 85; s += 5) { bot.entity.position = new Vec3(s, 64, 0); mock.timers.tick(5000); await flush(); }
+    assert.strictEqual(outcome, null, 'a walking bot is not stalled');
+    mock.timers.tick(5000); await flush(); await flush(); await flush();
+    assert.match(String(outcome), /no way there within 90 s/);
     console.log('goLeg: deadline after a night wait ok');
   };
   // execFile, not execFileSync: a blocked event loop failed the combat timing test next door (lastFight < 1 s).

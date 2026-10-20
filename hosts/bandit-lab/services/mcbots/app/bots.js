@@ -34,6 +34,7 @@ const owner = require('./owner');
 const NAME_RE = /^bot[0-9]{1,2}$/; // BotGate's pattern (Velocity plugin)
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
+const WATCH_MS = 5000, STILL_MS = 30000;
 const UNREACHABLE_CHEST_MS = 30 * 60000;
 const CHAT_TYPES = new Set(['chat.type.text', '<%s> %s']);
 const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers to you: %s']);
@@ -1137,16 +1138,28 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   // forever, so every walk has a deadline. Its clock runs while the pathfinder walks, armed anew for every try, not
   // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
   // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
-  let timedOut = false, deadline = null, wider = false, boxed = null;
+  let timedOut = false, stalled = false, deadline = null, watch = null, wider = false, boxed = null;
   const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
+  const halt = () => {
+    timedOut = true;
+    r.bot?.pathfinder.stop();
+    r.bot?.pathfinder.setGoal(null); // makes a pending goto() reject; stop() alone left one hanging for minutes (2026-10-08)
+  };
+  // A walk that stays within a block for STILL_MS is given up at once instead of at the deadline: 650 failed walks in
+  // 5 days cost 90 s each. A fight or a dig in progress is no stall.
   const arm = () => {
     clearTimeout(deadline);
-    timedOut = false;
-    deadline = setTimeout(() => {
-      timedOut = true;
-      r.bot?.pathfinder.stop();
-      r.bot?.pathfinder.setGoal(null); // makes a pending goto() reject; stop() alone left one hanging for minutes (2026-10-08)
-    }, GOTO_TIMEOUT_MS);
+    clearTimeout(watch);
+    timedOut = stalled = false;
+    deadline = setTimeout(halt, GOTO_TIMEOUT_MS);
+    let last = r.bot?.entity?.position?.clone() || null, still = 0;
+    const look = () => {
+      const p = r.bot?.entity?.position;
+      if (p && (!last || p.distanceTo(last) >= 1)) { last = p.clone(); still = 0; }
+      else if (p && !r.combat?.busy && !r.bot.targetDigBlock) still++;
+      if (still * WATCH_MS >= STILL_MS) { stalled = true; halt(); } else watch = setTimeout(look, WATCH_MS);
+    };
+    watch = setTimeout(look, WATCH_MS);
   };
   try {
     // Something else (combat, a block update) can stop the path mid-walk; walk
@@ -1163,7 +1176,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         guard(job);
         // The deadline clears the goal, so its error reads "The goal was changed": name the deadline instead (bot1's
         // 90 s in a sand-roofed cave looked like a fight in the archive, 2026-10-15).
-        const why = timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : e.message;
+        const why = stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : e.message;
         const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${why}`);
         // A fight takes the pathfinder over ("The goal was changed", 67 failed walks in 4 days): wait it
         // out, it is no failed try; the deadline still bounds the walk. Its end changes the goal too, with busy
@@ -1192,6 +1205,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
     }
   } finally {
     clearTimeout(deadline);
+    clearTimeout(watch);
     if (wider) pf.searchRadius = budget;
     if (boxed && !r.digBox) r.digBox = boxed;
   }
