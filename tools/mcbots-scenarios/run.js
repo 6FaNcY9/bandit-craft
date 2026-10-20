@@ -15,12 +15,14 @@ const RESULTS = path.join(os.homedir(), '.cache/bandit-bot-test/scenario-results
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = '(-?\\d+(?:\\.\\d+)?)';
 const inBox = (x, y, z) => x >= BOX.x1 && x <= BOX.x2 && z >= BOX.z1 && z <= BOX.z2 && y >= BOX.y1 && y <= BOX.y2;
-const blk = 'minecraft:[a-z_]+';
+const blk = 'minecraft:[a-z_]+(?:\\[[a-z_]+=[a-z0-9_]+\\])?'; // optional one block state, e.g. wheat[age=7]
 
 // Every rcon command must be one of these shapes with all coordinates inside the box (throws otherwise).
 function checkCommand(cmd) {
-  let c = cmd.replace(new RegExp(`^execute if block ${num} ${num} ${num} ${blk} run `), (m, x, y, z) => { checkPoint(cmd, x, y, z); return ''; });
   let m;
+  if ((m = new RegExp(`^execute if block ${num} ${num} ${num} ${blk}$`).exec(cmd))) return checkPoint(cmd, m[1], m[2], m[3]); // a count probe: prints "Test passed"/"Test failed"
+  if ((m = new RegExp(`^item replace block ${num} ${num} ${num} container\\.\\d{1,2} with minecraft:[a-z_]+ \\d{1,2}$`).exec(cmd))) return checkPoint(cmd, m[1], m[2], m[3]); // fill a chest
+  let c = cmd.replace(new RegExp(`^execute if block ${num} ${num} ${num} ${blk} run `), (m, x, y, z) => { checkPoint(cmd, x, y, z); return ''; });
   if ((m = new RegExp(`^fill ${num} ${num} ${num} ${num} ${num} ${num} ${blk}$`).exec(c))) { checkPoint(cmd, m[1], m[2], m[3]); return checkPoint(cmd, m[4], m[5], m[6]); }
   if ((m = new RegExp(`^setblock ${num} ${num} ${num} ${blk}$`).exec(c))) return checkPoint(cmd, m[1], m[2], m[3]);
   if ((m = new RegExp(`^tp bot50 ${num} ${num} ${num}$`).exec(c))) return checkPoint(cmd, m[1], m[2], m[3]);
@@ -41,9 +43,11 @@ function validateScenario(s) {
   if (!(s.timeoutS > 0)) throw new Error(`${s.name}: timeoutS must be positive`);
   if (!Array.isArray(s.success) || !s.success.length) throw new Error(`${s.name}: success needs at least one condition`);
   for (const c of s.success) {
-    if (!['near', 'notNear', 'inv', 'alive', 'finished', 'noError', 'error', 'chest'].includes(c.kind)) throw new Error(`${s.name}: unknown condition ${c.kind}`);
+    if (!['near', 'notNear', 'inv', 'alive', 'finished', 'noError', 'error', 'chest', 'cells'].includes(c.kind)) throw new Error(`${s.name}: unknown condition ${c.kind}`);
     if (c.kind === 'chest') checkPoint(s.name, c.x, c.y, c.z);
+    if (c.kind === 'cells') cellCommands(c).forEach(checkCommand);
   }
+  for (const z of s.zones || []) { if (z.box) { checkPoint(s.name, z.box.x1, z.box.y1, z.box.z1); checkPoint(s.name, z.box.x2, z.box.y2, z.box.z2); } else checkPoint(s.name, z.x, z.y, z.z); if (!/^scn-[a-z0-9-]+$/.test(z.name)) throw new Error(`${s.name}: zone names start with scn-`); }
   for (const cmd of [...(s.setup || []), ...(s.teardown || [])]) checkCommand(cmd);
   return s;
 }
@@ -62,10 +66,20 @@ function evalCondition(c, ctx) {
     case 'finished': return !ctx.timedOut && !b.job;
     case 'noError': return !errNow;
     case 'error': return errNow && new RegExp(c.re, 'i').test(b.lastError);
+    case 'cells': return (ctx.cells?.[cellKey(c)] ?? 0) >= (c.min ?? 0) && (ctx.cells?.[cellKey(c)] ?? 0) <= (c.max ?? Infinity);
     case 'chest': return (ctx.chests?.[`${c.x},${c.y},${c.z},${c.item}`] ?? 0) >= c.min;
   }
   return false;
 }
+// 'cells': how many cells of the box x1..z2 hold one of the block specs (a cell holds one block, so passes add up).
+const cellKey = (c) => JSON.stringify([c.x1, c.y1, c.z1, c.x2, c.y2, c.z2, c.specs]);
+function cellCommands(c) {
+  const out = [];
+  for (let x = c.x1; x <= c.x2; x++) for (let y = c.y1; y <= c.y2; y++) for (let z = c.z1; z <= c.z2; z++) for (const b of c.specs) out.push(`execute if block ${x} ${y} ${z} ${b}`);
+  if (out.length > 2500) throw new Error('cells: at most 2500 probes');
+  return out;
+}
+const countPassed = (out) => (out.match(/Test passed/g) || []).length;
 const evalSuccess = (s, ctx) => s.success.filter((c) => !evalCondition(c, ctx)).map((c) => JSON.stringify(c)); // the failed conditions
 
 const METRICS = {could_not_reach: /could not reach/i, no_path: /no path/i, no_progress_30s: /no progress for 30 s/i, skipped_a: /skipped a/i, no_free: /no free/i};
@@ -102,13 +116,32 @@ const api = async (p, body) => (await fetch(DASH + p, body ? {method: 'POST', he
 const botState = async () => (await api('/api/state')).bots.find((b) => b.name === BOT);
 const chestKey = (c) => `${c.x},${c.y},${c.z},${c.item}`;
 
+// Places in the bot's own state that a scenario needs (default kind storage: the index only knows chests in a storage zone; kind supply sets the y a wheat field is looked for at); set before, removed after.
+const zonesCall = (s, action) => Promise.all((s.zones || []).map((z) => api('/api/places', action === 'set' ? {action, place: {kind: 'storage', ...z}} : {action, name: z.name})));
+// Jobs that must finish before the scored one (e.g. a stock job so the bot has indexed a chest).
+async function runPre(s, t0) {
+  for (const j of s.pre || []) {
+    const posted = await api('/api/job', {bots: [BOT], type: j.type, args: j.args, replace: true});
+    if (posted.error || posted.ok === false) throw new Error(`pre job refused: ${JSON.stringify(posted).slice(0, 200)}`);
+    let saw = false;
+    for (let i = 0; ; i++) {
+      await sleep(1000);
+      const b = await botState();
+      if (b.job) saw = true;
+      if (!b.job && (saw || i >= 5)) break;
+      if (i >= 240) { await api('/api/job', {bots: [BOT], type: 'stop'}); throw new Error(`pre job ${j.type} still running after 240 s`); }
+    }
+  }
+}
 async function runScenario(s) {
   rcon([...PLATFORM, ...CLEAR]); // clear the previous scenario before building (also when it was aborted)
+  await zonesCall(s, 'set');
   rcon([...BOT_SETUP, ...(s.setup || [])]);
   await sleep(3000); // let the bot settle after the tp
   const startState = await botState();
   const since = (await api('/api/events')).lastId;
   const t0 = Date.now();
+  await runPre(s, t0);
   const posted = await api('/api/job', {bots: [BOT], type: s.job.type, args: s.job.args, replace: true});
   let timedOut = false, sawJob = false, sawZero = false, stopped = false, bot = startState, mined = 0;
   const samples = [];
@@ -132,9 +165,11 @@ async function runScenario(s) {
     const out = rcon([`data get block ${c.x} ${c.y} ${c.z} Items`]);
     chests[chestKey(c)] = chestItemCount(out, c.item);
   }
+  const cells = {};
+  for (const c of s.success.filter((x) => x.kind === 'cells')) cells[cellKey(c)] = countPassed(rcon(cellCommands(c)));
   const events = (await api(`/api/events?since=${since}`)).events.filter((e) => e.bot === BOT);
-  rcon(CLEAR.concat(s.teardown || []));
-  return {s, bot, events, sawZero, elapsedS, chests, timedOut, mined, maxGapS: Math.round(maxGap(samples)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
+  if (!process.env.KEEP) rcon(CLEAR.concat(s.teardown || [])); // KEEP=1 leaves the lab standing for a look
+  return {s, bot, events, sawZero, elapsedS, chests, cells, timedOut, mined, maxGapS: Math.round(maxGap(samples)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
 }
 
 async function main() {
@@ -145,20 +180,21 @@ async function main() {
   for (const s of list) {
     let row;
     try {
-      const r = await runScenario(s);
-      const failed = r.reason ? [r.reason] : evalSuccess(s, {bot: r.bot, timedOut: r.timedOut, elapsedS: r.elapsedS, chests: r.chests});
-      row = {t: new Date().toISOString(), name: s.name, pass: !failed.length, seconds: r.elapsedS, metrics: {...countMetrics(r.events, r.sawZero), mined: r.mined, placed: r.placed, max_gap_s: r.maxGapS}, failed, timedOut: r.timedOut, pos: r.bot?.pos, lastError: r.bot?.lastError, chests: r.chests};
+      let r;
+      try { r = await runScenario(s); } finally { await zonesCall(s, 'delete').catch(() => {}); }
+      const failed = r.reason ? [r.reason] : evalSuccess(s, {bot: r.bot, timedOut: r.timedOut, elapsedS: r.elapsedS, chests: r.chests, cells: r.cells});
+      row = {t: new Date().toISOString(), name: s.name, pass: !failed.length, seconds: r.elapsedS, metrics: {...countMetrics(r.events, r.sawZero), mined: r.mined, placed: r.placed, max_gap_s: r.maxGapS}, failed, timedOut: r.timedOut, pos: r.bot?.pos, lastError: r.bot?.lastError, chests: r.chests, cells: r.cells};
     } catch (e) {
       row = {t: new Date().toISOString(), name: s.name, pass: false, seconds: 0, metrics: countMetrics([]), failed: [`runner error: ${e.message}`]};
     }
     fs.appendFileSync(RESULTS, JSON.stringify(row) + '\n');
     rows.push(row);
-    console.log(`${row.pass ? 'PASS' : 'FAIL'} ${row.name} ${row.seconds}s ${JSON.stringify(row.metrics)}${row.pass ? '' : ` -> ${row.failed.join('; ')} err=${row.lastError || '-'}`}`);
+    console.log(`${row.pass ? 'PASS' : 'FAIL'} ${row.name} ${row.seconds}s ${JSON.stringify(row.metrics)}${row.pass ? '' : ` -> ${row.failed.join('; ')} err=${row.lastError || "-"} counts=${Object.values(row.cells || {}).join(",")}`}`);
   }
   console.log('\nname\t\t\tresult\tsec\tmetrics');
   for (const r of rows) console.log(`${r.name.padEnd(20)}\t${r.pass ? 'PASS' : 'FAIL'}\t${r.seconds}\t${Object.entries(r.metrics).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   process.exit(rows.some((r) => !r.pass) ? 1 : 0);
 }
 
-module.exports = {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, countMetrics, invCount, chestItemCount};
+module.exports = {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount};
 if (require.main === module) main();

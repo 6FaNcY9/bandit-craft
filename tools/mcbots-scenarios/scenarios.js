@@ -26,6 +26,15 @@ const SEALED = {x: 3549 + (Date.now() % 3), y: 201 + (Math.floor(Date.now() / 3)
 const alive = {kind: 'alive'}, finished = {kind: 'finished'}, noError = {kind: 'noError'};
 const near = (x, y, z, r = 2.5) => ({kind: 'near', x, y, z, r});
 
+
+// Hut blueprint, relative to its origin: 5x5 ring, 3 high; door gap at x2,z0 (y0..1), glass window at x2,y1,z4.
+const HUT = [];
+for (let y = 0; y < 3; y++) for (let x = 0; x < 5; x++) for (let z = 0; z < 5; z++) {
+  if (x > 0 && x < 4 && z > 0 && z < 4) continue;
+  if (x === 2 && z === 0 && y < 2) continue;
+  HUT.push({x, y, z, block: x === 2 && z === 4 && y === 1 ? 'glass' : 'oak_planks'});
+}
+
 const SCENARIOS = [
   {name: '1-goto-open', setup: [START], timeoutS: 90,
     job: {type: 'goto', args: {x: 3540, y: 201, z: 3030}}, success: [finished, noError, alive, near(3540, 201, 3030)]},
@@ -82,6 +91,35 @@ const SCENARIOS = [
     // 25 long 1x2 tunnel inside solid stone, no light at all
     setup: [fill(3505, 201, 3028, 3540, 205, 3032, 'stone'), fill(3508, 201, 3030, 3533, 202, 3030, 'air'), 'tp bot50 3508.5 201 3030.5'],
     job: {type: 'goto', args: {x: 3533, y: 201, z: 3030}}, success: [finished, noError, alive, near(3533, 201, 3030)]},
+  {name: '14-craft-get', timeoutS: 300,
+    // Empty inventory; a chest holds the materials. The bot only uses chests it has indexed, so a stock job on it comes first (pre);
+    // then one get job per item (shield and furnace in pre, iron_pickaxe is the scored job).
+    setup: ['setblock 3515 201 3030 minecraft:chest', 'item replace block 3515 201 3030 container.0 with minecraft:iron_ingot 8', 'item replace block 3515 201 3030 container.1 with minecraft:oak_planks 32', 'item replace block 3515 201 3030 container.2 with minecraft:cobblestone 16', 'clear bot50', START],
+    zones: [{name: 'scn-storage', box: {x1: 3512, y1: 200, z1: 3027, x2: 3518, y2: 204, z2: 3033}}], // chests are indexed only inside a storage zone (bots.js indexChest)
+    pre: [{type: 'stock', args: {x: 3515, y: 201, z: 3030}}, {type: 'get', args: {item: 'shield', count: 1}}, {type: 'get', args: {item: 'furnace', count: 1}}],
+    job: {type: 'get', args: {item: 'iron_pickaxe', count: 1}}, success: [finished, noError, alive, {kind: 'inv', item: 'iron_pickaxe', min: 1}, {kind: 'inv', item: 'shield', min: 1}, {kind: 'inv', item: 'furnace', min: 1}]},
+  {name: '15-wheat-plot', timeoutS: 200, stopAfterS: 150,
+    // 8x4 ripe wheat on farmland (y 201/202), a stone-walled water strip along the north edge hydrates it. The job never ends on its own: stopped after 150 s. A crafting table stands by the field (else the bot walks to the real base for bread) and the bot starts without bread (16 bread would be handed in at the base chest).
+    // Replanted = wheat at age 0..1 (a fresh seed may have grown one stage); harvested = no age 7 left. Farmland count must stay 32 (no trampling).
+    // KNOWN FAIL (bot limitation): wheatfarm.js looks for ground only within 20 blocks of the supply chest's (else base chest's) y (y0, ~65),
+    // so a field in the sky lab (y 201) counts as unwatered and the job fails at once on "need 9 more iron_ingot" (a bucket for water).
+    // A supply place inside the box was tried: the bot then walks off to rearm and dies far from the lab, so it is left out.
+    setup: [fill(3519, 201, 3023, 3528, 201, 3023, 'stone'), fill(3519, 201, 3024, 3519, 201, 3029, 'stone'), fill(3528, 201, 3024, 3528, 201, 3029, 'stone'), fill(3520, 201, 3024, 3527, 201, 3024, 'water'),
+      fill(3520, 201, 3025, 3527, 201, 3028, 'farmland[moisture=7]'), fill(3520, 202, 3025, 3527, 202, 3028, 'wheat[age=7]'), 'setblock 3525 201 3031 minecraft:crafting_table', 'clear bot50', 'give bot50 minecraft:stone_pickaxe 1', 'give bot50 minecraft:stone_axe 1', 'give bot50 minecraft:wheat_seeds 16', 'give bot50 minecraft:stone_hoe 1', 'tp bot50 3523.5 201 3032.5'],
+    job: {type: 'wheatfarm', args: {x1: 3520, z1: 3025, x2: 3527, z2: 3028}},
+    success: [alive, {kind: 'cells', x1: 3520, y1: 202, z1: 3025, x2: 3527, y2: 202, z2: 3028, specs: ['minecraft:wheat[age=7]'], max: 0},
+      {kind: 'cells', x1: 3520, y1: 202, z1: 3025, x2: 3527, y2: 202, z2: 3028, specs: ['minecraft:wheat[age=0]', 'minecraft:wheat[age=1]'], min: 31},
+      {kind: 'cells', x1: 3520, y1: 201, z1: 3025, x2: 3527, y2: 201, z2: 3028, specs: ['minecraft:farmland'], min: 32}]},
+  {name: '16-blueprint-small', timeoutS: 240,
+    // 5x5 hut, walls 3 high from oak_planks, a 2 high door gap in the south wall and one glass window in the north wall (46 blocks, MAX_SIZE is 5x3x5).
+    // Bot gets planks, glass and some dirt/cobblestone to scaffold with; afterwards no dirt/cobblestone may be left in the 9x9x6 box around the hut.
+    setup: ['give bot50 minecraft:oak_planks 64', 'give bot50 minecraft:glass 4', 'give bot50 minecraft:dirt 16', 'give bot50 minecraft:cobblestone 16', START],
+    job: {type: 'build', args: {origin: {x: 3530, y: 201, z: 3030}, blocks: HUT}},
+    success: [finished, noError, alive,
+      {kind: 'cells', x1: 3530, y1: 201, z1: 3030, x2: 3534, y2: 203, z2: 3034, specs: ['minecraft:oak_planks'], min: 45, max: 45},
+      {kind: 'cells', x1: 3530, y1: 201, z1: 3030, x2: 3534, y2: 203, z2: 3034, specs: ['minecraft:glass'], min: 1, max: 1},
+      {kind: 'cells', x1: 3532, y1: 201, z1: 3030, x2: 3532, y2: 202, z2: 3030, specs: ['minecraft:air'], min: 2},
+      {kind: 'cells', x1: 3528, y1: 201, z1: 3028, x2: 3536, y2: 206, z2: 3036, specs: ['minecraft:dirt', 'minecraft:cobblestone'], max: 0}]},
 ];
 
 module.exports = {BOX, SCENARIOS, CLEAR, PLATFORM, BOT};

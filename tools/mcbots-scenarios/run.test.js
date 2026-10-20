@@ -1,12 +1,12 @@
 'use strict';
 // Unit test for the pure parts of run.js: node tools/mcbots-scenarios/run.test.js
 const assert = require('node:assert/strict');
-const {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, countMetrics, invCount, chestItemCount} = require('./run');
+const {maxGap, checkCommand, validateScenario, evalCondition, evalSuccess, cellCommands, countPassed, countMetrics, invCount, chestItemCount} = require('./run');
 const {SCENARIOS} = require('./scenarios');
 
 // every shipped scenario is valid and stays inside the box
 for (const s of SCENARIOS) validateScenario(s);
-assert.equal(SCENARIOS.length, 13);
+assert.equal(SCENARIOS.length, 16);
 
 // rcon guard: outside the box, unknown verbs and unguarded shapes are refused
 assert.throws(() => checkCommand('fill 3499 201 3000 3510 205 3010 minecraft:stone'), /outside/);
@@ -43,6 +43,19 @@ assert.ok(evalCondition({kind: 'error', re: 'could not reach|no path'}, {...ctx,
 assert.ok(evalCondition({kind: 'noError'}, {...ctx, bot: {...failed, lastErrorAgoS: 900}}), 'a stale error from before the run is ignored');
 assert.ok(evalCondition({kind: 'noError'}, {...ctx, bot: {...failed, lastErrorAgoS: 35}}), 'an error from before the job started is ignored');
 assert.deepEqual(evalSuccess({success: [{kind: 'alive'}, {kind: 'inv', item: 'x', min: 1}]}, ctx), ['{"kind":"inv","item":"x","min":1}']);
+
+// state probes, chest fill and cell counts
+assert.ok(checkCommand('execute if block 3520 202 3025 minecraft:wheat[age=0]'));
+assert.ok(checkCommand('fill 3520 202 3025 3527 202 3028 minecraft:wheat[age=7]'));
+assert.ok(checkCommand('item replace block 3515 201 3030 container.0 with minecraft:iron_ingot 8'));
+assert.throws(() => checkCommand('item replace block 3515 201 3061 container.0 with minecraft:iron_ingot 8'), /outside/);
+assert.throws(() => checkCommand('item replace entity bot50 container.0 with minecraft:iron_ingot 8'), /not allowed/);
+assert.throws(() => checkCommand('execute if block 3 202 3025 minecraft:wheat[age=0]'), /outside/);
+const cc = {kind: 'cells', x1: 3520, y1: 202, z1: 3025, x2: 3521, y2: 202, z2: 3025, specs: ['minecraft:wheat[age=0]', 'minecraft:wheat[age=1]'], min: 2, max: 3};
+assert.equal(cellCommands(cc).length, 4);
+assert.equal(countPassed('Test passed\nTest failed\nTest passed'), 2);
+assert.ok(evalCondition(cc, {...ctx, cells: {[JSON.stringify([3520, 202, 3025, 3521, 202, 3025, cc.specs])]: 2}}) && !evalCondition(cc, ctx));
+assert.throws(() => validateScenario({...good, success: [{...cc, x2: 3600}]}), /outside/);
 
 // metrics
 const ev = [{kind: 'fail', text: 'could not reach 1 2 3'}, {kind: 'info', text: 'No path to 4 5 6'}, {kind: 'info', text: 'no progress for 30 s: x'}, {kind: 'info', text: 'skipped a block'}, {kind: 'info', text: 'no free stone'}, {kind: 'death', text: 'drowned'}];
