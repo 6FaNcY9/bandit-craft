@@ -9,7 +9,19 @@ const key = (x, y, z) => `${x},${y},${z}`;
 // A block placed straight up onto the block under the bot's own column is a pillar step; bridges and walls are not.
 const isPillarStep = (face, ref, feet) => !!face && face.x === 0 && face.y === 1 && face.z === 0 && !!ref && ref.x === Math.floor(feet.x) && ref.z === Math.floor(feet.z) && ref.y < feet.y;
 
-const record = (cells, x, y, z, name) => cells.set(key(x, y, z), {x, y, z, name});
+const MAX_CELLS = 512;
+const record = (cells, x, y, z, name) => {
+  cells.delete(key(x, y, z)); // re-insert as the newest
+  cells.set(key(x, y, z), {x, y, z, name});
+  if (cells.size > MAX_CELLS) cells.delete(cells.keys().next().value); // oldest goes
+};
+
+// The cells still recorded, emptied: what a respawn or a disconnect leaves standing.
+function take(cells) {
+  const out = [...cells.values()];
+  cells.clear();
+  return out;
+}
 
 // A block update at a recorded cell that changes it away from what we recorded ends our claim (a player's
 // same-type replacement after a removal is then not ours). Our own placement (air -> recorded name) keeps it.
@@ -24,7 +36,9 @@ function changed(cells, x, y, z, oldName, newName) {
 function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4}) {
   const out = [];
   for (const [k, c] of cells) {
-    if (blockAt(c.x, c.y, c.z)?.name !== c.name) { cells.delete(k); continue; }
+    const b = blockAt(c.x, c.y, c.z);
+    if (!b) continue; // unloaded: not dug now, but still ours (kept for the report on respawn/end)
+    if (b.name !== c.name) { cells.delete(k); continue; }
     if (protectedAt(c.x, c.z, c.y)) { cells.delete(k); continue; }
     if (target && Math.hypot(c.x - target.x, c.z - target.z) <= near) continue;
     out.push(c);
@@ -42,4 +56,4 @@ function openAbove(blockAt, x, y, z, up = 24) {
   return true;
 }
 
-module.exports = {record, changed, due, isPillarStep, openAbove, key};
+module.exports = {take, record, changed, due, isPillarStep, openAbove, key};

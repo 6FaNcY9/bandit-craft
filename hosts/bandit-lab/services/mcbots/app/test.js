@@ -5564,6 +5564,23 @@ require('./crafting');
     assert.strictEqual(c2.size, 0);
     assert.deepStrictEqual(P.due(c2, {blockAt: (x, y, z) => ({name: w2.get(`${x},${y},${z}`)})}), [], 'the replacement is not dug');
   }
+  { // the runner reports what stays standing, once
+    const say = [], fake = {pillars: new Map(), emit: (k, x) => say.push(x)};
+    P.record(fake.pillars, 3, 64, 4, 'dirt');
+    require('./bots').BotRunner.prototype.reportScaffold.call(fake);
+    require('./bots').BotRunner.prototype.reportScaffold.call(fake);
+    assert.deepStrictEqual(say, ['scaffold left standing: 1 blocks: 3 64 4 dirt']);
+  }
+  { // unloaded cells are kept, take() hands them over and empties the map, the map is capped
+    const c3 = new Map();
+    P.record(c3, 1, 60, 1, 'dirt'); P.record(c3, 2, 60, 1, 'dirt');
+    assert.deepStrictEqual(P.due(c3, {blockAt: (x) => (x === 1 ? null : {name: 'stone'})}), [], 'unloaded: not due, not forgotten');
+    assert.deepStrictEqual([...c3.keys()], ['1,60,1'], 'a loaded, different block is forgotten');
+    assert.deepStrictEqual(P.take(c3).map((c) => c.x), [1]);
+    assert.strictEqual(c3.size, 0);
+    for (let i = 0; i < 600; i++) P.record(c3, i, 60, 0, 'dirt');
+    assert.ok(c3.size === 512 && !c3.has('0,60,0') && c3.has('599,60,0'), 'oldest dropped at 512');
+  }
   const {insideAreas} = require('./world');
   assert.strictEqual(due({protectedAt: (x, z, y) => insideAreas([[0, 0, 40, 40, 70, 80]], x, z, y)}).length, 3, 'under a zone with a height: still dug back');
   assert.deepStrictEqual(due({protectedAt: (x) => x === 10}), ['30,66,20'], 'never in a protected area');

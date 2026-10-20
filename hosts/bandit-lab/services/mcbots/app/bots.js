@@ -334,6 +334,12 @@ class BotRunner {
     this.schedule(0);
   }
 
+  // Scaffold the bot could not dig down before it lost the world (death, dimension change, disconnect): say where it stands.
+  reportScaffold() {
+    const left = pillars.take(this.pillars);
+    if (left.length) this.emit('info', `scaffold left standing: ${left.length} blocks: ${left.slice(0, 20).map((c) => `${c.x} ${c.y} ${c.z} ${c.name}`).join(', ')}`);
+  }
+
   emit(kind, text, jobId) {
     const id = this.orders.get(jobId);
     if (id && ['done', 'fail', 'stop'].includes(kind)) {
@@ -539,9 +545,9 @@ class BotRunner {
       if (/too fast|throttl/i.test(this.lastError)) this.backoff = Math.max(this.backoff, 30000);
     });
     bot.on('blockUpdate', (o, n) => { if (this.pillars.size && n) pillars.changed(this.pillars, n.position.x, n.position.y, n.position.z, o?.name, n.name); });
-    bot.on('respawn', () => this.pillars.clear()); // another dimension or a new life: the old cells are not ours to dig any more
+    bot.on('respawn', () => this.reportScaffold()); // another dimension or a new life: the old cells are not ours to dig any more
     bot.once('end', (why) => {
-      this.pillars.clear();
+      this.reportScaffold();
       this.online = false;
       this.dead = false;
       if (spawnedAt) this.emit('disconnect', `left the game (${why})`); // failed connection attempts are not news
