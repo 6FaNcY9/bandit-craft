@@ -5446,6 +5446,23 @@ require('./crafting');
   const {backoff} = require('./bots');
   assert.deepStrictEqual([1, 2, 3, 5, 6, 9].map((n) => backoff(n) / 60000), [5, 10, 20, 80, 120, 120]);
 }
+{ // the wait for an unreachable block is shared: a second bot sees it, it doubles, and it is forgotten after 4 h
+  let t = 0;
+  const w = new WorldModel({now: () => t}), key = 'reach:overworld:-208,44,-169';
+  assert.strictEqual(w.learned(key), null);
+  w.learn(key, {ok: false});
+  assert.strictEqual(w.learned(key).blocked, true);
+  t = 5 * 60000 + 1;
+  assert.strictEqual(w.learned(key).blocked, false);
+  w.learn(key, {ok: false}); // the second bot's failed walk: 10 min now
+  t += 9 * 60000;
+  assert.strictEqual(w.learned(key).blocked, true);
+  t += 3 * 3600000 + 55 * 60000; // past 4 h since the last failure
+  assert.strictEqual(w.learned(key).blocked, false);
+  w.learn(key, {ok: false}); // the old streak is gone: 5 min again
+  assert.strictEqual(w.learned(key).until - t, 300000);
+  assert.throws(() => w.learn('reach:overworld:x,y,z', {ok: false}), /invalid experience/);
+}
 
 (async () => { // goLeg: "No path" at the usual budget looks further (250, then 600) and puts the budget back (2026-10-20)
   const {goNear} = require('./bots');

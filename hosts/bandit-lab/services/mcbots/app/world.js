@@ -56,7 +56,11 @@ function stairRing(x1, z1, x2, z2) {
   return ring;
 }
 
-const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-?\d+,-?\d+:[a-z_]{1,48})$/;
+const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-?\d+,-?\d+:[a-z_]{1,48}|reach:[a-z_]{1,24}:-?\d+,-?\d+,-?\d+)$/;
+// A block no walk reaches waits longer each time, 5 min doubling up to 2 h: a coal ore in a cave at -208 44 -169 cost
+// three bots 90 s every 5 min all night (main server 2026-10-20). The wait is shared (experience key reach:), kept 4 h.
+const backoff = (n) => Math.min(7200000, 300000 * 2 ** (n - 1));
+const REACH_KEEP_MS = 4 * 3600000;
 const validExperience = (v) => !!v && [v.ok, v.fail, v.streak, v.secs, v.units, v.lastFail, v.t].every((n) => Number.isFinite(n) && n >= 0);
 
 class WorldModel {
@@ -104,6 +108,7 @@ class WorldModel {
   learn(key, input = {}) {
     const {ok, secs = 0, units = 0} = input || {};
     if (!EXPERIENCE_KEY.test(key) || !input || typeof ok !== 'boolean' || !Number.isFinite(secs) || secs < 0 || !Number.isFinite(units) || units < 0) throw new Error('invalid experience');
+    if (key.startsWith('reach:')) for (const [k, v] of this.experience) if (k.startsWith('reach:') && this.now() - v.t > REACH_KEEP_MS) this.experience.delete(k);
     const r = this.experience.get(key) || {ok: 0, fail: 0, streak: 0, secs: 0, units: 0, lastFail: 0, t: 0};
     if (ok) { r.ok++; r.streak = 0; r.secs += secs; r.units += units; }
     else { r.fail++; r.streak++; r.lastFail = this.now(); }
@@ -125,6 +130,7 @@ class WorldModel {
   learned(key, now = this.now()) {
     const r = this.experience.get(key);
     if (!r) return null;
+    if (key.startsWith('reach:')) { const until = r.streak >= 1 && now - r.t < REACH_KEEP_MS ? r.lastFail + backoff(r.streak) : 0; return {each: null, pOk: 0, blocked: now < until, until}; }
     const until = r.streak >= 2 && !/^(craft|smelt):/.test(key) ? r.lastFail + Math.min(86400000, 600000 * 2 ** (r.streak - 2)) : 0;
     return {each: r.units >= 2 ? r.secs / r.units : null, pOk: (r.ok + 1) / (r.ok + r.fail + 1), blocked: now < until, until};
   }
@@ -347,4 +353,4 @@ function startBlueMap(world, baseUrl, log, fetchFn = fetch) {
   return () => clearInterval(timer);
 }
 
-module.exports = {CLAIM_TTL_MS, stairRing, WorldModel, startBlueMap, parsePlayers, mobLocation, isHostile, shouldFight, normDim, deadlineMs, insideAreas, NOTABLE_BLOCKS, MAPS, MOB_TTL_MS, MAX_MOBS, MAX_BLOCKS, NO_FIGHT};
+module.exports = {backoff, CLAIM_TTL_MS, stairRing, WorldModel, startBlueMap, parsePlayers, mobLocation, isHostile, shouldFight, normDim, deadlineMs, insideAreas, NOTABLE_BLOCKS, MAPS, MOB_TTL_MS, MAX_MOBS, MAX_BLOCKS, NO_FIGHT};

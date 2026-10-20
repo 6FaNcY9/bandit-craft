@@ -12,7 +12,7 @@ const {Combat, AVOID_FOOD, deathCause} = require('./combat');
 require('./physicsfix');
 const {cacheGetBlock} = require('./pathcache');
 const {BotTrace, SAMPLE_MS, round} = require('./debug');
-const {normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
+const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
 const {zoneNamed, inZone} = require('./places');
 const buildJob = require('./build');
 const huntJob = require('./hunt');
@@ -2153,9 +2153,6 @@ async function fetchWood(r, job, force) {
   }
 }
 
-// A block no walk reaches waits longer each time, 5 min doubling up to 2 h: a coal ore in a cave at -208 44 -169 cost
-// three bots 90 s every 5 min all night (main server 2026-10-20).
-const backoff = (n) => Math.min(7200000, 300000 * 2 ** (n - 1));
 async function collect(r, job, matching, count, what) {
   const {bot} = r;
   // An ore below Y 0 is the deepslate variant: mining iron_ore also takes deepslate_iron_ore.
@@ -2208,7 +2205,7 @@ async function collect(r, job, matching, count, what) {
     }
     if (anchor) found = found.filter((p) => Math.hypot(p.x - anchor.x, p.z - anchor.z) <= leash);
     for (const p of found) {
-      if ((r.skip.get(keyOf(p)) || 0) > Date.now()) continue; // could not get there lately
+      if ((r.skip.get(keyOf(p)) || 0) > Date.now() || r.world?.learned?.(`reach:${keyOf(p)}`)?.blocked) continue; // could not get there lately, any bot
       const k = keyOf(p);
       if (r.world && !(await r.world.claim(r.name, k))) {
         r.conflict();
@@ -2262,7 +2259,7 @@ async function collect(r, job, matching, count, what) {
       r.skip.set(key, until);
       // The rest of that vein sits behind the same water or wall: skip it too,
       // or each of its blocks costs another full walk timeout.
-      if (away) for (const q of found) if (q.distanceTo(pos) <= 4) r.skip.set(keyOf(q), until);
+      if (away) for (const q of found) if (q.distanceTo(pos) <= 4) { r.skip.set(keyOf(q), until); try { r.world?.learn?.(`reach:${keyOf(q)}`, {ok: false}); } catch {} }
       r.emit('info', `skipped a ${what} block (${e.message.slice(0, 40)}) at ${at(pos)}`);
       continue;
     } finally {
