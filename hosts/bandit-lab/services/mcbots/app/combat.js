@@ -63,6 +63,12 @@ function weaponScore(name) {
   return (m[2] === 'sword' ? 100 : 50) + tier;
 }
 
+// Left alone (NO_FIGHT) until one of its kind hits the bot: then those within 6 blocks are fought or kept away from
+// like any mob. Six endermen killed bot19 and seven bot1, provoked by a look while the bots never struck back (main
+// server 2026-10-20). hits: the runner's [{t, by}].
+const provoked = (e, hits = [], me, now) => /^(enderman|zombified_piglin|piglin)$/.test(e.name) && mobLocation(e).position.distanceTo(me) <= 6 &&
+  hits.some((h) => h.by === e.name && now - h.t < 10000);
+
 class Combat {
   constructor(runner) {
     this.r = runner;
@@ -261,7 +267,7 @@ class Combat {
     const s = this.settings();
     const now = Date.now();
     for (const [id, until] of this.ignore) if (until < now) this.ignore.delete(id);
-    const threats = seen.filter(shouldFight).sort((a, b) => mobLocation(a).position.distanceTo(me) - mobLocation(b).position.distanceTo(me));
+    const threats = seen.filter((e) => shouldFight(e) || provoked(e, r.hits, me, now)).sort((a, b) => mobLocation(a).position.distanceTo(me) - mobLocation(b).position.distanceTo(me));
     const close = threats[0], closeDist = close ? mobLocation(close).position.distanceTo(me) : Infinity;
     const near = threats.find((e) => !this.ignore.has(e.id));
     const dist = near ? mobLocation(near).position.distanceTo(me) : Infinity;
@@ -475,4 +481,4 @@ class Combat {
   }
 }
 
-module.exports = {Combat, weaponScore, AVOID_FOOD, wantsToEat, deathCause, fightReady, hasShield};
+module.exports = {provoked, Combat, weaponScore, AVOID_FOOD, wantsToEat, deathCause, fightReady, hasShield};

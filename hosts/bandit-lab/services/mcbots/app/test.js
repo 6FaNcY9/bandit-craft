@@ -6014,6 +6014,18 @@ require('./crafting');
   assert.deepStrictEqual([c.mode, dug, controls.jump, c.straightUp], ['air', ['stone'], true, true], 'no air: the roof is dug, then up');
 })();
 
+{ // an enderman is left alone until one hits: then those near are threats (2026-10-20)
+  const {provoked} = require('./combat');
+  const {Vec3} = require('vec3');
+  const me = new Vec3(0, 64, 0), now = 100000;
+  const ender = (x) => ({name: 'enderman', position: new Vec3(x, 64, 0)});
+  assert.strictEqual(provoked(ender(2), [], me, now), false, 'no hit: left alone');
+  assert.strictEqual(provoked(ender(2), [{t: now - 3000, by: 'enderman'}], me, now), true, 'hit 3 s ago: fought');
+  assert.strictEqual(provoked(ender(9), [{t: now - 3000, by: 'enderman'}], me, now), false, 'too far');
+  assert.strictEqual(provoked(ender(2), [{t: now - 15000, by: 'enderman'}], me, now), false, 'an old hit');
+  assert.strictEqual(provoked(ender(2), [{t: now - 3000, by: 'zombie'}], me, now), false, 'hit by something else');
+}
+
 { // a guard job fights even with the defend setting off
   const {Combat} = require('./combat');
   const c = Object.create(Combat.prototype);
