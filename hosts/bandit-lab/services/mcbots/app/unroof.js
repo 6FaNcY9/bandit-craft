@@ -45,7 +45,7 @@ function side(blockAt, p) {
   return null;
 }
 
-function makeUnroof({goBlock, guard, sleep, unsafe, at}) {
+function makeUnroof({goBlock, guard, sleep, unsafe, at, seal = null}) {
   const blockAtOf = (bot) => (x, y, z) => bot.blockAt(new Vec3(x, y, z));
 
   // One block dug from where the bot stands, with its best tool; a dig the server never answers ends after 25 s.
@@ -53,7 +53,9 @@ function makeUnroof({goBlock, guard, sleep, unsafe, at}) {
     const {bot} = r;
     const block = bot.blockAt(new Vec3(c.x, c.y, c.z));
     if (!solid(block)) return;
-    const danger = unsafe(bot, block.position);
+    let danger = unsafe(bot, block.position);
+    // Water beside the roof gets plugged first, as a mine target's (bot20 under a lake at -414 56 -413 failed every job, 2026-10-20).
+    if (danger && seal && / next to it$/.test(danger) && (await seal(r, job, block.position))) danger = unsafe(bot, block.position);
     if (danger) throw new Error(`unsafe: ${danger}`);
     await bot.tool?.equipForBlock(block, {}).catch(() => {});
     guard(job);

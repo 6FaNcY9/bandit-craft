@@ -7075,6 +7075,23 @@ require('./crafting');
   w = stone;
   w.put(0, 62, 0, 'stone');
   assert.strictEqual(await unroof({bot, emit: () => {}}, {t: {}, cancelled: false}), false);
+  // water beside the roof: sealed first, then dug; without a seal the dig is refused
+  for (const sealOk of [true, false]) {
+    const wet = world();
+    wet.put(0, 60, 0, 'sand'); wet.put(1, 60, 0, 'water');
+    w = wet;
+    bot.entity.position = new Vec3(0.5, 58, 0.5);
+    dug.length = 0;
+    let sealed = false;
+    const {unroof: u2} = U.makeUnroof({
+      goBlock: async (r, j, c) => { bot.entity.position = new Vec3(c.x + 0.5, c.y, c.z + 0.5); },
+      guard: () => {}, sleep: async () => {}, at: (c) => `${c.x} ${c.y} ${c.z}`,
+      unsafe: (b, q) => (!sealed && q.y === 60 ? 'water next to it' : null),
+      seal: async () => (sealed = sealOk),
+    });
+    if (sealOk) { assert.strictEqual(await u2({bot, emit: () => {}}, {t: {}, cancelled: false}), true); assert.ok(dug.includes('sand60'), 'sealed, then dug: ' + dug); }
+    else await assert.rejects(u2({bot, emit: () => {}}, {t: {}, cancelled: false}), /unsafe: water next to it/);
+  }
   console.log('unroof: sand roof dug from beside ok');
 })();
 

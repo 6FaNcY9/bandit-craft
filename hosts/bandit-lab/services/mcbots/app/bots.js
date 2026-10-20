@@ -2870,7 +2870,7 @@ const {fluids, emptyBucket, fillAt} = fluidsJob.makeFluids({
 });
 
 const {unroof} = unroofJob.makeUnroof({
-  guard, sleep, at, unsafe: unsafeDig,
+  guard, sleep, at, unsafe: unsafeDig, seal: sealFluids,
   goBlock: (r, job, c) => goLeg(r, job, c.x, c.y, c.z, 0, {brave: true, goal: new goals.GoalBlock(c.x, c.y, c.z), doing: `stepping beside the sand roof to ${at(c)}`}),
 });
 
