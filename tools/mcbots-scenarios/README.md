@@ -7,7 +7,7 @@ in a sky lab (x 3500..3560, z 3000..3060, y 200..230) on the SANDBOX server, so 
     node tools/mcbots-scenarios/run.test.js            # unit test of the pure parts, no server needed
 
 Needs: a local mcbots instance with bot50 on the sandbox (`~/.cache/bandit-bot-test/run-failmem.sh`,
-dashboard 127.0.0.1:8099; it sets `SUPPLY_CHEST=3516,201,3031`, the sky lab, which wheatfarm and the rescue need) and `ssh bandit-lab` (RCON through `docker exec minecraft-sandbox`).
+dashboard 127.0.0.1:8099) and `ssh bandit-lab` (RCON through `docker exec minecraft-sandbox`).
 
 - `scenarios.js`: the table. A scenario is `{name, setup: [rcon], job: {type, args}, timeoutS, success: [conditions]}`
   (optional `stopAfterS`, `teardown`, `pre` = jobs run first, e.g. a stock job, `zones` = places set in the bot's state for the run, removed after). Conditions: near, notNear, inv, alive, finished, noError, error, chest, cells (counts blocks in a box by `execute if block` probes, `min`/`max`).

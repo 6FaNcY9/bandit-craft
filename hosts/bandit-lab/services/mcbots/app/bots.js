@@ -261,6 +261,7 @@ const VALIDATE = {
   // Keep a wheat field of at most 9 x 9 going until stopped: harvest, till, plant, bake bread, hand it in at the base chest.
   wheatfarm: (a) => {
     const box = wheatFarmJob.farmBox(zoned(a));
+    if (a.y != null) box.y = num(a.y, -64, 320, 'y'); // ground level to search around; default is the supply chest's y
     if (a.fields == null) return box;
     if (!Array.isArray(a.fields) || !a.fields.length || a.fields.length > wheatFarmJob.MAX_FIELDS) throw new Error(`fields must be a list of 1 to ${wheatFarmJob.MAX_FIELDS} fields`);
     return {...box, fields: a.fields.map((f) => wheatFarmJob.farmBox(f))};
@@ -1595,7 +1596,9 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
 // ground at reach; a taller one may need a new step, which the next call removes.
 async function unpillar(r, job, target = null) {
   if (!r.pillars?.size) return;
-  const cells = pillars.due(r.pillars, {blockAt: (x, y, z) => r.bot.blockAt(new Vec3(x, y, z)), protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), target});
+  const feet = PILLAR_JOBS.has(job.type) ? null : r.bot.entity?.position; // a chop climbs down by digging; any other job stands where it arrived
+  const within = job.type === 'goto' ? 5 : null; // a walk ends where it was sent: no trip back into the pit it climbed out of (the cells stay recorded)
+  const cells = pillars.due(r.pillars, {blockAt: (x, y, z) => r.bot.blockAt(new Vec3(x, y, z)), protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), target, feet, within});
   for (const c of cells) {
     guard(job);
     r.pillars.delete(pillars.key(c.x, c.y, c.z));

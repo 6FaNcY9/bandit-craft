@@ -204,7 +204,7 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
     const fields = job.args.fields?.length ? job.args.fields : [job.args];
     let fi = 0, idle = 0;
     const blockAt = (x, y, z) => look(bot, x, y, z);
-    const y0 = (r.supplyChest || base).y;
+    const y0 = job.args.y ?? (r.supplyChest || base).y;
     const skip = new Map(); // key -> time until which that cell, item or chore is left alone
     const skipped = (k) => (skip.get(k) || 0) > Date.now();
     const later = (k, ms = RETRY_MS) => skip.set(k, Date.now() + ms);

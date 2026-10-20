@@ -32,8 +32,11 @@ function changed(cells, x, y, z, oldName, newName) {
 
 // The cells to dig now, tallest first. Only a cell this bot placed and that is still the same block (a player's
 // replacement stays), never in a protected area; stale entries are forgotten. With `target` ({x, z}: the next log),
-// a pillar within `near` blocks of it is kept: the bot may still need it for the rest of the tree.
-function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4}) {
+// a pillar within `near` blocks of it is kept: the bot may still need it for the rest of the tree. With `feet` (the
+// bot's position) the cells under its own column stay, still recorded: a walk that ended on its bridge or pillar must
+// not dig the ground from under the bot (sandbox goto onto a 5 high plateau dropped back into the pit, 2026-10-20).
+// With `within` as well, only cells that close to `feet` are due.
+function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4, feet = null, within = null}) {
   const out = [];
   for (const [k, c] of cells) {
     const b = blockAt(c.x, c.y, c.z);
@@ -41,6 +44,8 @@ function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4
     if (b.name !== c.name) { cells.delete(k); continue; }
     if (protectedAt(c.x, c.z, c.y)) { cells.delete(k); continue; }
     if (target && Math.hypot(c.x - target.x, c.z - target.z) <= near) continue;
+    if (feet && within && Math.hypot(c.x + 0.5 - feet.x, c.y - feet.y, c.z + 0.5 - feet.z) > within) continue;
+    if (feet && c.x === Math.floor(feet.x) && c.z === Math.floor(feet.z) && c.y < feet.y) continue;
     out.push(c);
   }
   return out.sort((a, b) => b.y - a.y);
