@@ -209,8 +209,10 @@ const clean = (v) => String(v ?? '').replace(/^minecraft:/, '').replace(/^raw_(?
 const itemOf = (v) => { const t = clean(v); return /^(pickaxe|axe|sword|shovel|hoe)$/.test(t) ? `stone_${t}` : t; };
 const ORE_DROPS = {coal_ore: 'coal', iron_ore: 'raw_iron', gold_ore: 'raw_gold', copper_ore: 'raw_copper', diamond_ore: 'diamond', emerald_ore: 'emerald', lapis_ore: 'lapis_lazuli', redstone_ore: 'redstone', nether_quartz_ore: 'quartz', nether_gold_ore: 'gold_nugget'};
 
+const STOCK_FRESH_S = 900;
+
 // Mindcraft command -> {job: [type, args]} | {query: name} | {local: name} | {refuse: why}.
-// `ctx` = {pos, supplyChest, places}.
+// `ctx` = {pos, supplyChest, places, job, stockAge}.
 function translate(cmd, ctx) {
   const a = cmd.args;
   const chest = ctx.supplyChest;
@@ -235,6 +237,8 @@ function translate(cmd, ctx) {
     }
     case 'guardHere':
       if (!ctx.pos) return {refuse: 'Position unknown.'};
+      // 2026-10-20: bot1 swapped !viewChest and !guardHere every ~63 s; a running guard is not restarted.
+      if (ctx.job?.type === 'guard') return {refuse: 'You are already on guard. Do something else or !stop first.'}; // shortcut: /api/state hides the post, so any running guard counts
       return {job: ['guard', {x: ctx.pos[0], y: ctx.pos[1], z: ctx.pos[2], radius: Math.max(4, Math.min(n(a[0], 16), 48))}]};
     case 'afkHere': return {local: 'afkHere'};
     case 'assign': return {local: 'assign'};
@@ -246,6 +250,7 @@ function translate(cmd, ctx) {
       return {job: ['withdraw', {...chest, item: String(a[0] ?? ''), count: n(a[1], 1)}]};
     case 'viewChest':
       if (!chest) return {refuse: 'There is no base chest yet.'};
+      if (ctx.stockAge < STOCK_FRESH_S) return {query: 'viewChest'}; // the BASE line already holds a recent count; a stock job would end guard
       return {job: ['stock', {...chest}]};
     case 'collectDrops': // around where the bot stands; without a position the job falls back to the base chest
       return {job: ['tidy', {...(ctx.pos ? {x: ctx.pos[0], y: ctx.pos[1], z: ctx.pos[2]} : {}), radius: Math.max(2, Math.min(n(a[0], 16), 32))}]};
@@ -769,7 +774,7 @@ async function decide(agent, agents, getState, budget) {
       settle(d, 'good', 'query response');
       continue;
     }
-    const ctx = {pos: bot.pos, supplyChest: state.supplyChest, places: {...Object.fromEntries((state.places || []).map((p) => [p.name, p])), ...agent.places}};
+    const ctx = {pos: bot.pos, supplyChest: state.supplyChest, job: bot.job, stockAge: state.world?.stock?.age, places: {...Object.fromEntries((state.places || []).map((p) => [p.name, p])), ...agent.places}};
     const t = translate(cmd, ctx);
     if (t.refuse) {
       agent.push('system', t.refuse);
@@ -778,6 +783,7 @@ async function decide(agent, agents, getState, budget) {
     }
     if (t.query) {
       const q = {stats: () => statsText(bot, state), inventory: () => inventoryText(bot), entities: () => entitiesText(bot, state),
+        viewChest: () => baseLine(agent, state),
         nearbyBlocks: () => `NEARBY_BLOCKS (offsets dx,dy,dz from you: +x east, +y up, +z south; N is -z)\n${agent.around || 'No scan available right now.'}\n`,
         savedPlaces: () => `Saved place names: ${Object.keys(ctx.places).join(', ') || 'none'}`, help: () => commandDocs(blueprintNames(), [...agent.workers])}[t.query];
       agent.push('system', q());

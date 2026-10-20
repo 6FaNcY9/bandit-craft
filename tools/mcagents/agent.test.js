@@ -96,6 +96,13 @@ assert.deepStrictEqual(tr('!guardHere(500)').job[1].radius, 48);
 assert.deepStrictEqual(tr('!guardHere(1)').job[1].radius, 4);
 assert.deepStrictEqual(tr('!guardHere').job[1].radius, 16);
 assert.strictEqual(tr('!afkHere').local, 'afkHere');
+// 2026-10-20: bot1 alternated !viewChest and !guardHere every ~63 s; a fresh count is answered, a running guard is kept.
+const tc = (s, extra) => translate(parseCommand(s), {...ctx, ...extra});
+assert.deepStrictEqual(tc('!viewChest', {stockAge: 60}), {query: 'viewChest'});
+assert.strictEqual(tc('!viewChest', {stockAge: 5000}).job[0], 'stock');
+assert.strictEqual(tc('!viewChest', {}).job[0], 'stock', 'no count yet -> count it');
+assert.ok(tc('!guardHere', {job: {type: 'guard'}}).refuse);
+assert.strictEqual(tc('!guardHere', {job: {type: 'mine'}}).job[0], 'guard');
 assert.ok(isRoutine({type: 'shift'}) && isRoutine({type: 'guard'}) && isRoutine({type: 'follow'}));
 assert.ok(!isRoutine({type: 'mine'}) && !isRoutine(null));
 for (const c of ['startShift', 'guardHere', 'afkHere']) assert.ok(commandDocs().includes(`!${c}:`), c);
