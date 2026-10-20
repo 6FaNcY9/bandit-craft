@@ -7102,6 +7102,14 @@ require('./crafting');
   assert.ok(!underBase(home, {x: ox, z: oz}) && Math.hypot(ox - home.x, oz - home.z) < 53 && ox > home.x && oz > home.z, `${ox} ${oz}`);
   assert.deepStrictEqual(outOfBase(home, home, 4), [home.x + 52, home.z]);
   const {shiftLeash} = require('./bots');
+  // T04: the walk aims at the nearest free blocks, never at skipped ones, and at most k of them
+  {
+    const {topTargets} = require("./bots");
+    const blocks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((x) => ({x}));
+    assert.deepStrictEqual(topTargets(blocks, (p) => p.x === 1 || p.x === 3, 3).map((p) => p.x), [2, 4, 5]);
+    assert.deepStrictEqual(topTargets(blocks, () => true), []);
+    assert.strictEqual(topTargets(blocks, () => false).length, 8, 'default k is 8');
+  }
   assert.deepStrictEqual([shiftLeash(home, {x: -269, z: -211}, false), shiftLeash(home, {x: home.x + 100, z: home.z}, false), shiftLeash(home, {x: -269, z: -211}, true), shiftLeash(home, null, false)], [112, 64, 240, 64], 'a shift anchored under the base reaches past the circle');
   const {ensureTool} = require('./bots');
   const crafted = [], infos = [];

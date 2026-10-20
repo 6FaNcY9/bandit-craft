@@ -2192,6 +2192,10 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
 const ORE_BAND = {coal_ore: [40, 130], iron_ore: [0, 40], copper_ore: [30, 70], gold_ore: [-30, -5], lapis_ore: [-15, 15], redstone_ore: [-60, -45], diamond_ore: [-60, -45], emerald_ore: [100, 250]};
 const outside = (band, y) => (band ? Math.max(0, band[0] - y, y - band[1]) : 0);
 const EXPLORE_STEP = 32;
+// T04 (2026-10-20): one search toward the TOPK nearest free blocks instead of a walk to one that may be sealed in
+// (535 "could not reach" a day); only for a first block farther than TOPK_NEAR, so close work stays a single short walk.
+const TOPK = 8, TOPK_NEAR = 8;
+const topTargets = (found, blocked, k = TOPK) => found.filter((p) => !blocked(p)).slice(0, k);
 const LEASH = 64; // blocks a shift may work from its chest (more for logs: forests thin out)
 const WOOD_LEASH = 192; // the main base's forest was felled within 128; the next one starts 80-190 blocks south (2026-10-14)
 const EXPLORE_MAX = 6;
@@ -2232,7 +2236,7 @@ async function collect(r, job, matching, count, what) {
   let explored = 0, descents = 0, left = 0;
   if (names.some((n) => ORE_BAND[n.replace(/^deepslate_/, '')])) await fetchWood(r, job);
   let got = job.collected || 0; // survives a combat interruption + resume
-  let misses = 0;
+  let misses = 0, topWalked = false;
   if (!job.t.open) Object.assign(job.t, {done: got, total: count});
   while (got < count) {
     await waitCalm(r, job);
@@ -2272,6 +2276,21 @@ async function collect(r, job, matching, count, what) {
     const filtered = found.length;
     if (anchor) found = found.filter((p) => Math.hypot(p.x - anchor.x, p.z - anchor.z) <= leash);
     const inLeash = found.length;
+    const isBlocked = (p) => (r.skip.get(keyOf(p)) || 0) > Date.now() || r.world?.learned?.(`reach:${keyOf(p)}`)?.blocked;
+    const top = topTargets(found, isBlocked);
+    if (!topWalked && top.length >= 2 && top[0].distanceTo(me) > TOPK_NEAR) {
+      topWalked = true; // once per dug block: a walk that ends beside the "wrong" block must not repeat
+      try {
+        await goNear(r, job, top[0].x, top[0].y, top[0].z, 4, {goal: new goals.GoalCompositeAny(top.map((p) => new goals.GoalLookAtBlock(p, bot.world, {reach: 4}))), doing: `walking to the nearest of ${top.length} ${what} blocks near ${at(top[0])}${tally(job)}`});
+      } catch (e) {
+        guard(job);
+        if (!/could not reach/.test(e.message)) throw e;
+        const until = Date.now() + backoff(1);
+        for (const p of top) r.skip.set(keyOf(p), until);
+        r.emit('info', `skipped ${top.length} ${what} blocks (no path to any of them) near ${at(top[0])}`);
+      }
+      continue;
+    }
     let blocked = 0, claimed = 0;
     for (const p of found) {
       if ((r.skip.get(keyOf(p)) || 0) > Date.now() || r.world?.learned?.(`reach:${keyOf(p)}`)?.blocked) { // could not get there lately, any bot
@@ -2338,6 +2357,7 @@ async function collect(r, job, matching, count, what) {
     } finally {
       r.world?.release(r.name, key);
     }
+    topWalked = false;
     job.collected = ++got;
     job.progress = `${got}/${count}`;
     if (!job.t.open) Object.assign(job.t, {done: got, total: count});
@@ -3539,4 +3559,4 @@ const JOBS = {
   },
 };
 
-module.exports = {noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
