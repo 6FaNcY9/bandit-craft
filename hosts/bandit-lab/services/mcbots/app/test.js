@@ -5424,6 +5424,17 @@ require('./crafting');
     assert.doesNotThrow(() => VALIDATE.level(boxJob('level', box(-58, -57), {length: 32, branch: 8})[1]));
   }
 })();
+(async () => { // goLeg: "No path" at the usual budget looks further (250, then 600) and puts the budget back (2026-10-20)
+  const {goNear} = require('./bots');
+  const {Vec3} = require('vec3');
+  const tried = [];
+  const pf = {searchRadius: 80, stop() {}, setGoal() {}, goto: async () => { tried.push(pf.searchRadius); if (pf.searchRadius < 600) throw new Error('No path to the goal!'); }};
+  const bot = {entity: {position: new Vec3(0, 64, 0)}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+    blockAt: () => ({name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+  await goNear({bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []}, {type: 'goto', t: {}, cancelled: false}, 3, 64, 3, 2);
+  assert.deepStrictEqual([tried, pf.searchRadius], [[80, 250, 600], 80]);
+})();
+
 { // goLeg: the walk deadline runs while the pathfinder walks, not during a night's wait: a night used it up, and bot1
   // swam against a cave wall for an hour with no deadline (main server 2026-10-18). Mock timers stop every clock in the
   // process, so this runs in a child process of its own.

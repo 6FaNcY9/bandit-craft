@@ -822,6 +822,11 @@ function safeMovements(bot, areas, runner = null) {
   mv.allowSprinting = false;
   mv.allowParkour = false;
   mv.allow1by1towers = true;
+  // A placed block cost what a step costs, so a bot bridged and pillared rather than walk round, and left the
+  // surface full of cobblestone and dirt (857 junk blocks round the base, 2026-10-20); Baritone weighs a placement
+  // like four to five steps. Falls stop at 3, where fall damage starts.
+  mv.placeCost = 4;
+  mv.maxDropDown = 3;
   mv.getMoveDiagonal = () => {};
   mv.scafoldingBlocks = PILLAR_BLOCKS.map((n) => bot.registry.itemsByName[n]?.id).filter((id) => id !== undefined);
   const inside = (blk) => insideAreas(areas, blk.position.x, blk.position.z, blk.position.y);
@@ -1122,6 +1127,7 @@ async function dropDown(r, walk, e) {
   }
 }
 
+const WIDER = [250, 600]; // search budgets tried after a "No path" at the usual 80
 async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null} = {}) {
   guard(job);
   const label = doing || `walking to ${at({x, y, z})}`;
@@ -1130,7 +1136,8 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   // forever, so every walk has a deadline. Its clock runs while the pathfinder walks, armed anew for every try, not
   // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
   // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
-  let timedOut = false, deadline = null;
+  let timedOut = false, deadline = null, wider = false;
+  const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
   const arm = () => {
     clearTimeout(deadline);
     timedOut = false;
@@ -1164,6 +1171,12 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         if (!timedOut && (r.combat?.busy || (epoch !== undefined && r.combat?.epoch !== epoch))) {
           await waitCalm(r, job);
           tries--;
+        } else if (!timedOut && /No path/.test(e.message) && budget >= 0 && WIDER.some((b) => b > pf.searchRadius)) {
+          // A way round may lie beyond the search budget: look further before giving up, each search still bounded by
+          // the think timeout (617 "No path" in 5 days, the cavity under the base among them, main server 2026-10-20).
+          pf.searchRadius = WIDER.find((b) => b > pf.searchRadius);
+          wider = true;
+          tries--;
         } else if (timedOut || tries >= 3) throw fail();
         else await sleep(1000);
         if (timedOut) throw fail();
@@ -1171,6 +1184,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
     }
   } finally {
     clearTimeout(deadline);
+    if (wider) pf.searchRadius = budget;
   }
 }
 
@@ -3437,4 +3451,4 @@ const JOBS = {
   },
 };
 
-module.exports = {care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {WIDER, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
