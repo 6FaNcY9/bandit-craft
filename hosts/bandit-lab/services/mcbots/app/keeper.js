@@ -159,12 +159,12 @@ class Keeper {
       this.planLighting(snaps, t, busy);
       return;
     }
-    // 2. the first quota that is short and has nobody on it
+    // 2. the quota that is shortest relative to its want and has nobody on it (the order of the list breaks a tie).
+    // shortcut: urgency only, not the plan's cost or the bots' travel time; weigh those once the archive shows which plans run long.
     this.notes.clear();
-    for (const [item, want] of this.quotas) {
-      const missing = want - have(stock.items, item) - (this.work.get(item)?.n || 0);
-      if (missing <= 0) continue;
-      if (this.work.has(item)) continue;
+    const short = [...this.quotas].map(([item, want]) => ({item, want, missing: want - have(stock.items, item) - (this.work.get(item)?.n || 0)}))
+      .filter((q) => q.missing > 0 && !this.work.has(q.item)).sort((a, b) => b.missing / b.want - a.missing / a.want);
+    for (const {item, want, missing} of short) {
       if ((this.cooldown.get(item) || 0) > t) {
         this.notes.set(item, `no progress last time, retrying in ${Math.ceil((this.cooldown.get(item) - t) / 60000)} min`);
         continue;

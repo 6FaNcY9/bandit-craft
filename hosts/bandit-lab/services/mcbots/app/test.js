@@ -1902,7 +1902,7 @@ require('./crafting');
   assert.match(k.state().quotas[2].note, /needs 4 coal/); // torches wait for coal
   assert.strictEqual(k.state().quotas[1].bot, null, 'cobblestone is above its target: no job');
   // cobblestone falls short: a second chain, on another bot
-  world.noteStock('bot1', {oak_log: 24, cobblestone: 20, coal: 8});
+  world.noteStock('bot1', {oak_log: 24, cobblestone: 0, coal: 8});
   k.tick();
   const stoneBot = bots.find((b) => b.sent.some((x) => x[0] === 'mine'));
   assert.ok(stoneBot && stoneBot !== logBot);
@@ -1917,6 +1917,17 @@ require('./crafting');
     w2.noteStock('bot9', {cobblestone: 1});
     solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
     assert.deepStrictEqual(solo.sent, [['get', {item: 'diamond', count: 5}], ['deposit', {...chest, only: 'diamond'}]]);
+  }
+  // 2026-10-20: with one free bot the quota that is shortest relative to its want goes first, not the first one listed
+  {
+    let t2 = Date.now();
+    const solo = fake('bot9'), w2 = new WorldModel({now: () => t2});
+    const k2 = new Keeper({runners: new Map([[solo.name, solo]]), world: w2, chest, quotas: [['logs', 100], ['cobblestone', 10]], now: () => t2});
+    k2.setEnabled(true);
+    t2 += IDLE_MS; k2.tick();
+    w2.noteStock('bot9', {oak_log: 90, cobblestone: 0});
+    solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
+    assert.strictEqual(solo.sent[0]?.[0], 'mine', 'cobblestone (10 of 10 missing) before logs (10 of 100)');
   }
   // the third bot is never used: at most two at once
   now += IDLE_MS; k.tick();
@@ -1934,10 +1945,10 @@ require('./crafting');
   assert.ok(bots.every((b) => !b.sent.slice(sentBefore[bots.indexOf(b)]).some((x) => x[0] === 'chop')), 'logs on cooldown: no new chop');
   assert.match(k.state().quotas[0].note, /retrying in \d+ min/);
   for (const b of bots) b.idle = true; // everyone is done (the torch chain started when coal appeared)
-  world.noteStock('bot1', {oak_log: 24, cobblestone: 20, coal: 8});
+  world.noteStock('bot1', {oak_log: 24, cobblestone: 200, coal: 8, torch: 16});
   now += 1000; k.tick(); // chains end, their items cool down
   now += COOLDOWN_MS + 1;
-  world.noteStock('bot1', {oak_log: 24, cobblestone: 20, coal: 8});
+  world.noteStock('bot1', {oak_log: 24, cobblestone: 200, coal: 8, torch: 16});
   k.tick(); now += IDLE_MS; k.tick();
   assert.ok(bots.some((b, i) => b.sent.slice(sentBefore[i]).some((x) => x[0] === 'chop')), 'after the cooldown logs are tried again');
   // old numbers: nothing is planned from them, a bot counts again
