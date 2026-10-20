@@ -3833,6 +3833,15 @@ require('./crafting');
       assert.deepStrictEqual(placed, []);
       await B.lightUp(mkr(['torch']), job, [], {wall: true}); // bright enough for an ordinary torch, but a shaft torch is placed
       assert.deepStrictEqual(placed, ['(1, 11, 0)']);
+      // never on the wall it faces: in a tunnel that block is dug next and the torch falls with it (main server 2026-10-20)
+      const facing = () => { const r = mkr(['torch']); r.bot.entity.yaw = -Math.PI / 2; return r; }; // looking at +x
+      map.set('0,11,0', ['air', 'empty', 15]);
+      placed.length = 0;
+      await B.lightUp(facing(), job, [], {wall: true});
+      assert.deepStrictEqual(placed, [], 'the only wall is the one ahead');
+      map.set('0,11,1', ['stone', 'block']);
+      await B.lightUp(facing(), job, [], {wall: true});
+      assert.deepStrictEqual(placed, ['(0, 11, 1)'], 'a side wall instead');
     }
     // foodAnimal: cows, then pigs; chickens only when the meat can be cooked
     const mob = (id, name, x) => ({id, name, position: new Vec3(x, 64, 0)});

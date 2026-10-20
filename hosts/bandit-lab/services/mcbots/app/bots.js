@@ -1725,8 +1725,13 @@ async function lightUp(r, job, ids = [], {wall = false} = {}) {
   const head = feet.offset(0, 1, 0);
   let ref = null, face = null, spot = feet;
   // Never on a block of the job's target type: digging it next drops the torch.
+  // Not on the wall it faces: in a tunnel that is the block it digs next, and the torch fell with it (bot20 placed 8 in
+  // two minutes, 7 were gone, main server 2026-10-20). yaw 0 looks at -z.
+  const fx = -Math.sin(bot.entity.yaw), fz = -Math.cos(bot.entity.yaw);
+  const ahead = (d) => (Math.abs(fx) > Math.abs(fz) ? d.x === Math.sign(fx) : d.z === Math.sign(fz));
   if (['air', 'cave_air'].includes(bot.blockAt(head)?.name)) {
     for (const d of [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]) {
+      if (ahead(d)) continue;
       const w = bot.blockAt(head.plus(d));
       if (w && w.boundingBox === 'block' && !ids.includes(w.type) && !insideAreas(r.protectedAreas, w.position.x, w.position.z)) { ref = w; face = d.scaled(-1); spot = head; break; }
     }
