@@ -45,8 +45,9 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
   only for sudo, GPG unlock, SOPS values, in-game actions and fingerprint approvals.
 - Changes that restart `docker-minecraft` disconnect players; prefer shipping them when nobody plays.
   Menu (`commandpanels`, `kits.nix`) changes reload live and need no restart.
-  Before a restart you trigger, run `sudo tools/minecraft-restart-warn.sh "<reason>"` on the lab and
-  wait for it to return.
+  Before a restart you trigger, warn the players and wait for the script to return (the lab has no
+  checkout; `-t` lets Ctrl-C reach the remote script):
+  `scp tools/minecraft-restart-warn.sh bandit-lab: && ssh -t bandit-lab 'sudo bash minecraft-restart-warn.sh "<reason>"'`.
 - Keep slayer and albert apart: slayer may run hot and loud (guard 90 °C); albert must stay quiet
   (short packets, fans held low).
 
