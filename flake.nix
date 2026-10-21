@@ -35,6 +35,7 @@
 
     checks.${system} = {
       mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
+      restart-warn-test = import ./ci/restart-warn-test.nix {inherit pkgs;};
       inherit (self.packages.${system}) mcbots pc-admin;
     };
 
