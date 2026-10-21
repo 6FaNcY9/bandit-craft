@@ -27,7 +27,7 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
 | --- | --- |
 | Flake outputs | `flake.nix` (`nixosModules.lab`, `checks`) |
 | Minecraft server, proxy, sandbox, menus, kits | `hosts/bandit-lab/services/minecraft/` (`kits.nix`, `commandpanels/`, `stage.sh`), `docs/runbooks/minecraft/{ADMIN,PROXY,PANEL,MIGRATION}.md` |
-| Bots (hub, dashboard, jobs, plan) | `hosts/bandit-lab/services/mcbots/` (`app/`, tests `app/test.js`), `docs/runbooks/minecraft/BOTS.md` |
+| Bots (hub, dashboard, jobs, plan) | `hosts/bandit-lab/services/mcbots/` (`app/`, tests `app/test.js` runs `app/test/<topic>.js`), `docs/runbooks/minecraft/BOTS.md` |
 | Agents (Andy-4.2), replay, judge, training data | `hosts/bandit-lab/services/mcagents/`, `tools/mcagents/` (`*.test.js`), `docs/runbooks/minecraft/AGENT-TRAINING.md` |
 | Model serving | `hosts/bandit-lab/services/ollama/`, `hosts/bandit-lab/services/llamacpp/` (PC tunnels) |
 | Gaming PCs (Windows) | `tools/slayer/` (watcher, installer, tests, README), `tools/winpc/` (PC manager) |
@@ -54,7 +54,7 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
   `nix build --override-input bandit-craft git+file://$PWD .#nixosConfigurations.bandit-lab.config.system.build.toplevel`
   plus its checks. Evaluation alone is not enough: build the lab before handing over.
 - Node: `node tools/mcagents/<x>.test.js` (all of them), mcbots `app/test.js` (see BOTS.md for the
-  NODE_PATH line).
+  NODE_PATH line); one topic alone: `node app/test/<topic>.js`.
 - Windows: copy the scripts to a temp folder on the PC and run `test-watch.ps1`, `test-install.ps1`
   (and the winpc tests); regenerate installer payloads after editing an embedded script.
 - Kits: `tools/minecraft-kit-check` tries every give command on the server.
