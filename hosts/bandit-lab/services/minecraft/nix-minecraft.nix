@@ -102,6 +102,9 @@
     main = "127.0.0.1:25567"
     try = ["main"]
 
+    # Velocity's defaults list example forced hosts that point at missing servers and refuse to start.
+    [forced-hosts]
+
     [advanced]
     haproxy-protocol = false
   '';
