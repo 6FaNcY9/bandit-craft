@@ -6,6 +6,7 @@
   ...
 }: let
   scripts = import ./scripts.nix {inherit pkgs;};
+  plugins = import ./plugins.nix {inherit pkgs;};
 
   # CommandPanels menus: the hand-written ones plus the generated /kit menus (kits.nix, JSON is YAML).
   panels = pkgs.linkFarm "minecraft-panels" (
@@ -23,58 +24,28 @@
   # BlueMap (MIT) is the live map, reachable only through the loopback port
   # published below and the tailnet HTTPS proxy. Administration is the bots
   # dashboard's Server panel (mcbots, over RCON); VoxelDash is retired.
-  blueMapVersion = "5.28";
-  blueMap = pkgs.fetchurl {
-    url = "https://github.com/BlueMap-Minecraft/BlueMap/releases/download/v${blueMapVersion}/bluemap-${blueMapVersion}-paper.jar";
-    hash = "sha256-TPtKmWMTLVvgqdsDGiipjp35Le7TfrsHVtOn3Ychq5g=";
-  };
+  blueMapVersion = plugins.bluemap.version;
+  blueMap = plugins.bluemap.src;
 
   # ImageFrame (LOOHP, open source): players put linked images (imgur/Discord only) on maps in
   # item frames. Nix-owned like BlueMap; its config is installed once (imageframe-config.yml).
-  imageFrameVersion = "2026.1.5.0";
-  imageFrame = pkgs.fetchurl {
-    url = "https://cdn.modrinth.com/data/lJFOpcEj/versions/dKkWOwRr/ImageFrame-${imageFrameVersion}.jar";
-    hash = "sha512-6e5c6laZRnZ8ElOXVQx8pbvL4NUEgyryFuydjeqZ9TL0r4Dg6aF+6RfH/XjBApK6O75hRXlH8Z0+32i79fL0qA==";
-  };
+  imageFrameVersion = plugins.imageframe.version;
+  imageFrame = plugins.imageframe.src;
 
   # Plugins seeded once (first activation of the one-time seed) and then owned
   # by the panel: pinned from Hangar / Modrinth / GitHub with exact hashes.
   # ViaVersion lets newer clients join; ViaBackwards (requires ViaVersion)
   # lets older clients join. Modrinth releases explicitly support 26.2.
-  seedPlugins = {
-    "ViaVersion-5.12.0.jar" = pkgs.fetchurl {
-      url = "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions/5.12.0/PAPER/ViaVersion-5.12.0.jar";
-      hash = "sha256-xNUS+pdg+kHRerrt3hKqH0yb3pINCpkv4PwBaWLxJr4=";
-    };
-    "ViaBackwards-5.12.0.jar" = pkgs.fetchurl {
-      url = "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.12.0/PAPER/ViaBackwards-5.12.0.jar";
-      hash = "sha256-+QL32n65nov69GH4AoPE4nULfZcn5rUI6ku5Fj9Vsds=";
-    };
-    "LuckPerms-Bukkit-5.5.71.jar" = pkgs.fetchurl {
-      url = "https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar";
-      hash = "sha512-GIqR8KVD0jv9oyOF/KbbY9YeScikIr1FKiYL2cvGp9f+RQcRmen8qPPOQ8K0HuhP0xW9FUZFdwKP85UafU+rJw==";
-    };
-    "SModeration-Paper-2.0.0.jar" = pkgs.fetchurl {
-      url = "https://cdn.modrinth.com/data/psWnUhHl/versions/oSGjnNOf/SModeration-Paper-2.0.0.jar";
-      hash = "sha512-lPfgeAqYZMZU4ACHBd4Hj7PtCCfcpfVUQ8jWHxwkrEWgO0aJve+jAQB0tjIZEJTw6VE1MalxwIGBwD63nAU2KA==";
-    };
-    "CommandPanels-4.2.4.jar" = pkgs.fetchurl {
-      url = "https://github.com/rockyhawk64/CommandPanels/releases/download/4.2.4/CommandPanels-4.2.4.jar";
-      hash = "sha256-I5BNRmQALJbL/9w5RCBl4iC09r0CKxXT+CsXgRUgYAE=";
-    };
-    "PlaceholderAPI-2.12.3.jar" = pkgs.fetchurl {
-      url = "https://hangarcdn.papermc.io/plugins/HelpChat/PlaceholderAPI/versions/2.12.3/PAPER/PlaceholderAPI-2.12.3.jar";
-      hash = "sha256-/eAyWfWvaTjzwz7rTYFAAKGtq/HSMEzhSXC+gfYJpDc=";
-    };
-    "InventoryRollbackPlus-1.8.4.jar" = pkgs.fetchurl {
-      url = "https://cdn.modrinth.com/data/XWKWAzd8/versions/2JWRgmoZ/InventoryRollbackPlus-1.8.4.jar";
-      hash = "sha512-UUS+wSYGcxIvG9yRwnQ/JsfSDeR0A8FWiY0pnQrhqV9KptWM/Sg6VH5RhiyRmxMb8JzMOA2iFbcOTuVrc5wbEA==";
-    };
-    "AxGraves-1.32.0.jar" = pkgs.fetchurl {
-      url = "https://cdn.modrinth.com/data/Cz6msz34/versions/TVfUUk5c/AxGraves-1.32.0.jar";
-      hash = "sha512-ZH1PTpLRu+6DkTgDLVM4DhfyCZTe9GfGZ5U1u44/k/fk2bGhuVDCx1Es1wA9azjxhSATFzEobtLYgMvpZOD1Lw==";
-    };
-  };
+  seedPlugins = lib.listToAttrs (map (p: lib.nameValuePair p.file p.src) (with plugins; [
+    viaversion
+    viabackwards
+    luckperms
+    smoderation
+    commandpanels
+    placeholderapi
+    inventoryrollbackplus
+    axgraves
+  ]));
   seedExpansions = {
     "PAPI-Expansion-Player_R5xV754.jar" = pkgs.fetchurl {
       url = "https://dl.placeholderapi.com/PAPI-Expansion-Player_R5xV754.jar";
