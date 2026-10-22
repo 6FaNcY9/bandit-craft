@@ -16,6 +16,7 @@
     nixosModules.lab.imports = [
       ./hosts/bandit-lab/services/minecraft
       ./hosts/bandit-lab/services/minecraft/sandbox.nix
+      ./hosts/bandit-lab/services/minecraft/nix-minecraft.nix
       ./hosts/bandit-lab/services/mcbots
       ./hosts/bandit-lab/services/ollama
       ./hosts/bandit-lab/services/llamacpp
