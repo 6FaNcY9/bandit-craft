@@ -194,6 +194,16 @@ assert.equal(fightReady(['iron_sword'], [], 20), false); // unarmoured
     assert.equal(paths.at(-1).goal.hasChanged(), true, 'retreat follows mount movement');
     await c.tick();
     assert.equal(c.mode, null, 'release when the threat moves away');
+    // Healthy but outmatched: the retreat holds instead of being dropped and retaken every tick (bot1, 2026-10-22).
+    location.position = new Vec3(5, 64, 0);
+    bot.health = 20;
+    c.odds = () => ({fight: false, loss: 30, secs: 0});
+    await c.tick();
+    await c.tick();
+    assert.equal(c.mode, 'retreat', 'a healthy bot keeps away while the odds say so');
+    delete c.odds;
+    c.release();
+    location.position = new Vec3(25, 64, 0);
     zombie.name = 'zombie';
     bot.health = 20;
     c.fit = () => true;

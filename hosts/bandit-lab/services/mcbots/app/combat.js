@@ -286,7 +286,9 @@ class Combat {
     }
     // Retreat until healthy again or nothing hostile is close, eating meanwhile (health only comes back at food 18+).
     if (this.mode === 'retreat') {
-      if (bot.health >= Math.min(20, s.retreatHealth + 4) || dist > 16) this.release();
+      // Healthy alone does not end it while the odds still say keep away: bot1 at full health started and dropped a
+      // retreat from a skeleton every second for 5 hours, never walking off (main server 2026-10-22).
+      if ((bot.health >= Math.min(20, s.retreatHealth + 4) && forecast.fight) || dist > 16) this.release();
       else if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
       return;
     }
