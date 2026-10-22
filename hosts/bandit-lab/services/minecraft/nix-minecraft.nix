@@ -17,7 +17,8 @@
   mapPort = 8101;
 
   # The plugins the Docker stack runs, as symlinks into the store (D2: all jars come from plugins.nix).
-  paperPlugins = lib.mapAttrs' (_: p: lib.nameValuePair "plugins/${p.file}" p.src) plugins;
+  # Jarvis is left out of the rehearsal so its live AI/API config is not used twice (owner OK 2026-10-23).
+  paperPlugins = lib.mapAttrs' (_: p: lib.nameValuePair "plugins/${p.file}" p.src) (lib.filterAttrs (n: _: n != "jarvis") plugins);
 
   # Same keys as the live server.properties (dumped 2026-10-22, minus the RCON password and the
   # management-server keys the server regenerates); only the lines after the attrset differ.
