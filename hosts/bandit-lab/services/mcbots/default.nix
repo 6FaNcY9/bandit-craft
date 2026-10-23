@@ -60,6 +60,7 @@
         HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
         MC_HOST = "10.250.77.2"; # Velocity on the mcbots network (see --add-host above)
         MC_PORT = "25565";
+        MC_VHOST = "sandbox.bots"; # owner 2026-10-23: helpers test in the sandbox until the board passes
         OWNER_UUIDS = ownerUuids;
         HOST_LABEL = w.label;
         NODE_OPTIONS = "--max-old-space-size=768";
@@ -92,8 +93,9 @@ in {
           imageFile = image;
           environment = {
             BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
-            # No MC_VHOST: the three helpers play on the main server next to the owner (spec 2026-10-12, step 3);
-            # test bots join the sandbox with the virtual host sandbox.bots (../minecraft/sandbox.nix).
+            # Owner 2026-10-23: helpers test in the sandbox until the board passes (spec 2026-10-23-bots-redesign);
+            # the virtual host sandbox.bots routes them there (../minecraft/sandbox.nix).
+            MC_VHOST = "sandbox.bots";
             MC_HOST = "velocity";
             MC_PORT = "25565";
             # Only the owner's in-game orders count (owner.js): the sender UUID of a player chat line.

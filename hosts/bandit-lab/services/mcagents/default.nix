@@ -47,7 +47,8 @@
   };
 in {
   options.bandit-lab.mcagents = {
-    enable = lib.mkEnableOption "the Andy-4.2 lead agent and its workers" // {default = true;};
+    # Off by default: owner 2026-10-23, the model only translates orders from now on (spec 2026-10-23-bots-redesign).
+    enable = lib.mkEnableOption "the Andy-4.2 lead agent and its workers" // {default = false;};
     offlineHosts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       # slayer replays and grades too (owner 2026-10-15, overnight): the lab GPU alone carried the live agents
