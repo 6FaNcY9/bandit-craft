@@ -313,11 +313,13 @@ The spike's code is thrown away; PR 3 is written properly with tests.
 - **Test bots.** PR 2 points the three helper worker containers at the sandbox virtual host instead of
   stopping them; they are the test bots (same names, separate world). The scenario runner kills a bot
   by stopping its container or by the sandbox console `/kill`.
-- **Progress in unloaded chunks.** Progress is counted by the sandbox/main server console
-  (`/execute if blocks` per layer, or the plugin once it exists), not by bot view, so it is known
-  wherever the slice is.
-- **Protocol.** New frames on the worker socket (`part_claim`, `part_beat`, `part_done`) are additive;
-  a worker that does not know them is never given a part. Windows PCs run no bots, so no skew there.
+- **Progress in unloaded chunks.** The board shows the progress the bot reports. On takeover the new
+  bot recounts when it arrives (its dig loop skips air, so it never redoes work). The scenario checks
+  "box empty" from the console (`execute if blocks` against an air box above it), which needs no
+  bot view. (Corrected while planning: the console cannot count partly dug boxes.)
+- **Protocol.** No new socket frames: the board hands a part out with the existing `enqueue` path
+  (works for local and remote bots, as `/api/job` does) and reads heartbeat and progress from the
+  status snapshots the hub already gets every second.
 - **Stop.** Whether the existing stop path meets 2 s mid-path and mid-dig is unmeasured; the spike
   times it. If it does not, PR 4 includes bot-side abort work. Pause is per job; on resume the board
   recounts every part.
