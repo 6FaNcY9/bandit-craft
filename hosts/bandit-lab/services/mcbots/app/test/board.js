@@ -131,4 +131,41 @@ const path = require('node:path');
   assert.deepStrictEqual([p2.state, p2.tries, p3.state, p3.tries], ['open', 0, 'open', 0]);
   assert.deepStrictEqual(evs.map((e) => e.what).sort(), ['not started', 'taken']);
 }
-console.log('ok');
+// ---- board in the hub: routes, protected areas, stop-all pauses ----
+(async () => {
+  const {spawn} = require('node:child_process');
+  const net = require('node:net');
+  const port = await new Promise((res) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'board-hub-'));
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', BOARD_BOTS: 'bot2', PROTECTED_AREAS: '100,100,120,120', STATE_DIR: stateDir, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  try {
+    await new Promise((res, rej) => {
+      const to = setTimeout(() => rej(new Error('server did not start')), 8000);
+      child.stdout.on('data', (b) => { if (String(b).includes('listening')) { clearTimeout(to); res(); } });
+      child.on('exit', (c) => rej(new Error(`server exited early (${c})`)));
+    });
+    const H = {'content-type': 'application/json', 'tailscale-user-login': 'a@github'};
+    const post = async (p, body) => { const r = await fetch(`http://127.0.0.1:${port}${p}`, {method: 'POST', headers: H, body: JSON.stringify(body)}); return {status: r.status, body: await r.json()}; };
+    const board = async () => (await fetch(`http://127.0.0.1:${port}/api/board`, {headers: H})).json();
+    assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/board`)).status, 403, 'owner only');
+    const bad = await post('/api/board/jobs', {kind: 'excavate', box: {x1: 95, y1: 60, z1: 95, x2: 105, y2: 62, z2: 105}});
+    assert.deepStrictEqual([bad.status, bad.body.error], [400, 'box touches the protected area 100 100 120 120']);
+    const made = await post('/api/board/jobs', {kind: 'excavate', box: {x1: 0, y1: 60, z1: 0, x2: 15, y2: 67, z2: 15}});
+    assert.strictEqual(made.status, 200);
+    let b = await board();
+    assert.deepStrictEqual(b.jobs[0].parts.map((p) => p.state), ['open', 'open', 'open', 'open']);
+    assert.strictEqual((await post('/api/board/jobs/j1', {action: 'jump'})).status, 400);
+    assert.strictEqual((await post('/api/job', {bots: 'all', type: 'stop'})).status, 200);
+    b = await board();
+    assert.strictEqual(b.jobs[0].state, 'paused', 'stop all pauses the board');
+    assert.strictEqual((await post('/api/board/jobs/j1', {action: 'resume'})).body.state, 'running');
+    assert.strictEqual((await post('/api/scenarios', {name: 'excavate-16'})).status, 400, 'no sandbox console here');
+    assert.ok(fs.existsSync(path.join(stateDir, 'board.json')));
+    console.log('ok');
+  } finally {
+    child.kill('SIGKILL');
+  }
+})().catch((e) => { console.error(e); process.exit(1); });

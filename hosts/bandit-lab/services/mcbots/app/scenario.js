@@ -57,6 +57,8 @@ function measure(samples, {stallMs = 60000} = {}) {
 const SPIKE_BOX = {x1: -140, y1: 70, z1: 0, x2: -125, y2: 77, z2: 15};
 const SCENARIOS = {
   'excavate-16': {box: SPIKE_BOX, fill: 'stone', job: {kind: 'excavate', box: SPIKE_BOX}},
+  // The same with bot19 killed over the console once half the parts are done: its part must be taken over.
+  'excavate-16-kill': {box: SPIKE_BOX, fill: 'stone', job: {kind: 'excavate', box: SPIKE_BOX}, kill: 'bot19'},
 };
 
 module.exports = {resetCommands, emptyCheck, checkCommands, loaded, measure, SCENARIOS};

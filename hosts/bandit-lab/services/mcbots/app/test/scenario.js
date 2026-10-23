@@ -43,9 +43,9 @@ const assert = require('node:assert');
 
   const sent = [];
   const call = async (c) => { sent.push(...c); return c.map((l) => (l.startsWith('execute if blocks') ? 'Test passed. Count: 2048' : 'ok')); };
-  assert.strictEqual(await main(['excavate-16'], sb, {call, http: async () => ({status: 404}), out: say}), 2);
+  assert.strictEqual(await main(['excavate-16'], sb, {call, http: async () => ({status: 400, body: {error: 'box touches the protected area 1 2 3 4'}}), out: say}), 1);
   assert.deepStrictEqual(sent, loaded(scn.box, resetCommands(scn)));
-  assert.match(out.pop(), /no board/);
+  assert.deepStrictEqual(JSON.parse(out.pop()), {scenario: 'excavate-16', run: 1, ok: false, refused: 'box touches the protected area 1 2 3 4'});
 
   sent.length = 0;
   let t = 0, polls = 0;
@@ -61,5 +61,10 @@ const assert = require('node:assert');
   const lines = out.map((l) => JSON.parse(l));
   assert.deepStrictEqual(lines.map((l) => [l.run, l.ok, l.empty, l.failed, l.stalls]), [[1, true, true, 0, 0], [2, true, true, 0, 0]]);
   assert.strictEqual(lines[0].ms, 4000);
+  assert.ok(!sent.some((l) => l.startsWith('kill')), 'no kill in the plain scenario');
+  sent.length = 0;
+  polls = 0;
+  assert.strictEqual(await main(['excavate-16-kill'], sb, {call, http, now: () => t, sleep: async (ms) => { t += ms; }, out: say}), 0);
+  assert.deepStrictEqual(sent.filter((l) => l.startsWith('kill')), ['kill bot19'], 'killed once, when half the parts were done');
   console.log('ok');
 })();
