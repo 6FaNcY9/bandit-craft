@@ -174,6 +174,17 @@ const VALIDATE = {
     if (box.x2 - box.x1 > 8 || box.z2 - box.z1 > 8 || box.y2 - box.y1 > 4) throw new Error('a room is at most 9 x 9 blocks and 5 high');
     return box;
   },
+  // One slice of a board job (board.js): at most 4 wide, 64 long and 32 high. The part id leads the label,
+  // which is how the board knows its part in the status snapshot.
+  part: (a0) => {
+    if (!/^[\w.-]{1,40}$/.test(a0.part || '')) throw new Error('part must be a board part id like j1.2');
+    const a = zoned(a0);
+    const p = xyz({x: a.x1, y: a.y1, z: a.z1}), q = xyz({x: a.x2, y: a.y2, z: a.z2});
+    const box = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
+    const w = [box.x2 - box.x1 + 1, box.z2 - box.z1 + 1].sort((m, n) => m - n);
+    if (w[0] > 4 || w[1] > 64 || box.y2 - box.y1 > 31) throw new Error('a part is at most 4 wide, 64 long and 32 high');
+    return {part: a0.part, ...box};
+  },
   // A shaft down to bedrock: a square of up to 16 x 16 from y `top` (default 80) to `bottom`
   // (default -59, the lowest layer without bedrock), with a staircase left along its walls.
   shaft: (a0) => {
@@ -665,7 +676,7 @@ class BotRunner {
     if (!this.online && this.queue[0].resume) return; // resumed jobs wait for the reconnect
     const job = (this.current = this.queue.shift());
     job.status = 'running';
-    this.digOnly = ['excavate', 'shaft', 'level', 'treefarm', 'wheatfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)
+    this.digOnly = ['excavate', 'part', 'shaft', 'level', 'treefarm', 'wheatfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)
     this.digBox = ['treefarm', 'wheatfarm'].includes(job.type) ? job.args : null; // ... and only inside the farm box
     job.startedAt = Date.now();
     job.progress = '';
@@ -893,7 +904,7 @@ async function waitCalm(r, job, until = Infinity) {
 // Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (alerts.js)
-const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'level', 'rim', 'tidy', 'get']);
+const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
@@ -1970,7 +1981,8 @@ async function care(r, job) {
   }
   // Hungry with food in hand: it eats first. Hungry with none to be had: the gear still gets made (bot1 at food 7
   // and 4.7 health went on without armour while the iron lay in storage, 2026-10-15).
-  if (bot.food >= FOOD_BELOW || !bot.inventory.items().some((i) => edible(bot, i))) await ensureGear(r, job);
+  // Not during a board part: armour and shield trips pulled bots off their slices (spike, 2026-10-23).
+  if (!r.boardPart && (bot.food >= FOOD_BELOW || !bot.inventory.items().some((i) => edible(bot, i)))) await ensureGear(r, job);
   // No pickaxe at all: only mining jobs replaced one, so bot50's wore out in a tunnel and the build job dug on by hand,
   // slowly and for no drops (sandbox 2026-10-18). One try per 5 minutes; the timer is set first, as the try runs jobs.
   if (!bot.inventory.items().some((i) => /_pickaxe$/.test(i.name)) && Date.now() - (r.pickaxeTriedAt || 0) > 300000) {
@@ -3427,6 +3439,70 @@ const JOBS = {
     }
     if (left) throw new Error(`${left} blocks of the room were not dug (held by another bot, unloaded, unreachable or unsafe)`);
     job.noop = !dug; // nothing natural left to dig: the event says "already complete"
+  },
+
+  // One board slice: the job's needs where the bot stands, then walk over, dig it top down a layer at a time
+  // with the excavate loop, then whatever the bot placed there itself. The board reads job.t and the outcome.
+  async part(r, job) {
+    const {x1, y1, z1, x2, y2, z2, part} = job.args;
+    const {bot} = r;
+    const cx = (x1 + x2) >> 1, cz = (z1 + z2) >> 1;
+    const layerSize = (x2 - x1 + 1) * (z2 - z1 + 1), total = layerSize * (y2 - y1 + 1);
+    // Spike 2026-10-23: armour and shield trips pulled bots off mid-piece; a part fetches only what it needs (care()).
+    r.boardPart = true;
+    try {
+      // Needs first (pickaxe, food, free slots): bots that arrived empty-handed walked back to base at once.
+      await upkeep(r, job, []);
+      const near = () => goNear(r, job, cx, y2 + 1, cz, 4, {doing: `walking to part ${part}`});
+      // From 130 blocks away the slice's chunks were not loaded and excavate ended at once (spike, 2026-10-23).
+      await near();
+      let dug = false;
+      for (let y = y2; y >= y1; y--) {
+        // An upkeep trip (food, a pickaxe, the chest) may have taken the bot away.
+        if (Math.hypot(bot.entity.position.x - cx, bot.entity.position.z - cz) > 8) await near();
+        for (let pass = 1; ; pass++) {
+          guard(job);
+          const layer = child(job, {type: 'excavate', args: {x1, y1: y, z1, x2, y2: y, z2}});
+          try {
+            await JOBS.excavate(r, layer);
+            dug ||= !layer.noop;
+            break;
+          } catch (e) {
+            guard(job);
+            if (!/were not dug/.test(e.message) || pass === 2) throw e;
+            await sleep(2000);
+          }
+        }
+        Object.assign(job.t, {total, done: (y2 - y + 1) * layerSize}); // excavate borrowed the counters
+        job.progress = `part ${part}: down to y ${y}`;
+      }
+      // excavate digs natural ground only, so the bots' own scaffold stayed (52 cobblestone in spike run 1).
+      // Solid blocks only: torches are light the owner wants.
+      let left = 0;
+      for (let y = y2; y >= y1; y--) {
+        for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
+          guard(job);
+          const pos = new Vec3(x, y, z);
+          const b = bot.blockAt(pos);
+          if (!b) { left++; continue; }
+          if (b.boundingBox !== 'block') continue;
+          try {
+            if (await digAt(r, job, pos)) dug = true;
+            else left++;
+          } catch (e) {
+            guard(job);
+            if (!/^unsafe: |could not reach|Digging aborted|needs a tool/.test(e.message)) throw e;
+            left++;
+            r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);
+          }
+        }
+      }
+      if (left) throw new Error(`${left} blocks left in the slice (unsafe, unreachable or not loaded)`);
+      Object.assign(job.t, {total, done: total});
+      job.noop = !dug;
+    } finally {
+      r.boardPart = false;
+    }
   },
 
   // Dig a shaft one layer at a time (the excavate loop on a 1-high box), leaving one block per layer
