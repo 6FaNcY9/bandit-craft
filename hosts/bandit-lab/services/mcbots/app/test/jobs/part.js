@@ -14,6 +14,7 @@ module.exports = async () => {
     for (let x = 0; x <= 3; x++) for (let y = 60; y <= 61; y++) for (let z = 0; z <= 2; z++) blocks.set(`${x},${y},${z}`, 'stone');
     blocks.set('1,61,1', 'cobblestone'); // a bot's scaffold: excavate leaves it
     blocks.set('2,60,2', 'torch');
+    blocks.set('3,61,2', 'chest'); // someone's chest in the box: never the clean-up's (review 2026-10-23)
     const order = [];
     const bot = {
       blockAt: (p) => {
@@ -31,9 +32,9 @@ module.exports = async () => {
     const job = {t: {}, cancelled: false, type: 'part', args: {part: 'j1.2', x1: 0, y1: 60, z1: 0, x2: 3, y2: 61, z2: 2}};
     await JOBS.part(r, job);
     assert.deepStrictEqual([job.t.done, job.t.total], [24, 24]);
-    assert.deepStrictEqual([...blocks.values()], ['torch'], 'stone and the scaffold are gone, the torch stays');
+    assert.deepStrictEqual([...blocks.values()].sort(), ['chest', 'torch'], 'stone and the scaffold are gone, the torch and the chest stay');
     assert.strictEqual(order.indexOf('cobblestone@61'), order.length - 1, 'the scaffold goes after the natural ground');
-    assert.ok(order.slice(0, 11).every((o) => o.endsWith('@61')), 'top layer first');
+    assert.ok(order.slice(0, 10).every((o) => o.endsWith('@61')), 'top layer first');
     assert.ok(!job.noop);
     assert.strictEqual(r.boardPart, false);
     const again = {...job, t: {}};

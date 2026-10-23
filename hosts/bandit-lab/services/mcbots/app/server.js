@@ -769,6 +769,8 @@ const server = http.createServer(async (req, res) => {
   if (board && req.method === 'POST' && url.pathname === '/api/scenarios') {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     if (!cfg.sandboxRcon) return json(400, {error: 'no sandbox console (SANDBOX_RCON_HOST unset)'});
+    // The console resets the sandbox, but the board's bots dig wherever they play: never with them on the real server.
+    if (!process.env.MC_VHOST) return json(400, {error: 'the bots play on the real server (no MC_VHOST): a scenario would dig there'});
     if (scenarioRunning) return json(409, {error: 'a scenario is already running'});
     const {name, runs = 1} = await readJson(req).catch(() => ({}));
     scenarioRunning = true;
@@ -811,7 +813,7 @@ function boardTick() {
   const snaps = new Map([...runners.values()].map((r) => [r.name, r.snapshot()]));
   for (const e of board.observe(snaps)) events.add('board', e.what === 'failed' ? 'error' : 'info', `${e.part || e.job} ${e.what}${e.bot ? ` (${e.bot})` : ''}${e.error ? `: ${e.error}` : ''}`);
   const pos = (n) => { const p = snaps.get(n)?.pos; return p ? {x: p[0], z: p[2]} : null; };
-  for (const {bot, part} of board.assign(cfg.boardBots.filter((n) => runners.has(n) && idle(snaps.get(n))), pos)) {
+  for (const {bot, part} of board.assign(cfg.boardBots.filter((n) => runners.has(n) && idle(snaps.get(n))), pos, (n) => snaps.get(n))) {
     try {
       runners.get(bot).enqueue('part', {part: part.id, ...part.box});
     } catch (e) {

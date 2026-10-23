@@ -40,7 +40,8 @@ const path = require('node:path');
   assert.ok(of('bot2').box.x1 === 0 || of('bot2').box.z1 === 0, 'bot2 gets the part at its corner');
   assert.deepStrictEqual(board.assign(['bot2'], () => null), [], 'a bot holding a part gets no second one');
 
-  const snap = (part, extra = {}) => ({online: true, dead: false, queue: [], job: part && {type: 'part', label: `part ${part.id}`, done: 100, total: 512}, ...extra});
+  const snap = (part, extra = {}) => ({online: true, dead: false, queue: [], job: part && {type: 'part', label: `part ${part.id} 0 60 0`, done: 100, total: 512}, ...extra});
+  const fin = (part, extra = {}) => ({online: true, dead: false, queue: [], job: null, lastDone: {label: `part ${part.id} 0 60 0`, agoS: 0}, ...extra});
   // all three start their parts: heartbeat and progress
   t += 2000;
   board.observe(new Map([['bot2', snap(of('bot2'))], ['bot3', snap(of('bot3'))], ['bot19', snap(of('bot19'))]]));
@@ -48,7 +49,7 @@ const path = require('node:path');
 
   // bot3 finishes: idle, no error -> done; it gets the last part
   t += 60000;
-  let ev = board.observe(new Map([['bot2', snap(of('bot2'))], ['bot3', snap(null)], ['bot19', snap(of('bot19'))]]));
+  let ev = board.observe(new Map([['bot2', snap(of('bot2'))], ['bot3', fin(of('bot3'))], ['bot19', snap(of('bot19'))]]));
   assert.strictEqual(of('bot3').state, 'done');
   assert.ok(ev.some((e) => e.what === 'done' && e.bot === 'bot3'));
   const last = board.assign(['bot3'], () => pos.bot3);
@@ -115,7 +116,7 @@ const path = require('node:path');
   t += 2000;
   b3.observe(new Map([['bot2', snap(small.parts[0])]]));
   t += 2000;
-  b3.observe(new Map([['bot2', snap(null)]]));
+  b3.observe(new Map([['bot2', fin(small.parts[0])]]));
   assert.strictEqual(small.state, 'done');
 
   // a part that never shows up as the bot's job opens after START_MS; one an owner order replaced opens at once
@@ -130,6 +131,36 @@ const path = require('node:path');
   const evs = b4.observe(new Map([['bot2', snap(null)], ['bot3', {...snap(null), job: {type: 'goto', label: 'goto 1 2 3'}}]]));
   assert.deepStrictEqual([p2.state, p2.tries, p3.state, p3.tries], ['open', 0, 'open', 0]);
   assert.deepStrictEqual(evs.map((e) => e.what).sort(), ['not started', 'taken']);
+
+  // review 2026-10-23: a part done between two ticks (never seen running), or done with the bot already on its next job
+  const b5 = new Board({now});
+  const four = b5.create({kind: 'excavate', box: {x1: 0, y1: 0, z1: 0, x2: 15, y2: 0, z2: 0}});
+  b5.assign(['bot2', 'bot3'], () => null);
+  const [q1, q2] = four.parts;
+  t += 5000;
+  b5.observe(new Map([['bot2', fin(q1)], ['bot3', fin(q2, {job: {type: 'goto', label: 'goto 1 2 3'}, queue: ['mine stone 64']})]]));
+  assert.deepStrictEqual([q1.state, q2.state], ['done', 'done']);
+  // the part id is matched whole: "j5.1" is not "j5.10"
+  b5.assign(['bot2'], () => null);
+  const q3 = four.parts.find((p) => p.state === 'claimed');
+  t += 2000;
+  b5.observe(new Map([['bot2', fin({id: `${q3.id}0`})]]));
+  assert.strictEqual(q3.state, 'claimed');
+  // an error the bot had before it got the part never counts, though its rounded age puts it after the claim
+  const b6 = new Board({now});
+  const one = b6.create({kind: 'excavate', box: {x1: 0, y1: 0, z1: 0, x2: 3, y2: 0, z2: 0}});
+  const stale = {online: true, dead: false, queue: [], job: null, lastError: 'part: 3 blocks left in the slice', lastErrorAgoS: 0};
+  b6.assign(['bot2'], () => null, () => stale);
+  t += 5000;
+  b6.observe(new Map([['bot2', {...stale, lastErrorAgoS: 5}]]));
+  t += 6000;
+  b6.observe(new Map([['bot2', {...stale, lastErrorAgoS: 11}]]));
+  assert.deepStrictEqual([one.parts[0].state, one.parts[0].tries], ['open', 0], 'not started, no try');
+  // ... while a new one does
+  b6.assign(['bot2'], () => null, () => ({...stale, lastErrorAgoS: 11}));
+  t += 4000;
+  b6.observe(new Map([['bot2', {...stale, lastErrorAgoS: 1}]]));
+  assert.strictEqual(one.parts[0].tries, 1);
 }
 // ---- board in the hub: routes, protected areas, stop-all pauses ----
 (async () => {

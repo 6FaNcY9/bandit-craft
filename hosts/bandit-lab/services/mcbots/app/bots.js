@@ -710,6 +710,8 @@ class BotRunner {
         }
       }
       job.status = job.cancelled ? 'stopped' : 'done';
+      // The board (board.js) learns a part finished from this: a part done between two of its ticks was never seen running.
+      if (job.status === 'done') this.lastDone = {label: jobLabel(job), t: Date.now()};
     } catch (e) {
       job.status = job.cancelled ? 'stopped' : 'failed';
       if (!job.cancelled) {
@@ -765,6 +767,7 @@ class BotRunner {
       lastError: this.lastError,
       stoppedAgoS: this.stoppedAt ? Math.round((Date.now() - this.stoppedAt) / 1000) : null,
       lastErrorAgoS: this.trace.error ? Math.round((Date.now() - this.trace.error.t) / 1000) : null,
+      lastDone: this.lastDone ? {label: this.lastDone.label, agoS: Math.round((Date.now() - this.lastDone.t) / 1000)} : null,
       pullbacks: this.trace.recentCorrections(),
     };
   }
@@ -3476,16 +3479,19 @@ const JOBS = {
         Object.assign(job.t, {total, done: (y2 - y + 1) * layerSize}); // excavate borrowed the counters
         job.progress = `part ${part}: down to y ${y}`;
       }
-      // excavate digs natural ground only, so the bots' own scaffold stayed (52 cobblestone in spike run 1).
-      // Solid blocks only: torches are light the owner wants.
+      // excavate digs natural ground only, so the bots' own scaffold stayed (52 cobblestone in spike run 1). Only the
+      // blocks bots pillar and bridge with: never a chest, bed, spawner or anything else someone built there.
       let left = 0;
+      const dim = normDim(bot.game?.dimension);
       for (let y = y2; y >= y1; y--) {
         for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
           guard(job);
           const pos = new Vec3(x, y, z);
           const b = bot.blockAt(pos);
           if (!b) { left++; continue; }
-          if (b.boundingBox !== 'block') continue;
+          if (!PILLAR_BLOCKS.includes(b.name)) continue;
+          const k = `${dim}:${x},${y},${z}`;
+          if (r.world && !(await r.world.claim(r.name, k))) { left++; continue; }
           try {
             if (await digAt(r, job, pos)) dug = true;
             else left++;
@@ -3494,6 +3500,8 @@ const JOBS = {
             if (!/^unsafe: |could not reach|Digging aborted|needs a tool/.test(e.message)) throw e;
             left++;
             r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);
+          } finally {
+            r.world?.release(r.name, k);
           }
         }
       }

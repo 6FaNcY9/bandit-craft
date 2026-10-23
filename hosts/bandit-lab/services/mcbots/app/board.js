@@ -3,7 +3,7 @@
 // bots claim. Heartbeat, progress and outcome come from the status snapshots the hub already has; a part whose
 // bot goes quiet reopens with its progress kept, so another bot takes over. Pure apart from its JSON file.
 const fs = require('node:fs');
-const {strip, failedSince, stoppedSince} = require('./plan');
+const {strip} = require('./plan');
 
 const SLICE = 4; // a slice is at most this wide: one bot keeps one place, claims stay few
 const CLAIM_MS = 45000; // a claim without a heartbeat this long goes back to open
@@ -11,6 +11,12 @@ const START_MS = 10000; // a handed-out part that never showed up as the bot's j
 const MAX_TRIES = 3;
 const MAX = {x: 64, y: 32, z: 64};
 const OWN_ERROR = /^(part:|died$)/; // the spike's keeper "light: no torches available" failed a dug piece
+const SLACK_MS = 1500; // the snapshot's ages are whole seconds, and a worker's snapshot may be a moment old
+
+const partOf = (label) => (String(label || '').startsWith('part ') ? label.split(' ')[1] : null); // jobLabel: "part <id> x1 ..."
+const at = (agoS, t) => (agoS == null ? null : t - agoS * 1000);
+// An error or stop is the part's only when it is newer than the one the bot already had when the part went out.
+const newer = (when, before) => when != null && (before == null || when > before + SLACK_MS);
 
 const norm = (b) => ({x1: Math.min(b.x1, b.x2), y1: Math.min(b.y1, b.y2), z1: Math.min(b.z1, b.z2), x2: Math.max(b.x1, b.x2), y2: Math.max(b.y1, b.y2), z2: Math.max(b.z1, b.z2)});
 const size = (b, a) => b[`${a}2`] - b[`${a}1`] + 1;
@@ -64,8 +70,9 @@ class Board {
     return job;
   }
 
-  // Each idle bot gets the nearest open part of the oldest running job. posOf(bot) -> {x, z} | null.
-  assign(idle, posOf) {
+  // Each idle bot gets the nearest open part of the oldest running job. posOf(bot) -> {x, z} | null; snapOf(bot) -> the
+  // snapshot, whose last error and stop are remembered so that only later ones count against the part.
+  assign(idle, posOf, snapOf = () => null) {
     const out = [];
     const holding = new Set(this.parts().filter((p) => p.state === 'claimed').map((p) => p.claim.bot));
     for (const bot of idle) {
@@ -75,7 +82,9 @@ class Board {
       const job = this.data.jobs.find((j) => j.state === 'running' && j.parts.some((p) => p.state === 'open'));
       if (!job) break;
       const part = job.parts.filter((p) => p.state === 'open').sort((a, b) => dist(a) - dist(b))[0];
-      Object.assign(part, {state: 'claimed', claim: {bot, since: this.now(), heartbeat: this.now(), seen: false}});
+      const s = snapOf(bot), t = this.now();
+      const err0 = s?.lastError ? at(s.lastErrorAgoS, t) : null;
+      Object.assign(part, {state: 'claimed', claim: {bot, since: t, heartbeat: t, seen: false, err0, stop0: at(s?.stoppedAgoS, t)}});
       holding.add(bot);
       out.push({bot, part});
     }
@@ -98,28 +107,32 @@ class Board {
           continue;
         }
         c.heartbeat = t;
-        if (s.job?.type === 'part' && s.job.label?.includes(p.id)) {
+        // Finished, even if no tick saw it run (an empty slice ends in a second) or the bot has moved on since.
+        if (partOf(s.lastDone?.label) === p.id && at(s.lastDone.agoS, t) >= c.since - SLACK_MS) {
+          ev.push({what: 'done', job: job.id, part: p.id, bot: c.bot});
+          Object.assign(p, {state: 'done', claim: null, progress: {...p.progress, done: p.progress.total}});
+          continue;
+        }
+        if (partOf(s.job?.label) === p.id) {
           c.seen = true;
           p.progress.done = s.job.done || 0;
           continue;
         }
-        if (s.job || s.queue?.length) {
-          if (c.seen) open(p, 'taken', {by: s.job?.type || 'queue'}); // an owner order replaced the part
-          continue;
-        }
-        if (failedSince(s, c.since, t) && OWN_ERROR.test(s.lastError)) {
+        if (s.queue?.some((l) => partOf(l) === p.id)) continue; // waiting its turn
+        const failed = !!s.lastError && newer(at(s.lastErrorAgoS, t), c.err0);
+        if (failed && OWN_ERROR.test(s.lastError)) {
           p.tries++;
           p.lastError = s.lastError;
           if (p.tries < MAX_TRIES) { open(p, 'retry', {error: s.lastError}); continue; }
           ev.push({what: 'failed', job: job.id, part: p.id, bot: c.bot, error: s.lastError});
           Object.assign(p, {state: 'failed', claim: null});
           job.problem = {reason: s.lastError, part: p.id, since: t};
-        } else if (failedSince(s, c.since, t)) open(p, 'foreign', {error: s.lastError});
-        else if (stoppedSince(s, c.since, t)) open(p, 'stopped');
-        else if (c.seen) {
-          ev.push({what: 'done', job: job.id, part: p.id, bot: c.bot});
-          Object.assign(p, {state: 'done', claim: null, progress: {...p.progress, done: p.progress.total}});
-        } else if (t - c.since >= START_MS) open(p, 'not started');
+        } else if (failed) open(p, 'foreign', {error: s.lastError});
+        else if (newer(at(s.stoppedAgoS, t), c.stop0)) open(p, 'stopped');
+        // Something else runs (an owner order replaced the part, or came before it started): free the part, no try.
+        else if (s.job || s.queue?.length) { if (c.seen || t - c.since >= START_MS) open(p, 'taken', {by: s.job?.type || 'queue'}); }
+        else if (c.seen) open(p, 'lost'); // ended without done, error or stop: hand it out again
+        else if (t - c.since >= START_MS) open(p, 'not started');
       }
       if (job.state === 'running' && !job.parts.some((p) => p.state === 'open' || p.state === 'claimed')) {
         job.state = job.parts.every((p) => p.state === 'done') ? 'done' : 'failed';
