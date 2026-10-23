@@ -2,12 +2,14 @@
 const assert = require('node:assert');
 // ---- scenario: sandbox reset lines, the "box empty" check, run measurement ----
 {
-  const {resetCommands, emptyCheck, measure, SCENARIOS} = require('../scenario');
+  const {resetCommands, emptyCheck, checkCommands, loaded, measure, SCENARIOS} = require('../scenario');
   const box = {x1: 0, y1: 60, z1: 0, x2: 15, y2: 67, z2: 15};
   assert.deepStrictEqual(resetCommands({box}), ['fill 0 60 0 15 67 15 stone', 'fill 0 68 0 15 68 15 air']);
   assert.deepStrictEqual(resetCommands({box: {x1: 15, y1: 67, z1: 15, x2: 0, y2: 60, z2: 0}, fill: 'dirt'}), ['fill 0 60 0 15 67 15 dirt', 'fill 0 68 0 15 68 15 air']);
   assert.throws(() => resetCommands({box: {x1: 0, y1: 0, z1: 0, x2: 63, y2: 15, z2: 63}}), /too big for one fill/);
   assert.strictEqual(emptyCheck(box), 'execute if blocks 0 60 0 15 67 15 0 300 0 all');
+  assert.deepStrictEqual(checkCommands(box), ['forceload add 0 0 15 15', 'fill 0 60 0 15 67 15 air replace torch', 'fill 0 60 0 15 67 15 air replace wall_torch', 'execute if blocks 0 60 0 15 67 15 0 300 0 all', 'forceload remove 0 0 15 15']);
+  assert.deepStrictEqual(loaded(box, ['x']), ['forceload add 0 0 15 15', 'x', 'forceload remove 0 0 15 15']);
 
   const bot = (done, extra = {}) => ({name: 'bot5', online: true, dead: false, job: {type: 'part', done}, ...extra});
   const flat = [0, 20, 40, 61].map((s) => ({t: s * 1000, bots: [bot(120)]}));
@@ -24,4 +26,40 @@ const assert = require('node:assert');
 
   for (const [name, scn] of Object.entries(SCENARIOS)) assert.ok(resetCommands(scn).length === 2 && scn.job.box, name);
 }
-console.log('ok');
+// ---- scenario-run: refuses without the sandbox console, resets, starts the board job, reports ----
+(async () => {
+  const {main} = require('../scenario-run');
+  const {SCENARIOS, resetCommands, loaded, checkCommands} = require('../scenario');
+  const scn = SCENARIOS['excavate-16'];
+  const env = {BOT_NAMES: 'bot5', BOT_AUTH: 'none'};
+  const sb = {...env, SANDBOX_RCON_HOST: 'minecraft-sandbox', SANDBOX_RCON_PASSWORD: 'pw'};
+  const out = [];
+  const say = (l) => out.push(l);
+  const never = async () => assert.fail('no console call without a sandbox');
+  assert.strictEqual(await main(['excavate-16'], {...env, RCON_HOST: 'minecraft', RCON_PASSWORD: 'pw'}, {call: never, out: say}), 2);
+  assert.match(out.pop(), /no sandbox console/);
+  assert.strictEqual(await main(['nope'], sb, {call: never, out: say}), 2);
+  assert.match(out.pop(), /unknown scenario nope/);
+
+  const sent = [];
+  const call = async (c) => { sent.push(...c); return c.map((l) => (l.startsWith('execute if blocks') ? 'Test passed. Count: 2048' : 'ok')); };
+  assert.strictEqual(await main(['excavate-16'], sb, {call, http: async () => ({status: 404}), out: say}), 2);
+  assert.deepStrictEqual(sent, loaded(scn.box, resetCommands(scn)));
+  assert.match(out.pop(), /no board/);
+
+  sent.length = 0;
+  let t = 0, polls = 0;
+  const http = async (method, p, body) => {
+    if (method === 'POST') { assert.deepStrictEqual(body, scn.job); return {status: 200, body: {id: 'j1'}}; }
+    if (p === '/api/state') return {status: 200, body: {bots: [{name: 'bot5', online: true, dead: false, job: {done: polls * 10}}]}};
+    polls++;
+    return {status: 200, body: {jobs: [{id: 'j1', parts: [{state: polls < 3 ? 'claimed' : 'done'}]}]}};
+  };
+  assert.strictEqual(await main(['excavate-16', '--runs', '2'], sb, {call, http, now: () => t, sleep: async (ms) => { t += ms; }, out: say}), 0);
+  assert.deepStrictEqual(sent.slice(0, 4), loaded(scn.box, resetCommands(scn)));
+  assert.deepStrictEqual(sent.slice(4, 9), checkCommands(scn.box));
+  const lines = out.map((l) => JSON.parse(l));
+  assert.deepStrictEqual(lines.map((l) => [l.run, l.ok, l.empty, l.failed, l.stalls]), [[1, true, true, 0, 0], [2, true, true, 0, 0]]);
+  assert.strictEqual(lines[0].ms, 4000);
+  console.log('ok');
+})();

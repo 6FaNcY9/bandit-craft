@@ -22,6 +22,18 @@ const emptyCheck = (box) => {
   return `execute if blocks ${coords(b)} ${b.x1} 300 ${b.z1} all`;
 };
 
+// The console touches only loaded chunks ("That position is not loaded" in the spike, once the bots had left).
+const loaded = (box, lines) => {
+  const b = norm(box);
+  return [`forceload add ${b.x1} ${b.z1} ${b.x2} ${b.z2}`, ...lines, `forceload remove ${b.x1} ${b.z1} ${b.x2} ${b.z2}`];
+};
+
+// Torches are wanted light, not leftovers: they go before the check (the box is rebuilt for the next run anyway).
+const checkCommands = (box) => {
+  const b = norm(box);
+  return loaded(b, [`fill ${coords(b)} air replace torch`, `fill ${coords(b)} air replace wall_torch`, emptyCheck(b)]);
+};
+
 // samples: [{t, bots: [{name, online, dead, job: {done}|null}]}]. A stall is stallMs in which a job ran and
 // no bot's job.done grew; one long stall counts once.
 function measure(samples, {stallMs = 60000} = {}) {
@@ -47,4 +59,4 @@ const SCENARIOS = {
   'excavate-16': {box: SPIKE_BOX, fill: 'stone', job: {kind: 'excavate', box: SPIKE_BOX}},
 };
 
-module.exports = {resetCommands, emptyCheck, measure, SCENARIOS};
+module.exports = {resetCommands, emptyCheck, checkCommands, loaded, measure, SCENARIOS};
