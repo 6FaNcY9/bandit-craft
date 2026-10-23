@@ -72,6 +72,8 @@ Proves the riskiest assumptions before PR work. Code lives in `~/src/bandit-craf
 
 ### Task 2: scenario runner CLI
 
+> Changed while building: the dashboard API admits only the owner's Tailscale identity, so a CLI in the container would get 403, and trusting loopback would let the worker containers (same network namespace) in. The runner is a library (`scenario-run.js` `main`) that the hub runs in-process on `POST /api/scenarios {name, runs}` (owner only, Task 6); results go to the event log and `STATE_DIR/scenarios.jsonl`. No `mcbots-scenario` bin.
+
 **Files:**
 - Create: `hosts/bandit-lab/services/mcbots/app/scenario-run.js`
 - Modify: `hosts/bandit-lab/services/mcbots/package.nix` (a `mcbots-scenario` bin next to `mcbots-worker`)
@@ -175,4 +177,4 @@ Rollback: revert both commits, redeploy.
 
 - [ ] **Step 1:** implement the kill hook in `scenario-run.js` (Task 2's sampler triggers it once).
 - [ ] **Step 2:** commit, hand to the owner for shipping (bandit-craft push, bandit-nix input bump, `lab-apply`).
-- [ ] **Step 3 (after deploy):** `ssh bandit-lab docker exec mcbots mcbots-scenario excavate-16 --runs 3` and `... excavate-16-kill --runs 1`. Expected: 4 lines with `"ok":true`, `"stalls":0`, the console check "box empty" (torches excepted) passing, and each run under 30 min (spike run 2 with today's dig loop: 24.9 min). Report the numbers to the owner in German; a failed run goes back to Task 5 with its cause.
+- [ ] **Step 3 (after deploy):** from the laptop `curl -X POST -H 'content-type: application/json' -d '{"name":"excavate-16","runs":3}' https://bandit-lab.tail7facc9.ts.net:8445/api/scenarios`, then `excavate-16-kill` with one run; read the lines from `/api/events` (`scenario`). Expected: 4 lines with `"ok":true`, `"stalls":0`, the console check "box empty" (torches excepted) passing, and each run under 30 min (spike run 2 with today's dig loop: 24.9 min). Report the numbers to the owner in German; a failed run goes back to Task 5 with its cause.
