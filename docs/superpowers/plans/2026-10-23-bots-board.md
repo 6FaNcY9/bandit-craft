@@ -40,14 +40,14 @@ builder check" first).
 
 Proves the riskiest assumptions before PR work. Code lives in `~/src/bandit-craft-redesign/spike/` and is never committed to the branch.
 
-- [ ] **S1: three bots reach the sandbox from the laptop.** Ask the owner to run on the laptop:
+- [x] **S1: three bots reach the sandbox from the laptop.** Ask the owner to run on the laptop:
   `MC_VHOST=sandbox.bots nix run ~/src/bandit-craft-redesign#mcbots-worker -- bot5 bot6 bot7`
   Expected: the lab dashboard lists bot5-7 online; the sandbox log shows three "joined the game". If not, stop and report: this is the first blocker.
-- [ ] **S2: a test box.** Pick a 16 x 16 x 8 box at least 32 blocks outside every zone in `places.js`/`PROTECTED_AREAS`. The owner fills it in the sandbox as op: `/fill <x1> <y1> <z1> <x2> <y2> <z2> stone`. Record the coordinates in `spike/notes.md`.
-- [ ] **S3: minimal board.** `spike/board.mjs`: polls the dashboard `GET /api/state`, cuts the box into 4 slices with `strip()` from `plan.js`, posts `POST /api/job` (`{bots: [name], type: 'excavate', args: <slice>}`, header `Origin` = the dashboard origin) per idle bot. Today's `excavate` caps a box at 9 x 9 x 5, so the spike cuts the box into 16 pieces of 4 wide x 8 long x 4 high and digs the upper pieces before the lower ones. Reopen a piece when its bot's snapshot shows `lastError` or `online: false` for 45 s.
-- [ ] **S4: three runs.** Run 3 times (owner refills with `/fill` between runs); in run 3 the owner kills bot6 in game (`/kill bot6`) half-way. Record per run: minutes, pieces failed, blocks left (count by eye or `/execute if blocks <box> <air box above> all`), deaths. Also time the stop: `POST /api/job {bots:'all', type:'stop'}` while all dig; seconds until all snapshots show no job.
-- [ ] **S5: translator on slayer.** Ten German orders in `spike/orders.txt` (for example "grab das hier aus", "hol mir 20 Eisen", "bring alles ins Lager", "hör auf", "bau hier eine Fackel-Reihe", ...) with the wanted job JSON next to each. On slayer, through its llama-server/Ollama at the lab's quantisation: Andy-4.2, Qwen3-14B Q4_K_M, gpt-oss:20b. One prompt with the job schema; count exact jobs. Target: 8 of 10 for the winner.
-- [ ] **S6: report.** `spike/notes.md` with the numbers from S4, S5 and the stop time; tell the owner in German. If S4 fails for reasons the board cannot fix (dig loop stalls), Task 5 starts with that cause.
+- [x] **S2: a test box.** Pick a 16 x 16 x 8 box at least 32 blocks outside every zone in `places.js`/`PROTECTED_AREAS`. The owner fills it in the sandbox as op: `/fill <x1> <y1> <z1> <x2> <y2> <z2> stone`. Record the coordinates in `spike/notes.md`.
+- [x] **S3: minimal board.** `spike/board.mjs`: polls the dashboard `GET /api/state`, cuts the box into 4 slices with `strip()` from `plan.js`, posts `POST /api/job` (`{bots: [name], type: 'excavate', args: <slice>}`, header `Origin` = the dashboard origin) per idle bot. Today's `excavate` caps a box at 9 x 9 x 5, so the spike cuts the box into 16 pieces of 4 wide x 8 long x 4 high and digs the upper pieces before the lower ones. Reopen a piece when its bot's snapshot shows `lastError` or `online: false` for 45 s.
+- [x] **S4: three runs.** Run 3 times (owner refills with `/fill` between runs); in run 3 the owner kills bot6 in game (`/kill bot6`) half-way. Record per run: minutes, pieces failed, blocks left (count by eye or `/execute if blocks <box> <air box above> all`), deaths. Also time the stop: `POST /api/job {bots:'all', type:'stop'}` while all dig; seconds until all snapshots show no job.
+- [ ] **S5 (deferred: slayer stays idle, owner 2026-10-23): translator on slayer.** Ten German orders in `spike/orders.txt` (for example "grab das hier aus", "hol mir 20 Eisen", "bring alles ins Lager", "hör auf", "bau hier eine Fackel-Reihe", ...) with the wanted job JSON next to each. On slayer, through its llama-server/Ollama at the lab's quantisation: Andy-4.2, Qwen3-14B Q4_K_M, gpt-oss:20b. One prompt with the job schema; count exact jobs. Target: 8 of 10 for the winner.
+- [x] **S6: report.** `spike/notes.md` with the numbers from S4, S5 and the stop time; tell the owner in German. If S4 fails for reasons the board cannot fix (dig loop stalls), Task 5 starts with that cause.
 
 ## PR 1: sandbox bench
 
@@ -118,7 +118,7 @@ Rollback: revert both commits, redeploy.
   - `constructor({file, now = Date.now, locked})`: loads `file` (JSON, atomic write like `crews.js`); parts that were `claimed` come back `open`.
   - `create({kind: 'excavate', box, by}) -> Job` throws on `locked(box)` reason, on a box over 64 x 32 x 64, or an empty one. Cuts the box along its longer horizontal axis into slices of at most 4 wide; each part `{id: '<job>.<n>', box, state: 'open', tries: 0, progress: {done: 0, total}}`.
   - `assign(idleBots: string[], posOf: (bot) => {x,z}|null) -> [{bot, part}]`: each idle bot gets the nearest open part of the highest-priority running job; marks it `claimed` with `{bot, since: now}`.
-  - `observe(snaps: Map<bot, snapshot>)`: for each claimed part: snapshot `online` and `job.type === 'part' && job.label` naming the part id -> heartbeat, `progress.done = job.done`; offline or no snapshot for `CLAIM_MS = 45000` -> back to `open`; idle after the claim with `failedSince` -> `tries++`, `lastError`, `open` (or `failed` at `tries === 3`, setting `job.problem = {reason: lastError, part}`); idle with `stoppedSince` -> `open`; idle otherwise -> `done`. A job whose parts are all `done` is `done`.
+  - `observe(snaps: Map<bot, snapshot>)`: for each claimed part: snapshot `online` and `job.type === 'part' && job.label` naming the part id -> heartbeat, `progress.done = job.done`; offline or no snapshot for `CLAIM_MS = 45000` -> back to `open`; idle after the claim with `failedSince` and a `lastError` that is the part's own (`part:` prefix, or `died`) -> `tries++`, `lastError`, `open` (or `failed` at `tries === 3`, setting `job.problem = {reason: lastError, part}`); any other fresh `lastError` -> `open` without a try (spike run 1: the keeper's "light: no torches available" failed a piece that was dug); idle with `stoppedSince` -> `open`; idle otherwise -> `done`. A job whose parts are all `done` is `done`.
   - `pause(jobId)`, `resume(jobId)`, `cancel(jobId)`, `pauseAll() -> string[]` (bots that held parts), `state()` (for the API).
 - Values: `SLICE = 4`, `CLAIM_MS = 45000`, `MAX_TRIES = 3`, box caps 64 x 32 x 64.
 
@@ -126,7 +126,8 @@ Rollback: revert both commits, redeploy.
   - 16 x 8 x 16 box -> 4 parts of 4 x 8 x 16 covering it exactly, no overlap.
   - `assign(['bot2','bot3','bot19'])` -> three different parts; a fourth call with `['bot3']` after bot3's part is done gives it the last part.
   - bot19 offline 46 s -> its part `open`, progress kept; next `assign(['bot2'])` gives it to bot2.
-  - three failures with `lastError: 'unsafe: lava'` -> part `failed`, `job.problem.reason` contains `lava`, other parts still `claimed`.
+  - three failures with `lastError: 'part: unsafe: lava'` -> part `failed`, `job.problem.reason` contains `lava`, other parts still `claimed`.
+  - a fresh `lastError: 'light: no torches available'` -> part `open`, `tries === 0`.
   - `create` on a box touching a locked zone throws with the zone name.
   - reload from `file` with a claimed part -> part `open`.
   - `pauseAll()` returns the holding bots; `assign` gives nothing while paused.
@@ -138,14 +139,14 @@ Rollback: revert both commits, redeploy.
 ### Task 5: `part` job in the bot
 
 **Files:**
-- Modify: `hosts/bandit-lab/services/mcbots/app/bots.js`: `VALIDATE.part` next to `VALIDATE.excavate` (`:170`), `JOBS.part` next to `JOBS.excavate` (`:3381`), `KEEP`/`NIGHT_JOBS` gain `part`, `RESUMABLE` does not.
+- Modify: `hosts/bandit-lab/services/mcbots/app/bots.js`: `VALIDATE.part` next to `VALIDATE.excavate` (`:170`), `JOBS.part` next to `JOBS.excavate` (`:3381`), `NIGHT_JOBS` and the walk's `digOnly` list gain `part`; `RESUMABLE` and `KEEP` do not (the board resumes a part, never the bot).
 - Test: `hosts/bandit-lab/services/mcbots/app/test/jobs/part.js`, added to `test/jobs.js`
 
 **Interfaces:**
 - Produces: job type `part`, args `{part: '<job>.<n>', x1, y1, z1, x2, y2, z2}`; validation: box at most 4 x 32 x 64 along any axis order (slice), part id `/^[\w.-]{1,40}$/`. `jobLabel` for it contains the part id (the board matches on it).
-- Behaviour: walk near the slice first (`goNear`, as `shaft` does, so chunks load), then dig it layer by layer from the top with `JOBS.excavate` on one-layer child jobs (as `shaft` calls it), setting `job.t.total`/`job.t.done` over the whole slice. Before each layer: `upkeep` (food, tool, free inventory as today). A layer that ends "were not dug" is retried once, then the job throws with that message.
+- Behaviour (spike findings a-c, f in brackets): resolve the needs first (pickaxe, food, free slots) wherever the bot stands, then walk near the slice (`goNear`, as `shaft` does, so chunks load) [a: excavate from 130 blocks away ended at once on unloaded chunks; bots with empty hands walked off for tools after arriving]. Dig it layer by layer from the top with `JOBS.excavate` on one-layer child jobs (as `shaft` calls it), setting `job.t.total`/`job.t.done` over the whole slice. Before each layer: `upkeep`, and `goNear` again if upkeep took the bot more than 8 blocks away [a]. While the root job is `part`, `care` skips `ensureGear` (armour, shield, iron smelting): only the job's needs send a bot away [b: gear trips pulled bots off mid-piece]. `part` joins `NIGHT_JOBS` (a fit bot digs on; an unfit one shelters, which the board reads as stopped, not failed) [c]. After the last layer a clean-up pass digs every solid block left in the slice except torches: excavate digs only NATURAL blocks, so its own cobblestone scaffold stayed (52 blocks in run 1, 23 in run 2) [f]. Then recount from the bot's view; blocks left -> throw `part: N blocks left`. A layer that ends "were not dug" is retried once, then the job throws with that message (`part:` prefix, the board counts it).
 
-- [ ] **Step 1: test** with the fake bot of `test/jobs/rearm-excavate-shaft.js`: a 4 x 2 x 3 slice of stone is dug fully, `t.done === t.total === 24`; a slice of 5 wide is refused by `VALIDATE.part`; a slice already air ends `noop`.
+- [ ] **Step 1: test** with the fake bot of `test/jobs/rearm-excavate-shaft.js`: a 4 x 2 x 3 slice of stone is dug fully, `t.done === t.total === 24`; the same slice with one cobblestone block in it ends with that block dug too and a torch left; a slice of 5 wide is refused by `VALIDATE.part`; a slice already air ends `noop`; with the root job `part`, `care` does not call `ensureGear`.
 - [ ] **Step 2:** fails. **Step 3:** implement. **Step 4:** `node test/jobs.js` and `node test.js` pass.
 - [ ] **Step 5:** commit `feat(mcbots): part job digs one board slice`.
 
@@ -154,6 +155,7 @@ Rollback: revert both commits, redeploy.
 **Files:**
 - Modify: `hosts/bandit-lab/services/mcbots/app/server.js`: create `Board` (file `STATE_DIR/board.json`, `locked` from `cfg.protectedAreas` and `places.list` zones of kind `protected`), tick it in `keeperTick` before `plan?.tick()`, routes below, stop-all also calls `board.pauseAll()`.
 - Modify: `hosts/bandit-lab/services/mcbots/app/config.js`: `BOARD_BOTS` (comma list, default empty = board off); must not overlap `PLAN_ROSTER`/`AGENT_BOTS` (throw like the existing roster checks).
+- Modify: `hosts/bandit-lab/services/mcbots/app/keeper.js`: a `skip` set (the `BOARD_BOTS`) left out of `free()` and `dayFree()` (spike finding d: the keeper took idle board bots for `light` and `treefarm`; it waits 10 s idle, the board refills in 3 s, so it struck after errors and when the job ended).
 - Modify: `hosts/bandit-lab/services/mcbots/default.nix`: `BOARD_BOTS = "bot1,bot2,bot3,bot19,bot20,bot21";`, `AGENT_BOTS = "";` (if `config.js` rejects an empty `AGENT_BOTS`, allow it: the agents are off since Task 3).
 - Test: `hosts/bandit-lab/services/mcbots/app/test/board.js` (API part, loopback HTTP as `test/debug-api.js` does)
 
@@ -161,7 +163,7 @@ Rollback: revert both commits, redeploy.
 - Consumes: `Board` (Task 4), job type `part` (Task 5), `runners`, `r.snapshot()`, `r.enqueue`.
 - Produces: `GET /api/board` -> `board.state()`; `POST /api/board/jobs {kind, box}` (same `sameOrigin` + JSON check as `/api/job`) -> job or 400 with the reason; `POST /api/board/jobs/<id> {action: pause|resume|cancel}`. Each tick: idle `BOARD_BOTS` (online, no job, no owner order) -> `board.assign` -> `r.enqueue('part', part.box + {part: part.id})`; then `board.observe(snapshots)`.
 
-- [ ] **Step 1: tests:** POST a job overlapping a protected area -> 400 with the area; POST a valid one -> `GET /api/board` lists 4 open parts; stop-all -> job `paused`.
+- [ ] **Step 1: tests:** POST a job overlapping a protected area -> 400 with the area; POST a valid one -> `GET /api/board` lists 4 open parts; stop-all -> job `paused`; a keeper with `skip: ['bot2']` and bot2 the only idle bot assigns nothing.
 - [ ] **Step 2:** fails. **Step 3:** implement. **Step 4:** `node test.js` passes; `nix flake check`; bandit-nix lab build with the override.
 - [ ] **Step 5:** commit `feat(mcbots): board in the hub with its API`.
 
@@ -173,4 +175,4 @@ Rollback: revert both commits, redeploy.
 
 - [ ] **Step 1:** implement the kill hook in `scenario-run.js` (Task 2's sampler triggers it once).
 - [ ] **Step 2:** commit, hand to the owner for shipping (bandit-craft push, bandit-nix input bump, `lab-apply`).
-- [ ] **Step 3 (after deploy):** `ssh bandit-lab docker exec mcbots mcbots-scenario excavate-16 --runs 3` and `... excavate-16-kill --runs 1`. Expected: 4 lines with `"ok":true`, `"stalls":0`. Report the numbers to the owner in German; a failed run goes back to Task 5 with its cause.
+- [ ] **Step 3 (after deploy):** `ssh bandit-lab docker exec mcbots mcbots-scenario excavate-16 --runs 3` and `... excavate-16-kill --runs 1`. Expected: 4 lines with `"ok":true`, `"stalls":0`, the console check "box empty" (torches excepted) passing, and each run under 30 min (spike run 2 with today's dig loop: 24.9 min). Report the numbers to the owner in German; a failed run goes back to Task 5 with its cause.

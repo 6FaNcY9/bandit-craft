@@ -293,6 +293,28 @@ Proves the riskiest assumptions first:
 
 The spike's code is thrown away; PR 3 is written properly with tests.
 
+### Spike results (2026-10-23, sandbox, bot5-7 from the laptop, box -140 70 0 .. -125 77 15)
+
+| Run | Minutes | Pieces done / failed | Stone left | Own blocks left | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 38.5 | 14 / 1 (+1 never started) | 126 | 52 cobblestone, 2 torches | keeper's error failed a dug piece, which blocked the one below |
+| 2 | 24.9 | 16 / 0 | 0 | 23 cobblestone, 6 torches | about 82 blocks a minute for three bots |
+| 3 | about 47 | 16 / 0 | 0 | 60 cobblestone, 3 torches | bot6 killed; laptop slept 77 min, all parts taken over after 45 s; stop 0.53 s |
+
+The translator comparison (point 3) waits until slayer is free. What the board needs from the bots,
+learnt on the way (PR 3 plan, Tasks 4-6):
+
+- a. Needs first, then walk: today's excavate gives up on unloaded chunks (130 blocks away), and
+  bots that arrived without tools walked back to base.
+- b. A part fetches only its needs; armour and shield trips pulled bots off mid-piece.
+- c. Night shelter applies only to unfit bots and reads as "stopped", not "failed".
+- d. The keeper and plan never task board bots: the keeper took idle board bots for `light` and
+  `treefarm` jobs.
+- e. Only the part's own errors (`part:`, `died`) count as tries; another job's error reopens the
+  part without a try.
+- f. The dig loop leaves its own cobblestone scaffold (it digs NATURAL blocks only): a part ends
+  with a clean-up pass over its slice.
+
 ## Settled after the builder check (author's calls, not the owner's)
 
 - **Player builds.** `blocklog.js` cannot tell a player from the world (it records bots and
@@ -320,9 +342,8 @@ The spike's code is thrown away; PR 3 is written properly with tests.
 - **Protocol.** No new socket frames: the board hands a part out with the existing `enqueue` path
   (works for local and remote bots, as `/api/job` does) and reads heartbeat and progress from the
   status snapshots the hub already gets every second.
-- **Stop.** Whether the existing stop path meets 2 s mid-path and mid-dig is unmeasured; the spike
-  times it. If it does not, PR 4 includes bot-side abort work. Pause is per job; on resume the board
-  recounts every part.
+- **Stop.** The existing stop path meets the 2 s target: in spike run 3 three digging bots were idle
+  0.53 s after `stop`. Pause is per job; on resume the board recounts every part.
 - **Plugin build:** plain `javac` against the pinned Paper API jar, like `botgate/default.nix` does
   against the Velocity jar. No Gradle.
 - **Translator interface:** hosted by the `mcagents` service on lab Ollama. The plugin sends
