@@ -82,8 +82,10 @@ const getPlan = (item) => (n, c) => [['get', {item, count: n}], ['deposit', {...
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
 class Keeper {
-  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}, file = null}) {
+  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}, file = null, skip = []}) {
     this.runners = runners;
+    // The board's bots (BOARD_BOTS): the keeper took idle ones for light and treefarm jobs mid-board (spike 2026-10-23).
+    this.skip = new Set(skip);
     this.world = world;
     this.chest = chest; // {x,y,z} of the supply chest, or null: nothing to keep
     this.quotas = quotas; // [[item, want]]
@@ -130,7 +132,7 @@ class Keeper {
   }
 
   idle(s) {
-    return idle(s);
+    return idle(s) && !this.skip.has(s.name);
   }
 
   tick() {

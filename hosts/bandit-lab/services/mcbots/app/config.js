@@ -102,6 +102,12 @@ function loadConfig(env = process.env) {
   // The gaming PC's llama-server through the lab tunnel (slayer.js); unset = no card.
   const overlap = planRoster.filter((n) => agentBots.includes(n));
   if (planEnable && overlap.length) throw new Error(`PLAN_ROSTER must not contain agent bots: ${overlap.join(', ')}`);
+  // The job board (board.js) owns these bots: no agent, plan or keeper hands them work (spike 2026-10-23).
+  const boardBots = list(env.BOARD_BOTS);
+  const boardBad = boardBots.filter((n) => !NAME_RE.test(n));
+  if (boardBad.length) throw new Error(`BOARD_BOTS must be bot names: ${boardBad.join(', ')}`);
+  const boardTaken = boardBots.filter((n) => agentBots.includes(n) || (planEnable && planRoster.includes(n)));
+  if (boardTaken.length) throw new Error(`BOARD_BOTS must not contain agent or plan bots: ${boardTaken.join(', ')}`);
   const slayerUrl = (env.SLAYER_URL || '').replace(/\/+$/, '');
   if (slayerUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(slayerUrl)) throw new Error('SLAYER_URL must be http://host:port');
   const slayerStatusCmd = require('./slayer').parseCmd(env.SLAYER_STATUS_CMD);
@@ -144,6 +150,7 @@ function loadConfig(env = process.env) {
     hubWorkers,
     agentToken,
     agentBots,
+    boardBots,
     slayerUrl,
     rcon: rconHost ? {host: rconHost, port: rconPort, password: rconPassword} : null,
     sandboxRcon: sbHost ? {host: sbHost, port: 25575, password: sbPassword} : null,
