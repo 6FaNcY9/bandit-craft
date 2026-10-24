@@ -112,6 +112,7 @@
       <button class="b" data-order="rearm"><b>🎒</b>Ausrüsten</button>
       <button class="b" data-order="deposit"><b>📥</b>Einlagern</button>
       <button class="b" data-order="tidy"><b>🧹</b>Aufräumen</button>
+      <button class="b" data-order="trade"><b>💎</b>Sticks → Emeralds</button>
       <button class="b" id="collectGraves"><b>🪦</b>Gräber einsammeln</button>
       <button class="b stop" data-order="stop"><b>⏹</b>Stopp</button>
     </div>
@@ -280,6 +281,15 @@ const step = (s) => {
   return items(s);
 };
 const DOING = [
+  [/^walking to the villager at (.+)$/, (m) => `geht zum Dorfbewohner (${m[1]})`],
+  [/^walking to the trading hall$/, () => 'geht zur Handelshalle'],
+  [/^trading sticks for emeralds$/, () => 'tauscht Sticks gegen Emeralds'],
+  [/^crafting sticks$/, () => 'craftet Sticks'],
+  [/^taking sticks from the hall chests$/, () => 'nimmt Sticks aus den Hallenkisten'],
+  [/^bringing loot to storage$/, () => 'bringt Beute ins Lager'],
+  [/^the stick chests are empty, waiting for a refill$/, () => 'Stick-Kisten leer, wartet aufs Nachfüllen'],
+  [/^bringing the emeralds to the chest$/, () => 'bringt die Emeralds in die Kiste'],
+  [/^every villager is sold out, waiting for the restock$/, () => 'alle ausverkauft, wartet aufs Auffüllen'],
   [/^walking to the material chest at (.+) for (.+)$/, (m) => `geht zur Materialkiste (${m[1]}) für ${item(m[2])}`],
   [/^walking to fill (\S+) at (.+)$/, (m) => `geht ${item(m[1])} befüllen (${m[2]})`],
   [/^walking to place (\S+) at (.+)$/, (m) => `geht ${item(m[1])} setzen (${m[2]})`],
@@ -354,7 +364,7 @@ const eventText = (s) => { for (const [re, f] of EVENT) { const m = re.exec(s); 
 const doing = (s) => { if (!s) return ''; for (const [re, f] of DOING) { const m = re.exec(s); if (m) return f(m); } return s; };
 const JOB = {schematic: 'baut', produce: 'besorgt Material', mine: 'baut ab', chop: 'fällt Bäume', come: 'kommt', follow: 'folgt', guard: 'hält Wache',
   deposit: 'lagert ein', withdraw: 'holt aus Kiste', craft: 'craftet', smelt: 'schmilzt', grave: 'holt sein Grab', graves: 'sammelt seine Gräber ein', rearm: 'rüstet sich aus', tidy: 'räumt auf', goto: 'läuft hin',
-  treefarm: 'Baumfarm', shaft: 'Schacht', shift: 'Schicht', get: 'besorgt'};
+  treefarm: 'Baumfarm', shaft: 'Schacht', shift: 'Schicht', get: 'besorgt', trade: 'handelt Sticks gegen Emeralds'};
 const PROJECT = new Set(['schematic', 'produce']);
 const pct = (a, b) => (b ? Math.max(0, Math.min(100, Math.round((100 * a) / b))) : 0);
 const ago = (s) => (s == null ? '' : s < 90 ? 'gerade eben' : s < 5400 ? `vor ${Math.round(s / 60)} min` : `vor ${Math.round(s / 3600)} h`);
@@ -470,7 +480,7 @@ for (const b of document.querySelectorAll('[data-order]')) {
     const t = b.dataset.order, sc = last.supplyChest;
     if ((t === 'come' || t === 'follow' || t === 'guard') && !me()) return say('Trag oben deinen Spielernamen ein', true);
     if ((t === 'rearm' || t === 'deposit') && !sc) return say('Keine Vorratskiste eingestellt', true);
-    const args = {come: {player: me()}, follow: {player: me()}, guard: {player: me(), radius: 16}, rearm: sc, deposit: sc, tidy: sc ? {...sc, radius: 16} : {radius: 16}, stop: {}}[t];
+    const args = {come: {player: me()}, follow: {player: me()}, guard: {player: me(), radius: 16}, rearm: sc, deposit: sc, tidy: sc ? {...sc, radius: 16} : {radius: 16}, trade: {}, stop: {}}[t];
     sendJob(bots, t, args, b.textContent.replace(/^\S+/, '').trim());
   };
 }

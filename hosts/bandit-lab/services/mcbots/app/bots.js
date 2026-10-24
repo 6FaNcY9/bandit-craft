@@ -17,6 +17,7 @@ const {zoneNamed, inZone} = require('./places');
 const buildJob = require('./build');
 const huntJob = require('./hunt');
 const gravesJob = require('./graves');
+const tradeJob = require('./trade');
 const treeFarmJob = require('./treefarm');
 const wheatFarmJob = require('./wheatfarm');
 const fluidsJob = require('./fluids');
@@ -128,6 +129,8 @@ const VALIDATE = {
   tidy: (a) => ({...(a.x !== undefined ? xyz(a) : {}), radius: num(a.radius ?? 16, 2, 32, 'radius')}),
   grave: xyz, // where the bot died; AxGraves keeps the loot in a grave there
   graves: (a) => ({spots: (Array.isArray(a.spots) ? a.spots : []).slice(0, 40).map(xyz)}),
+  // Sell sticks to the trading hall's villagers until stopped; the emeralds go to x,y,z (default: the supply chest).
+  trade: (a) => (a.x !== undefined ? xyz(a) : {}),
   craft: (a) => {
     if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be an item name like stone_pickaxe');
     // Plain words the model uses for real item names ("unknown item: planks", lab 2026-10-10).
@@ -2843,6 +2846,9 @@ async function produce(r, job) {
 }
 
 const {grave, graves} = gravesJob.makeGraves({goNear, guard, sleep, deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: r.supplyChest}))});
+const {trade} = tradeJob.makeTrade({goNear, guard, sleep, count: (bot, name) => crafting.count(bot, name), ensureItem: (r, job, name, want) => crafting.ensureItem(r, job, name, want),
+  withdraw: (r, job, item, count, from) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...from}})),
+  deposit: (r, job, store, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...store, ...(only ? {only} : {})}}))});
 const {hunt, bed} = huntJob.makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at});
 
 const {homebed} = homebedJob.makeHomebed({goNear, guard, sleep, goals, crafting, run: buildRunJob, at, digAt, NATURAL});
@@ -2986,6 +2992,7 @@ const JOBS = {
   fluids,
   grave,
   graves,
+  trade,
   treefarm,
   homebed,
   level,
