@@ -8,6 +8,14 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOT_AUTH: 'x'}), /BOT_AUTH/);
 loadConfig({BOT_NAMES: 'bot1', BOT_AUTH: 'none'});
 assert.throws(() => require('../config').loadWorkerConfig({HUB_URL: 'ws://127.0.0.1:1/worker', HUB_TOKEN: 't'.repeat(40), MC_HOST: 'h', BOT_AUTH: 'x'}, ['bot2']), /BOT_AUTH/);
 assert.throws(() => loadConfig({BOT_NAMES: 'bot1', MC_VHOST: 'bad host'}), /MC_VHOST/);
+{ // sandbox console: same host as the main one only on another port (rehearsal forwarders on one gateway address)
+  const rc = {BOT_NAMES: 'bot1', RCON_HOST: 'minecraft', RCON_PASSWORD: 'pw', SANDBOX_RCON_HOST: 'minecraft-sandbox', SANDBOX_RCON_PASSWORD: 'pw'};
+  assert.strictEqual(loadConfig(rc).sandboxRcon.port, 25575, 'default port');
+  assert.strictEqual(loadConfig({...rc, SANDBOX_RCON_PORT: '25580'}).sandboxRcon.port, 25580);
+  assert.throws(() => loadConfig({...rc, SANDBOX_RCON_HOST: 'minecraft'}), /must differ/);
+  assert.strictEqual(loadConfig({...rc, SANDBOX_RCON_HOST: 'minecraft', SANDBOX_RCON_PORT: '25580'}).sandboxRcon.host, 'minecraft');
+  for (const bad of ['0', '65536', 'x', '1.5']) assert.throws(() => loadConfig({...rc, SANDBOX_RCON_PORT: bad}), /SANDBOX_RCON_PORT/, bad);
+}
 loadConfig({BOT_NAMES: 'bot1', MC_VHOST: 'sandbox.bots'});
 assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1, bot22'}).names, ['bot1', 'bot22']);
 for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(() => loadConfig({BOT_NAMES: bad}), bad);

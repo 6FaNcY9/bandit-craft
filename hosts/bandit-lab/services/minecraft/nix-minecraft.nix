@@ -1,4 +1,4 @@
-# Rehearsal stack (phase 5.3): Paper + Velocity from nix-minecraft, running beside the Docker stack # on a copy of the world. Velocity listens on the tailnet :25566, Paper on 127.0.0.1:25567, RCON on # 25575 (the Docker RCON lives on the Docker network, no host clash). The Docker stack in default.nix is # untouched. Paper and RCON ports are in no firewall list (ci/lab-surface.nix, ci/lab-minecraft.nix).
+# Rehearsal stack (phase 5.3): Paper + Velocity from nix-minecraft, running beside the Docker stack # on a copy of the world. Velocity listens on :25566 (tailscale0 and the mcbots bridge), Paper on 127.0.0.1:25567, RCON on # 25575 (the Docker RCON lives on the Docker network, no host clash). The Docker stack in default.nix is # untouched. Paper and RCON ports are in no firewall list (ci/lab-surface.nix, ci/lab-minecraft.nix).
 {
   config,
   lib,
@@ -10,7 +10,22 @@
   plugins = import ./plugins.nix {inherit pkgs;};
   vplugins = import ./velocity-plugins.nix {inherit pkgs;};
 
-  tailnet = repoConfig.lab.tailscaleIp;
+  # The Docker mcbots bridge (minecraft/default.nix mcbotsSubnet); the cutover bots reach the stack on its gateway.
+  bridgeSubnet = "10.250.77.0/29";
+  bridgeGw = "10.250.77.1";
+  bridgePorts = {
+    mc-bridge-rcon = 25575;
+    mc-bridge-map = mapPort;
+  };
+  bridgeRule = op: "iptables ${op} nixos-fw -s ${bridgeSubnet} -d ${bridgeGw} -p tcp -m multiport --dports 25566,25575,${toString mapPort} -j nixos-fw-accept";
+  bridgeService = port: {
+    serviceConfig = {
+      ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 127.0.0.1:${toString port}";
+      DynamicUser = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+    };
+  };
   dataDir = "/srv/minecraft";
   # Simple Voice Chat and BlueMap move off the Docker stack's 24454/udp and 8100/tcp.
   voicePort = 24455;
@@ -91,7 +106,7 @@
 
   velocityToml = pkgs.writeText "velocity.toml" ''
     config-version = "2.8"
-    bind = "${tailnet}:25566"
+    bind = "0.0.0.0:25566"
     # Mojang authentication for everyone; BotGate flips single logins offline.
     # VeloAuth decides per connection (see velocity-plugins.nix).
     online-mode = false
@@ -188,12 +203,15 @@ in {
         "plugins/veloauth.jar" = vplugins.veloauthJar;
         "plugins/veloauth/config.yml" = vplugins.veloauthConfig;
       };
-      # Bots from the workstation only; the Docker mcbots subnet is not part of the rehearsal.
-      environment.BOTGATE_SOURCES = "${repoConfig.lab.workstationTailscaleIp}/32";
+      # Workstation plus the mcbots bridge without its gateway (.1) and the host: the bots are .2-.7.
+      environment.BOTGATE_SOURCES = "${repoConfig.lab.workstationTailscaleIp}/32,10.250.77.2/31,10.250.77.4/30";
     };
   };
 
   systemd.services = {
+    mc-bridge-rcon = bridgeService bridgePorts.mc-bridge-rcon;
+    mc-bridge-map = bridgeService bridgePorts.mc-bridge-map;
+
     minecraft-server-paper.serviceConfig = {
       MemoryMax = "9G"; # 6G heap plus off-heap; rehearsal only
       CPUQuota = "300%";
@@ -247,6 +265,20 @@ in {
       '';
     };
   };
+
+  # Paper binds loopback, so the bridge reaches RCON and the map through forwarders listening on the gateway only
+  # (never 0.0.0.0: that would clash with Paper's 127.0.0.1:25575). FreeBind: the bridge may not exist yet.
+  systemd.sockets =
+    lib.mapAttrs (_: port: {
+      wantedBy = ["sockets.target"];
+      listenStreams = ["${bridgeGw}:${toString port}"];
+      socketConfig.FreeBind = true;
+    })
+    bridgePorts;
+
+  # One rule for the bridge, like ntfy's: Velocity, RCON and the map on the gateway; never Paper's 25567.
+  networking.firewall.extraCommands = bridgeRule "-A";
+  networking.firewall.extraStopCommands = "${bridgeRule "-D"} || true";
 
   # Velocity on the tailnet and voice chat only; Paper (25567) and RCON (25575) are in no list.
   networking.firewall.interfaces.tailscale0 = {

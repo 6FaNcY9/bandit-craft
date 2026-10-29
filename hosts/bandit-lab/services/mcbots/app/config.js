@@ -121,8 +121,10 @@ function loadConfig(env = process.env) {
   if (spot && !/^-?\d{1,7},-?\d{1,3},-?\d{1,7}$/.test(spot)) throw new Error('RESCUE_SPOT must be x,y,z');
   const rescueSpot = spot ? Object.fromEntries(spot.split(',').map((v, i) => ['xyz'[i], Number(v)])) : null;
   // The bots' sandbox console (rescue.js): never the real server's.
-  const sbHost = (env.SANDBOX_RCON_HOST || '').trim(), sbPassword = env.SANDBOX_RCON_PASSWORD || '';
-  if (sbHost && (!/^[\w.-]{1,64}$/.test(sbHost) || sbHost === rconHost)) throw new Error('SANDBOX_RCON_HOST must be a host name other than RCON_HOST');
+  const sbHost = (env.SANDBOX_RCON_HOST || '').trim(), sbPassword = env.SANDBOX_RCON_PASSWORD || '', sbPort = Number(env.SANDBOX_RCON_PORT || 25575);
+  if (sbHost && !/^[\w.-]{1,64}$/.test(sbHost)) throw new Error('SANDBOX_RCON_HOST must be a host name');
+  if (!Number.isInteger(sbPort) || sbPort < 1 || sbPort > 65535) throw new Error('SANDBOX_RCON_PORT must be a port');
+  if (sbHost && sbHost === rconHost && sbPort === rconPort) throw new Error('SANDBOX_RCON_HOST:SANDBOX_RCON_PORT must differ from RCON_HOST:RCON_PORT');
   if (!!sbHost !== !!sbPassword) throw new Error('SANDBOX_RCON_HOST and SANDBOX_RCON_PASSWORD must be set together');
   checkBotAuth(env);
   const host = env.DASHBOARD_HOST || '127.0.0.1';
@@ -153,7 +155,7 @@ function loadConfig(env = process.env) {
     boardBots,
     slayerUrl,
     rcon: rconHost ? {host: rconHost, port: rconPort, password: rconPassword} : null,
-    sandboxRcon: sbHost ? {host: sbHost, port: 25575, password: sbPassword} : null,
+    sandboxRcon: sbHost ? {host: sbHost, port: sbPort, password: sbPassword} : null,
     rescueSpot,
     slayerStatusCmd,
     workerPort,
