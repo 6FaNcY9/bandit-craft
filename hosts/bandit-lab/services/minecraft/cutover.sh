@@ -81,5 +81,7 @@ fi
 now=$(date -Is)
 echo "$now" >"$stamp"
 [ -z "$owner" ] || chown "$owner" "$stamp"
+# A rollback to the pre-cutover generation must not re-run its rehearsal copy over this world.
+touch "$dest/.rehearsal-copied"
 printf '%s\nThe world was copied to %s and runs there; this directory is cold since this time.\n' "$now" "$dest" >"$old_stamp"
 echo "cutover copy finished: $count files, $now"

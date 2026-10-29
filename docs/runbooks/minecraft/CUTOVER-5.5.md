@@ -48,9 +48,8 @@ provably stopped.
 - Quick, Docker game only (bots stay down: mcbots now point at the host): on bandit-lab
   `sudo systemctl start docker-minecraft docker-velocity docker-minecraft-sandbox`. Starting them stops
   `minecraft-cutover` and, through its `Requires=`, the three nix servers. Check `ss -ltn | grep 25565`.
-- Full (also puts mcbots and the old units back): on bandit-lab first
-  `sudo touch /srv/minecraft/paper/.rehearsal-copied` (else the old generation's rehearsal copy overwrites the
-  new world), then either `sudo nixos-rebuild switch --rollback` or, from the laptop, revert the lock bump and `lab-apply`.
+- Full (also puts mcbots and the old units back; the cutover left `.rehearsal-copied` so the old
+  generation's rehearsal copy does not run): on bandit-lab either `sudo nixos-rebuild switch --rollback` or, from the laptop, revert the lock bump and `lab-apply`.
   Restart the timer afterwards.
 - To redo the copy after a rollback: `sudo rm /srv/minecraft/paper/.cutover-done` before the next try.
 
