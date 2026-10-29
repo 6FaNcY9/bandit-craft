@@ -47,16 +47,17 @@
       bots = "bot20,bot21";
       label = "bandit-lab-worker-4";
     };
-    # MidariBread's own bot (owner 2026-10-29): plays on the main server, obeys MidariBread and the owner only, and is
-    # in GUEST_BOTS below so no keeper, board, help job or supply chest of the owner's touches it.
+    # MidariBread's own bots (owner 2026-10-29, docs/specs/2026-10-29-misa-bots.md): MisaBot is her builder, bot23 her
+    # trader. They play on the main server, obey MidariBread and the owner, and are in GUEST_BOTS below so no keeper,
+    # board, help job or supply chest of the owner's touches them.
     mcbots-worker-5 = {
-      bots = "bot22";
+      bots = "MisaBot,bot23";
       label = "bandit-lab-worker-5";
       owners = "${ownerUuids},06ee5c24-21e7-4c96-8adb-f74ccf20a264"; # + MidariBread
       mainServer = true;
     };
   };
-  guestBots = "bot22";
+  guestBots = "MisaBot,bot23";
   # Worker processes: each shares mcbots' network namespace, so it reaches the
   # hub on 127.0.0.1 (plain ws:// is accepted only there) and Velocity from
   # mcbots' address, which BotGate admits.
@@ -104,7 +105,7 @@ in {
           image = "${image.imageName}:${image.imageTag}";
           imageFile = image;
           environment = {
-            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, bot22 (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
+            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, MisaBot and bot23 (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
             # Owner 2026-10-23: helpers test in the sandbox until the board passes (spec 2026-10-23-bots-redesign);
             # the virtual host sandbox.bots routes them there (../minecraft/sandbox.nix).
             MC_VHOST = "sandbox.bots";
@@ -148,8 +149,9 @@ in {
             # Off since the scripted crew is retired (2026-10-12); plan.js and keeper.js stay for later.
             PLAN_ENABLE = "";
             # Bots never dig or place inside these x1,z1,x2,z2 boxes: the main base
-            # around spawn and MidariBread's base (from BlueMap light data, +16).
-            PROTECTED_AREAS = "-80,-144,80,80;112,368,272,592";
+            # around spawn and MidariBread's base (from BlueMap light data, +16). "@MisaBot" lets that bot
+            # (and only it) work inside the box; her trading hall, once known, is added without "@".
+            PROTECTED_AREAS = "-80,-144,80,80;112,368,272,592@MisaBot";
             NODE_OPTIONS = "--max-old-space-size=1536";
             # Per-bot settings from the dashboard (settings.json) survive restarts.
             STATE_DIR = "/state";
@@ -160,6 +162,11 @@ in {
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
             BOARD_BOTS = "bot2,bot3,bot19,bot20,bot21";
             GUEST_BOTS = guestBots;
+            # Misa's trader (app/tradeschedule.js): bot23 trades in the hall "misa" on Mon, Wed and Sat from 18:00
+            # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}]}}
+            # and stays empty until Misa's hall coordinates are known: with no hall nothing trades.
+            TRADE_HALLS = "";
+            TRADE_SCHEDULE = "bot23=misa@mon,wed,sat/18:00+60";
             # Server panel (admin.js): RCON to Paper over the minecraft network; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
             RCON_HOST = "minecraft";

@@ -33,7 +33,7 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'steve'}), /BOARD_BOTS must be bot names/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', AGENT_TOKEN: tok, AGENT_BOTS: 'bot1', BOARD_BOTS: 'bot1,bot2'}), /must not contain agent or plan bots: bot1/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PLAN_ENABLE: '1', PLAN_ROSTER: 'bot2', BOARD_BOTS: 'bot2'}), /agent or plan bots: bot2/);
-  assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', GUEST_BOTS: 'bot22'}).guestBots, ['bot22']);
+  assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', GUEST_BOTS: 'MisaBot,bot23'}).guestBots, ['MisaBot', 'bot23']);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'bot2', GUEST_BOTS: 'bot2'}), /GUEST_BOTS must be bot names outside/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', AGENT_TOKEN: 'short', AGENT_BOTS: 'bot1'}), /32..128/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', AGENT_TOKEN: tok, AGENT_BOTS: 'bot1', WORKER_TOKEN: tok, WORKER_PORT: '8096'}), /differ/);

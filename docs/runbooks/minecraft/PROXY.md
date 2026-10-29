@@ -11,7 +11,7 @@ Paper no longer publishes a game port; it is reachable only from the proxy over 
 - Everyone is authenticated by Mojang at the proxy (`online-mode = true`), so premium
   players keep their existing online UUIDs through forwarding.
 - The BotGate plugin (`hosts/bandit-lab/services/minecraft/botgate/`) forces offline mode
-  for a login only when the name matches `^bot[0-9]{1,2}$` (case-sensitive) **and** the
+  for a login only when the name matches `^(bot[0-9]{1,2}|MisaBot)$` (case-sensitive) **and** the
   source address is inside `BOTGATE_SOURCES`: the laptop `bandit` tailnet IP
   (`repoConfig.lab.workstationTailscaleIp`) and the `mcbots` network. It logs
   `botgate: offline login <name> from <ip>` for each one. A missing or malformed

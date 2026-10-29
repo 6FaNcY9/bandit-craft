@@ -581,7 +581,7 @@ function drawMap() {
     g.font = 'bold 12px system-ui'; g.fillStyle = '#e8e8e8'; g.fillText(label, sx(x) + r + 3, sz(z) + 4);
   };
   last.bots.forEach((b, i) => { if (b.pos && b.online) dot(b.pos[0], b.pos[2], COLORS[i % COLORS.length], b.name, picked.has(b.name) ? 8 : 6); });
-  for (const p of last.world?.players || []) if (!/^bot\d+$/.test(p.name)) dot(p.x, p.z, '#ffffff', p.name, 7);
+  for (const p of last.world?.players || []) if (!/^(bot\d+|MisaBot)$/.test(p.name)) dot(p.x, p.z, '#ffffff', p.name, 7);
   if (pick) { g.strokeStyle = '#60a5fa'; g.lineWidth = 3; g.beginPath(); g.arc(sx(pick.x), sz(pick.z), 10, 0, 7); g.stroke(); }
 }
 const toWorld = (ev) => { const r = cv.getBoundingClientRect(); return {x: Math.floor(view.x + (ev.clientX - r.left - r.width / 2) / view.s), z: Math.floor(view.z + (ev.clientY - r.top - r.height / 2) / view.s)}; };

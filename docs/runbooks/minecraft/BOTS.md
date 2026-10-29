@@ -33,7 +33,7 @@ type is one entry in `JOBS` and one in `VALIDATE` in `app/bots.js`.
   hunting). The scripted crew (`bot4`, `bot10` at the gold farm, `bot16`-`bot18`) is retired and the
   plan is off (`PLAN_ENABLE` empty); the text below still describes them where it explains the code.
 - Bots are named `bot1`..`bot4` on the lab (`bot5`+ on the laptop). BotGate
-  admits offline logins only for `^bot[0-9]{1,2}$` from the owner laptop
+  admits offline logins only for `^(bot[0-9]{1,2}|MisaBot)$` from the owner laptop
   (`100.102.247.30/32`) or the `mcbots` Docker network (`10.250.77.0/29`).
 - Lab: container `mcbots` (nix-built image, non-root uid 1000, 2 GiB / 2 CPUs,
   no capabilities, no mounts) on network `mcbots`, connecting to `velocity:25565`.
@@ -60,15 +60,32 @@ Immediate stop without a deploy: `sudo systemctl stop docker-mcbots mcbots-https
 
 ## Guest bot (MidariBread, 2026-10-29)
 
-`bot22` in `mcbots-worker-5` belongs to the player MidariBread: it plays on the main server and obeys only
-MidariBread and the owner (its own `OWNER_UUIDS`; every other process keeps the owner alone). Orders are whispered:
-`/msg bot22 komm | folge | stopp | wache | wache hier | hol <n> <block> | gib | status`. `hol 20 eisen` fills
+`MisaBot` (builder) and `bot23` (trader) in `mcbots-worker-5` belong to the player MidariBread: they play on the main
+server and obey only MidariBread and the owner (the worker's own `OWNER_UUIDS`; every other process keeps the owner
+alone). Design: `docs/specs/2026-10-29-misa-bots.md`. Orders are whispered:
+`/msg MisaBot komm | folge | stopp | wache | wache hier | hol <n> <block> | gib | status`. `hol 20 eisen` fills
 its inventory, `gib` brings that haul and throws everything but tools, armour and food at the player's feet. The bot
 whispers back how an order ended (`fertig: ...`, `Problem: ...`, `gestoppt: ...`) and when it died.
 
-`GUEST_BOTS` keeps it out of the keeper, board, plan, agent and help jobs, and its worker gets no supply chest (no
-rearm from the owner's chest). Protected areas still apply (it does not dig either base). MidariBread gets no
-dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop it (`alle stopp`).
+Building words (`app/misa.js`): `ecke` notes the block she stands on as corner 1, the next as corner 2 (then 1 again);
+`abbau` removes everything between the corners except containers (up to 32 x 32 x 24, top down); `bau <name> [90|180|270]`
+builds `<name>.litematic` from the dashboard's schematics with its origin on her block, material from the chests and
+barrels within 8 blocks of her. Both are refused unless the whole box lies inside an area that names the bot
+(`PROTECTED_AREAS` entry `x1,z1,x2,z2@MisaBot`; several bots `@a+b`) and touches no area that does not. A bot holds
+only the areas that do not name it, so a trading hall added to `PROTECTED_AREAS` without `@` stays closed to
+everyone. `bau` never clears other people's blocks (`clearAll` is off): `abbau` the spot first.
+
+`bot23` trades sticks for emeralds on a schedule: `TRADE_SCHEDULE=bot23=misa@mon,wed,sat/18:00+60` (Europe/Vienna;
+several entries with `;`) gives it the `trade` job of hall `misa` at the start and stops it after the minutes; a hub
+restart inside the window resumes it. The hall is `TRADE_HALLS` JSON `{"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores":
+[{x,y,z}], "sticks": [{x,y,z}]}}` (`sticks` optional: every other chest or barrel in the box). `TRADE_HALLS` is empty
+until Misa's hall coordinates are known, so nothing trades yet; then add the hall there (and its box to
+`PROTECTED_AREAS`) and deploy.
+
+`GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
+rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
+MidariBread gets no dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop them
+(`alle stopp`). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
 
 ## Phone notifications
 
@@ -900,7 +917,7 @@ dirty tree does not leak).
   itself. Do not restart repeatedly.
 - Kicked with a not-whitelisted/online-mode message: BotGate refused it. Check
   `sudo docker logs velocity 2>&1 | grep -i botgate` for the decision line (name
-  pattern or source address). The name must match `^bot[0-9]{1,2}$` and come
+  pattern or source address). The name must match `^(bot[0-9]{1,2}|MisaBot)$` and come
   from the allowlisted source.
 - Other Velocity problems: `sudo docker logs --tail 100 velocity`.
 - Dashboard: `sudo journalctl -u docker-mcbots -u mcbots-https -n 50`,

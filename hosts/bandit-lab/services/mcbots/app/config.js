@@ -2,6 +2,7 @@
 // Environment -> validated config. Throws on anything unsafe.
 const {NAME_RE} = require('./bots');
 const {parseQuotas} = require('./keeper');
+const {parseHalls, parseSchedule} = require('./tradeschedule');
 
 const ownerUuids = (env) => {
   const ids = (env.OWNER_UUIDS || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -41,12 +42,18 @@ function loadConfig(env = process.env) {
   // namespace (the worker) could send it itself (Codex R2-1).
   const trustedProxies = list(env.TRUSTED_PROXIES);
   if (trustedProxies.some((a) => !/^[\d.]+$|^[\da-f:]+$/i.test(a))) throw new Error('TRUSTED_PROXIES must be IP addresses');
-  // "x1,z1,x2,z2;..." boxes where bots never dig or place (player bases).
+  // "x1,z1,x2,z2;..." boxes where bots never dig or place (player bases). "x1,z1,x2,z2@MisaBot+bot23" names bots that
+  // are allowed inside: the box becomes [x1,z1,x2,z2,null,null,['MisaBot','bot23']] (misa.js filters it per bot).
   const protectedAreas = (env.PROTECTED_AREAS || '').split(';').map((b) => b.trim()).filter(Boolean).map((b) => {
-    const n = b.split(',').map(Number);
-    if (n.length !== 4 || n.some((v) => !Number.isInteger(v))) throw new Error(`bad PROTECTED_AREAS box: ${b}`);
-    return [Math.min(n[0], n[2]), Math.min(n[1], n[3]), Math.max(n[0], n[2]), Math.max(n[1], n[3])];
+    const [box, who] = b.split('@');
+    const n = box.split(',').map(Number);
+    const bots = who === undefined ? null : who.split('+');
+    if (n.length !== 4 || n.some((v) => !Number.isInteger(v)) || bots?.some((x) => !NAME_RE.test(x))) throw new Error(`bad PROTECTED_AREAS box: ${b}`);
+    return [Math.min(n[0], n[2]), Math.min(n[1], n[3]), Math.max(n[0], n[2]), Math.max(n[1], n[3]), ...(bots ? [null, null, bots] : [])];
   });
+  // The trading halls and when a bot works one (tradeschedule.js); empty = no trader runs.
+  const tradeHalls = parseHalls(env.TRADE_HALLS);
+  const tradeSchedule = parseSchedule(env.TRADE_SCHEDULE);
   // Optional BlueMap webserver base URL for global player positions.
   const bluemapUrl = (env.BLUEMAP_URL || '').trim();
   if (bluemapUrl && !/^https?:\/\/[^\s/]+(:\d+)?(\/\S*)?$/.test(bluemapUrl)) throw new Error(`bad BLUEMAP_URL: ${bluemapUrl}`);
@@ -159,6 +166,8 @@ function loadConfig(env = process.env) {
     agentBots,
     boardBots,
     guestBots,
+    tradeHalls,
+    tradeSchedule,
     slayerUrl,
     rcon: rconHost ? {host: rconHost, port: rconPort, password: rconPassword} : null,
     sandboxRcon: sbHost ? {host: sbHost, port: sbPort, password: sbPassword} : null,
