@@ -214,9 +214,13 @@ in {
       # giving up after the default start limit.
       # Restart=always: a Stop from the panel (or a clean exit) brings the server
       # back; `systemctl stop docker-minecraft` stays the way to keep it down.
+      # preStart re-runs the network unit's ensure script: docker-prune (weekly, and as a
+      # catch-up right at boot after downtime) deletes a network no running container is on,
+      # while the oneshot stays "active" and never re-creates it (2026-10-28 outage).
       docker-minecraft = {
         after = ["docker-network-minecraft.service"];
         requires = ["docker-network-minecraft.service"];
+        preStart = "${config.systemd.services.docker-network-minecraft.serviceConfig.ExecStart}";
         unitConfig.StartLimitIntervalSec = 0;
         serviceConfig = {
           Restart = lib.mkForce "always";
@@ -230,6 +234,7 @@ in {
         after = ["tailscaled.service" "docker-network-minecraft.service" "docker-network-mcbots.service" "docker-minecraft.service"];
         wants = ["tailscaled.service"];
         requires = ["docker-network-minecraft.service" "docker-network-mcbots.service"];
+        preStart = lib.concatMapStrings (n: "${config.systemd.services.${n}.serviceConfig.ExecStart}\n") ["docker-network-minecraft" "docker-network-mcbots"]; # see docker-minecraft
         unitConfig.StartLimitIntervalSec = 0;
         serviceConfig = {
           Restart = lib.mkForce "always";

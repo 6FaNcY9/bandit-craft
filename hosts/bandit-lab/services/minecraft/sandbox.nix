@@ -84,6 +84,7 @@ in {
       docker-minecraft-sandbox = {
         after = ["docker-network-minecraft.service"];
         requires = ["docker-network-minecraft.service"];
+        preStart = "${config.systemd.services.docker-network-minecraft.serviceConfig.ExecStart}"; # see docker-minecraft (default.nix)
         unitConfig.StartLimitIntervalSec = 0;
         serviceConfig = {
           Restart = lib.mkForce "always";

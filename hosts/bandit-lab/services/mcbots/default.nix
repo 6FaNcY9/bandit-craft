@@ -234,6 +234,7 @@ in {
         docker-mcbots = {
           after = ["docker-network-mcbots.service" "docker-network-minecraft.service" "docker-velocity.service" "mcbots-seed.service" "minecraft-plugins.service" "docker-minecraft-sandbox.service"]; # minecraft-plugins makes the overlay directory; the sandbox is where the bots play
           requires = ["docker-network-mcbots.service" "docker-network-minecraft.service" "mcbots-seed.service"];
+          preStart = lib.concatMapStrings (n: "${config.systemd.services.${n}.serviceConfig.ExecStart}\n") ["docker-network-minecraft" "docker-network-mcbots"]; # see docker-minecraft (minecraft/default.nix)
           unitConfig.StartLimitIntervalSec = 0;
           serviceConfig = {
             Restart = lib.mkForce "always";
