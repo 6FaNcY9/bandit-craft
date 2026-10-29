@@ -47,7 +47,16 @@
       bots = "bot20,bot21";
       label = "bandit-lab-worker-4";
     };
+    # MidariBread's own bot (owner 2026-10-29): plays on the main server, obeys MidariBread and the owner only, and is
+    # in GUEST_BOTS below so no keeper, board, help job or supply chest of the owner's touches it.
+    mcbots-worker-5 = {
+      bots = "bot22";
+      label = "bandit-lab-worker-5";
+      owners = "${ownerUuids},06ee5c24-21e7-4c96-8adb-f74ccf20a264"; # + MidariBread
+      mainServer = true;
+    };
   };
+  guestBots = "bot22";
   # Worker processes: each shares mcbots' network namespace, so it reaches the
   # hub on 127.0.0.1 (plain ws:// is accepted only there) and Velocity from
   # mcbots' address, which BotGate admits.
@@ -56,19 +65,22 @@
       image = "${image.imageName}:${image.imageTag}";
       imageFile = image;
       cmd = ["${app}/bin/mcbots-worker"] ++ lib.splitString "," w.bots;
-      environment = {
-        HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
-        MC_HOST = "10.250.77.2"; # Velocity on the mcbots network (see --add-host above)
-        MC_PORT = "25565";
-        MC_VHOST = "sandbox.bots"; # owner 2026-10-23: helpers test in the sandbox until the board passes
-        OWNER_UUIDS = ownerUuids;
-        HOST_LABEL = w.label;
-        NODE_OPTIONS = "--max-old-space-size=768";
-        # The schematics of the dashboard's projects, from mcbots' own volume: bot2 and bot3 failed every schematic
-        # job with "ENOENT ... schematics/ironfarm.litematic" (2026-10-15). Read-write, as the containers
-        # filled are recorded there (.filled-*.json) and merged across processes.
-        SCHEMATIC_DIR = "/schematics";
-      };
+      environment =
+        {
+          HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
+          MC_HOST = "10.250.77.2"; # Velocity on the mcbots network (see --add-host above)
+          MC_PORT = "25565";
+          OWNER_UUIDS = w.owners or ownerUuids;
+          HOST_LABEL = w.label;
+          NODE_OPTIONS = "--max-old-space-size=768";
+          # The schematics of the dashboard's projects, from mcbots' own volume: bot2 and bot3 failed every schematic
+          # job with "ENOENT ... schematics/ironfarm.litematic" (2026-10-15). Read-write, as the containers
+          # filled are recorded there (.filled-*.json) and merged across processes.
+          SCHEMATIC_DIR = "/schematics";
+        }
+        // lib.optionalAttrs (!(w.mainServer or false)) {
+          MC_VHOST = "sandbox.bots"; # owner 2026-10-23: helpers test in the sandbox until the board passes
+        };
       environmentFiles = ["/run/mcbots/worker-${w.label}.env"]; # BOT_PASSWORD_SEED, HUB_TOKEN (this worker's own, R2-6)
       extraOptions = [
         "--network=container:mcbots"
@@ -92,7 +104,7 @@ in {
           image = "${image.imageName}:${image.imageTag}";
           imageFile = image;
           environment = {
-            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
+            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, bot22 (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
             # Owner 2026-10-23: helpers test in the sandbox until the board passes (spec 2026-10-23-bots-redesign);
             # the virtual host sandbox.bots routes them there (../minecraft/sandbox.nix).
             MC_VHOST = "sandbox.bots";
@@ -147,6 +159,7 @@ in {
             AGENT_BOTS = "bot1";
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
             BOARD_BOTS = "bot2,bot3,bot19,bot20,bot21";
+            GUEST_BOTS = guestBots;
             # Server panel (admin.js): RCON to Paper over the minecraft network; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
             RCON_HOST = "minecraft";

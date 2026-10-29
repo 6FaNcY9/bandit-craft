@@ -6,7 +6,7 @@ const {rotate} = require('./archive');
 const UUID_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const uuid = (s) => typeof s === 'string' && UUID_RE.test(s) ? s.replace(/-/g, '').toLowerCase() : null;
 const ROLES = new Set(['helfer', 'sammler', 'farmer', 'wache']);
-const HELP = 'verstehe ich nicht: komm, folge, stopp, wache, wache hier, hol <n> <block>, status, rolle <name>';
+const HELP = 'kenne ich nicht: komm, folge, stopp, wache, wache hier, hol <n> <block>, gib, status, rolle <name>';
 
 // Mineflayer 4.39 emits message(msg, 'chat', sender UUID, verified) for playerChat, including
 // msg_command_incoming: translate=commands.message.display.incoming, with=[sender, content].
@@ -28,6 +28,7 @@ function translate(words, {owner, ownerPos}) {
     if (['stopp', 'bleib', 'fertig'].includes(cmd)) return {stop: true};
     if (cmd === 'status') return {status: true};
     if (cmd === 'wache') return {type: 'guard', args: {player: owner, radius: 16}};
+    if (cmd === 'gib') return {type: 'give', args: {player: owner}};
   }
   if (w.length === 2 && cmd === 'rolle' && ROLES.has(arg)) return {role: arg};
   if (w.length === 2 && cmd === 'wache' && arg === 'hier' && ownerPos && ['x', 'y', 'z'].every((k) => Number.isFinite(ownerPos[k]))) {

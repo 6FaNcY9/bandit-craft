@@ -108,6 +108,11 @@ function loadConfig(env = process.env) {
   if (boardBad.length) throw new Error(`BOARD_BOTS must be bot names: ${boardBad.join(', ')}`);
   const boardTaken = boardBots.filter((n) => agentBots.includes(n) || (planEnable && planRoster.includes(n)));
   if (boardTaken.length) throw new Error(`BOARD_BOTS must not contain agent or plan bots: ${boardTaken.join(', ')}`);
+  // Another player's bots (guest bot, 2026-10-29): only their in-game orders move them, so no keeper, board, plan,
+  // agent or help job, and the owner's supply chest is not theirs.
+  const guestBots = list(env.GUEST_BOTS);
+  const guestBad = guestBots.filter((n) => !NAME_RE.test(n) || agentBots.includes(n) || boardBots.includes(n) || planRoster.includes(n));
+  if (guestBad.length) throw new Error(`GUEST_BOTS must be bot names outside AGENT_BOTS, BOARD_BOTS and PLAN_ROSTER: ${guestBad.join(', ')}`);
   const slayerUrl = (env.SLAYER_URL || '').replace(/\/+$/, '');
   if (slayerUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(slayerUrl)) throw new Error('SLAYER_URL must be http://host:port');
   const slayerStatusCmd = require('./slayer').parseCmd(env.SLAYER_STATUS_CMD);
@@ -153,6 +158,7 @@ function loadConfig(env = process.env) {
     agentToken,
     agentBots,
     boardBots,
+    guestBots,
     slayerUrl,
     rcon: rconHost ? {host: rconHost, port: rconPort, password: rconPassword} : null,
     sandboxRcon: sbHost ? {host: sbHost, port: sbPort, password: sbPassword} : null,

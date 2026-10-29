@@ -58,6 +58,18 @@ Disable: set `bandit-lab.mcbots.enable = false;` (or remove the
 `./services/mcbots` import in `hosts/bandit-lab/default.nix`) and deploy.
 Immediate stop without a deploy: `sudo systemctl stop docker-mcbots mcbots-https`.
 
+## Guest bot (MidariBread, 2026-10-29)
+
+`bot22` in `mcbots-worker-5` belongs to the player MidariBread: it plays on the main server and obeys only
+MidariBread and the owner (its own `OWNER_UUIDS`; every other process keeps the owner alone). Orders are whispered:
+`/msg bot22 komm | folge | stopp | wache | wache hier | hol <n> <block> | gib | status`. `hol 20 eisen` fills
+its inventory, `gib` brings that haul and throws everything but tools, armour and food at the player's feet. The bot
+whispers back how an order ended (`fertig: ...`, `Problem: ...`, `gestoppt: ...`) and when it died.
+
+`GUEST_BOTS` keeps it out of the keeper, board, plan, agent and help jobs, and its worker gets no supply chest (no
+rearm from the owner's chest). Protected areas still apply (it does not dig either base). MidariBread gets no
+dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop it (`alle stopp`).
+
 ## Phone notifications
 
 After an operator deploys this configuration, ntfy listens only on host loopback

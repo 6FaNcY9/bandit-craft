@@ -106,6 +106,7 @@ const VALIDATE = {
   goto: (a) => (a.y === undefined || a.y === null ? {x: num(a.x, -3e7, 3e7, 'x'), z: num(a.z, -3e7, 3e7, 'z')} : xyz(a)),
   follow: player,
   come: player,
+  give: player, // walk to the player and hand over the haul (in-game "gib")
   // Guard a spot (x,y,z) or a player: fight every hostile within radius of it.
   guard: (a) => ({...(a.player ? player(a) : xyz(a)), radius: num(a.radius ?? 16, 4, 48, 'radius')}),
   mine: (a) => {
@@ -330,6 +331,7 @@ class BotRunner {
     this.ownerUuids = ownerUuids;
     this.demoLog = demoLog;
     this.orders = new Map();
+    this.chatJobs = new Set(); // in-game orders whose outcome is whispered back to the player who gave it
     this.strangerOrders = 0;
     this.rolesFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'roles.json') : null;
     this.role = owner.loadRole(this.rolesFile, name);
@@ -362,6 +364,9 @@ class BotRunner {
       try { this.demoLog?.outcome(id, {done: 'finished', fail: 'failed', stop: 'stopped'}[kind], text); }
       catch (e) { this.log(this.name, `demonstration: ${e.message}`); }
     }
+    // Without this a player hears only "ok" and must guess whether the order worked (guest bot, 2026-10-29).
+    if (['done', 'fail', 'stop'].includes(kind) && this.chatJobs.delete(jobId)) this.say(`${{done: 'fertig', fail: 'Problem', stop: 'gestoppt'}[kind]}: ${text}`);
+    else if (kind === 'death' && this.answerTo) this.say(`gestorben: ${text}`);
     try {
       this.onEvent?.(this.name, kind, text, jobId);
     } catch {}
@@ -394,15 +399,17 @@ class BotRunner {
           VALIDATE[command.type](command.args); // refuse before replacing the active job
           jobId = this.jobSeq + 1;
           if (id) this.orders.set(jobId, id);
+          this.chatJobs.add(jobId);
           this.enqueue(command.type, command.args, {replace: true});
         } else if (command.stop) this.enqueue('stop');
         else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
         const s = command.status && this.snapshot();
-        const receipt = s ? `Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}` : command.role ? `Rolle ${command.role}` : command.stop ? 'bleibe stehen' : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz'}[command.type];
+        const receipt = s ? `Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}` : command.role ? `Rolle ${command.role}` : command.stop ? 'bleibe stehen' : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz', give: 'bringe dir alles'}[command.type];
         this.say(`ok: ${receipt}`);
         if (!command.type) this.demoLog?.outcome(id, 'finished', receipt);
       } catch (e) {
         this.orders.delete(jobId);
+        this.chatJobs.delete(jobId);
         this.say(`geht nicht: ${e.message}`);
         try { if (id) this.demoLog?.outcome(id, 'refused', e.message); } catch (err) { this.log(this.name, `demonstration: ${err.message}`); }
       }
@@ -3023,6 +3030,19 @@ const JOBS = {
   come: (r, job) => chase(r, job, false),
 
   follow: (r, job) => chase(r, job, true),
+
+  // In-game "gib" (guest bot, 2026-10-29): what a bot fetched stays in its inventory, so it walks up and throws
+  // everything but tools, armour and food at the player's feet.
+  give: async (r, job) => {
+    await chase(r, job, false);
+    const {bot} = r, e = bot.players[job.args.player]?.entity;
+    if (e) await bot.lookAt(e.position.offset(0, 1.6, 0)).catch(() => {});
+    const keep = (it) => TOOL_RE.test(it.name) || /_(helmet|chestplate|leggings|boots)$/.test(it.name) || edible(bot, it);
+    for (const it of bot.inventory.items().filter((i) => !keep(i))) {
+      guard(job);
+      await bot.tossStack(it).catch(() => {});
+    }
+  },
 
   // Runs until stopped: hunts hostiles within the radius (combat does the
   // hitting once it is close), else walks back to the post or the player.
