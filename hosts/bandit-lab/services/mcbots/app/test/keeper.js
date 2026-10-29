@@ -64,6 +64,16 @@ const {WorldModel} = require('../world');
     solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
     assert.deepStrictEqual(solo.sent, [['get', {item: 'diamond', count: 5}], ['deposit', {...chest, only: 'diamond'}]]);
   }
+  // 2026-10-23: the board's bots are never the keeper's, idle or not (it took them for light and treefarm in the spike)
+  for (const skip of [['bot2'], []]) {
+    let t2 = Date.now();
+    const solo = fake('bot2');
+    solo.snapshot = function () { return {name: this.name, online: true, dead: false, job: null, queue: []}; };
+    const k2 = new Keeper({runners: new Map([[solo.name, solo]]), world: new WorldModel({now: () => t2}), chest, quotas: [['logs', 64]], now: () => t2, skip});
+    k2.setEnabled(true);
+    for (let i = 0; i < 3; i++) { t2 += IDLE_MS; k2.tick(); }
+    assert.strictEqual(solo.sent.length > 0, !skip.length, skip.length ? 'a skipped bot gets nothing' : 'the same bot unskipped is used');
+  }
   // 2026-10-20: with one free bot the quota that is shortest relative to its want goes first, not the first one listed
   {
     let t2 = Date.now();

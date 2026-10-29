@@ -78,6 +78,7 @@ function cleanSnapshot(s) {
     lastError: str(s.lastError, 300),
     lastErrorAgoS: num(s.lastErrorAgoS),
     stoppedAgoS: num(s.stoppedAgoS),
+    lastDone: obj(s.lastDone) ? {label: str(s.lastDone.label, 160), agoS: num(s.lastDone.agoS)} : null,
     pullbacks: int(s.pullbacks),
   };
 }

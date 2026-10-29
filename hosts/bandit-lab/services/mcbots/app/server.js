@@ -15,7 +15,9 @@ const {EventLog} = require('./events');
 const archive = require('./archive');
 const gravesLib = require('./graves');
 const {NtfyNotifier} = require('./notify');
-const {Keeper} = require('./keeper');
+const {Keeper, idle} = require('./keeper');
+const {Board} = require('./board');
+const scenarioRun = require('./scenario-run');
 const {Plan} = require('./plan');
 const planConfig = require('./plan-config');
 const {botView} = require('./view');
@@ -125,7 +127,12 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null}) : null;
+const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: cfg.boardBots}) : null;
+// The job board (board.js): owner jobs cut into slices that only BOARD_BOTS dig. A box touching a protected area
+// (PROTECTED_AREAS and the dashboard's protected zones, which join that array) is refused when the job is made.
+const touches = (b) => cfg.protectedAreas.find(([x1, z1, x2, z2, y1, y2]) => b.x1 <= x2 && b.x2 >= x1 && b.z1 <= z2 && b.z2 >= z1 && (y1 == null || y2 == null || (b.y1 <= y2 && b.y2 >= y1)));
+const board = cfg.boardBots.length ? new Board({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'board.json') : null, locked: (b) => { const a = touches(b); return a && `the protected area ${a.slice(0, 4).join(' ')}`; }}) : null;
+let scenarioRunning = false;
 // Map markers: the first 'supply' place is the supply chest for every bot, the
 // hub's workers and the keeper; the first 'site' place is where the keeper works.
 const places = new Places(process.env.STATE_DIR || '');
@@ -723,6 +730,7 @@ const server = http.createServer(async (req, res) => {
           keeperOff = true;
         }
         if (plan?.enabled) plan.setEnabled(false); // it would hand the idle bots new work; this also returns the keeper
+        board?.pauseAll(); // the board too: no part goes out again until the owner resumes the job
       }
       broadcast();
       if (errors.length) throw new Error(errors.join('; '));
@@ -734,6 +742,42 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return json(400, {error: e.message});
     }
+  }
+  if (board && req.method === 'GET' && url.pathname === '/api/board') return json(200, board.state());
+  if (board && req.method === 'POST' && url.pathname.startsWith('/api/board/jobs')) {
+    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
+    try {
+      const body = await readJson(req);
+      const id = url.pathname.slice('/api/board/jobs/'.length);
+      if (url.pathname === '/api/board/jobs') {
+        const job = board.create({kind: body.kind, box: body.box, by: 'owner'});
+        events.add('board', 'info', `job ${job.id}: ${job.kind} ${job.box.x1} ${job.box.y1} ${job.box.z1} .. ${job.box.x2} ${job.box.y2} ${job.box.z2} in ${job.parts.length} parts`);
+        broadcast();
+        return json(200, job);
+      }
+      if (!['pause', 'resume', 'cancel'].includes(body.action)) throw new Error('action must be pause, resume or cancel');
+      const out = board[body.action](id);
+      for (const b of Array.isArray(out) ? out : []) runners.get(b)?.enqueue('stop', {});
+      events.add('board', 'info', `job ${id}: ${body.action}`);
+      broadcast();
+      return json(200, board.job(id));
+    } catch (e) {
+      return json(400, {error: e.message});
+    }
+  }
+  // A sandbox scenario (scenario.js) runs inside the hub: the dashboard's owner starts it, results go to the event log.
+  if (board && req.method === 'POST' && url.pathname === '/api/scenarios') {
+    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
+    if (!cfg.sandboxRcon) return json(400, {error: 'no sandbox console (SANDBOX_RCON_HOST unset)'});
+    // The console resets the sandbox, but the board's bots dig wherever they play: never with them on the real server.
+    if (!process.env.MC_VHOST) return json(400, {error: 'the bots play on the real server (no MC_VHOST): a scenario would dig there'});
+    if (scenarioRunning) return json(409, {error: 'a scenario is already running'});
+    const {name, runs = 1} = await readJson(req).catch(() => ({}));
+    scenarioRunning = true;
+    scenarioRun.main([String(name), '--runs', String(Math.min(5, Number(runs) || 1))], process.env, {call: queued(cfg.sandboxRcon), http: boardHttp, out: (line) => events.add('scenario', 'info', line)})
+      .catch((e) => events.add('scenario', 'error', e.message))
+      .finally(() => { scenarioRunning = false; });
+    return json(202, {started: name});
   }
   return json(404, {error: 'not found'});
 });
@@ -755,7 +799,34 @@ const tick = setInterval(() => {
   broadcast();
   hub?.broadcastWorld();
 }, 1000);
+// The board, in-process for the scenarios: same answers as the HTTP routes, without the owner check they need.
+async function boardHttp(method, p, body) {
+  if (p === '/api/state') return {status: 200, body: state()};
+  if (method === 'GET') return {status: 200, body: board.state()};
+  try {
+    return {status: 200, body: board.create({kind: body.kind, box: body.box, by: 'scenario'})};
+  } catch (e) {
+    return {status: 400, body: {error: e.message}};
+  }
+}
+function boardTick() {
+  const snaps = new Map([...runners.values()].map((r) => [r.name, r.snapshot()]));
+  for (const e of board.observe(snaps)) events.add('board', e.what === 'failed' ? 'error' : 'info', `${e.part || e.job} ${e.what}${e.bot ? ` (${e.bot})` : ''}${e.error ? `: ${e.error}` : ''}`);
+  const pos = (n) => { const p = snaps.get(n)?.pos; return p ? {x: p[0], z: p[2]} : null; };
+  for (const {bot, part} of board.assign(cfg.boardBots.filter((n) => runners.has(n) && idle(snaps.get(n))), pos, (n) => snaps.get(n))) {
+    try {
+      runners.get(bot).enqueue('part', {part: part.id, ...part.box});
+    } catch (e) {
+      events.add('board', 'error', `${part.id} could not go to ${bot}: ${e.message}`); // it reopens after START_MS
+    }
+  }
+}
 const keeperTick = setInterval(() => {
+  try {
+    if (board) boardTick(); // before the plan and the keeper, though they never take board bots
+  } catch (e) {
+    log('board', `error: ${e.message}`);
+  }
   try {
     plan?.tick(); // before the keeper: a borrowed keeper starts with the plan's quotas
   } catch (e) {
