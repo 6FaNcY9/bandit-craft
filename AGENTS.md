@@ -43,11 +43,13 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
   only with the owner's fingerprint (`docs/specs/2026-10-12-windows-pc-manager.md`).
 - The owner signs and pushes. Agents commit unsigned in a worktree; the owner ships. Ask the owner
   only for sudo, GPG unlock, SOPS values, in-game actions and fingerprint approvals.
-- Changes that restart `docker-minecraft` disconnect players; prefer shipping them when nobody plays.
+- Changes that restart `minecraft-server-paper` (`docker-minecraft` before the 5.5 cutover, `docs/runbooks/minecraft/CUTOVER-5.5.md`) disconnect players; prefer shipping them when nobody plays.
   Menu (`commandpanels`, `kits.nix`) changes reload live and need no restart.
   Before a restart you trigger, warn the players and wait for the script to return (the lab has no
   checkout; `-t` lets Ctrl-C reach the remote script):
   `scp tools/minecraft-restart-warn.sh bandit-lab: && ssh -t bandit-lab 'sudo bash minecraft-restart-warn.sh "<reason>"'`.
+  On the nix-minecraft server (after the cutover) the script needs its console:
+  `ssh -t bandit-lab 'sudo env MC_CONSOLE=/run/minecraft/paper.stdin bash minecraft-restart-warn.sh "<reason>"'`.
 - Keep slayer and albert apart: slayer may run hot and loud (guard 90 °C); albert must stay quiet
   (short packets, fans held low).
 
