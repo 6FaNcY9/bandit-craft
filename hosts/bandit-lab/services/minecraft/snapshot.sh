@@ -3,8 +3,11 @@
 # Copy the Minecraft data directory into DEST without stopping the server.
 # Saves are flushed and switched off while rsync reads the files, then switched
 # back on, so the world files do not change under the copy (a plain copy of a
-# live, auto-saving world is NOT consistent). With the container stopped the
+# live, auto-saving world is NOT consistent). With the server stopped the
 # copy is simply cold and consistent.
+#
+# Backend: MC_UNIT set = a nix-minecraft server (systemd unit, console FIFO
+# MC_CONSOLE); unset = the Docker container MC_CONTAINER.
 #
 # Not captured: the panel's own backups, caches, logs, BlueMap's rendered tiles
 # and downloaded client jar (regenerated). LuckPerms' H2 file is copied as a crash-consistent
@@ -13,9 +16,17 @@ set -euo pipefail
 
 dest=${1:?usage: minecraft-snapshot DEST}
 data=${MC_DATA:-/srv/containers/minecraft/data}
+unit=${MC_UNIT-}
 container=${MC_CONTAINER:-minecraft}
+fifo=${MC_CONSOLE:-/run/minecraft/paper.stdin}
 
-console() { docker exec --user 1000 "$container" mc-send-to-console "$1" >/dev/null; }
+if [ -n "$unit" ]; then
+  console() { printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null; }
+  saved_since() { journalctl -u "$unit" --since "@$1" -o cat 2>&1 | grep -q "Saved the game"; }
+else
+  console() { docker exec --user 1000 "$container" mc-send-to-console "$1" >/dev/null; }
+  saved_since() { docker logs --since "$1" "$container" 2>&1 | grep -q "Saved the game"; }
+fi
 
 # One snapshot at a time: a second run's save-on would re-enable autosave
 # while the first is still copying.
@@ -39,9 +50,20 @@ resume() {
 }
 trap resume EXIT
 
-# Fail closed: only "no such container" means cold; any other docker failure
-# must not be mistaken for a stopped server (that would copy a live world).
-if state=$(docker inspect --format '{{.State.Running}}' "$container" 2>&1); then
+# Fail closed: only "no such container" (or an inactive/failed unit) means
+# cold; anything else must not be mistaken for a stopped server (that would
+# copy a live world).
+if [ -n "$unit" ]; then
+  state=$(systemctl is-active "$unit" 2>&1) || true
+  case $state in
+    active) running=true ;;
+    inactive | failed) running=false ;;
+    *)
+      echo "cannot tell whether $unit runs: $state" >&2
+      exit 1
+      ;;
+  esac
+elif state=$(docker inspect --format '{{.State.Running}}' "$container" 2>&1); then
   running=$state
 elif grep -q 'No such object' <<<"$state"; then
   running=false
@@ -55,7 +77,7 @@ if [ "$running" = true ]; then
   saves_off=true
   console 'save-all flush'
   for _ in $(seq 1 90); do
-    if docker logs --since "$since" "$container" 2>&1 | grep -q 'Saved the game'; then
+    if saved_since "$since"; then
       flushed=true
       break
     fi
