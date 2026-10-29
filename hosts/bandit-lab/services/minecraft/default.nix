@@ -164,24 +164,30 @@ in {
       # and failed, 2026-10-12), so a menu change never restarts Minecraft.
       minecraft-panels = {
         description = "Install the CommandPanels menus and reload them";
-        after = ["docker-minecraft.service"];
-        wantedBy = ["docker-minecraft.service"];
-        partOf = ["docker-minecraft.service"];
-        path = [pkgs.coreutils pkgs.docker];
-        environment.PANELS = panels;
+        after = ["minecraft-server-paper.service"];
+        wantedBy = ["minecraft-server-paper.service"];
+        partOf = ["minecraft-server-paper.service"];
+        path = [pkgs.coreutils pkgs.mcrcon];
+        environment = {
+          PANELS = panels;
+          MCRCON_HOST = "127.0.0.1";
+          MCRCON_PORT = "25575"; # servers.paper rcon.port, loopback
+        };
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
           TimeoutStartSec = "10min";
         };
         script = ''
-          d=/srv/containers/minecraft/data/plugins/CommandPanels
-          install -d -o 1000 -g 1000 -m 0750 "$d" "$d/panels"
+          d=/srv/minecraft/paper/plugins/CommandPanels
+          install -d -o minecraft -g minecraft -m 0770 "$d" "$d/panels"
           for panel in "$PANELS"/*.yml; do
-            install -o 1000 -g 1000 -m 0644 "$panel" "$d/panels/$(basename "$panel")"
+            install -o minecraft -g minecraft -m 0644 "$panel" "$d/panels/$(basename "$panel")"
           done
+          MCRCON_PASS=$(cat ${config.sops.secrets."minecraft-rcon-password".path})
+          export MCRCON_PASS
           for _ in $(seq 50); do
-            timeout 20 docker exec minecraft rcon-cli "pa reload" >/dev/null 2>&1 && exit 0
+            timeout 20 mcrcon "pa reload" >/dev/null 2>&1 && exit 0
             sleep 10
           done
           echo "Minecraft is not running; it reads the menus when it starts" >&2
@@ -287,7 +293,7 @@ in {
       # (The unit keeps its old name; VoxelDash's route on 443 is retired.)
       minecraft-panel-https = {
         description = "Tailnet-only HTTPS for the Minecraft map";
-        after = ["tailscaled.service" "docker-minecraft.service"];
+        after = ["tailscaled.service" "minecraft-server-paper.service"];
         wants = ["tailscaled.service"];
         wantedBy = ["multi-user.target"];
         path = [config.services.tailscale.package pkgs.coreutils];
@@ -315,6 +321,11 @@ in {
       # snapshot at 04:30.
       minecraft-backup = {
         description = "Consistent Minecraft backup (flush, snapshot, verify, prune)";
+        # The snapshot reads the nix-minecraft server; its default backend is the (stopped) Docker container.
+        environment = {
+          MC_UNIT = "minecraft-server-paper";
+          MC_DATA = "/srv/minecraft/paper";
+        };
         serviceConfig = {
           Type = "oneshot";
           ExecStart = "${scripts.backup}/bin/minecraft-backup";
@@ -363,6 +374,7 @@ in {
   # The container has no docker.sock, no privileges and a single mount; its
   # plugins cannot reach the host.
   virtualisation.oci-containers.containers.minecraft = {
+    autoStart = false; # rollback only since the phase 5.5 cutover (CUTOVER-5.5.md); removal is phase 5.6
     # java25 tag: Minecraft 26.1+ refuses to start on anything older.
     image = "itzg/minecraft-server@sha256:769a826c340586e9d483a0eb6437b8e2c3611aea6a115ff072a2fe372d43e2be"; # java25
     # itzg rewrites every server.properties key that has an environment
@@ -427,6 +439,7 @@ in {
   # the BotGate jar is mounted directly (the image's /plugins copy only
   # replaces older files, and Nix store files all carry epoch mtimes).
   virtualisation.oci-containers.containers.velocity = {
+    autoStart = false; # rollback only, like minecraft above
     image = "itzg/mc-proxy@sha256:4bc904ca87ce92a1d6dc4948aaca3e026b770a7fe2bcfead0b099412239ba210"; # java21
     environment = {
       TYPE = "CUSTOM";

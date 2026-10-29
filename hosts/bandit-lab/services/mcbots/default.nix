@@ -1,6 +1,8 @@
 # Mineflayer bots (docs/runbooks/minecraft/BOTS.md): containers on the `mcbots`
 # network join Velocity as velocity:25565 (BotGate admits bot1..bot99 from that
-# subnet) and are driven from a dashboard served on the tailnet only.
+# subnet) and are driven from a dashboard served on the tailnet only. Since the phase 5.5 cutover
+# Velocity, both RCONs and the map run on the host; the containers reach them on the bridge gateway
+# (minecraft/nix-minecraft.nix).
 # Switch off: `bandit-lab.mcbots.enable = false;` (or drop the import).
 {
   config,
@@ -21,6 +23,9 @@
       Cmd = ["${app}/bin/mcbots"];
     };
   };
+  # The gateway of the mcbots network (minecraft/default.nix mcbotsSubnet): the host's Velocity, RCON and map.
+  bridgeGw = "10.250.77.1";
+  overlayDir = "/srv/minecraft/paper/bluemap/web/mcbots";
   dashboardPort = "8095";
   servePort = "8445";
   # Hub for remote workers (laptop bots): WebSocket on /worker only, bearer
@@ -58,7 +63,7 @@
       cmd = ["${app}/bin/mcbots-worker"] ++ lib.splitString "," w.bots;
       environment = {
         HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
-        MC_HOST = "10.250.77.2"; # Velocity on the mcbots network (see --add-host above)
+        MC_HOST = bridgeGw; # Velocity on the host, via the mcbots bridge gateway (see --add-host above)
         MC_PORT = "25565";
         MC_VHOST = "sandbox.bots"; # owner 2026-10-23: helpers test in the sandbox until the board passes
         OWNER_UUIDS = ownerUuids;
@@ -96,7 +101,7 @@ in {
             # Owner 2026-10-23: helpers test in the sandbox until the board passes (spec 2026-10-23-bots-redesign);
             # the virtual host sandbox.bots routes them there (../minecraft/sandbox.nix).
             MC_VHOST = "sandbox.bots";
-            MC_HOST = "velocity";
+            MC_HOST = "velocity"; # --add-host below pins the name to the gateway
             MC_PORT = "25565";
             # Only the owner's in-game orders count (owner.js): the sender UUID of a player chat line.
             OWNER_UUIDS = ownerUuids;
@@ -115,9 +120,9 @@ in {
             # namespace and could send the header itself (Codex R2-1). A refused
             # identity is logged with its source address.
             TRUSTED_PROXIES = "10.250.77.1,172.22.0.1";
-            # Global player positions (read-only JSON) from BlueMap in the minecraft
-            # container, reachable over the `minecraft` network.
-            BLUEMAP_URL = "http://minecraft:8100";
+            # Global player positions (read-only JSON) from BlueMap on the host (loopback 8100,
+            # forwarded to the gateway).
+            BLUEMAP_URL = "http://${bridgeGw}:8100";
             # Chest next to the bots' respawn point (spawnpoint -36 64 -197); after a
             # death a bot re-equips armour, sword and food from it.
             SUPPLY_CHEST = "-37,65,-200";
@@ -147,22 +152,24 @@ in {
             AGENT_BOTS = "bot1";
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
             BOARD_BOTS = "bot2,bot3,bot19,bot20,bot21";
-            # Server panel (admin.js): RCON to Paper over the minecraft network; the password
+            # Server panel (admin.js): RCON to Paper through the gateway forwarder; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
-            RCON_HOST = "minecraft";
+            RCON_HOST = bridgeGw;
+            RCON_PORT = "25575";
             # Stranded bots on the main server are teleported here (app/rescue.js, owner 2026-10-19): grass west of
             # the supply chest with room to stand; the rescue checks the ground before each tp.
             RESCUE_SPOT = "-273,66,-211";
             # Rescue of stranded bots (app/rescue.js) over the sandbox's own console; password in seed.env.
-            SANDBOX_RCON_HOST = "minecraft-sandbox";
+            SANDBOX_RCON_HOST = bridgeGw;
+            SANDBOX_RCON_PORT = "25576";
             # What the bots changed in the world, as a BlueMap overlay (app/blocklog.js).
             BLOCKLOG_EXPORT_DIR = "/bluemap-overlay";
           };
-          # Named state volume, plus BlueMap's mcbots/ web directory (owner 1000, made by minecraft-plugins,
-          # readable by the minecraft container) for the block-log overlay.
+          # Named state volume, plus BlueMap's mcbots/ web directory (owner 1000, tmpfiles below and the
+          # cutover copy; readable by the minecraft user) for the block-log overlay.
           volumes = [
             "mcbots-state:/state"
-            "/srv/containers/minecraft/data/bluemap/web/mcbots:/bluemap-overlay"
+            "${overlayDir}:/bluemap-overlay"
           ];
           ports = [
             "127.0.0.1:${dashboardPort}:${dashboardPort}"
@@ -176,13 +183,11 @@ in {
           environmentFiles = ["/run/mcbots/seed.env"];
           extraOptions = [
             "--network=mcbots"
-            # Second network only to read BlueMap at minecraft:8100. Paper there
-            # accepts logins only with Velocity's forwarding secret. With two
-            # networks the name `velocity` could resolve to its minecraft-network
-            # address (BotGate refuses that source), so pin it to Velocity's
-            # mcbots-network address (gateway .1, velocity .2 of 10.250.77.0/29).
+            # Second network kept until phase 5.6 (nothing needs it since Paper moved to the host).
+            # With two networks the name `velocity` could resolve to a minecraft-network address, so
+            # pin it to the gateway, where the host's Velocity listens (BotGate admits the mcbots subnet).
             "--network=minecraft"
-            "--add-host=velocity:10.250.77.2"
+            "--add-host=velocity:${bridgeGw}"
             "--memory=2g"
             "--cpus=2"
             "--pids-limit=256"
@@ -191,6 +196,9 @@ in {
           ];
         };
       };
+
+    # The container uid (1000) writes the block-log overlay into BlueMap's web directory; the minecraft user reads it.
+    systemd.tmpfiles.rules = ["d ${overlayDir} 0755 1000 1000 -"];
 
     # Shared secret of the hub: remote workers send it as a bearer token. The
     # same key lives in secrets/bandit.yaml for the laptop (nixos/secrets-workstation.nix).
@@ -213,8 +221,8 @@ in {
       // {
         mcbots-seed = {
           description = "Derive the bots' login password seed and hand over the hub, agent and RCON credentials";
-          after = ["minecraft-rcon-seed.service" "minecraft-sandbox-rcon-seed.service"];
-          requires = ["minecraft-rcon-seed.service" "minecraft-sandbox-rcon-seed.service"];
+          after = ["minecraft-sandbox-rcon-seed.service"];
+          requires = ["minecraft-sandbox-rcon-seed.service"];
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
@@ -228,7 +236,7 @@ in {
             # reads it as a systemd credential. Delete the file and restart both to rotate.
             install -d -m 0700 /var/lib/mcbots
             [ -s /var/lib/mcbots/agent-token ] || head -c 32 /dev/urandom | sha256sum | cut -c1-64 > /var/lib/mcbots/agent-token
-            printf 'BOT_PASSWORD_SEED=%s\nWORKER_TOKEN=%s\nAGENT_TOKEN=%s\nRCON_PASSWORD=%s\nSANDBOX_RCON_PASSWORD=%s\n' "$seed" "$(tr -d '\n' < ${config.sops.secrets."mcbots-worker-token".path})" "$(cat /var/lib/mcbots/agent-token)" "$(cat /var/lib/minecraft-rcon/password)" "$(cat /var/lib/minecraft-sandbox-rcon/password)" > /run/mcbots/seed.env
+            printf 'BOT_PASSWORD_SEED=%s\nWORKER_TOKEN=%s\nAGENT_TOKEN=%s\nRCON_PASSWORD=%s\nSANDBOX_RCON_PASSWORD=%s\n' "$seed" "$(tr -d '\n' < ${config.sops.secrets."mcbots-worker-token".path})" "$(cat /var/lib/mcbots/agent-token)" "$(tr -d '\n' < ${config.sops.secrets."minecraft-rcon-password".path})" "$(cat /var/lib/minecraft-sandbox-rcon/password)" > /run/mcbots/seed.env
             # One hub credential per worker container, derived from the shared token and the container's label
             # (the hub derives the same, hub.js workerToken), so a compromised worker cannot act as another.
             shared=$(tr -d '\n' < ${config.sops.secrets."mcbots-worker-token".path})
@@ -236,7 +244,7 @@ in {
           '';
         };
         docker-mcbots = {
-          after = ["docker-network-mcbots.service" "docker-network-minecraft.service" "docker-velocity.service" "mcbots-seed.service" "minecraft-plugins.service" "docker-minecraft-sandbox.service"]; # minecraft-plugins makes the overlay directory; the sandbox is where the bots play
+          after = ["docker-network-mcbots.service" "docker-network-minecraft.service" "mcbots-seed.service" "minecraft-server-velocity.service" "minecraft-server-sandbox.service"]; # the host's Velocity and the sandbox, where the bots play
           requires = ["docker-network-mcbots.service" "docker-network-minecraft.service" "mcbots-seed.service"];
           preStart = lib.concatMapStrings (n: "${config.systemd.services.${n}.serviceConfig.ExecStart}\n") ["docker-network-minecraft" "docker-network-mcbots"]; # see docker-minecraft (minecraft/default.nix)
           unitConfig.StartLimitIntervalSec = 0;

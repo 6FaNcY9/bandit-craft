@@ -1,9 +1,9 @@
-# Sandbox Paper server for the bots: a copy of the real world on the same internal `minecraft` network,
-# no published port; only the ViaVersion pair as plugins. Behind Velocity like the real server (modern
-# forwarding, same secret): the bots join with the virtual host sandbox.bots (Velocity's forced host),
-# players with /server sandbox. Whatever the bots try there never touches the real base.
-# Reset: `systemctl stop docker-minecraft-sandbox`, remove
-# /srv/containers/minecraft-sandbox/data/world, start it (re-copies the real world).
+# The sandbox Paper for the bots now runs as `servers.sandbox` in nix-minecraft.nix (phase 5.5): a copy of
+# the real world, only the ViaVersion pair as plugins, behind Velocity (virtual host sandbox.bots, or
+# /server sandbox). Reset: `systemctl stop minecraft-server-sandbox`, remove /srv/minecraft/sandbox/world,
+# start it (re-copies the real world).
+# What is left here is the rollback: the Docker sandbox container (not autostarted), its world seed, and the
+# sandbox RCON password generator, which both sandboxes read. Removal is phase 5.6.
 {
   config,
   lib,
@@ -25,11 +25,12 @@ in {
     tmpfiles.rules = ["d ${data} 0750 1000 1000 -"];
 
     services = {
-      # Own RCON password (root-only), same pattern as minecraft-rcon-seed.
+      # Own RCON password (root-only), same pattern as minecraft-rcon-seed. The nix sandbox reads the
+      # environment file after the shared one (nix-minecraft.nix), mcbots-seed reads the password file.
       minecraft-sandbox-rcon-seed = {
         description = "Generate the sandbox Minecraft RCON password and its environment file";
-        before = ["docker-minecraft-sandbox.service"];
-        requiredBy = ["docker-minecraft-sandbox.service"];
+        before = ["docker-minecraft-sandbox.service" "minecraft-server-sandbox.service"];
+        requiredBy = ["docker-minecraft-sandbox.service" "minecraft-server-sandbox.service"];
         path = [pkgs.coreutils];
         serviceConfig = {
           Type = "oneshot";
@@ -95,6 +96,7 @@ in {
   };
 
   virtualisation.oci-containers.containers.minecraft-sandbox = {
+    autoStart = false; # rollback only: `systemctl start docker-minecraft-sandbox` (see CUTOVER-5.5.md)
     inherit (real) image; # same pinned image as the real server
     environment = {
       EULA = "TRUE";
