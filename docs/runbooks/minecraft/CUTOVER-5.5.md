@@ -45,13 +45,17 @@ provably stopped.
 
 `/srv/containers/minecraft/data` is untouched since T-0 (cold copy). Progress made on the new server is lost.
 
-- Quick, Docker game only (bots stay down: mcbots now point at the host): on bandit-lab
+- Quick, a bridge only (Docker game back, bots stay down: mcbots point at the host): on bandit-lab
   `sudo systemctl start docker-minecraft docker-velocity docker-minecraft-sandbox`. Starting them stops
   `minecraft-cutover` and, through its `Requires=`, the three nix servers. Check `ss -ltn | grep 25565`.
+  While it lasts: keep `lab-update-apply.timer` stopped, no `lab-apply`, no reboot (any switch or boot
+  starts the nix stack again, and the cutover then refuses with both stacks down), and the live Docker world
+  is NOT backed up (the backups follow `/srv/minecraft/paper`). Do the Full rollback the same day.
 - Full (also puts mcbots and the old units back; the cutover left `.rehearsal-copied` so the old
-  generation's rehearsal copy does not run): on bandit-lab either `sudo nixos-rebuild switch --rollback` or, from the laptop, revert the lock bump and `lab-apply`.
-  Restart the timer afterwards.
-- To redo the copy after a rollback: `sudo rm /srv/minecraft/paper/.cutover-done` before the next try.
+  generation's rehearsal copy does not run): from the laptop revert the lock bump on main (mandatory, or
+  lab-update re-applies the cutover within the hour) and `lab-apply`. Restart the timer afterwards.
+- To redo the copy after a rollback: `sudo rm /srv/minecraft/paper/.cutover-done` before the next try
+  (the cutover refuses while Docker's `level.dat` is newer than that stamp).
 
 ## Later
 

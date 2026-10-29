@@ -24,6 +24,12 @@ paper_unit=${MC_PAPER_UNIT:-minecraft-server-paper.service}
 stamp=$dest/.cutover-done
 
 if [ -e "$stamp" ]; then
+  # Docker saves level.dat on every save: newer than the stamp = Docker ran after the cutover (a rollback),
+  # and starting the nix world would silently drop that progress.
+  if [ "$src/world/level.dat" -nt "$stamp" ]; then
+    echo "refusing: Docker ran after the cutover ($(cat "$stamp")); rm $stamp to copy again" >&2
+    exit 1
+  fi
   echo "cutover already done ($(cat "$stamp")); nothing to copy"
   exit 0
 fi

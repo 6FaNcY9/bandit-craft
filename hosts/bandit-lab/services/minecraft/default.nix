@@ -354,9 +354,9 @@ in {
     secrets."minecraft-velocity-secret".mode = "0400";
     templates."minecraft-velocity.env" = {
       mode = "0400";
-      # Docker reads environment files when a container is created; both
-      # containers must be recreated together to rotate the secret.
-      restartUnits = ["docker-minecraft.service" "docker-velocity.service"];
+      # Docker reads environment files when a container is created (a manual
+      # start for rollback). No restartUnits: a start job for a Docker game unit
+      # in a switch conflicts with minecraft-cutover and fails the transaction.
       content = ''
         VELOCITY_FORWARDING_SECRET=${config.sops.placeholder."minecraft-velocity-secret"}
         CFG_VELOCITY_SECRET=${config.sops.placeholder."minecraft-velocity-secret"}
