@@ -519,6 +519,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // Zones keep their height: highway route1 leg 4 runs at y56-59 under the iron hall's y60-64 (2026-10-19).
     for (const t of plan.targets) if (insideAreas(r.protectedAreas, t.x, t.z, t.y)) throw new Error(`${t.x} ${t.y} ${t.z} is inside a protected area`);
     const {lo, hi} = plan;
+    // confine (Misa's "bau"): the whole build, air included, lies in an area that names this bot (misa.js)
+    const bad = job.args.confine && require('./misa').boxRule(r.allAreas, r.name, {x1: lo.x, y1: lo.y, z1: lo.z, x2: hi.x, y2: hi.y, z2: hi.z});
+    if (bad) throw new Error(bad);
     const chests = job.args.chests || [];
     const dim = normDim(bot.game?.dimension);
     const ckey = (p) => `${dim}:${p.x},${p.y},${p.z}`;

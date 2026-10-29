@@ -16,7 +16,7 @@
   assert.deepEqual(parseOrder('komm', 'bot1', {whisper: true}), {all: false, words: ['komm']});
   for (const s of ['komm', 'bot12 komm', '[fancy8869 -> bot1] stopp', 'bot1komm']) assert.equal(parseOrder(s, 'bot1', {}), null);
   const ctx = {owner: 'fancy8869', ownerPos: {x: 1.9, y: 64.5, z: -2.1}}, tr = (s, c = ctx) => translate(s.split(' '), c);
-  for (const [word, type] of [['KOMM', 'come'], ['folge', 'follow']]) assert.deepEqual(tr(word), {type, args: {player: ctx.owner}});
+  for (const [word, type] of [['KOMM', 'come'], ['folge', 'follow'], ['gib', 'give']]) assert.deepEqual(tr(word), {type, args: {player: ctx.owner}});
   for (const word of ['stopp', 'bleib', 'fertig']) assert.deepEqual(tr(word), {stop: true});
   assert.deepEqual(tr('status'), {status: true});
   assert.deepEqual(tr('wache'), {type: 'guard', args: {player: ctx.owner, radius: 16}});
@@ -89,6 +89,10 @@
     assert.match(whispers.at(-1).text, /^geht nicht:/); assert.equal(runner.queue[0].type, 'follow');
     bot.emit('message', msg('stopp', true), 'chat', uuid);
     assert.equal(runner.queue.length, 0); assert.ok(outcomes.some((o) => o[1] === 'stopped'));
+    // the player hears how an in-game order ended, and of a death
+    assert.ok(whispers.some((w) => /^gestoppt: stopped: follow/.test(w.text)));
+    runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
+    runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.at(-1).text, 'gestorben: died at 1 2 3');
     // the main server sends the format text instead of the key: no bot ever answered there (probe 2026-10-15)
     const asText = (m, t) => ({...m, translate: t}), heard = whispers.length;
     bot.emit('message', asText(msg('bot1 status'), '<%s> %s'), 'chat', uuid, false);

@@ -95,6 +95,11 @@ const assert = require('node:assert');
     a.send({t: 'hello', v: 1, host: 'laptop', wid: W1, bots: ['bot5']});
     const welcome = await until(() => a.msgs.find((m) => m.t === 'welcome'), 'welcome');
     assert.deepStrictEqual([welcome.protectedAreas, welcome.supplyChest], [[[1, 2, 3, 4]], {x: 1, y: 2, z: 3}]);
+    // a worker running only another player's bots gets no supply chest
+    hub.guests = new Set(['bot22']);
+    assert.strictEqual(hub.chestFor({bots: new Set(['bot22'])}), null);
+    assert.deepStrictEqual(hub.chestFor({bots: new Set(['bot22', 'bot5'])}), {x: 1, y: 2, z: 3});
+    hub.guests = new Set();
     const r5 = runners.get('bot5');
     assert.ok(r5 instanceof RemoteRunner);
     assert.strictEqual(r5.snapshot().online, false, 'not online until the bot reports in');

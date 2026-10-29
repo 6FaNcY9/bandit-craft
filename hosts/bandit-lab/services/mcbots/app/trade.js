@@ -1,4 +1,5 @@
 'use strict';
+const {Vec3} = require('vec3');
 // Trading hall (owner 2026-10-24): sell sticks to every villager on both floors of the hall that buys them (the
 // fletchers) and put the emeralds into a chest. The sticks come from the owner's stick chests in the hall (logs the
 // bot happens to carry are crafted into sticks too); with every chest empty it waits for a refill and never walks
@@ -79,7 +80,18 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
     // after a fight, and that must not visit every villager again.
     const memo = (job.tradeMemo ||= new Map());
     const empty = (job.emptyChests ||= new Map());
-    const stores = job.args.x !== undefined ? [{x: job.args.x, y: job.args.y, z: job.args.z}] : STORE;
+    // Another hall (Misa's, spec 2026-10-29) comes in the job's arguments: its box, store chests and, unless listed,
+    // every other chest or barrel in the box as stick chests. Without them it is the owner's hall.
+    const hall = job.args.hall || HALL;
+    const stores = job.args.stores || (job.args.x !== undefined ? [{x: job.args.x, y: job.args.y, z: job.args.z}] : STORE);
+    const sticksAt = () => {
+      if (job.args.sticks) return job.args.sticks;
+      if (!job.args.hall) return STICK_CHESTS;
+      const c = {x: (hall.x1 + hall.x2) >> 1, y: (hall.y1 + hall.y2) >> 1, z: (hall.z1 + hall.z2) >> 1};
+      const isStore = (p) => stores.some((o) => o.x === p.x && o.y === p.y && o.z === p.z);
+      return bot.findBlocks({point: new Vec3(c.x, c.y, c.z), maxDistance: 64, count: 512, matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b?.name)})
+        .filter((p) => inBox(hall, p) && !isStore(p));
+    };
     let sold = 0, emeralds = job.t.done || 0;
     job.t.open = true; // no end: the dashboard shows the count
     const bank = async () => {
@@ -110,7 +122,8 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
       const logs = bot.inventory.items().filter((i) => i.name.endsWith('_log')).reduce((n, i) => n + i.count, 0);
       // At least a stack: a price raised by demand is at most 64 sticks, so every offer stays affordable.
       if (count(bot, 'stick') < 64) {
-        const c = nextStickChest(bot.entity.position, empty, Date.now());
+        const chests = sticksAt();
+        const c = nextStickChest(bot.entity.position, empty, Date.now(), chests);
         if (c) {
           job.t.doing = 'taking sticks from the hall chests';
           // A chest half shows the whole double chest: both halves are passed over once one is empty.
@@ -119,7 +132,7 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
           if (room < 1) { await bank(); if (bot.inventory.emptySlotCount() - 4 < 1) await clear(); return; }
           try { await withdraw(r, job, 'stick', Math.min(STICKS, room * 64), c); } catch (e) {
             guard(job);
-            for (const o of STICK_CHESTS) if (o.x === c.x && o.y === c.y && Math.abs(o.z - c.z) <= 1) empty.set(`${o.x},${o.y},${o.z}`, Date.now() + EMPTY_MS);
+            for (const o of chests) if (o.x === c.x && o.y === c.y && Math.abs(o.z - c.z) <= 1) empty.set(`${o.x},${o.y},${o.z}`, Date.now() + EMPTY_MS);
             if (!/^no stick/.test(e.message)) r.emit('info', `trade: stick chest at ${c.x} ${c.y} ${c.z}: ${e.message.slice(0, 80)}`);
           }
           return;
@@ -135,11 +148,11 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
         if (bot.inventory.emptySlotCount() < 2) throw new Error('inventory full: no room for the emeralds of a trade');
         return;
       }
-      const v = nextVillager(Object.values(bot.entities), bot.entity.position, memo, Date.now());
+      const v = nextVillager(Object.values(bot.entities), bot.entity.position, memo, Date.now(), hall);
       if (!v) {
         await bank();
-        if (!Object.values(bot.entities).some((e) => e.name === 'villager' && e.position && inBox(HALL, e.position))) {
-          await goNear(r, job, (HALL.x1 + HALL.x2) / 2, 63, (HALL.z1 + HALL.z2) / 2, 6, {doing: 'walking to the trading hall'});
+        if (!Object.values(bot.entities).some((e) => e.name === 'villager' && e.position && inBox(hall, e.position))) {
+          await goNear(r, job, (hall.x1 + hall.x2) / 2, job.args.hall ? hall.y1 + 3 : 63, (hall.z1 + hall.z2) / 2, 6, {doing: 'walking to the trading hall'});
           return;
         }
         await wait('every villager is sold out, waiting for the restock');

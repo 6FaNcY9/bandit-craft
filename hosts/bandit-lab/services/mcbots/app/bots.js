@@ -31,8 +31,9 @@ const planConfig = require('./plan-config');
 const gearJob = require('./gear');
 const sealJob = require('./seal');
 const owner = require('./owner');
+const misa = require('./misa');
 
-const NAME_RE = /^bot[0-9]{1,2}$/; // BotGate's pattern (Velocity plugin)
+const NAME_RE = /^(bot[0-9]{1,2}|MisaBot)$/; // BotGate's pattern (Velocity plugin), case as written in both
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
 const WATCH_MS = 5000, STILL_MS = 30000;
@@ -55,7 +56,7 @@ const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podz
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
-const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy']);
+const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
 const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
@@ -99,13 +100,14 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 
 // Normalise and validate job arguments (throws on bad input).
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
-const AREA_JOBS = new Set(['shaft', 'excavate', 'rim', 'treefarm', 'wheatfarm']); // one run covers the area
+const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm']); // one run covers the area
 const VALIDATE = {
   help: () => ({}),
   // Without y (a spot tapped on the dashboard's map): walk there in x and z only.
   goto: (a) => (a.y === undefined || a.y === null ? {x: num(a.x, -3e7, 3e7, 'x'), z: num(a.z, -3e7, 3e7, 'z')} : xyz(a)),
   follow: player,
   come: player,
+  give: player, // walk to the player and hand over the haul (in-game "gib")
   // Guard a spot (x,y,z) or a player: fight every hostile within radius of it.
   guard: (a) => ({...(a.player ? player(a) : xyz(a)), radius: num(a.radius ?? 16, 4, 48, 'radius')}),
   mine: (a) => {
@@ -130,7 +132,19 @@ const VALIDATE = {
   grave: xyz, // where the bot died; AxGraves keeps the loot in a grave there
   graves: (a) => ({spots: (Array.isArray(a.spots) ? a.spots : []).slice(0, 40).map(xyz)}),
   // Sell sticks to the trading hall's villagers until stopped; the emeralds go to x,y,z (default: the supply chest).
-  trade: (a) => (a.x !== undefined ? xyz(a) : {}),
+  // Optional hall = {x1,y1,z1,x2,y2,z2} with its `stores` (emerald chests) and `sticks` (stick chests; default: every
+  // other chest or barrel in the hall); without a hall it is the owner's (trade.js).
+  trade: (a) => {
+    const one = a.x !== undefined ? xyz(a) : {};
+    if (a.hall === undefined) return one;
+    const list = (v, max, what) => { if (!Array.isArray(v) || v.length > max) throw new Error(`${what} must be a list of at most ${max} x,y,z`); return v.map(xyz); };
+    const p = xyz({x: a.hall?.x1, y: a.hall?.y1, z: a.hall?.z1}), q = xyz({x: a.hall?.x2, y: a.hall?.y2, z: a.hall?.z2});
+    const hall = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
+    if (hall.x2 - hall.x1 > 99 || hall.z2 - hall.z1 > 99 || hall.y2 - hall.y1 > 39) throw new Error('a trading hall is at most 100 x 100 blocks and 40 high');
+    const stores = list(a.stores, 8, 'stores');
+    if (!stores.length) throw new Error('a trading hall needs at least one store chest for the emeralds');
+    return {...one, hall, stores, ...(a.sticks !== undefined ? {sticks: list(a.sticks, 128, 'sticks')} : {})};
+  },
   craft: (a) => {
     if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be an item name like stone_pickaxe');
     // Plain words the model uses for real item names ("unknown item: planks", lab 2026-10-10).
@@ -175,6 +189,14 @@ const VALIDATE = {
     const p = xyz({x: a.x1, y: a.y1, z: a.z1}), q = xyz({x: a.x2, y: a.y2, z: a.z2});
     const box = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
     if (box.x2 - box.x1 > 8 || box.z2 - box.z1 > 8 || box.y2 - box.y1 > 4) throw new Error('a room is at most 9 x 9 blocks and 5 high');
+    return box;
+  },
+  // Everything in a box except containers, top down (in-game "abbau", up to 32 x 32 x 24); the owner's area rule is
+  // checked by the job (misa.js).
+  clear: (a) => {
+    const p = xyz({x: a.x1, y: a.y1, z: a.z1}), q = xyz({x: a.x2, y: a.y2, z: a.z2});
+    const box = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
+    if (box.x2 - box.x1 > 31 || box.z2 - box.z1 > 31 || box.y2 - box.y1 > 23) throw new Error('zu gross: höchstens 32 x 32 Blöcke und 24 hoch');
     return box;
   },
   // One slice of a board job (board.js): at most 4 wide, 64 long and 32 high. The part id leads the label,
@@ -239,8 +261,9 @@ const VALIDATE = {
     const anySolid = a.anySolid ?? [];
     if (!Array.isArray(anySolid) || anySolid.length > 8 || anySolid.some((n) => !/^[a-z_]{1,48}$/.test(n))) throw new Error('anySolid must be a list of at most 8 block names');
     if (a.tight !== undefined && typeof a.tight !== 'boolean') throw new Error('tight must be true or false');
+    if (a.confine !== undefined && typeof a.confine !== 'boolean') throw new Error('confine must be true or false');
     if (a.digInside !== undefined && typeof a.digInside !== 'boolean') throw new Error('digInside must be true or false');
-    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.tight ? {tight: true} : {}), ...(anySolid.length ? {anySolid: [...new Set(anySolid)]} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(a.digInside === true ? {digInside: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
+    return {file: a.file, origin: xyz(a.origin || {}), rotation: a.rotation ?? 0, mirror: a.mirror ?? 'none', chests: chests.map(xyz), ...(a.store ? {store: xyz(a.store)} : {}), ...(a.tight ? {tight: true} : {}), ...(anySolid.length ? {anySolid: [...new Set(anySolid)]} : {}), ...(a.clearAll === true ? {clearAll: true} : {}), ...(a.digInside === true ? {digInside: true} : {}), ...(a.confine === true ? {confine: true} : {}), ...(Object.keys(subs).length ? {substitute: {...subs}} : {})};
   },
   // The water and lava sources of that schematic build, poured from buckets once its blocks stand (fluids.js).
   fluids: (a) => VALIDATE.schematic(a),
@@ -311,6 +334,7 @@ class BotRunner {
     this.combat = {busy: false, epoch: 0}; // replaced by a Combat per connection
     this.host = host;
     this.protectedAreas = protectedAreas;
+    this.corners = new misa.Corners(); // per player: the "ecke" orders of the building words
     this.supplyChest = supplyChest;
     this.pillars = new Map(); // blocks placed to climb to logs (pillars.js), dug back down by unpillar()
     // VeloAuth account password, derived per bot from a shared seed.
@@ -330,11 +354,16 @@ class BotRunner {
     this.ownerUuids = ownerUuids;
     this.demoLog = demoLog;
     this.orders = new Map();
+    this.chatJobs = new Set(); // in-game orders whose outcome is whispered back to the player who gave it
     this.strangerOrders = 0;
     this.rolesFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'roles.json') : null;
     this.role = owner.loadRole(this.rolesFile, name);
     this.say = owner.makeSayer((text) => { if (this.online) this.bot?.whisper(this.answerTo, text); });
   }
+
+  // Every area the hub knows (allAreas) minus those that name this bot (misa.js): consumers read only this view.
+  get protectedAreas() { return misa.forBot(this.allAreas, this.name); }
+  set protectedAreas(v) { this.allAreas = v; }
 
   // lastError lives in the trace so the debug panel knows when it happened.
   get lastError() {
@@ -362,6 +391,9 @@ class BotRunner {
       try { this.demoLog?.outcome(id, {done: 'finished', fail: 'failed', stop: 'stopped'}[kind], text); }
       catch (e) { this.log(this.name, `demonstration: ${e.message}`); }
     }
+    // Without this a player hears only "ok" and must guess whether the order worked (guest bot, 2026-10-29).
+    if (['done', 'fail', 'stop'].includes(kind) && this.chatJobs.delete(jobId)) this.say(`${{done: 'fertig', fail: 'Problem', stop: 'gestoppt'}[kind]}: ${text}`);
+    else if (kind === 'death' && this.answerTo) this.say(`gestorben: ${text}`);
     try {
       this.onEvent?.(this.name, kind, text, jobId);
     } catch {}
@@ -386,27 +418,53 @@ class BotRunner {
       this.answerTo = name;
       let id, jobId;
       try {
-        const command = owner.translate(order.words, {owner: name, ownerPos: player.entity?.position || null});
+        let command = owner.translate(order.words, {owner: name, ownerPos: player.entity?.position || null});
         id = this.demoLog?.add({bot: this.name, via: whisper ? 'whisper' : 'chat', text, command, state: this.snapshot()});
+        command = this.builderOrder(command, player, name);
         if (command.unknown) { this.say(owner.HELP); this.demoLog?.outcome(id, 'unknown', owner.HELP); return; }
         if (command.type) {
           if (!this.online || this.dead) throw new Error(this.dead ? 'bot is dead' : 'bot is offline');
           VALIDATE[command.type](command.args); // refuse before replacing the active job
           jobId = this.jobSeq + 1;
           if (id) this.orders.set(jobId, id);
+          this.chatJobs.add(jobId);
           this.enqueue(command.type, command.args, {replace: true});
         } else if (command.stop) this.enqueue('stop');
         else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
         const s = command.status && this.snapshot();
-        const receipt = s ? `Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}` : command.role ? `Rolle ${command.role}` : command.stop ? 'bleibe stehen' : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz'}[command.type];
+        const receipt = command.receipt ?? (s ? `Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}` : command.role ? `Rolle ${command.role}` : command.stop ? 'bleibe stehen' : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz', give: 'bringe dir alles', clear: 'baue ab', schematic: 'baue'}[command.type]);
         this.say(`ok: ${receipt}`);
         if (!command.type) this.demoLog?.outcome(id, 'finished', receipt);
       } catch (e) {
         this.orders.delete(jobId);
+        this.chatJobs.delete(jobId);
         this.say(`geht nicht: ${e.message}`);
         try { if (id) this.demoLog?.outcome(id, 'refused', e.message); } catch (err) { this.log(this.name, `demonstration: ${err.message}`); }
       }
     });
+  }
+
+  // Misa's words (misa.js): "ecke" notes the block the player stands on, "abbau" and "bau" become a clear or schematic
+  // job. The area rule is checked here for the answer and again when the job runs.
+  builderOrder(command, player, who) {
+    if (!command.corner && !command.clear && !command.build) return command;
+    const p = player.entity?.position;
+    if (!p) throw new Error('ich sehe dich nicht');
+    const here = {x: Math.floor(p.x), y: Math.floor(p.y) - 1, z: Math.floor(p.z)};
+    if (command.corner) return {receipt: `Ecke ${this.corners.set(who, here)}: ${here.x} ${here.y} ${here.z}`};
+    if (command.clear) {
+      const box = this.corners.box(who);
+      const bad = misa.boxRule(this.allAreas, this.name, box);
+      if (bad) throw new Error(bad);
+      return {type: 'clear', args: box};
+    }
+    const want = `${command.build.name.replace(/\.litematic$/i, '')}.litematic`.toLowerCase();
+    let file;
+    try { file = require('node:fs').readdirSync(this.schematicDir || SCHEMATIC_DIR).find((f) => f.toLowerCase() === want); } catch {}
+    if (!file || !buildJob.SCHEMATIC_RE.test(file)) throw new Error(`kenne ${command.build.name} nicht`);
+    if (!this.allAreas.some((a) => a[6]?.includes(this.name))) throw new Error('das liegt nicht ganz in deinem Bereich'); // the whole build is checked when it runs
+    const chests = this.bot.findBlocks({point: p, maxDistance: 8, count: 64, matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b?.name)}).map(({x, y, z}) => ({x, y, z}));
+    return {type: 'schematic', args: {file, origin: here, rotation: command.build.rotation, chests, confine: true}};
   }
 
   dropQueue() {
@@ -679,7 +737,7 @@ class BotRunner {
     if (!this.online && this.queue[0].resume) return; // resumed jobs wait for the reconnect
     const job = (this.current = this.queue.shift());
     job.status = 'running';
-    this.digOnly = ['excavate', 'part', 'shaft', 'level', 'treefarm', 'wheatfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)
+    this.digOnly = ['excavate', 'clear', 'part', 'shaft', 'level', 'treefarm', 'wheatfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)
     this.digBox = ['treefarm', 'wheatfarm'].includes(job.type) ? job.args : null; // ... and only inside the farm box
     job.startedAt = Date.now();
     job.progress = '';
@@ -3024,6 +3082,19 @@ const JOBS = {
 
   follow: (r, job) => chase(r, job, true),
 
+  // In-game "gib" (guest bot, 2026-10-29): what a bot fetched stays in its inventory, so it walks up and throws
+  // everything but tools, armour and food at the player's feet.
+  give: async (r, job) => {
+    await chase(r, job, false);
+    const {bot} = r, e = bot.players[job.args.player]?.entity;
+    if (e) await bot.lookAt(e.position.offset(0, 1.6, 0)).catch(() => {});
+    const keep = (it) => TOOL_RE.test(it.name) || /_(helmet|chestplate|leggings|boots)$/.test(it.name) || edible(bot, it);
+    for (const it of bot.inventory.items().filter((i) => !keep(i))) {
+      guard(job);
+      await bot.tossStack(it).catch(() => {});
+    }
+  },
+
   // Runs until stopped: hunts hostiles within the radius (combat does the
   // hitting once it is close), else walks back to the post or the player.
   guard: async (r, job) => {
@@ -3404,6 +3475,8 @@ const JOBS = {
     const {bot} = r;
     const {x1, y1, z1, x2, y2, z2} = job.args;
     for (const [x, z] of [[x1, z1], [x1, z2], [x2, z1], [x2, z2]]) if (insideAreas(r.protectedAreas, x, z)) throw new Error(`${x} ${z} is inside a protected area`);
+    // all (the clear job): every block but containers and nothing to dig in the air, a fluid or bedrock
+    const all = job.args.all === true, skipAll = /^(air|cave_air|void_air|water|lava|bedrock|barrier|light)$/;
     refuseSupport(r, {x1, z1, x2, z2, y1, y2});
     const Vec3 = require('vec3').Vec3;
     const dim = normDim(bot.game?.dimension);
@@ -3418,7 +3491,7 @@ const JOBS = {
           const pos = new Vec3(x, y, z);
           const b = bot.blockAt(pos);
           if (!b) { left++; continue; } // not loaded is not dug (a shaft resumed right after login "finished" in 0 s)
-          if (b.boundingBox === 'empty' || !NATURAL.test(b.name)) continue;
+          if (all ? skipAll.test(b.name) || buildJob.CONTAINER.test(b.name) : b.boundingBox === 'empty' || !NATURAL.test(b.name)) continue;
           const k = `${dim}:${x},${y},${z}`;
           if (job.unreachable?.has(k)) { left++; continue; } // no way there in an earlier pass of this layer
           if (r.world && !(await r.world.claim(r.name, k))) {
@@ -3449,6 +3522,15 @@ const JOBS = {
     }
     if (left) throw new Error(`${left} blocks of the room were not dug (held by another bot, unloaded, unreachable or unsafe)`);
     job.noop = !dug; // nothing natural left to dig: the event says "already complete"
+  },
+
+  // Misa's "abbau": the excavate loop over every block but containers, and only where the area rule (misa.js) allows.
+  async clear(r, job) {
+    const bad = misa.boxRule(r.allAreas, r.name, job.args);
+    if (bad) throw new Error(bad);
+    const run = child(job, {args: {...job.args, all: true}});
+    await JOBS.excavate(r, run);
+    job.noop = run.noop;
   },
 
   // One board slice: the job's needs where the bot stands, then walk over, dig it top down a layer at a time

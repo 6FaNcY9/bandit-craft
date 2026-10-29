@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 
 /**
- * Lets names bot0..bot99 skip Mojang authentication, but only when the
+ * Lets names bot0..bot99 and MisaBot (Misa's helper) skip Mojang authentication, but only when the
  * connection comes from an allowlisted CIDR (env BOTGATE_SOURCES). Every other
  * login is untouched (online mode). Missing or malformed config aborts plugin
  * load, so a broken gate never silently opens or silently stays half-open.
@@ -21,7 +21,7 @@ import org.slf4j.Logger;
  * because velocity-plugin.json names the main class.
  */
 public final class BotGate {
-    private static final Pattern BOT = Pattern.compile("^bot[0-9]{1,2}$");
+    private static final Pattern BOT = Pattern.compile("^(bot[0-9]{1,2}|MisaBot)$");
 
     private record Cidr(byte[] net, int bits) {
         boolean contains(byte[] ip) {

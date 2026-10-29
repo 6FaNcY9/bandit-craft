@@ -16,6 +16,7 @@ const archive = require('./archive');
 const gravesLib = require('./graves');
 const {NtfyNotifier} = require('./notify');
 const {Keeper, idle} = require('./keeper');
+const {TradeSchedule} = require('./tradeschedule');
 const {Board} = require('./board');
 const scenarioRun = require('./scenario-run');
 const {Plan} = require('./plan');
@@ -88,7 +89,7 @@ setInterval(() => {
   const open = world.openNeeds();
   for (const [name, runner] of runners) {
     const s = runner.snapshot();
-    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && open.some((n) => n.bot !== name)) {
+    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !cfg.guestBots.includes(name) && open.some((n) => n.bot !== name)) {
       try { runner.enqueue('help', {}); } catch {}
     }
   }
@@ -121,13 +122,15 @@ const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<scrip
 const CSP = csp(page), LEGACY_CSP = csp(legacy); // each page allows its own bodies only
 // Remote workers register themselves in `runners` (see hub.js), so the
 // dashboard, /api/state and /api/debug list them next to the lab's bots.
-const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, events, settings}) : null;
+const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, guests: cfg.guestBots, events, settings}) : null;
 const workerServer = hub ? createWorkerServer(hub) : null;
 
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: cfg.boardBots}) : null;
+const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots]}) : null;
+// Scheduled trading (TRADE_SCHEDULE): a guest's trader works its hall in set time windows; nothing without a configured hall.
+const tradeSchedule = cfg.tradeSchedule.length ? new TradeSchedule({runners, halls: cfg.tradeHalls, entries: cfg.tradeSchedule, log}) : null;
 // The job board (board.js): owner jobs cut into slices that only BOARD_BOTS dig. A box touching a protected area
 // (PROTECTED_AREAS and the dashboard's protected zones, which join that array) is refused when the job is made.
 const touches = (b) => cfg.protectedAreas.find(([x1, z1, x2, z2, y1, y2]) => b.x1 <= x2 && b.x2 >= x1 && b.z1 <= z2 && b.z2 >= z1 && (y1 == null || y2 == null || (b.y1 <= y2 && b.y2 >= y1)));
@@ -831,6 +834,11 @@ const keeperTick = setInterval(() => {
     plan?.tick(); // before the keeper: a borrowed keeper starts with the plan's quotas
   } catch (e) {
     log('plan', `error: ${e.message}`);
+  }
+  try {
+    tradeSchedule?.tick();
+  } catch (e) {
+    log('trade', `error: ${e.message}`);
   }
   try {
     keeper?.tick();
