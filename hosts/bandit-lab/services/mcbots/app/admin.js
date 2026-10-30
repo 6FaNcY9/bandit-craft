@@ -146,10 +146,11 @@ const SCHEDULE = [[0, 60], [30000, 30], [50000, 10]]; // [ms after the request, 
 
 class Admin {
   // call(commands[]) -> Promise<replies[]>; botNames: names to mark as bots; events: the dashboard's EventLog.
-  constructor({call, events, botNames = [], setTimer = setTimeout, clearTimer = clearTimeout}) {
+  constructor({call, events, botNames = [], guests = [], setTimer = setTimeout, clearTimer = clearTimeout}) {
     this.call = call;
     this.events = events;
     this.botNames = new Set(botNames);
+    this.guests = new Set(guests); // another player's bots (GUEST_BOTS) play on the real server: never evicted
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
     this.console = []; // {id, t, cmd, reply}, newest last
@@ -186,7 +187,7 @@ class Admin {
   // main when the sandbox is down (lab 2026-10-11, a deploy). A kick makes Velocity move them to the sandbox.
   async evictBots() {
     const [list] = await this.call(['minecraft:list']);
-    const bots = parse.players(list).filter((n) => this.isBot(n));
+    const bots = parse.players(list).filter((n) => this.isBot(n) && !this.guests.has(n));
     for (const n of bots) await this.call([`minecraft:kick ${n} bots play in the sandbox`]);
     return bots;
   }
