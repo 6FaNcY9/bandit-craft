@@ -46,9 +46,9 @@ for unit in $docker_units $paper_unit; do
       ;;
   esac
 done
-if state=$(docker inspect --format '{{.State.Running}}' "$container" 2>&1); then
+if state=$(docker inspect --type container --format '{{.State.Running}}' "$container" 2>&1); then
   running=$state
-elif grep -q 'No such object' <<<"$state"; then
+elif grep -qE 'No such (object|container)' <<<"$state"; then
   running=false
 else
   echo "refusing to copy: cannot query docker for $container: $state" >&2
