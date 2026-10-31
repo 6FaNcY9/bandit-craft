@@ -245,6 +245,7 @@ in {
         serviceConfig = {
           Restart = lib.mkForce "always";
           RestartSec = "10s";
+          SuccessExitStatus = 143; # Velocity exits 143 on docker stop; "failed" here makes lab-update roll the cutover back
         };
       };
 
