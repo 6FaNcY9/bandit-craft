@@ -130,3 +130,59 @@ const assert = require('node:assert');
     process.stdout.write(out);
   });
 }
+
+(async () => { // doors: a closed wooden door is clicked open, an open door or gate and a closed door's upper half are walked through, iron stays shut (2026-11-01)
+  const {safeMovements} = require('../bots');
+  const {Vec3} = require('vec3');
+  const EventEmitter = require('node:events');
+  const registry = require('minecraft-data')('26.1');
+  const blocks = new Map(); // "x,y,z" -> block
+  const bot = Object.assign(new EventEmitter(), {registry, entity: {position: new Vec3(0, 64, 0)}, pathfinder: {}, blockAt: (p) => blocks.get(`${p.x},${p.y},${p.z}`) || null});
+  const put = (x, y, z, name, props) => blocks.set(`${x},${y},${z}`, {type: registry.blocksByName[name].id, name, position: new Vec3(x, y, z), boundingBox: 'block', shapes: [[0, 0, 0, 1, 1, 0.19]], getProperties: () => props});
+  put(1, 64, 0, 'oak_door', {open: false, half: 'lower'});
+  put(1, 65, 0, 'oak_door', {open: false, half: 'upper'});
+  put(2, 64, 0, 'oak_door', {open: true, half: 'lower'});
+  put(3, 64, 0, 'iron_door', {open: false, half: 'lower'});
+  put(4, 64, 0, 'oak_fence_gate', {open: true});
+  put(5, 64, 0, 'oak_fence_gate', {open: false});
+  const mv = safeMovements(bot, [], null);
+  const at = (x, y) => { const b = mv.getBlock(new Vec3(x, y, 0), 0, 0, 0); return [b.openable, b.safe]; };
+  assert.strictEqual(mv.canOpenDoors, true);
+  assert.deepStrictEqual(at(1, 64), [true, false], 'closed lower half: click it');
+  assert.deepStrictEqual(at(1, 65), [false, true], 'closed upper half: the click below opens it');
+  assert.deepStrictEqual(at(2, 64), [false, true], 'open door: walk through, never click it shut');
+  assert.deepStrictEqual(at(3, 64), [false, false], 'iron door: a wall');
+  assert.deepStrictEqual(at(4, 64), [false, true], 'open gate: walk through');
+  assert.deepStrictEqual(at(5, 64), [true, false], 'closed gate: click it');
+})();
+
+(async () => { // chase: "No path" to a player below widens the fall once, and a way missing for 30 s ends the job with a reason (2026-11-01)
+  const {chase} = require('../bots');
+  const {Vec3} = require('vec3');
+  const EventEmitter = require('node:events');
+  const mk = (py) => {
+    const goals = [], mv = {maxDropDown: 3};
+    const bot = Object.assign(new EventEmitter(), {health: 20, entity: {position: new Vec3(0, 70, 0)}, players: {Misa: {entity: {position: new Vec3(0, py, 0)}}},
+      pathfinder: {movements: mv, setGoal: (g) => goals.push(g), isMoving: () => false, stop() {}}});
+    return {bot, goals, mv, r: {bot, online: true, combat: {epoch: 0, busy: false}, world: {player: () => null}}};
+  };
+  const {bot, goals, mv, r} = mk(60);
+  const job = {args: {player: 'Misa'}, t: {}, cancelled: false};
+  const done = chase(r, job, false);
+  await new Promise((res) => setTimeout(res, 100));
+  bot.emit('path_update', {status: 'noPath', path: []});
+  await new Promise((res) => setTimeout(res, 700));
+  assert.strictEqual(mv.maxDropDown, 12, 'health 20 allows a 12-block fall');
+  assert.strictEqual(goals.length, 2, 'the goal is set again with the wider drop');
+  bot.players.Misa.entity.position = new Vec3(0, 69, 1);
+  await done;
+  assert.strictEqual(mv.maxDropDown, 3, 'the drop is put back');
+  const two = mk(70);
+  const follow = chase(two.r, {args: {player: 'Misa'}, t: {}, cancelled: false}, true).then(() => 'ok', (e) => e.message);
+  await new Promise((res) => setTimeout(res, 100));
+  two.bot.emit('path_update', {status: 'noPath', path: []});
+  const realNow = Date.now;
+  Date.now = () => realNow() + 31000;
+  try { assert.strictEqual(await follow, 'no path to Misa'); } finally { Date.now = realNow; }
+  assert.strictEqual(two.mv.maxDropDown, 3, 'same level: no wider drop');
+})();

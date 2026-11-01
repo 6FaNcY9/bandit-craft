@@ -550,6 +550,9 @@ class BotRunner {
       this.online = true;
       const mv = safeMovements(bot, this.protectedAreas, this);
       bot.pathfinder.setMovements(mv);
+      // Armour handed over in game (dropped at the bot's feet) goes on at once: only a digging job's upkeep wore it, and
+      // MisaBot carried hers around (2026-11-01).
+      bot.on('playerCollect', (collector) => { if (collector === bot.entity) wearArmour(this).catch(() => {}); });
       // Unbounded searches toward buried targets ran the bot process out of
       // memory (2026-10-08); cap planning time and radius.
       bot.pathfinder.thinkTimeout = 4000;
@@ -936,6 +939,20 @@ function safeMovements(bot, areas, runner = null) {
   mv.getLandingBlock = (node, dir) => { const b = landing(node, dir); return b?.position ? b : null; };
   const scaffold = mv.countScaffoldingItems.bind(mv);
   mv.countScaffoldingItems = () => (runner?.noScaffold ? 0 : scaffold()); // a path with 0 blocks places none
+  // pathfinder 2.4.5 opens fence gates only, and only with canOpenDoors (off by default): every closed door was a wall
+  // (MisaBot, 2026-11-01). Wooden doors join the openable set. An open door or gate is walked through (the library
+  // would click it again and close it); a closed door's upper half is left to the click on the lower one, never dug.
+  mv.canOpenDoors = true;
+  for (const b of bot.registry.blocksArray) if (/_door$/.test(b.name) && b.name !== 'iron_door') mv.openable.add(b.id);
+  const rawBlock = mv.getBlock.bind(mv);
+  mv.getBlock = (pos, dx, dy, dz) => {
+    const b = rawBlock(pos, dx, dy, dz);
+    if (b.openable && /_door$|_fence_gate$/.test(b.name || '')) {
+      const props = b.getProperties?.() || {};
+      if (String(props.open) === 'true' || props.half === 'upper') Object.assign(b, {safe: true, physical: false, openable: false, shapes: []});
+    }
+    return b;
+  };
   // Every block change counts up, so the path cache never answers from before it.
   if (bot.blockVersion === undefined) {
     bot.blockVersion = 0;
@@ -2470,6 +2487,12 @@ async function chase(r, job, follow) {
   let mode = null; // what the current pathfinder goal chases
   let goalAt = null;
   let epoch = r.combat.epoch;
+  // "No path" while chasing was silent: MisaBot stood at the ledge Misa had jumped down (2026-11-01). A player below
+  // gets the longer fall dropDown allows; a way still missing after 30 s ends the job with the reason.
+  let noPathAt = 0;
+  const mv = bot.pathfinder?.movements, wasDrop = mv?.maxDropDown;
+  const onPath = (res) => { noPathAt = res.status === 'noPath' ? noPathAt || Date.now() : 0; };
+  bot.on('path_update', onPath);
   try {
     for (;;) {
       guard(job);
@@ -2481,6 +2504,12 @@ async function chase(r, job, follow) {
       }
       const me = bot.entity.position;
       const e = bot.players[name]?.entity;
+      if (noPathAt && mv) {
+        const ty = e ? e.position.y : r.world.player(name)?.y;
+        const drop = Math.min(12, Math.floor((bot.health || 0) - 6) + 3);
+        if (ty != null && me.y - ty > mv.maxDropDown && drop > mv.maxDropDown) { mv.maxDropDown = drop; mode = null; noPathAt = 0; }
+        else if (Date.now() - noPathAt > CHASE_NO_PATH_MS) throw new Error(`no path to ${name}`);
+      }
       if (e) {
         // A dynamic GoalFollow never started walking with our movement
         // settings (2026-10-08); a fixed GoalNear re-issued whenever the player
@@ -2515,9 +2544,12 @@ async function chase(r, job, follow) {
       await sleep(500);
     }
   } finally {
+    bot.removeListener('path_update', onPath);
+    if (mv && wasDrop !== undefined) mv.maxDropDown = wasDrop;
     r.bot?.pathfinder?.stop();
   }
 }
+const CHASE_NO_PATH_MS = 30000;
 
 const craftingLib = require('./crafting');
 const crafting = craftingLib.makeCrafting({goNear, guard, fetch: (r, job, item, count) => (r.supplyChest ? JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})) : Promise.resolve())});
@@ -3790,4 +3822,4 @@ const JOBS = {
   },
 };
 
-module.exports = {makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

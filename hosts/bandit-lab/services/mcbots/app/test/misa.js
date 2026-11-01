@@ -170,3 +170,13 @@
   assert.equal(sent.length, 4, 'hall not configured: nothing runs');
   console.log('misa ok');
 })();
+
+{ // armour in the inventory goes on, filled slots stay (wearArmour, 2026-11-01)
+  const assert = require('node:assert/strict');
+  const {wearArmour} = require('../bots');
+  const slots = {5: null, 6: {name: 'iron_chestplate'}, 7: null, 8: null, 45: null};
+  const items = [{name: 'diamond_helmet'}, {name: 'iron_leggings'}, {name: 'shield'}, {name: 'cobblestone'}];
+  const worn = [];
+  const bot = {inventory: {slots, items: () => items}, getEquipmentDestSlot: (s) => ({head: 5, torso: 6, legs: 7, feet: 8, 'off-hand': 45})[s], equip: async (it, slot) => { worn.push(`${it.name}>${slot}`); }};
+  wearArmour({bot}).then(() => assert.deepEqual(worn, ['diamond_helmet>head', 'iron_leggings>legs', 'shield>off-hand']));
+}

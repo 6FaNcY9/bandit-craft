@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <title>Deine Bots – Anleitung für Misa</title>
 <style>
-  @page { size: A4; margin: 16mm 16mm 18mm; }
+  @page { size: A4; margin: 14mm 16mm 15mm; }
   :root { --ink: #1d2433; --mute: #5b6475; --line: #d9dde5; --accent: #2f6f4f; --soft: #eef5f0; --warn: #8a4b12; --warnbg: #fbf1e6; }
   * { box-sizing: border-box; }
-  body { font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.45; margin: 0; background: #fff; }
+  body { font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.4; margin: 0; background: #fff; }
   h1 { font-size: 22pt; margin: 0 0 2mm; letter-spacing: -0.01em; }
-  h2 { font-size: 13.5pt; margin: 7mm 0 2.5mm; padding-bottom: 1.5mm; border-bottom: 1.5px solid var(--accent); break-after: avoid; }
+  h2 { font-size: 13.5pt; margin: 5.5mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1.5px solid var(--accent); break-after: avoid; }
   h3 { font-size: 11pt; margin: 4mm 0 1.5mm; break-after: avoid; }
   p { margin: 0 0 2.5mm; }
   .lead { color: var(--mute); font-size: 11pt; margin-bottom: 5mm; }
@@ -56,16 +56,20 @@ Den Namen kannst du nach <code>/msg Mi</code> mit der <b>Tab</b>-Taste ergänzen
   Wenn er fertig ist, flüstert er <code>fertig: …</code>.
 </div>
 <p>Der Bot muss auf dem Server sein (in der Spielerliste mit <b>Tab</b> zu sehen). Groß- und Kleinschreibung ist egal.</p>
+<p>Die Bots verstehen <b>nur genau diese Wörter</b> und nur in dieser Reihenfolge, ein Befehl pro Nachricht. Bei <code>hol</code>
+kommt erst die Zahl, dann der Block (<code>hol 20 eisen</code>, nicht <code>hol eisen 20</code>). Ein neuer Befehl bricht den
+laufenden ab, du musst vorher nicht <code>stopp</code> sagen. Im normalen Chat geht es auch, wenn die Nachricht mit dem
+Bot-Namen beginnt: <code>MisaBot komm</code> (dann lesen es aber alle mit).</p>
 
 <h2>2. Alle Befehle für MisaBot</h2>
 <table>
   <tr><th>Du schreibst</th><th>Was passiert</th></tr>
   <tr><td><code>/msg MisaBot komm</code></td><td>Er läuft zu dir und bleibt dann stehen.</td></tr>
   <tr><td><code>/msg MisaBot folge</code></td><td>Er folgt dir, bis du <code>stopp</code> sagst.</td></tr>
-  <tr><td><code>/msg MisaBot stopp</code></td><td>Er hört sofort mit allem auf und bleibt stehen.</td></tr>
+  <tr><td><code>/msg MisaBot stopp</code></td><td>Er hört sofort mit allem auf und bleibt stehen. <code>bleib</code> und <code>fertig</code> tun dasselbe.</td></tr>
   <tr><td><code>/msg MisaBot wache</code></td><td>Er bleibt bei dir und kämpft gegen Monster in deiner Nähe.</td></tr>
   <tr><td><code>/msg MisaBot wache hier</code></td><td>Er bewacht die Stelle, an der du gerade stehst.</td></tr>
-  <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, z.&nbsp;B. <code>hol 5 diamond_ore</code>. Höchstens 256.</td></tr>
+  <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 256.</td></tr>
   <tr><td><code>/msg MisaBot gib</code></td><td>Er kommt zu dir und wirft dir alles hin, was er gesammelt hat. Werkzeug, Rüstung und Essen behält er.</td></tr>
   <tr><td><code>/msg MisaBot status</code></td><td>Er sagt dir Leben, Essen und was er gerade tut.</td></tr>
   <tr><td><code>/msg MisaBot ecke</code></td><td>Merkt sich den Block unter dir als Ecke (für <code>abbau</code>, siehe 3).</td></tr>
@@ -127,7 +131,7 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
     <code>dort ist gesperrtes Gebiet</code> – der Bereich berührt deine Handelshalle oder eine fremde Basis.<br>
     <code>kenne haus nicht</code> – dieses Schematic gibt es (noch) nicht.<br>
     <code>ich sehe dich nicht</code> – geh näher zum Bot.</td></tr>
-  <tr><td><code>kenne ich nicht: …</code></td><td>Tippfehler. Er zählt dir die Befehle auf, die er kennt.</td></tr>
+  <tr><td><code>kenne ich nicht: …</code></td><td>Tippfehler, falsche Reihenfolge oder ein Wort zu viel. Er zählt dir die Befehle auf, die er kennt.</td></tr>
 </table>
 
 <h2>7. Was die Bots nicht tun</h2>
@@ -135,7 +139,7 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <li>Sie hören nicht auf andere Spieler – nur auf dich und den Server-Besitzer.</li>
   <li>Sie graben und bauen nicht in fremden Basen, nicht in deiner Handelshalle und nicht am Spawn.</li>
   <li>Sie nehmen nichts aus den Truhen des Besitzers.</li>
-  <li>Neue Wörter oder ganze Sätze verstehen sie nicht – nur die Befehle oben.</li>
+  <li>Neue Wörter oder ganze Sätze verstehen sie nicht – nur die Befehle oben. Sie lernen auch nichts dazu.</li>
 </ul>
 
 <h2>8. Wenn etwas nicht klappt</h2>
@@ -146,7 +150,7 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <tr><td>Er ist weit weg</td><td><code>komm</code> – er läuft den ganzen Weg, das kann dauern. <code>status</code> zeigt, was er tut.</td></tr>
   <tr><td>Er reißt das Falsche ab</td><td>Sofort <code>stopp</code>.</td></tr>
 </table>
-<p class="small">Stand: 29.10.2026. Fragen und Wünsche an den Server-Besitzer.</p>
+<p class="small">Stand: 01.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
 
 </body>
 </html>
