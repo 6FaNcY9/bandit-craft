@@ -17,7 +17,8 @@ provably stopped.
 2. laptop: stop the auto-deploy so the restart happens once, after the warning:
    `ssh -t bandit-lab 'sudo systemctl stop lab-update-apply.timer; systemctl list-timers | grep lab-update'` (nothing listed).
 3. laptop: backup, verified, off-host copy (Docker is still live, so the Docker backend is used):
-   `ssh -t bandit-lab 'sudo systemctl start minecraft-backup && cd /srv/containers/minecraft/backups/auto && sudo sha256sum --check "$(ls -t *.sha256 | head -1)" && sudo systemctl start restic-backups-peer && sudo restic-peer snapshots --latest 1'`
+   `ssh -t bandit-lab 'sudo systemctl start minecraft-backup && sudo sh -c '"'"'cd /srv/containers/minecraft/backups/auto && sha256sum --check "$(ls -t *.sha256 | head -1)"'"'"' && sudo systemctl start restic-backups-peer && sudo restic-peer snapshots --latest 1'`
+   (the backup directory is root-only: the `cd` must run under sudo)
    (`restic-peer` is the module's wrapper, docs/runbooks/backup-peer.md in bandit-nix).
 4. laptop, T-10 min: `scp tools/minecraft-restart-warn.sh bandit-lab: && ssh -t bandit-lab 'sudo bash minecraft-restart-warn.sh "move to nix-minecraft"'`
    (default `MC_RCON` = Docker; returns after the 10 minutes).
@@ -54,6 +55,10 @@ provably stopped.
 - Full (also puts mcbots and the old units back; the cutover left `.rehearsal-copied` so the old
   generation's rehearsal copy does not run): from the laptop revert the lock bump on main (mandatory, or
   lab-update re-applies the cutover within the hour) and `lab-apply`. Restart the timer afterwards.
+- After a rollback the timer is active again (every switch starts it) but refuses the rolled-back commit
+  until a new one is pushed (`/var/lib/lab-update/failed-candidate`). If `mc-bridge-map.socket` says
+  "listening" but BlueMap stays dark, `sudo systemctl restart mc-bridge-map.socket` (changed sockets are
+  not restarted by a switch).
 - To redo the copy after a rollback: `sudo rm /srv/minecraft/paper/.cutover-done` before the next try
   (the cutover refuses while Docker's `level.dat` is newer than that stamp).
 

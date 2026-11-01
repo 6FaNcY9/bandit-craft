@@ -372,6 +372,9 @@ in {
   # Paper binds loopback, so the bridge reaches RCON (both servers) and the map through forwarders listening on the
   # gateway only (never 0.0.0.0: that would clash with Paper's 127.0.0.1:25575). FreeBind: the bridge may not
   # exist yet. Velocity itself listens on all addresses; only the firewall rule below lets the bridge in.
+  # switch-to-configuration leaves a changed .socket running on its old address (nixpkgs#74899; cutover
+  # 2026-10-31: the map port moved and BlueMap stayed dark until `systemctl restart mc-bridge-map.socket`).
+  # After changing a port or the gateway here, restart that socket on the lab by hand.
   systemd.sockets =
     lib.mapAttrs (_: port: {
       wantedBy = ["sockets.target"];
