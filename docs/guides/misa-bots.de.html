@@ -72,6 +72,7 @@ Bot-Namen beginnt: <code>MisaBot komm</code> (dann lesen es aber alle mit).</p>
   <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 256.</td></tr>
   <tr><td><code>/msg MisaBot gib</code></td><td>Er kommt zu dir und wirft dir alles hin, was er gesammelt hat. Werkzeug, Rüstung und Essen behält er.</td></tr>
   <tr><td><code>/msg MisaBot status</code></td><td>Er sagt dir Leben, Essen und was er gerade tut.</td></tr>
+  <tr><td><i>Rüstung geben</i></td><td>Kein Befehl: Wirf ihm Helm, Brustpanzer, Hose, Schuhe oder Schild vor die Füße (Taste <b>Q</b>). Er hebt sie auf und zieht sie sofort an.</td></tr>
   <tr><td><code>/msg MisaBot ecke</code></td><td>Merkt sich den Block unter dir als Ecke (für <code>abbau</code>, siehe 3).</td></tr>
   <tr><td><code>/msg MisaBot abbau</code></td><td>Reißt alles zwischen deinen zwei Ecken ab (siehe 3).</td></tr>
   <tr><td><code>/msg MisaBot bau haus</code></td><td>Baut das Schematic „haus“ an deiner Stelle (siehe 4).</td></tr>
@@ -139,6 +140,7 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <li>Sie hören nicht auf andere Spieler – nur auf dich und den Server-Besitzer.</li>
   <li>Sie graben und bauen nicht in fremden Basen, nicht in deiner Handelshalle und nicht am Spawn.</li>
   <li>Sie nehmen nichts aus den Truhen des Besitzers.</li>
+  <li>Holztüren und Zauntore öffnen sie selbst. Eisentüren sind für sie eine Wand.</li>
   <li>Neue Wörter oder ganze Sätze verstehen sie nicht – nur die Befehle oben. Sie lernen auch nichts dazu.</li>
 </ul>
 
@@ -148,6 +150,7 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <tr><td>Keine Antwort</td><td>Steht der Bot in der Spielerliste (<b>Tab</b>)? Stimmt der Name? Sonst dem Besitzer Bescheid geben.</td></tr>
   <tr><td>Er hängt fest</td><td><code>stopp</code>, dann <code>komm</code>. Hilft das nicht: Besitzer fragen.</td></tr>
   <tr><td>Er ist weit weg</td><td><code>komm</code> – er läuft den ganzen Weg, das kann dauern. <code>status</code> zeigt, was er tut.</td></tr>
+  <tr><td><code>Problem: no path to …</code></td><td>Er hat 30 Sekunden keinen Weg zu dir gefunden (Klippe, Wasser, Eisentür). Geh ihm ein Stück entgegen und sag nochmal <code>komm</code>. Hinunter springt er bis zu 12 Blöcke, wenn er genug Leben hat.</td></tr>
   <tr><td>Er reißt das Falsche ab</td><td>Sofort <code>stopp</code>.</td></tr>
 </table>
 <p class="small">Stand: 01.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
