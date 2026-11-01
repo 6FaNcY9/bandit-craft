@@ -4,7 +4,6 @@
 // the SANDBOX server, and the server's own `execute if block` says whether the state came out right.
 // Usage (laptop, tailnet, `ssh bandit-lab` with docker): NODE_PATH=<mcbots node_modules> node placetest.js [filter]
 // Bot: PLACETEST_BOT (default bot50), password from ~/.local/state/mcbots/seed like every laptop bot.
-const {execFile} = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -14,15 +13,16 @@ const {Vec3} = require('vec3');
 const {placement, YAW} = require('../../hosts/bandit-lab/services/mcbots/app/placing');
 
 const BOT = process.env.PLACETEST_BOT || 'bot50';
-const CONTAINER = 'minecraft-sandbox'; // never anything else: `minecraft` is the real server
+const B = process.env.MCBOTS_URL || 'https://bandit-lab.tail7facc9.ts.net:8445'; // the dashboard: its /api/sandbox/console is the SANDBOX server's, never the real one
 const X0 = 3100, Z0 = 3000, FLOOR = 120; // in the air: case i at x X0 + 4 i, its ways at z Z0 + 4 w, cells at y FLOOR + 2
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SSH = ['-o', 'ControlMaster=auto', '-o', `ControlPath=${path.join(os.tmpdir(), 'mcpt-%C')}`, '-o', 'ControlPersist=300'];
 
-function rcon(cmd) {
-  if (cmd.includes("'")) throw new Error(`no single quotes in rcon commands: ${cmd}`);
-  return new Promise((res, rej) => execFile('ssh', [...SSH, 'bandit-lab', `docker exec ${CONTAINER} rcon-cli '${cmd}'`], {timeout: 60000},
-    (e, out, err) => (e ? rej(new Error(`rcon failed (${cmd}): ${e.message} ${err}`)) : res(out.replace(/\x1b\[[0-9;]*m/g, '').trim()))));
+async function rcon(cmd) {
+  const r = await fetch(B + '/api/sandbox/console', {method: 'POST', headers: {'Content-Type': 'application/json', Origin: B}, body: JSON.stringify({commands: [cmd]})});
+  const body = await r.json().catch(() => ({}));
+  if (r.status !== 200) throw new Error(`rcon failed (${cmd}): ${body.error || r.status}`);
+  return body.replies[0].replace(/§./g, '').trim();
 }
 const state = (name, props) => `minecraft:${name}${Object.keys(props).length ? `[${Object.entries(props).map(([k, v]) => `${k}=${v}`).join(',')}]` : ''}`;
 const isBlock = async (p, name, props) => /Test passed/.test(await rcon(`execute if block ${p.x} ${p.y} ${p.z} ${state(name, props)}`));

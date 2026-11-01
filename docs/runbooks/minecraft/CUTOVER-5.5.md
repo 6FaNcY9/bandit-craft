@@ -60,5 +60,7 @@ provably stopped.
 ## Later
 
 - Restart warning for the nix server: `ssh -t bandit-lab 'sudo env MC_CONSOLE=/run/minecraft/paper.stdin bash minecraft-restart-warn.sh "<reason>"'`.
-- Bot scripts that call `docker exec minecraft-sandbox rcon-cli` (`tools/mcbots-selftest`, `mcbots-placetest`,
-  `mcbots-scenarios/run.js`) and `tools/minecraft-kit-check` need the nix console/RCON before they work again.
+- Done 2026-11-01: `tools/mcbots-selftest`, `mcbots-placetest` and `mcbots-scenarios/run.js` reach the sandbox
+  console through the dashboard (`POST /api/sandbox/console`); `tools/minecraft-kit-check` writes to
+  `/run/minecraft/paper.stdin` with sudo and reads the journal. `tools/minecraft-restore-test.sh` still boots the
+  Docker image and goes with the Docker removal.

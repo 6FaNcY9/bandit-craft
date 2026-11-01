@@ -2,7 +2,8 @@
 'use strict';
 // mcbots self-test: runs every job primitive on bot10 in the SANDBOX server and verifies the result by
 // world / inventory state (never by the job's own "done" text). Usage: node selftest.js [testName...]
-// Needs: tailnet access to the dashboard, `ssh bandit-lab` (docker exec on the container minecraft-sandbox ONLY).
+// Needs: tailnet access to the dashboard (the sandbox console goes through it, POST /api/sandbox/console) and
+// `ssh bandit-lab` for the sandbox server's journal (the say test).
 const {execFile} = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -10,19 +11,14 @@ const path = require('node:path');
 
 const B = process.env.MCBOTS_URL || 'https://bandit-lab.tail7facc9.ts.net:8445';
 const BOT = process.env.MCBOTS_BOT || 'bot10'; // MCBOTS_BOT=bot5 with MCBOTS_URL=http://127.0.0.1:8095 for a laptop bot running new code
-const CONTAINER = 'minecraft-sandbox'; // never anything else: `minecraft` is the real server
 const CX = 3000, CZ = 3000, FLOOR = 64, R = 20; // test site: stone slab y 30..64, air above, x/z CX/CZ +- R
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SSH = ['-o', 'ControlMaster=auto', '-o', `ControlPath=${path.join(os.tmpdir(), 'mcst-%C')}`, '-o', 'ControlPersist=300'];
 
-function rcon(cmd) {
-  if (cmd.includes("'")) throw new Error(`no single quotes in rcon commands: ${cmd}`);
-  return new Promise((res, rej) => {
-    execFile('ssh', [...SSH, 'bandit-lab', `docker exec ${CONTAINER} rcon-cli '${cmd}'`], {timeout: 60000}, (e, out, err) => {
-      if (e) return rej(new Error(`rcon failed (${cmd}): ${e.message} ${err}`));
-      res(out.replace(/\x1b\[[0-9;]*m/g, '').trim());
-    });
-  });
+async function rcon(cmd) {
+  const r = await api('/api/sandbox/console', {method: 'POST', headers: {'Content-Type': 'application/json', Origin: B}, body: JSON.stringify({commands: [cmd]})});
+  if (r.status !== 200) throw new Error(`rcon failed (${cmd}): ${r.body.error || r.status}`);
+  return r.body.replies[0].replace(/§./g, '').trim();
 }
 const api = async (p, init) => {
   const r = await fetch(B + p, init);
@@ -373,7 +369,7 @@ test('say', async (t) => {
   await t.prep();
   const word = `selftest${Date.now() % 100000}`;
   t.job = await job('say', {text: word});
-  const logs = await new Promise((res) => execFile('ssh', [...SSH, 'bandit-lab', `docker logs --since 60s ${CONTAINER} 2>&1`], (e, out) => res(out || '')));
+  const logs = await new Promise((res) => execFile('ssh', [...SSH, 'bandit-lab', 'journalctl -u minecraft-server-sandbox --since -60s -o cat'], (e, out) => res(out || '')));
   t.check('chat line in the server log', logs.includes(word), `looked for ${word}`);
 });
 

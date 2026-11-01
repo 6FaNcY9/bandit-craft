@@ -3,7 +3,6 @@
 // Sandbox scenario runner for the mcbots bot (bot50 on the local dashboard, SANDBOX server only).
 // Usage: node run.js [name-filter]    env: DASHBOARD (default http://127.0.0.1:8099), BOT (bot50), TRACE=1 (position per second)
 // 2026-10-20: walking/digging fixes had no repeatable check; this builds each case in a sky lab and scores the bot.
-const {spawnSync} = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -110,11 +109,12 @@ function chestItemCount(out, item) {
   return n;
 }
 
-function rcon(cmds) {
+async function rcon(cmds) {
   cmds.forEach(checkCommand);
-  const r = spawnSync('ssh', ['-o', 'BatchMode=yes', 'bandit-lab', 'docker exec -i minecraft-sandbox rcon-cli'], {input: cmds.join('\n') + '\n', encoding: 'utf8', timeout: 120000});
-  if (r.status !== 0) throw new Error(`rcon failed: ${r.stderr || r.error}`);
-  return r.stdout.replace(/\x1b\[[0-9;]*m/g, '');
+  const r = await fetch(DASH + '/api/sandbox/console', {method: 'POST', headers: {'content-type': 'application/json', origin: DASH}, body: JSON.stringify({commands: cmds})});
+  const body = await r.json().catch(() => ({}));
+  if (r.status !== 200) throw new Error(`rcon failed: ${body.error || r.status}`);
+  return body.replies.join('\n');
 }
 const api = async (p, body) => (await fetch(DASH + p, body ? {method: 'POST', headers: {'content-type': 'application/json', origin: DASH}, body: JSON.stringify(body)} : undefined)).json();
 const botState = async () => (await api('/api/state')).bots.find((b) => b.name === BOT);
@@ -138,9 +138,9 @@ async function runPre(s, t0) {
   }
 }
 async function runScenario(s) {
-  rcon([...PLATFORM, ...CLEAR]); // clear the previous scenario before building (also when it was aborted)
+  await rcon([...PLATFORM, ...CLEAR]); // clear the previous scenario before building (also when it was aborted)
   await zonesCall(s, 'set');
-  rcon([...BOT_SETUP, ...(s.setup || [])]);
+  await rcon([...BOT_SETUP, ...(s.setup || [])]);
   await sleep(3000); // let the bot settle after the tp
   const startState = await botState();
   const since = (await api('/api/events')).lastId;
@@ -166,13 +166,13 @@ async function runScenario(s) {
   const elapsedS = Math.round((Date.now() - t0) / 1000);
   const chests = {};
   for (const c of s.success.filter((x) => x.kind === 'chest')) {
-    const out = rcon([`data get block ${c.x} ${c.y} ${c.z} Items`]);
+    const out = await rcon([`data get block ${c.x} ${c.y} ${c.z} Items`]);
     chests[chestKey(c)] = chestItemCount(out, c.item);
   }
   const cells = {};
-  for (const c of s.success.filter((x) => x.kind === 'cells')) cells[cellKey(c)] = countPassed(rcon(cellCommands(c)));
+  for (const c of s.success.filter((x) => x.kind === 'cells')) cells[cellKey(c)] = countPassed(await rcon(cellCommands(c)));
   const events = (await api(`/api/events?since=${since}`)).events.filter((e) => e.bot === BOT);
-  if (!process.env.KEEP) rcon(CLEAR.concat(s.teardown || [])); // KEEP=1 leaves the lab standing for a look
+  if (!process.env.KEEP) await rcon(CLEAR.concat(s.teardown || [])); // KEEP=1 leaves the lab standing for a look
   return {s, bot, events, sawZero, elapsedS, chests, cells, timedOut, mined, maxGapS: Math.round(maxGap(samples)), lookMaxDeg: Math.round(lookMax(readLook(), t0)), placed: events.filter((e) => /^placed /.test(e.text || '')).length};
 }
 

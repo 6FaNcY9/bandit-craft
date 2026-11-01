@@ -101,6 +101,7 @@ const decisions = new EventLog();
 const slayer = new Slayer({url: cfg.slayerUrl, cmd: cfg.slayerStatusCmd, decisions});
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
+const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
 const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: cfg.guestBots}) : null;
 const agentStatuses = new Map(); // agent -> its last POST /api/agentstatus (goal, workers, role, t)
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
@@ -151,7 +152,7 @@ let supplyChest = cfg.supplyChest;
 // the main server's only with RESCUE_SPOT (owner 2026-10-19), and there only the rescue's guarded tp.
 // ponytail: in the sandbox they land one block east and two north of the supply chest; a landing place if that ever moves.
 const {Rescue} = require('./rescue');
-if (cfg.sandboxRcon) rescuers.push(new Rescue({call: queued(cfg.sandboxRcon), events, target: () => supplyChest && {x: supplyChest.x + 1, y: supplyChest.y, z: supplyChest.z - 2}}));
+if (sandboxConsole) rescuers.push(new Rescue({call: sandboxConsole, events, target: () => supplyChest && {x: supplyChest.x + 1, y: supplyChest.y, z: supplyChest.z - 2}}));
 if (mainConsole && cfg.rescueSpot) rescuers.push(new Rescue({call: mainConsole, events, label: 'main server', target: () => cfg.rescueSpot}));
 if (rescuers.length) setInterval(() => { const snaps = [...runners.values()].map((r) => r.snapshot()); for (const r of rescuers) r.watch(snaps); }, 60000).unref();
 const supplyStock = () => (supplyChest ? world.stockAt(supplyChest) : world.stock); // the supply chest's numbers, not the plan's base chest's
@@ -768,6 +769,21 @@ const server = http.createServer(async (req, res) => {
       return json(400, {error: e.message});
     }
   }
+  // The sandbox console for the laptop tools (tools/mcbots-selftest, -placetest, -scenarios): the Docker
+  // `rcon-cli` they used went with the 5.5 cutover. Never the real server's console (cfg.sandboxRcon only).
+  if (req.method === 'POST' && url.pathname === '/api/sandbox/console') {
+    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
+    if (!sandboxConsole) return json(400, {error: 'no sandbox console (SANDBOX_RCON_HOST unset)'});
+    const {commands} = await readJson(req).catch(() => ({}));
+    if (!Array.isArray(commands) || !commands.length || commands.length > 64 || !commands.every((c) => typeof c === 'string' && c.length <= 1400 && !/[\x00-\x1f\x7f]/.test(c))) {
+      return json(400, {error: 'commands: 1-64 one-line strings of at most 1400 characters'});
+    }
+    try {
+      return json(200, {replies: await sandboxConsole(commands)});
+    } catch (e) {
+      return json(502, {error: e.message});
+    }
+  }
   // A sandbox scenario (scenario.js) runs inside the hub: the dashboard's owner starts it, results go to the event log.
   if (board && req.method === 'POST' && url.pathname === '/api/scenarios') {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
@@ -777,7 +793,7 @@ const server = http.createServer(async (req, res) => {
     if (scenarioRunning) return json(409, {error: 'a scenario is already running'});
     const {name, runs = 1} = await readJson(req).catch(() => ({}));
     scenarioRunning = true;
-    scenarioRun.main([String(name), '--runs', String(Math.min(5, Number(runs) || 1))], process.env, {call: queued(cfg.sandboxRcon), http: boardHttp, out: (line) => events.add('scenario', 'info', line)})
+    scenarioRun.main([String(name), '--runs', String(Math.min(5, Number(runs) || 1))], process.env, {call: sandboxConsole, http: boardHttp, out: (line) => events.add('scenario', 'info', line)})
       .catch((e) => events.add('scenario', 'error', e.message))
       .finally(() => { scenarioRunning = false; });
     return json(202, {started: name});
