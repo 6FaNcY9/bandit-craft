@@ -1,0 +1,20 @@
+'use strict';
+// Ingame helpers: sidebar lines, panel tokens and the order inbox parser (pure functions).
+const assert = require('node:assert/strict');
+const {token, sidebarLines, parseInbox, statusToken} = require('../ingame');
+assert.equal(token('Holz holen 3/8'), 'Holz_holen_3/8');
+assert.equal(token('§aStein "x" \\y'), 'Stein_x_y');
+assert.equal(token(''), '-');
+assert.equal(token('a'.repeat(40)).length, 32);
+assert.deepEqual(parseInbox('bot1:hol_32_holz'), {bot: 'bot1', words: ['hol', '32', 'holz']});
+assert.deepEqual(parseInbox('alle:stopp'), {bot: 'alle', words: ['stopp']});
+for (const bad of [null, '', 'x', 'bot1:', 'bot1:a b', 'bot1:' + 'a'.repeat(200), 'bot1:__']) assert.equal(parseInbox(bad), null, String(bad));
+const snap = (name, extra = {}) => ({name, online: true, dead: false, activity: 'idle - no job', lastErrorAgoS: null, ...extra});
+const lines = sidebarLines([snap('bot1', {activity: 'walking to "the" \\chest', lastErrorAgoS: 10}), snap('bot2', {dead: true}), snap('bot3', {online: false})], {guests: [], now: 0});
+assert.equal(lines.length, 3); assert.deepEqual(lines.map((l) => l.score), [15, 14, 13]);
+assert.deepEqual(JSON.parse(lines[0].component)[2], {text: 'walking to "the" \\chest', color: 'red'});
+assert.equal(JSON.parse(lines[1].component)[2].color, 'dark_red'); assert.equal(JSON.parse(lines[2].component)[2].color, 'gray');
+const many = sidebarLines([...Array(17)].map((_, i) => snap('b' + i)), {guests: ['b3', 'b5'], now: 0});
+assert.equal(many.length, 15); assert.ok(!many.some((l) => l.entry === 'b3' || l.entry === 'b5'));
+assert.equal(JSON.parse(sidebarLines([snap('b', {activity: 'x'.repeat(40)})], {guests: [], now: 0})[0].component)[2].text.length, 29);
+assert.equal(statusToken(snap('b', {online: false, activity: ''})), 'offline');
