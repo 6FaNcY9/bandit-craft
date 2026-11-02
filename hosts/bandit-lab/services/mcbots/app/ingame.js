@@ -39,23 +39,28 @@ class Ingame {
 
   async push() {
     if (this.busy) { if (!this.warned) this.log('ingame push: previous push still in flight'); this.warned = true; return; }
-    const snaps = this.snapshots(), cmds = [], lines = new Map(), tokens = new Map();
-    for (const l of sidebarLines(snaps, {guests: this.guests, now: this.now()})) {
-      lines.set(l.entry, l.component);
-      if (this.lines.get(l.entry) !== l.component) cmds.push(`scoreboard players set ${l.entry} mcbots ${l.score}`, `scoreboard players display name ${l.entry} mcbots ${l.component}`);
-    }
-    for (const e of this.lines.keys()) if (!lines.has(e)) cmds.push(`scoreboard players reset ${e} mcbots`);
-    for (const s of snaps) {
-      const t = statusToken(s);
-      tokens.set(s.name, t);
-      if (this.tokens.get(s.name) !== t) cmds.push(`pa data del mcbots ${s.name}`, `pa data set mcbots ${s.name} ${t}`);
-    }
-    if (!cmds.length) return;
     this.busy = true;
-    try { await this.call(cmds); Object.assign(this, {lines, tokens, warned: false}); } catch (e) { this.log('ingame push: ' + e.message); } finally { this.busy = false; }
+    try {
+      const snaps = this.snapshots(), cmds = [], lines = new Map(), tokens = new Map();
+      for (const l of sidebarLines(snaps, {guests: this.guests, now: this.now()})) {
+        lines.set(l.entry, l.component);
+        if (this.lines.get(l.entry) !== l.component) cmds.push(`scoreboard players set ${l.entry} mcbots ${l.score}`, `scoreboard players display name ${l.entry} mcbots ${l.component}`);
+      }
+      for (const e of this.lines.keys()) if (!lines.has(e)) cmds.push(`scoreboard players reset ${e} mcbots`);
+      for (const s of snaps) {
+        const t = statusToken(s);
+        tokens.set(s.name, t);
+        if (this.tokens.get(s.name) !== t) cmds.push(`pa data del mcbots ${s.name}`, `pa data set mcbots ${s.name} ${t}`);
+      }
+      if (!cmds.length) return;
+      await this.call(cmds);
+      Object.assign(this, {lines, tokens, warned: false});
+    } catch (e) { this.log('ingame push: ' + e.message); } finally { this.busy = false; }
   }
 
   async poll() {
+    if (this.polling) return;
+    this.polling = true;
     try {
       const replies = await this.call(this.viewers.map((v) => `pa data get ${v} order`));
       for (const [i, v] of this.viewers.entries()) {
@@ -69,7 +74,7 @@ class Ingame {
           this.pending.set(o.bot, {viewer: v, since: this.now()});
         } catch (e) { this.say(v, o.bot, 'geht nicht: ' + e.message); }
       }
-    } catch (e) { this.log('ingame poll: ' + e.message); }
+    } catch (e) { this.log('ingame poll: ' + e.message); } finally { this.polling = false; }
   }
 
   // One tellraw per viewer per gap: the newest text of a burst wins.

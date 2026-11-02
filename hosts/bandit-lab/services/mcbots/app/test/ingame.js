@@ -64,4 +64,9 @@ const {Ingame} = require('../ingame');
   const s = new Ingame({call: () => { n++; return new Promise(() => {}); }, viewers: ['a'], guests: [], snapshots: () => [snap('b')], order: () => '', log: () => {}});
   s.push(); s.push(); s.push(); await flush();
   assert.equal(n, 1);
+  let m = 0; const p = new Ingame({call: () => { m++; return new Promise(() => {}); }, viewers: ['a'], guests: [], snapshots: () => [], order: () => '', log: () => {}});
+  p.poll(); p.poll(); p.poll(); await flush();
+  assert.equal(m, 1); // a poll in flight skips the tick
+  const logs = []; const t = new Ingame({call, viewers: ['a'], guests: [], snapshots: () => { throw new Error('boom'); }, order: () => '', log: (x) => logs.push(x)});
+  await t.push(); assert.deepEqual(logs, ['ingame push: boom']);
 })().catch((e) => { console.error(e); process.exit(1); });
