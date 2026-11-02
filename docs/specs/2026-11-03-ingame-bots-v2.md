@@ -13,6 +13,13 @@ bot). v2 builds the actual management surface on top of it.
 | Mineflayer ecosystem (minecraftlegion, mineflayer-webpanel) | Only web panels exist; nobody manages mineflayer bots from inside the game. Nothing to copy, nothing to compete with. |
 | CommandPanels 4.2.4 docs + lab probes | `$EQUALS/$ATLEAST/$AND/$OR/$NOT` conditions, multi-item slots, `update-interval`, `[session]`, `[open]`, `[refresh]`, `[sound]`, `[msg]`, `[head] <name>` / `[head] <base64>`; `pa data set` keeps U+00A0 (no-break space) inside a value, so a value may be a whole sentence (verified on the lab 2026-11-03: `Holz 12/64 ok` round-trips with NBSP). |
 
+## Owner constraints (2026-11-03, after seeing v1 live)
+
+- **Nothing on the HUD.** The sidebar covered the view; it stays opt-in (off by default) and compact. All information
+  lives in GUIs the player opens and closes.
+- **No chat noise.** Only replies to the player's own orders appear in chat; no death lines, no status lines, no RCON
+  feedback (`broadcast-rcon-to-ops = false`). Chat cards (section 5) are shown only on an explicit click.
+
 ## Goals
 
 1. From one `/bots` screen the owner sees at a glance who works, who idles, who is in trouble, and what the
@@ -36,7 +43,7 @@ Non-goals: editing crews/plan/projects, the server panel (restart, whitelist), B
 - **Chat cards**: `tellraw` with hover text and clickable buttons (`suggest_command` fills the chat with the
   chat-grammar order; `run_command` opens panels via `/bots ...` aliases). Used for lists longer than a
   chest row: full inventory, last 10 events, chest contents.
-- **Sidebar** (v1): one line per bot. v2 adds a first line "7 arbeiten · 1 Problem · Bedarf: Eisen".
+- **Sidebar** (v1, opt-in): unchanged; the summary line lives in the `/bots` screen instead.
 
 ## Screens
 

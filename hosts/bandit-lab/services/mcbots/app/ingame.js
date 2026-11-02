@@ -31,7 +31,7 @@ class Ingame {
 
   async setup() {
     try {
-      await this.call(['team add mcbots', 'team modify mcbots color aqua', ...this.viewers.map((v) => `team join mcbots ${v}`),
+      await this.call(['team add mcbots', 'team modify mcbots color aqua', // viewers join via the /bots sidebar button (opt-in, owner 2026-11-03)
         'scoreboard objectives add mcbots dummy', 'scoreboard objectives modify mcbots numberformat blank',
         'scoreboard objectives setdisplay sidebar.team.aqua mcbots', 'pa data clear mcbots']);
     } catch (e) { this.log('ingame setup: ' + e.message); }
@@ -93,7 +93,6 @@ class Ingame {
   event(e) {
     const m = e.kind === 'say' && /^(\w{1,16}): (.*)$/.exec(e.text);
     if (m) return this.viewers.includes(m[1]) ? this.say(m[1], e.bot, m[2]) : undefined;
-    if (e.kind === 'death') return this.viewers.forEach((v) => this.say(v, e.bot, 'gestorben: ' + e.text));
     const p = this.pending.get(e.bot);
     if (!END_WORD[e.kind] || !p) return;
     this.pending.delete(e.bot);

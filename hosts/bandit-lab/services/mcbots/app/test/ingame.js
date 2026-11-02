@@ -29,7 +29,7 @@ const {Ingame} = require('../ingame');
   const g = new Ingame({call, viewers: ['fancy8869', 'MidariBread'], guests: ['bot23'], snapshots: () => snaps, gapMs: 0, order: (v, b, w) => { orders.push([v, b, w]); if (b === 'nope') throw new Error('unbekannter Bot'); return 'ok: komme'; }, log: () => {}, now: () => 0});
   const flush = () => new Promise((r) => setTimeout(r, 5));
   await g.setup();
-  assert.ok(calls.includes('team join mcbots MidariBread') && calls.includes('scoreboard objectives setdisplay sidebar.team.aqua mcbots'));
+  assert.ok(!calls.some((c) => c.startsWith('team join')) && calls.includes('scoreboard objectives setdisplay sidebar.team.aqua mcbots')); // sidebar is opt-in
   calls.length = 0; await g.push();
   assert.ok(calls.some((c) => c.startsWith('scoreboard players display name bot1 mcbots ')) && calls.includes('pa data set mcbots bot1 idle_-_no_job'));
   calls.length = 0; await g.push(); assert.equal(calls.length, 0); // nothing changed
@@ -55,8 +55,8 @@ const {Ingame} = require('../ingame');
   g.event({bot: 'bot2', kind: 'say', text: 'MidariBread: ok: folge dir'});
   g.event({bot: 'bot2', kind: 'death', text: 'died at 1 2 3'}); await flush();
   const mb = calls.filter((c) => c.startsWith('tellraw MidariBread '));
-  assert.equal(mb.length, 1); assert.ok(mb[0].includes('gestorben: died at 1 2 3')); // newest wins within the burst
-  assert.ok(calls.some((c) => c.startsWith('tellraw fancy8869 ') && c.includes('gestorben: died at 1 2 3')));
+  assert.equal(mb.length, 1); assert.ok(mb[0].includes('ok: folge dir')); // deaths are not told in chat (owner 2026-11-03: no chat noise)
+  assert.ok(!calls.some((c) => c.includes('gestorben')));
   calls.length = 0; g.event({bot: 'bot2', kind: 'say', text: 'MidariBread: ok: folge dir'}); await flush();
   assert.ok(calls[0].includes('[bot2] ') && calls[0].includes('ok: folge dir'));
   calls.length = 0; g.event({bot: 'bot1', kind: 'say', text: 'Stranger: hi'}); await flush(); assert.ok(!calls.some((c) => c.startsWith('tellraw'))); // unknown name: no relay

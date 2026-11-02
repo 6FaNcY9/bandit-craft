@@ -49,7 +49,7 @@
       accepts-transfers = false;
       allow-flight = true;
       broadcast-console-to-ops = true;
-      broadcast-rcon-to-ops = true;
+      broadcast-rcon-to-ops = false; # the bot hub talks over RCON every few seconds; ops must not see that in chat
       bug-report-link = "";
       chat-spam-threshold-seconds = 10;
       command-spam-threshold-seconds = 10;

@@ -93,10 +93,13 @@ MidariBread gets no dashboard: a Tailscale login there is full admin (RCON conso
 Spec: `docs/specs/2026-11-02-ingame-bots.md` (its Findings hold the verified console facts). Code: `app/ingame.js`
 (`Ingame`), reply path in `app/bots.js`.
 
-- Sidebar: at start the hub creates team `mcbots` (color aqua), joins the viewers (`INGAME_VIEWERS`, default
-  `fancy8869,MidariBread`) and objective `mcbots` (`numberformat blank`) shown on `sidebar.team.aqua`. Every 5 s it pushes one
-  line per bot (name + activity; gray idle/offline, dark_red dead, red recent error, white working; max 15, guests dropped
-  last). Off for one player: `/team leave` (on: `/team join mcbots`); the `/bots` menu has both as "Seitenleiste".
+- Sidebar (opt-in, off by default since 2026-11-03: the owner wants nothing on the HUD): at start the hub creates team
+  `mcbots` (color aqua) and objective `mcbots` (`numberformat blank`) shown on `sidebar.team.aqua`, but joins nobody.
+  Every 5 s it pushes one line per bot (name + activity; gray idle/offline, dark_red dead, red recent error, white
+  working; max 15, guests dropped last). On for one player: `/team join mcbots <name>` (off: `/team leave <name>`); the
+  `/bots` menu has both as "Seitenleiste". Chat stays quiet: only replies to a player's own orders are told
+  (`broadcast-rcon-to-ops = false` in nix-minecraft.nix keeps the hub's RCON traffic out of the ops' chat; deaths are not
+  announced).
 - `/bots` (alias `/b`, CommandPanels `commandpanels/bots.yml`, only fancy8869 and MidariBread): heads of bot1, bot2, bot3,
   bot19, bot20, bot21, MisaBot, bot23 with live lore from `%commandpanels_data_<bot>,mcbots%`
   (`update-interval: 20`), `Alle stopp`, a click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32,
