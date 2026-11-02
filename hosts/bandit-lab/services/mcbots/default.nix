@@ -155,8 +155,8 @@ in {
             PLAN_ENABLE = "";
             # Bots never dig or place inside these x1,z1,x2,z2 boxes: the main base
             # around spawn and MidariBread's base (from BlueMap light data, +16). "@MisaBot" lets that bot
-            # (and only it) work inside the box; her trading hall, once known, is added without "@".
-            PROTECTED_AREAS = "-80,-144,80,80;112,368,272,592@MisaBot";
+            # (and only it) work inside the box; her trading hall (known 2026-11-02) is the last box, without "@".
+            PROTECTED_AREAS = "-80,-144,80,80;112,368,272,592@MisaBot;166,409,181,427";
             NODE_OPTIONS = "--max-old-space-size=1536";
             # Per-bot settings from the dashboard (settings.json) survive restarts.
             STATE_DIR = "/state";
@@ -167,11 +167,11 @@ in {
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
             BOARD_BOTS = "bot2,bot3,bot19,bot20,bot21";
             GUEST_BOTS = guestBots;
-            # Misa's trader (app/tradeschedule.js): bot23 trades in the hall "misa" on Mon, Wed and Sat from 18:00
-            # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}]}}
-            # and stays empty until Misa's hall coordinates are known: with no hall nothing trades.
-            TRADE_HALLS = "";
-            TRADE_SCHEDULE = "bot23=misa@mon,wed,sat/18:00+60";
+            # Misa's trader (app/tradeschedule.js): bot23 trades in the hall "misa" daily from 18:00
+            # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}], "sticks": [{x,y,z}]}}.
+            # Hall scanned 2026-11-02: 32 villagers, floors y 55/59, stick chest 175 59 424, emerald chest 171 59 425.
+            TRADE_HALLS = "{\"misa\":{\"hall\":{\"x1\":166,\"y1\":54,\"z1\":409,\"x2\":181,\"y2\":61,\"z2\":426},\"stores\":[{\"x\":171,\"y\":59,\"z\":425}],\"sticks\":[{\"x\":175,\"y\":59,\"z\":424}]}}";
+            TRADE_SCHEDULE = "bot23=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60";
             # Server panel (admin.js): RCON to Paper through the gateway forwarder; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
             RCON_HOST = bridgeGw;
