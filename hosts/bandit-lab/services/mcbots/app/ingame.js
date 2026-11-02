@@ -19,4 +19,87 @@ function parseInbox(value) {
   return words && words.length ? {bot: m[1], words} : null;
 }
 
-module.exports = {token, sidebarLines, parseInbox, statusToken};
+const PENDING_MS = 30 * 60000;
+const END_WORD = {done: 'fertig', fail: 'Problem', stop: 'gestoppt'};
+
+class Ingame {
+  // call(commands[]) -> replies (RCON); order(viewer, bot, words) -> receipt text, throws on refusal.
+  constructor({call, viewers, guests, snapshots, order, log, now = Date.now, gapMs = 2000}) {
+    Object.assign(this, {call, viewers, guests, snapshots, order, log, now, gapMs,
+      lines: new Map(), tokens: new Map(), pending: new Map(), waiting: new Map(), busy: false, warned: false});
+  }
+
+  async setup() {
+    try {
+      await this.call(['team add mcbots', 'team modify mcbots color aqua', ...this.viewers.map((v) => `team join mcbots ${v}`),
+        'scoreboard objectives add mcbots dummy', 'scoreboard objectives modify mcbots numberformat blank',
+        'scoreboard objectives setdisplay sidebar.team.aqua mcbots', 'pa data clear mcbots']);
+    } catch (e) { this.log('ingame setup: ' + e.message); }
+  }
+
+  async push() {
+    if (this.busy) { if (!this.warned) this.log('ingame push: previous push still in flight'); this.warned = true; return; }
+    const snaps = this.snapshots(), cmds = [], lines = new Map(), tokens = new Map();
+    for (const l of sidebarLines(snaps, {guests: this.guests, now: this.now()})) {
+      lines.set(l.entry, l.component);
+      if (this.lines.get(l.entry) !== l.component) cmds.push(`scoreboard players set ${l.entry} mcbots ${l.score}`, `scoreboard players display name ${l.entry} mcbots ${l.component}`);
+    }
+    for (const e of this.lines.keys()) if (!lines.has(e)) cmds.push(`scoreboard players reset ${e} mcbots`);
+    for (const s of snaps) {
+      const t = statusToken(s);
+      tokens.set(s.name, t);
+      if (this.tokens.get(s.name) !== t) cmds.push(`pa data del mcbots ${s.name}`, `pa data set mcbots ${s.name} ${t}`);
+    }
+    if (!cmds.length) return;
+    this.busy = true;
+    try { await this.call(cmds); Object.assign(this, {lines, tokens, warned: false}); } catch (e) { this.log('ingame push: ' + e.message); } finally { this.busy = false; }
+  }
+
+  async poll() {
+    try {
+      const replies = await this.call(this.viewers.map((v) => `pa data get ${v} order`));
+      for (const [i, v] of this.viewers.entries()) {
+        const value = /Value: (\S+)/.exec(replies[i] || '')?.[1];
+        if (!value || value === 'null') continue;
+        await this.call([`pa data del ${v} order`]);
+        const o = parseInbox(value);
+        if (!o) { this.say(v, 'bots', 'kenne ich nicht: ' + value); continue; }
+        try {
+          this.say(v, o.bot, this.order(v, o.bot, o.words));
+          this.pending.set(o.bot, {viewer: v, since: this.now()});
+        } catch (e) { this.say(v, o.bot, 'geht nicht: ' + e.message); }
+      }
+    } catch (e) { this.log('ingame poll: ' + e.message); }
+  }
+
+  // One tellraw per viewer per gap: the newest text of a burst wins.
+  say(viewer, bot, text) {
+    const msg = `tellraw ${viewer} ` + JSON.stringify(['', {text: `[${bot}] `, color: 'aqua'}, {text: String(text).slice(0, 100)}]);
+    const had = this.waiting.has(viewer);
+    this.waiting.set(viewer, msg);
+    if (had) return;
+    setTimeout(() => {
+      const m = this.waiting.get(viewer);
+      this.waiting.delete(viewer);
+      this.call([m]).catch((e) => this.log('ingame tellraw: ' + e.message));
+    }, this.gapMs).unref();
+  }
+
+  event(e) {
+    const m = e.kind === 'say' && /^(\w{1,16}): (.*)$/.exec(e.text);
+    if (m) return this.say(m[1], e.bot, m[2]);
+    if (e.kind === 'death') return this.viewers.forEach((v) => this.say(v, e.bot, 'gestorben: ' + e.text));
+    const p = this.pending.get(e.bot);
+    if (!END_WORD[e.kind] || !p) return;
+    this.pending.delete(e.bot);
+    if (this.now() - p.since < PENDING_MS) this.say(p.viewer, e.bot, `${END_WORD[e.kind]}: ${e.text}`);
+  }
+
+  start() {
+    this.setup();
+    setInterval(() => this.push(), 5000).unref();
+    setInterval(() => this.poll(), 2000).unref();
+  }
+}
+
+module.exports = {token, sidebarLines, parseInbox, statusToken, Ingame};
