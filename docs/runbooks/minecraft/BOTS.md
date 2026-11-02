@@ -62,10 +62,11 @@ Immediate stop without a deploy: `sudo systemctl stop docker-mcbots mcbots-https
 
 `MisaBot` (builder) and `bot23` (trader) in `mcbots-worker-5` belong to the player MidariBread: they play on the main
 server and obey only MidariBread and the owner (the worker's own `OWNER_UUIDS`; every other process keeps the owner
-alone). Design: `docs/specs/2026-10-29-misa-bots.md`. Orders are whispered:
-`/msg MisaBot komm | folge | stopp | wache | wache hier | hol <n> <block> | gib | status`. `hol 20 eisen` fills
+alone). Design: `docs/specs/2026-10-29-misa-bots.md`. Orders are chat words (or the in-game menu, see below):
+`MisaBot komm | folge | stopp | wache | wache hier | hol <n> <block> | gib | status`. `hol 20 eisen` fills
 its inventory, `gib` brings that haul and throws everything but tools, armour and food at the player's feet. The bot
-whispers back how an order ended (`fertig: ...`, `Problem: ...`, `gestoppt: ...`) and when it died.
+reports how an order ended (`fertig: ...`, `Problem: ...`, `gestoppt: ...`) and when it died; since 2026-11-02 the reply
+comes from the console as `tellraw`, not as a `/tell` from the bot.
 
 Building words (`app/misa.js`): `ecke` notes the block she stands on as corner 1, the next as corner 2 (then 1 again);
 `abbau` removes everything between the corners except containers (up to 32 x 32 x 24, top down); `bau <name> [90|180|270]`
@@ -75,17 +76,41 @@ barrels within 8 blocks of her. Both are refused unless the whole box lies insid
 only the areas that do not name it, so a trading hall added to `PROTECTED_AREAS` without `@` stays closed to
 everyone. `bau` never clears other people's blocks (`clearAll` is off): `abbau` the spot first.
 
-`bot23` trades sticks for emeralds on a schedule: `TRADE_SCHEDULE=bot23=misa@mon,wed,sat/18:00+60` (Europe/Vienna;
-several entries with `;`) gives it the `trade` job of hall `misa` at the start and stops it after the minutes; a hub
-restart inside the window resumes it. The hall is `TRADE_HALLS` JSON `{"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores":
-[{x,y,z}], "sticks": [{x,y,z}]}}` (`sticks` optional: every other chest or barrel in the box). `TRADE_HALLS` is empty
-until Misa's hall coordinates are known, so nothing trades yet; then add the hall there (and its box to
-`PROTECTED_AREAS`) and deploy.
+`bot23` trades sticks for emeralds on a schedule: `TRADE_SCHEDULE=bot23=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60`
+(daily, Europe/Vienna; several entries with `;`) gives it the `trade` job of hall `misa` at the start and stops it after
+the minutes; a hub restart inside the window resumes it. The hall is `TRADE_HALLS` JSON `{"misa": {"hall": {x1,y1,z1,x2,y2,z2},
+"stores": [{x,y,z}], "sticks": [{x,y,z}]}}` (`sticks` optional: every other chest or barrel in the box). Since 2026-11-02
+it holds Misa's hall `{x1:166,y1:54,z1:409,x2:181,y2:61,z2:426}`, stores `171 59 425`, sticks `175 59 424`; its box
+`166,409,181,427` is in `PROTECTED_AREAS`.
 
 `GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
 rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
 MidariBread gets no dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop them
 (`alle stopp`). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
+
+## In the game: sidebar, /bots, replies (2026-11-02)
+
+Spec: `docs/specs/2026-11-02-ingame-bots.md` (its Findings hold the verified console facts). Code: `app/ingame.js`
+(`Ingame`), reply path in `app/bots.js`.
+
+- Sidebar: at start the hub creates team `mcbots` (color aqua), joins the viewers (`INGAME_VIEWERS`, default
+  `fancy8869,MidariBread`) and objective `mcbots` (`numberformat blank`) shown on `sidebar.team.aqua`. Every 5 s it pushes one
+  line per bot (name + activity; gray idle/offline, dark_red dead, red recent error, white working; max 15, guests dropped
+  last). Off for one player: `/team leave` (on: `/team join mcbots`); the `/bots` menu has both as "Seitenleiste".
+- `/bots` (alias `/b`, CommandPanels `commandpanels/bots.yml`, only fancy8869 and MidariBread): heads of bot1, bot2, bot3,
+  bot19, bot20, bot21, MisaBot, bot23 with live lore from `%commandpanels_data_<bot>,mcbots%`
+  (`update-interval: 20`), `Alle stopp`, a click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32,
+  Stein 32, Eisen 16, Kohle 32, Zurueck). Limit: `/botmenu` opened directly has no bot selected.
+- Inbox contract: the hub writes `pa data set mcbots <bot> <token>` (one word, spaces become `_`). A click sets the
+  player's `order` data to `<bot>:<words>` (words joined by `_`, same grammar as the chat orders); every 2 s the hub runs
+  `pa data get <viewer> order`, deletes it and runs the order. `alle:stopp` stops everything like the dashboard's Stop all.
+- Replies: `tellraw <viewer> [bot] text`, coalesced per viewer+bot (2 s). Bots do not `/tell` any more: Paper rejects an
+  unsigned `/tell` from an offline-mode bot ("Received unsigned command packet ... requires signable arguments";
+  `enforce-secure-profile` stays on). A runner emits event kind `say` with text `"<player>: <text>"` and the hub turns it
+  into `tellraw`. Deaths go to every viewer. Chat orders ("MisaBot komm") work as before.
+- Console cost: about 1 RCON command/s for the polls (2 s per viewer) plus pushes only when something changed.
+- Troubleshooting (RCON): `pa data get mcbots bot1` (what the panel shows), `pa data get <you> order` (stuck order),
+  `scoreboard objectives list` (objective exists), `team list mcbots` (who sees it).
 
 ## Phone notifications
 
