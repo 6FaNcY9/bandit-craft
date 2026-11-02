@@ -203,7 +203,7 @@ class Admin {
     return {ok: true, reply};
   }
 
-  // Warn 60/30/10 s ahead, save, stop. docker-minecraft has Restart=always, so `stop` is a restart.
+  // Warn 60/30/10 s ahead, save, stop. minecraft-server-paper has Restart=always, so `stop` is a restart.
   restart() {
     if (this.timers) throw new Error('a restart is already counting down');
     this.restartAt = Date.now() + 60000;

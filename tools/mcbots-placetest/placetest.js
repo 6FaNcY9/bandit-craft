@@ -2,7 +2,7 @@
 'use strict';
 // Live check of app/placing.js: a creative test bot places each block state the way placing.js says, in
 // the SANDBOX server, and the server's own `execute if block` says whether the state came out right.
-// Usage (laptop, tailnet, `ssh bandit-lab` with docker): NODE_PATH=<mcbots node_modules> node placetest.js [filter]
+// Usage (laptop, tailnet, `ssh bandit-lab`): NODE_PATH=<mcbots node_modules> node placetest.js [filter]
 // Bot: PLACETEST_BOT (default bot50), password from ~/.local/state/mcbots/seed like every laptop bot.
 const fs = require('node:fs');
 const os = require('node:os');

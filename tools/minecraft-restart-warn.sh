@@ -2,8 +2,8 @@
 # In-game restart warning: 10 minutes (with reason), 7 and 5 minutes, then return after the full
 # 10 minutes. The caller restarts the server; this script never announces "restarting now".
 #   tools/minecraft-restart-warn.sh REASON
-# Env: MC_RCON (default: docker exec minecraft rcon-cli), MC_WARN_MINUTE (seconds per minute, default 60),
-# MC_CONSOLE (a nix-minecraft console FIFO, e.g. /run/minecraft/paper.stdin; set = used instead of MC_RCON).
+# Env: MC_RCON (default: mcrcon; needs MCRCON_PASS), MC_WARN_MINUTE (seconds per minute, default 60),
+# MC_CONSOLE (console FIFO; default /run/minecraft/paper.stdin when it exists, else MC_RCON is used).
 set -euo pipefail
 
 reason=${1-}
@@ -11,8 +11,8 @@ if [[ -z ${reason//[[:space:]]/} ]]; then
   echo "usage: minecraft-restart-warn.sh REASON" >&2
   exit 2
 fi
-rcon=${MC_RCON:-docker exec minecraft rcon-cli}
-console=${MC_CONSOLE-}
+rcon=${MC_RCON:-mcrcon}
+console=${MC_CONSOLE-$([ -w /run/minecraft/paper.stdin ] && echo /run/minecraft/paper.stdin || true)}
 m=${MC_WARN_MINUTE:-60}
 
 # sleep in the background so the INT trap runs at once instead of after the foreground sleep

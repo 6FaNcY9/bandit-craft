@@ -2,6 +2,12 @@
 
 Verified live on 2026-09-22 after activation. Existing server and worlds preserved.
 
+> **Since the 5.5 cutover (2026-10-31, [CUTOVER-5.5.md](CUTOVER-5.5.md))** the game runs under
+> nix-minecraft: unit `minecraft-server-paper` (sandbox `minecraft-server-sandbox`, proxy
+> `minecraft-server-velocity`), data `/srv/minecraft/paper` (owner `minecraft`), console FIFO
+> `/run/minecraft/paper.stdin` (root), log `journalctl -u minecraft-server-paper`. Where the text
+> below still says `docker-minecraft`, `/srv/containers/minecraft/data` or `docker exec`, read these.
+
 > **Prepared, not deployed (2026-10-06):** browser administration (VoxelDash panel,
 > since retired in favour of the dashboard's Server panel; BlueMap map), pinned Paper build, consistent backups and a plugin-ownership change
 > are in the working tree. They change several statements below once activated
@@ -24,15 +30,17 @@ time and weather, the ImageFrame list, a command console and "restart with warni
   Docker network. The port is not published (the `lab-minecraft` check forbids it). The password
   is random, made once by `minecraft-rcon-seed` (`/var/lib/minecraft-rcon/password`, root only),
   and reaches Paper (`/run/minecraft-rcon/rcon.env`) and the dashboard (`mcbots-seed`) as
-  environment files. Rotate: delete the file, restart `docker-minecraft` and `docker-mcbots`.
+  environment files. Since 5.5 the password is the SOPS secret `minecraft-rcon-password`
+  (bandit-nix `secrets/lab.yaml`); rotate it there, deploy, restart `docker-mcbots`.
 - Access: `/api/admin/*` is human-only. The agent bearer token is refused (deny-by-default list in
   `agentauth.js`), POSTs need same origin and JSON like every other dashboard POST, names must
   match `[A-Za-z0-9_]{1,16}`, commands are at most 200 characters on one line, and every
   action is written to the events feed (`admin: kick X`).
 - Console shows the commands you send and Paper's replies only. `latest.log` is not mounted into
-  the dashboard container, so the live server log is not available there (use `docker logs`).
-- Restart: warnings at 60, 30 and 10 s, then `save-all flush` and `stop`; `docker-minecraft` has
-  `Restart=always`, so systemd brings it back (about 10 s). Cancel works until the stop. The
+  the dashboard container, so the live server log is not available there (use
+  `journalctl -u minecraft-server-paper`).
+- Restart: warnings at 60, 30 and 10 s, then `save-all flush` and `stop`; systemd restarts
+  `minecraft-server-paper` (about 10 s). Cancel works until the stop. The
   countdown lives in the dashboard process: restarting `docker-mcbots` during it cancels it.
 - Not available through RCON: ping per player, uptime (the panel shows TPS, MSPT and memory
   as Paper prints them), restarting the host or the other containers.
@@ -40,9 +48,9 @@ time and weather, the ImageFrame list, a command console and "restart with warni
 ## Server and backup
 
 - Paper 26.2 build 127 (`ad9a034`); Temurin Java 25.0.4+7-LTS.
-- Host: bandit-lab; service: `docker-minecraft.service`; container: `minecraft`.
-- Data: `/srv/containers/minecraft/data` (container `/data`); plugins: `data/plugins`.
-- Declarative configuration: `hosts/bandit-lab/services/minecraft/default.nix`; staging: `minecraft-plugins.service`.
+- Host: bandit-lab; service: `minecraft-server-paper.service` (nix-minecraft, since 5.5).
+- Data: `/srv/minecraft/paper`; plugins: `/srv/minecraft/paper/plugins`.
+- Declarative configuration: `hosts/bandit-lab/services/minecraft/nix-minecraft.nix` (`default.nix` keeps the Docker units until their removal).
 - Online mode enabled; whitelist disabled; existing ports/gameplay/world configuration preserved.
 - Live baseline: `allow-flight=true` and ViaVersion's
   `packet-limiter.enabled=false`. The declarative staging service targets only those
@@ -277,16 +285,16 @@ modification or rollback rights. Add other specific permissions only when needed
 operation after all gates below pass:
 
 1. **BACKUP:** make and verify a full consistent backup of
-   `/srv/containers/minecraft/data`, including the target world's
+   `/srv/minecraft/paper`, including the target world's
    `level.dat`; record its checksum and restore location.
-2. **STOP:** stop/quiesce `docker-minecraft.service`; do not edit a live world.
+2. **STOP:** stop/quiesce `minecraft-server-paper.service`; do not edit a live world.
 3. **COPY:** copy the target `level.dat` into an isolated working directory and
    verify that the copy is owned by the operator and not writable by Paper.
 4. **TEST/RESTORE:** run the unchanged script only on that copy, inspect its
    output, validate the result, and retain the original until a restore test is
    complete. Restore the original on any error or unexpected result.
 5. **OWNERSHIP:** before any approved replacement, verify the destination
-   ownership is the Paper container's `1000:1000` and mode is appropriate for
+   ownership is `minecraft:minecraft` and mode is appropriate for
    the existing data directory.
 6. **GO:** obtain an explicit maintenance GO after backup, offline state,
    isolated-copy result, and restore path are all recorded. A source change or
@@ -298,11 +306,11 @@ those require a separate maintenance action.
 Console (SSH as vino; RCON is on but unpublished, see the next section):
 
 ```sh
-docker exec --user 1000 minecraft mc-send-to-console 'plugins'
-docker exec --user 1000 minecraft mc-send-to-console 'save-all flush'
-docker logs --since 5m minecraft
-# Restart only after confirming the server is empty: mc-send-to-console 'list'
-sudo systemctl restart docker-minecraft.service
+sudo sh -c "echo plugins > /run/minecraft/paper.stdin"
+sudo sh -c "echo 'save-all flush' > /run/minecraft/paper.stdin"
+journalctl -u minecraft-server-paper --since -5m
+# Restart only after confirming the server is empty: echo list > the console, read the journal
+sudo systemctl restart minecraft-server-paper.service
 bandit-lab-health
 ```
 

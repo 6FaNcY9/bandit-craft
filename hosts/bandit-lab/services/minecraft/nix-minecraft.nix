@@ -166,8 +166,9 @@
 
   # Modern forwarding: only the three keys velocity-patch.nix sets in the Docker stack (secret from the
   # environment file). The sandbox has no config yet on its first start, so it gets an empty file to patch.
+  # allow-piston-duplication: the owner wants TNT dupers (Paper disables them by default).
   forwardingPatch = ''
-    yq -i '.proxies.velocity.enabled = true | .proxies.velocity.online-mode = true | .proxies.velocity.secret = strenv(VELOCITY_FORWARDING_SECRET)' config/paper-global.yml
+    yq -i '.proxies.velocity.enabled = true | .proxies.velocity.online-mode = true | .proxies.velocity.secret = strenv(VELOCITY_FORWARDING_SECRET) | .unsupported-settings.allow-piston-duplication = true' config/paper-global.yml
   '';
 
   # The sandbox, as the Docker one was (sandbox.nix): the same Paper, only the ViaVersion pair, offline mode
