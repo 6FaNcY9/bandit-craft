@@ -56,9 +56,9 @@
     assert.equal(loadRole(roles, 'bot1'), 'wache'); assert.equal(loadRole(roles, 'bot2'), 'farmer');
     const bot = new EventEmitter(), whispers = [];
     bot.players = {fancy8869: {uuid, username: 'fancy8869', entity: {position: ctx.ownerPos}}};
-    bot.whisper = (name, text) => whispers.push({name, text});
+    bot.whisper = () => { throw new Error('replies go over the say event, not /tell'); };
     const outcomes = [], orders = [];
-    const runner = new BotRunner('bot1', {log: () => {}, ownerUuids: [uuid], demoLog: {add: (e) => { orders.push(e); return String(orders.length); }, outcome: (...a) => outcomes.push(a)}});
+    const runner = new BotRunner('bot1', {log: () => {}, ownerUuids: [uuid], onEvent: (b, k, t) => { if (k === 'say') whispers.push({name: t.split(': ')[0], text: t.slice(t.indexOf(': ') + 2)}); }, demoLog: {add: (e) => { orders.push(e); return String(orders.length); }, outcome: (...a) => outcomes.push(a)}});
     runner.bot = bot; runner.online = true;
     runner.snapshot = () => ({health: 20, food: 18, job: null, role: runner.role, strangerOrders: runner.strangerOrders});
     runner.pump = () => {}; // keep the real enqueue/validation; no Minecraft work
@@ -77,7 +77,7 @@
     runner.emit('done', 'finished: come', job.id + 1); assert.equal(outcomes.length, 0);
     runner.emit('done', 'finished: come', job.id); assert.deepEqual(outcomes[0], ['1', 'finished', 'finished: come']);
     runner.emit('done', 'finished: come', job.id); assert.equal(outcomes.length, 1);
-    runner.say = (text) => bot.whisper('fancy8869', text);
+    runner.say = (text) => runner.emit('say', `fancy8869: ${text}`); // unthrottled stand-in; the first assertion above ran the real sayer
     runner.rolesFile = roles;
     bot.emit('message', msg('rolle sammler', true), 'chat', uuid);
     assert.equal(runner.role, 'sammler'); assert.equal(loadRole(roles, 'bot1'), 'sammler');

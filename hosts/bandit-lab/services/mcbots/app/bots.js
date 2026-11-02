@@ -358,7 +358,7 @@ class BotRunner {
     this.strangerOrders = 0;
     this.rolesFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'roles.json') : null;
     this.role = owner.loadRole(this.rolesFile, name);
-    this.say = owner.makeSayer((text) => { if (this.online) this.bot?.whisper(this.answerTo, text); });
+    this.say = owner.makeSayer((text) => { if (this.answerTo) this.emit('say', `${this.answerTo}: ${text}`); }); // the hub tells it over the console: Paper rejects the bots' /tell (unsigned command)
   }
 
   // Every area the hub knows (allAreas) minus those that name this bot (misa.js): consumers read only this view.

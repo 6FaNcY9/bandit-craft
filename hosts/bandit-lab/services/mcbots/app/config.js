@@ -128,6 +128,9 @@ function loadConfig(env = process.env) {
   if (rconHost && !/^[\w.-]{1,64}$/.test(rconHost)) throw new Error('RCON_HOST must be a host name');
   if (!Number.isInteger(rconPort) || rconPort < 1 || rconPort > 65535) throw new Error('RCON_PORT must be a port');
   if (!!rconHost !== !!rconPassword) throw new Error('RCON_HOST and RCON_PASSWORD must be set together');
+  // Players whose sidebar and panel inbox the hub serves over the console (ingame.js).
+  const ingameViewers = list(env.INGAME_VIEWERS ?? 'fancy8869,MidariBread');
+  if (ingameViewers.some((n) => !/^\w{1,16}$/.test(n))) throw new Error('bad INGAME_VIEWERS');
   // Where the main server's rescue lands a stranded bot (rescue.js), "x,y,z"; unset, no rescue there.
   const spot = (env.RESCUE_SPOT || '').trim();
   if (spot && !/^-?\d{1,7},-?\d{1,3},-?\d{1,7}$/.test(spot)) throw new Error('RESCUE_SPOT must be x,y,z');
@@ -172,6 +175,7 @@ function loadConfig(env = process.env) {
     rcon: rconHost ? {host: rconHost, port: rconPort, password: rconPassword} : null,
     sandboxRcon: sbHost ? {host: sbHost, port: sbPort, password: sbPassword} : null,
     rescueSpot,
+    ingameViewers,
     slayerStatusCmd,
     workerPort,
     workerHost: env.WORKER_HOST || '127.0.0.1',

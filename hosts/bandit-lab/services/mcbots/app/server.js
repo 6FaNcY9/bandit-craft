@@ -94,7 +94,7 @@ setInterval(() => {
     }
   }
 }, 60000).unref();
-const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
+const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); ingame?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.
 const decisions = new EventLog();
@@ -155,6 +155,44 @@ const {Rescue} = require('./rescue');
 if (sandboxConsole) rescuers.push(new Rescue({call: sandboxConsole, events, target: () => supplyChest && {x: supplyChest.x + 1, y: supplyChest.y, z: supplyChest.z - 2}}));
 if (mainConsole && cfg.rescueSpot) rescuers.push(new Rescue({call: mainConsole, events, label: 'main server', target: () => cfg.rescueSpot}));
 if (rescuers.length) setInterval(() => { const snaps = [...runners.values()].map((r) => r.snapshot()); for (const r of rescuers) r.watch(snaps); }, 60000).unref();
+// Stop all, authoritative here: standing orders off first (they would hand idle bots new work), pending recoveries dropped.
+// Returns whether the keeper was on.
+function stopAll() {
+  toResume = {};
+  const keeperOff = !!keeper?.enabled;
+  if (keeperOff) keeper.setEnabled(false);
+  if (plan?.enabled) plan.setEnabled(false); // it would hand the idle bots new work; this also returns the keeper
+  board?.pauseAll(); // the board too: no part goes out again until the owner resumes the job
+  return keeperOff;
+}
+// The sidebar, the panel inbox and the replies of the in-game channel (ingame.js), over the main console.
+const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
+  snapshots: () => [...runners.values()].map((r) => r.snapshot()),
+  // Mirrors bots.js bindOwner for a runner of the map (local or remote); throws the refusal text.
+  order: (viewer, name, words) => {
+    const owner = require('./owner');
+    if (name === 'alle') {
+      if (words[0] !== 'stopp') throw new Error('alle: nur stopp');
+      for (const r of runners.values()) if (!(r instanceof RemoteRunner) || r.conn) { r.enqueue('stop'); ownerOrders.delete(r.name); delete toResume[r.name]; projects.pause(r.name); }
+      saveOrders(); stopAll(); saveJobs(true); broadcast();
+      return 'ok: alle stoppen';
+    }
+    const r = runners.get(name);
+    if (!r) throw new Error('unbekannter Bot');
+    const c = owner.translate(words, {owner: viewer, ownerPos: null});
+    if (c.unknown) throw new Error(owner.HELP);
+    if (c.role) throw new Error('Rolle nur im Chat');
+    if (c.type) {
+      VALIDATE[c.type](c.args); // refuse before replacing the active job
+      r.enqueue(c.type, c.args, {replace: true});
+      ownerOrders.set(name, {type: c.type, args: c.args}); saveOrders();
+      return 'ok: ' + c.type;
+    }
+    if (c.stop) { r.enqueue('stop'); ownerOrders.delete(name); saveOrders(); return 'ok: bleibe stehen'; }
+    if (c.status) { const s = r.snapshot(); return `ok: Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}`; }
+    throw new Error(owner.HELP);
+  }}) : null;
+if (ingame) ingame.start();
 const supplyStock = () => (supplyChest ? world.stockAt(supplyChest) : world.stock); // the supply chest's numbers, not the plan's base chest's
 const staticAreas = cfg.protectedAreas.slice();
 function applyPlaces() {
@@ -728,13 +766,7 @@ const server = http.createServer(async (req, res) => {
       // (they would hand idle bots new work), then every pending recovery dropped.
       let keeperOff = false;
       if (all && type === 'stop') {
-        toResume = {};
-        if (keeper?.enabled) {
-          keeper.setEnabled(false);
-          keeperOff = true;
-        }
-        if (plan?.enabled) plan.setEnabled(false); // it would hand the idle bots new work; this also returns the keeper
-        board?.pauseAll(); // the board too: no part goes out again until the owner resumes the job
+        keeperOff = stopAll();
       }
       broadcast();
       if (errors.length) throw new Error(errors.join('; '));
