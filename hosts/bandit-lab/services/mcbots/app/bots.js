@@ -393,7 +393,6 @@ class BotRunner {
     }
     // Without this a player hears only "ok" and must guess whether the order worked (guest bot, 2026-10-29).
     if (['done', 'fail', 'stop'].includes(kind) && this.chatJobs.delete(jobId)) this.say(`${{done: 'fertig', fail: 'Problem', stop: 'gestoppt'}[kind]}: ${text}`);
-    else if (kind === 'death' && this.answerTo) this.say(`gestorben: ${text}`);
     try {
       this.onEvent?.(this.name, kind, text, jobId);
     } catch {}

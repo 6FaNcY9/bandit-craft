@@ -1,3 +1,4 @@
+# The head list must match BOT_NAMES and the worker `bots` lists in hosts/bandit-lab/services/mcbots/default.nix.
 title: '&8Bots'
 type: inventory
 command: bots
@@ -113,6 +114,7 @@ items:
     name: '&cAlle stopp'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order alle:stopp'
         - '[msg] &7gesendet'
   sidebar:

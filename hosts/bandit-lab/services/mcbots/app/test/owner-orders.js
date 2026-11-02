@@ -92,7 +92,7 @@
     // the player hears how an in-game order ended, and of a death
     assert.ok(whispers.some((w) => /^gestoppt: stopped: follow/.test(w.text)));
     runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
-    runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.at(-1).text, 'gestorben: died at 1 2 3');
+    const nw = whispers.length; runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.length, nw); // the hub tells of deaths, not the runner
     // the main server sends the format text instead of the key: no bot ever answered there (probe 2026-10-15)
     const asText = (m, t) => ({...m, translate: t}), heard = whispers.length;
     bot.emit('message', asText(msg('bot1 status'), '<%s> %s'), 'chat', uuid, false);

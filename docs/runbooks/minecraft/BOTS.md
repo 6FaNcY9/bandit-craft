@@ -100,7 +100,7 @@ Spec: `docs/specs/2026-11-02-ingame-bots.md` (its Findings hold the verified con
 - `/bots` (alias `/b`, CommandPanels `commandpanels/bots.yml`, only fancy8869 and MidariBread): heads of bot1, bot2, bot3,
   bot19, bot20, bot21, MisaBot, bot23 with live lore from `%commandpanels_data_<bot>,mcbots%`
   (`update-interval: 20`), `Alle stopp`, a click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32,
-  Stein 32, Eisen 16, Kohle 32, Zurueck). Limit: `/botmenu` opened directly has no bot selected.
+  Stein 32, Eisen 16, Kohle 32, Zurück). Limit: `/botmenu` opened directly has no bot selected.
 - Inbox contract: the hub writes `pa data set mcbots <bot> <token>` (one word, spaces become `_`). A click sets the
   player's `order` data to `<bot>:<words>` (words joined by `_`, same grammar as the chat orders); every 2 s the hub runs
   `pa data get <viewer> order`, deletes it and runs the order. `alle:stopp` stops everything like the dashboard's Stop all.

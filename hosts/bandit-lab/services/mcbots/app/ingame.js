@@ -92,7 +92,7 @@ class Ingame {
 
   event(e) {
     const m = e.kind === 'say' && /^(\w{1,16}): (.*)$/.exec(e.text);
-    if (m) return this.say(m[1], e.bot, m[2]);
+    if (m) return this.viewers.includes(m[1]) ? this.say(m[1], e.bot, m[2]) : undefined;
     if (e.kind === 'death') return this.viewers.forEach((v) => this.say(v, e.bot, 'gestorben: ' + e.text));
     const p = this.pending.get(e.bot);
     if (!END_WORD[e.kind] || !p) return;

@@ -32,6 +32,7 @@ items:
     name: '&bKomm'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:komm'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -40,6 +41,7 @@ items:
     name: '&bFolge'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:folge'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -48,6 +50,7 @@ items:
     name: '&bWache'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:wache'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -56,6 +59,7 @@ items:
     name: '&bGib'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:gib'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -64,6 +68,7 @@ items:
     name: '&bStatus'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:status'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -72,6 +77,7 @@ items:
     name: '&bStopp'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:stopp'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -80,6 +86,7 @@ items:
     name: '&bHolz 32'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:hol_32_holz'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -88,6 +95,7 @@ items:
     name: '&bStein 32'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:hol_32_stein'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -96,6 +104,7 @@ items:
     name: '&bEisen 16'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:hol_16_eisen'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'
@@ -104,6 +113,7 @@ items:
     name: '&bKohle 32'
     left-click:
       commands:
+        - '[console] pa data del %player_name% order'
         - '[console] pa data set %player_name% order %commandpanels_session_bot%:hol_32_kohle'
         - '[msg] &7gesendet an %commandpanels_session_bot%'
         - '[close]'

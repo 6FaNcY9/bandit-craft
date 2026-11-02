@@ -59,6 +59,7 @@ const {Ingame} = require('../ingame');
   assert.ok(calls.some((c) => c.startsWith('tellraw fancy8869 ') && c.includes('gestorben: died at 1 2 3')));
   calls.length = 0; g.event({bot: 'bot2', kind: 'say', text: 'MidariBread: ok: folge dir'}); await flush();
   assert.ok(calls[0].includes('[bot2] ') && calls[0].includes('ok: folge dir'));
+  calls.length = 0; g.event({bot: 'bot1', kind: 'say', text: 'Stranger: hi'}); await flush(); assert.ok(!calls.some((c) => c.startsWith('tellraw'))); // unknown name: no relay
   // a burst: one line per bot, the newest text of each
   calls.length = 0; g.say('fancy8869', 'bot1', 'eins'); g.say('fancy8869', 'bot2', 'zwei'); g.say('fancy8869', 'bot1', 'drei'); await flush();
   const burst = calls.filter((c) => c.startsWith('tellraw fancy8869 '));
