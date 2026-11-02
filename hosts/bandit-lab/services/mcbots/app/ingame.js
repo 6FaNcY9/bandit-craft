@@ -77,15 +77,15 @@ class Ingame {
     } catch (e) { this.log('ingame poll: ' + e.message); } finally { this.polling = false; }
   }
 
-  // One tellraw per viewer per gap: the newest text of a burst wins.
+  // One tellraw per viewer and bot per gap: the newest text of a burst wins (an `alle` order gets one line per bot).
   say(viewer, bot, text) {
     const msg = `tellraw ${viewer} ` + JSON.stringify(['', {text: `[${bot}] `, color: 'aqua'}, {text: String(text).slice(0, 100)}]);
-    const had = this.waiting.has(viewer);
-    this.waiting.set(viewer, msg);
+    const key = viewer + '\0' + bot, had = this.waiting.has(key);
+    this.waiting.set(key, msg);
     if (had) return;
     setTimeout(() => {
-      const m = this.waiting.get(viewer);
-      this.waiting.delete(viewer);
+      const m = this.waiting.get(key);
+      this.waiting.delete(key);
       this.call([m]).catch((e) => this.log('ingame tellraw: ' + e.message));
     }, this.gapMs).unref();
   }

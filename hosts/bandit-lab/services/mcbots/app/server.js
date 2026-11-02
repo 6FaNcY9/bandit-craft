@@ -186,9 +186,10 @@ const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole
       VALIDATE[c.type](c.args); // refuse before replacing the active job
       r.enqueue(c.type, c.args, {replace: true});
       ownerOrders.set(name, {type: c.type, args: c.args}); saveOrders();
+      delete toResume[name]; projects.pause(name); saveJobs(true); // as /api/job does when replacing
       return 'ok: ' + c.type;
     }
-    if (c.stop) { r.enqueue('stop'); ownerOrders.delete(name); saveOrders(); return 'ok: bleibe stehen'; }
+    if (c.stop) { r.enqueue('stop'); ownerOrders.delete(name); saveOrders(); delete toResume[name]; projects.pause(name); saveJobs(true); return 'ok: bleibe stehen'; }
     if (c.status) { const s = r.snapshot(); return `ok: Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}`; }
     throw new Error(owner.HELP);
   }}) : null;

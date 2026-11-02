@@ -59,6 +59,10 @@ const {Ingame} = require('../ingame');
   assert.ok(calls.some((c) => c.startsWith('tellraw fancy8869 ') && c.includes('gestorben: died at 1 2 3')));
   calls.length = 0; g.event({bot: 'bot2', kind: 'say', text: 'MidariBread: ok: folge dir'}); await flush();
   assert.ok(calls[0].includes('[bot2] ') && calls[0].includes('ok: folge dir'));
+  // a burst: one line per bot, the newest text of each
+  calls.length = 0; g.say('fancy8869', 'bot1', 'eins'); g.say('fancy8869', 'bot2', 'zwei'); g.say('fancy8869', 'bot1', 'drei'); await flush();
+  const burst = calls.filter((c) => c.startsWith('tellraw fancy8869 '));
+  assert.equal(burst.length, 2); assert.ok(burst.some((c) => c.includes('[bot1] ') && c.includes('drei') && !c.includes('eins')) && burst.some((c) => c.includes('[bot2] ')));
   // a call that never resolves: one call over three pushes
   let n = 0;
   const s = new Ingame({call: () => { n++; return new Promise(() => {}); }, viewers: ['a'], guests: [], snapshots: () => [snap('b')], order: () => '', log: () => {}});
