@@ -1,5 +1,7 @@
 # MisaBot v2: queue, chest, reports, self-supply (2026-11-03)
 
+**Status (2026-11-03): Phase 1 built, not yet deployed.** Phases 2 and 3 are open. See "Phase 1 as built" at the end for the differences from this design.
+
 Source: `~/Downloads/MisaBot-Anforderungen-v2.pdf` (MidariBread, November 2026). Owner decision (chat, 2026-11-03):
 the request is hers and the owner's; everything that is not Misa-specific applies to **all bots**. Phase 0
 (analysis) is in this document; the build follows the phases below, one shippable step at a time, with
@@ -133,6 +135,17 @@ Acceptance (from the PDF, used as tests): four orders in a row run in order; a f
 File split (`queue.js`, `chest.js`, `acquire.js`, `report.js` are suggestions, not requirements), exact
 persistence format, how `jetzt` resumes non-count jobs (restart is fine), test fixtures. The help text must
 stay ≤ 100 chars: put the new words into a second `hilfe 2` line.
+
+## Phase 1 as built
+
+Where the build differs from the design above:
+
+- Prefs (chest, keep list, verbose) live in one file `STATE_DIR/prefs.json`, not `STATE_DIR/<bot>/chest.json`.
+- The queue is not persisted across restarts (deferred); only the existing `KEEP`/`keptOf` resume of a running job stays.
+- Failure reasons were not already German: about 15 common ones have a table (`owner.germanReason`), rare ones stay English.
+- `handel` does not chop when out of sticks (Phase 2, self-supply): it ends with `keine Sticks`.
+- `komm`, `folge`, `wache`, `gib` go first, and chat orders go ahead of open-ended and non-chat jobs, which resume after.
+- Own deposits also store sticks, coal and torches (`KEEP_RE` does not apply); the bot cannot fetch them back yet.
 
 ## Verification
 

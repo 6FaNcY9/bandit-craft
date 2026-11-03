@@ -57,26 +57,56 @@ Den Namen kannst du nach <code>/msg Mi</code> mit der <b>Tab</b>-Taste ergänzen
 </div>
 <p>Der Bot muss auf dem Server sein (in der Spielerliste mit <b>Tab</b> zu sehen). Groß- und Kleinschreibung ist egal.</p>
 <p>Die Bots verstehen <b>nur genau diese Wörter</b> und nur in dieser Reihenfolge, ein Befehl pro Nachricht. Bei <code>hol</code>
-kommt erst die Zahl, dann der Block (<code>hol 20 eisen</code>, nicht <code>hol eisen 20</code>). Ein neuer Befehl bricht den
-laufenden ab, du musst vorher nicht <code>stopp</code> sagen. Im normalen Chat geht es auch, wenn die Nachricht mit dem
+kommt erst die Zahl, dann der Block (<code>hol 20 eisen</code>, nicht <code>hol eisen 20</code>). Im normalen Chat geht es auch, wenn die Nachricht mit dem
 Bot-Namen beginnt: <code>MisaBot komm</code> (dann lesen es aber alle mit).</p>
+<p>Schickst du mehrere Aufträge hintereinander, stellt der Bot sie in eine <b>Liste</b> und arbeitet sie nacheinander ab
+(siehe 2b). Die Antwort geht immer an den, der den letzten Auftrag gegeben hat.</p>
 
 <h2>2. Alle Befehle für MisaBot</h2>
 <table>
   <tr><th>Du schreibst</th><th>Was passiert</th></tr>
   <tr><td><code>/msg MisaBot komm</code></td><td>Er läuft zu dir und bleibt dann stehen.</td></tr>
   <tr><td><code>/msg MisaBot folge</code></td><td>Er folgt dir, bis du <code>stopp</code> sagst.</td></tr>
-  <tr><td><code>/msg MisaBot stopp</code></td><td>Er hört sofort mit allem auf und bleibt stehen. <code>bleib</code> und <code>fertig</code> tun dasselbe.</td></tr>
+  <tr><td><code>/msg MisaBot stopp</code></td><td>Er bricht nur den laufenden Auftrag ab und macht mit dem nächsten in der Liste weiter. <code>bleib</code> und <code>fertig</code> tun dasselbe.</td></tr>
+  <tr><td><code>/msg MisaBot alles stopp</code></td><td>Er bricht den laufenden Auftrag ab und wirft die ganze Liste weg. <code>clear</code> tut dasselbe.</td></tr>
   <tr><td><code>/msg MisaBot wache</code></td><td>Er bleibt bei dir und kämpft gegen Monster in deiner Nähe.</td></tr>
   <tr><td><code>/msg MisaBot wache hier</code></td><td>Er bewacht die Stelle, an der du gerade stehst.</td></tr>
-  <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 256.</td></tr>
+  <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 4096.</td></tr>
   <tr><td><code>/msg MisaBot gib</code></td><td>Er kommt zu dir und wirft dir alles hin, was er gesammelt hat. Werkzeug, Rüstung und Essen behält er.</td></tr>
-  <tr><td><code>/msg MisaBot status</code></td><td>Er sagt dir Leben, Essen und was er gerade tut.</td></tr>
+  <tr><td><code>/msg MisaBot status</code></td><td>Er sagt dir Leben, Essen, was er gerade tut, wie lang die Liste ist, wie voll das Inventar ist und ob er eine Kiste hat.</td></tr>
+  <tr><td><code>/msg MisaBot hilfe</code></td><td>Er zählt die Befehle auf (die neuen stehen in der zweiten Zeile).</td></tr>
+  <tr><td><code>/msg MisaBot liste</code></td><td>Er sagt dir die ersten Aufträge in seiner Liste. <code>queue</code> tut dasselbe.</td></tr>
+  <tr><td><code>/msg MisaBot queue weg 2</code></td><td>Streicht Auftrag Nr. 2 aus der Liste.</td></tr>
+  <tr><td><code>/msg MisaBot queue erst 2</code></td><td>Zieht Auftrag Nr. 2 an die erste Stelle der Liste.</td></tr>
+  <tr><td><code>/msg MisaBot jetzt hol 16 stein</code></td><td>Dieser Auftrag kommt sofort dran; was er gerade tat, macht er danach weiter. Geht mit jedem Auftrag, z.&nbsp;B. <code>jetzt komm</code>.</td></tr>
+  <tr><td><code>/msg MisaBot kiste</code></td><td>Schau dabei auf eine Kiste oder ein Fass: Das wird seine Kiste (siehe 2b).</td></tr>
+  <tr><td><code>/msg MisaBot kiste 171 59 425</code></td><td>Seine Kiste mit Koordinaten (x y z) festlegen.</td></tr>
+  <tr><td><code>/msg MisaBot lagern</code></td><td>Er bringt alles in seine Kiste, was nicht zu den Sachen gehört, die er behält.</td></tr>
+  <tr><td><code>/msg MisaBot behalte 64 stick</code></td><td>Diese Menge behält er immer im Inventar. <code>behalte nichts stick</code> hebt es wieder auf.</td></tr>
+  <tr><td><code>/msg MisaBot laut</code></td><td>Bei langen Aufträgen meldet er alle 10&nbsp;% den Stand. <code>leise</code> schaltet das wieder aus.</td></tr>
+  <tr><td><code>/msg MisaBot handel sticks</code></td><td>Er verkauft Sticks an die Villager der Handelshalle (siehe 5). Mit Grenze: <code>handel sticks 1h</code>, <code>handel sticks 30m</code> (Zeit) oder <code>handel sticks 500</code> (Smaragde).</td></tr>
   <tr><td><i>Rüstung geben</i></td><td>Kein Befehl: Wirf ihm Helm, Brustpanzer, Hose, Schuhe oder Schild vor die Füße (Taste <b>Q</b>). Er hebt sie auf und zieht sie sofort an.</td></tr>
   <tr><td><code>/msg MisaBot ecke</code></td><td>Merkt sich den Block unter dir als Ecke (für <code>abbau</code>, siehe 3).</td></tr>
   <tr><td><code>/msg MisaBot abbau</code></td><td>Reißt alles zwischen deinen zwei Ecken ab (siehe 3).</td></tr>
   <tr><td><code>/msg MisaBot bau haus</code></td><td>Baut das Schematic „haus“ an deiner Stelle (siehe 4).</td></tr>
 </table>
+
+<h3>2b. Liste, Kiste und Lagern</h3>
+<p><b>Die Liste.</b> Aufträge laufen nacheinander. Nur <code>komm</code>, <code>folge</code>, <code>wache</code> und <code>gib</code>
+kommen sofort dran; was er dabei unterbrochen hat, macht er danach weiter. Mit <code>jetzt</code> kannst du jeden anderen Auftrag
+vorziehen. <b>Wird der Bot neu gestartet, ist die Liste weg.</b> Antwortet er <code>ok: kommt dran, Platz 2</code>, steht der
+Auftrag an zweiter Stelle; <code>ok: läuft schon</code> heißt: genau das macht er gerade.</p>
+<p><b>Die Kiste.</b> Hat der Bot eine Kiste (<code>kiste</code>), geht er bei fast vollem Inventar von selbst dorthin, legt alles ab
+außer Werkzeug, Rüstung, Essen und dem, was du mit <code>behalte</code> festgelegt hast, und läuft zurück zur Arbeit. Auch
+<b>Sticks, Kohle und Fackeln</b> landen in der Kiste. Sag deshalb <code>behalte 8 stick</code>, damit er ein neues Werkzeug bauen kann,
+und <code>behalte 64 torch</code>, wenn er sich den Weg beleuchten soll. Sonst kann ein Auftrag mit <code>keine Spitzhacke für …</code>
+enden. Die Namen sind die englischen Minecraft-Namen (<code>stick</code>, <code>coal</code>, <code>torch</code>);
+<code>behalte 8 kohle</code> antwortet <code>kenne kohle nicht</code>. Aus seiner eigenen Kiste holt der Bot noch nichts zurück: Hol es dir selbst.</p>
+<p>Ist die Kiste voll, nimmt er jede andere Kiste oder jedes Fass im Umkreis von 2 Blöcken, sonst meldet er <code>Kiste voll</code>.
+<code>kiste x y z</code> klappt nur, wenn der Bot nah genug ist, um den Block zu sehen, sonst <code>zu weit weg</code>: Sag vorher
+<code>komm</code>. Manchmal antwortet <code>kiste</code> mit <code>schau auf eine Kiste</code>, obwohl du auf eine schaust: Nimm dann
+<code>kiste x y z</code>, das klappt immer.</p>
+<p class="small"><code>lagern</code> und <code>handel</code> gibt es nicht im Spielmenü (<code>/bots</code>): Das antwortet <code>nur im Chat</code>.</p>
 
 <h2>3. Etwas abreißen lassen</h2>
 <ol>
@@ -116,15 +146,21 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <li>Du musst nur dafür sorgen, dass genug Sticks in den Truhen sind.</li>
   <li>In der Halle baut kein Bot etwas ab oder hin – auch MisaBot nicht.</li>
   <li>Du kannst ihn auch ansprechen: <code>/msg bot23 status</code> oder <code>/msg bot23 stopp</code>.</li>
+  <li>Auf Zuruf geht es mit jedem Bot: <code>/msg MisaBot handel sticks</code>. Die Sticks müssen in der Kiste des Bots oder in den Truhen der Halle liegen;
+      er macht keine aus dem Nichts und meldet sonst <code>keine Sticks</code>. Die Smaragde legt er in seine eigene Kiste, wenn er eine hat, sonst in die der Halle.
+      Am Ende sagt er die Zahl: <code>Smaragde: 123</code>.</li>
+  <li>Die Halle teilt er sich mit den anderen Bots und dem täglichen Händler.</li>
 </ul>
 
 <h2>6. Was die Antworten bedeuten</h2>
 <table>
   <tr><th>Antwort</th><th>Bedeutung</th></tr>
-  <tr><td><code>ok: …</code></td><td>Verstanden, er fängt an.</td></tr>
-  <tr><td><code>fertig: …</code></td><td>Auftrag erledigt.</td></tr>
-  <tr><td><code>Problem: …</code></td><td>Er hat aufgegeben; dahinter steht warum.</td></tr>
-  <tr><td><code>gestoppt: …</code></td><td>Ein Auftrag wurde abgebrochen (von dir, vom Besitzer oder durch einen neuen Auftrag).</td></tr>
+  <tr><td><code>start: …</code></td><td>Ein Auftrag aus der Liste fängt jetzt an. Ein Auftrag, der gleich losgeht, hat kein <code>ok:</code>: <code>start:</code> ist die Antwort.</td></tr>
+  <tr><td><code>weiter: …</code></td><td>Ein unterbrochener Auftrag läuft weiter.</td></tr>
+  <tr><td><code>ok: …</code></td><td>Verstanden. <code>ok: kommt dran, Platz 2</code>: steht in der Liste an Stelle 2. <code>ok: läuft schon</code>: genau das macht er gerade.</td></tr>
+  <tr><td><code>fertig: …, 3&nbsp;min</code></td><td>Auftrag erledigt, dahinter steht, wie lange es gedauert hat.</td></tr>
+  <tr><td><code>Problem: …: &lt;Grund&gt;</code></td><td>Er hat aufgegeben; hinter dem zweiten Doppelpunkt steht warum. Seltene Gründe kommen manchmal noch auf Englisch.</td></tr>
+  <tr><td><code>gestoppt: …</code></td><td>Ein Auftrag wurde abgebrochen (von dir, vom Besitzer oder weil du <code>stopp</code> gesagt hast).</td></tr>
   <tr><td><code>gestorben: …</code></td><td>Er ist gestorben und steht gleich wieder auf.</td></tr>
   <tr><td><code>geht nicht: …</code></td><td>Diesen Auftrag kann er nicht annehmen; dahinter steht warum. Die häufigsten Gründe:<br>
     <code>erst zweimal ecke sagen</code> – dir fehlt noch eine Ecke.<br>
@@ -150,10 +186,10 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <tr><td>Keine Antwort</td><td>Steht der Bot in der Spielerliste (<b>Tab</b>)? Stimmt der Name? Sonst dem Besitzer Bescheid geben.</td></tr>
   <tr><td>Er hängt fest</td><td><code>stopp</code>, dann <code>komm</code>. Hilft das nicht: Besitzer fragen.</td></tr>
   <tr><td>Er ist weit weg</td><td><code>komm</code> – er läuft den ganzen Weg, das kann dauern. <code>status</code> zeigt, was er tut.</td></tr>
-  <tr><td><code>Problem: no path to …</code></td><td>Er hat 30 Sekunden keinen Weg zu dir gefunden (Klippe, Wasser, Eisentür). Geh ihm ein Stück entgegen und sag nochmal <code>komm</code>. Hinunter springt er bis zu 12 Blöcke, wenn er genug Leben hat.</td></tr>
+  <tr><td><code>Problem: …: kein Weg zu …</code></td><td>Er hat 30 Sekunden keinen Weg zu dir gefunden (Klippe, Wasser, Eisentür). Geh ihm ein Stück entgegen und sag nochmal <code>komm</code>. Hinunter springt er bis zu 12 Blöcke, wenn er genug Leben hat.</td></tr>
   <tr><td>Er reißt das Falsche ab</td><td>Sofort <code>stopp</code>.</td></tr>
 </table>
-<p class="small">Stand: 01.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
+<p class="small">Stand: 03.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
 
 </body>
 </html>
