@@ -6,7 +6,8 @@ const {rotate} = require('./archive');
 const UUID_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const uuid = (s) => typeof s === 'string' && UUID_RE.test(s) ? s.replace(/-/g, '').toLowerCase() : null;
 const ROLES = new Set(['helfer', 'sammler', 'farmer', 'wache']);
-const HELP = 'kenne ich nicht: komm folge stopp wache hol <n> <block> gib status rolle ecke abbau bau <name>';
+const HELP = 'kenne ich nicht: komm folge stopp wache hol <n> <block> gib status rolle ecke abbau bau <name> hilfe';
+const HELP2 = 'laut leise queue [weg|erst n] alles stopp jetzt <x> kiste lagern behalte <n> <x> handel sticks';
 
 // Mineflayer 4.39 emits message(msg, 'chat', sender UUID, verified) for playerChat, including
 // msg_command_incoming: translate=commands.message.display.incoming, with=[sender, content].
@@ -25,8 +26,14 @@ function translate(words, {owner, ownerPos}) {
   const w = words.map((s) => s.toLowerCase()), [cmd, arg, block] = w;
   if (w.length === 1) {
     if (cmd === 'komm' || cmd === 'folge') return {type: cmd === 'komm' ? 'come' : 'follow', args: {player: owner}};
-    if (['stopp', 'bleib', 'fertig'].includes(cmd)) return {stop: true};
+    if (['stopp', 'bleib', 'fertig', 'cancel'].includes(cmd)) return {stop: true};
     if (cmd === 'status') return {status: true};
+    if (cmd === 'hilfe') return {help: true};
+    if (cmd === 'laut' || cmd === 'leise') return {verbose: cmd === 'laut'};
+    if (cmd === 'queue' || cmd === 'liste') return {queue: 'list'};
+    if (cmd === 'clear') return {stopAll: true};
+    if (cmd === 'kiste') return {chest: 'look'};
+    if (cmd === 'lagern') return {type: 'deposit', args: {own: true}};
     if (cmd === 'wache') return {type: 'guard', args: {player: owner, radius: 16}};
     if (cmd === 'gib') return {type: 'give', args: {player: owner}};
     // Misa's building words (misa.js): the runner resolves them where it can see the player and the world.
@@ -39,8 +46,20 @@ function translate(words, {owner, ownerPos}) {
     return {type: 'guard', args: {...Object.fromEntries(['x', 'y', 'z'].map((k) => [k, Math.floor(ownerPos[k])])), radius: 16}};
   }
   const blocks = {eisen: 'iron_ore', kohle: 'coal_ore', stein: 'stone'};
-  if (w.length === 3 && cmd === 'hol' && /^\d+$/.test(arg) && +arg >= 1 && +arg <= 256 && /^[a-z_]{1,48}$/.test(block)) {
+  if (w.length === 3 && (cmd === 'hol' || cmd === 'farm') && /^\d+$/.test(arg) && +arg >= 1 && +arg <= 4096 && /^[a-z_]{1,48}$/.test(block)) {
     return block === 'holz' ? {type: 'chop', args: {count: +arg}} : {type: 'mine', args: {block: Object.hasOwn(blocks, block) ? blocks[block] : block, count: +arg}};
+  }
+  if (w.length === 2 && cmd === 'alles' && arg === 'stopp') return {stopAll: true};
+  if (w.length === 2 && cmd === 'verbose' && (arg === 'on' || arg === 'off')) return {verbose: arg === 'on'};
+  if (w.length === 3 && cmd === 'queue' && (arg === 'weg' || arg === 'remove' || arg === 'erst' || arg === 'first') && /^\d{1,2}$/.test(block) && +block >= 1) return {queue: {[arg === 'weg' || arg === 'remove' ? 'remove' : 'first']: +block}};
+  if (w.length > 1 && cmd === 'jetzt') { const now = translate(words.slice(1), {owner, ownerPos}); return now.type ? {now} : {unknown: true}; }
+  if (w.length === 4 && cmd === 'kiste' && w.slice(1).every((s) => /^-?\d{1,8}$/.test(s))) return {chest: {x: +arg, y: +block, z: +w[3]}};
+  if (w.length === 3 && cmd === 'behalte' && /^[a-z_]{1,48}$/.test(block) && (arg === 'nichts' || (/^\d{1,4}$/.test(arg) && +arg <= 4096))) return {keep: {item: block, count: arg === 'nichts' ? 0 : +arg}};
+  if ((w.length === 2 || w.length === 3) && cmd === 'handel' && (arg === 'sticks' || arg === 'stick')) {
+    const m = /^(\d{1,4})([hm])$/.exec(block || '');
+    if (w.length === 2) return {type: 'trade', args: {item: 'stick'}};
+    if (m && +m[1] >= 1) return {type: 'trade', args: {item: 'stick', minutes: +m[1] * (m[2] === 'h' ? 60 : 1)}};
+    if (/^\d{1,6}$/.test(block) && +block >= 1) return {type: 'trade', args: {item: 'stick', target: +block}};
   }
   return {unknown: true};
 }
@@ -89,4 +108,4 @@ function saveRole(file, name, role) {
   fs.renameSync(`${file}.tmp`, file);
 }
 
-module.exports = {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole, UUID_RE, HELP};
+module.exports = {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole, UUID_RE, HELP, HELP2};

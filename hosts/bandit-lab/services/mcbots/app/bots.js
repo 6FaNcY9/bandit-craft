@@ -117,9 +117,9 @@ const VALIDATE = {
     if (BUILT_RE.test(a.block)) throw new Error(`${a.block} is a placed block, not something to mine: craft it or take it from a chest`);
     // Items the model asked to mine (lab: "torches", 2026-10-11): they are crafted.
     if (/^(torches|sticks?|planks|[a-z]+_planks|[a-z]+_ingot|charcoal)$/.test(a.block)) throw new Error(`${a.block} is crafted, not mined: craft it or take it from a chest`);
-    return {block: a.block, count: num(a.count ?? 1, 1, 2048, 'count')};
+    return {block: a.block, count: num(a.count ?? 1, 1, 4096, 'count')};
   },
-  chop: (a) => ({count: num(a.count ?? 1, 1, 2048, 'count')}),
+  chop: (a) => ({count: num(a.count ?? 1, 1, 4096, 'count')}),
   // `only` (optional): put just that kind into the chest, even what a normal
   // deposit keeps (coal, torches); used by the keeper.
   deposit: (a) => {

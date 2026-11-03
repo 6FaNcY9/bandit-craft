@@ -3,8 +3,8 @@
 (async () => {
   const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
   const {EventEmitter} = require('node:events');
-  const {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole} = require('../owner');
-  const {BotRunner} = require('../bots');
+  const {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole, HELP, HELP2} = require('../owner');
+  const {BotRunner, VALIDATE} = require('../bots');
   const {loadConfig, loadWorkerConfig} = require('../config');
   const uuid = '623c7ee4-71ca-487a-b92a-a4564e43fbb9', other = '123c7ee4-71ca-487a-b92a-a4564e43fbb9';
   assert.equal(isOwnerMessage({sender: uuid.replace(/-/g, '').toUpperCase(), position: 'chat'}, [uuid]), true);
@@ -26,7 +26,26 @@
   for (const [word, block] of [['eisen', 'iron_ore'], ['kohle', 'coal_ore'], ['stein', 'stone'], ['diamond_ore', 'diamond_ore']]) assert.deepEqual(tr(`hol 16 ${word}`), {type: 'mine', args: {block, count: 16}});
   assert.deepEqual(tr('hol 256 holz'), {type: 'chop', args: {count: 256}});
   assert.deepEqual(tr('hol 1 stein'), {type: 'mine', args: {block: 'stone', count: 1}});
-  for (const text of ['', 'rolle chef', 'rolle', 'komm jetzt', 'wache dort', 'hol 0 eisen', 'hol 257 eisen', 'hol -1 eisen', 'hol 1.5 eisen', 'hol NaN eisen', 'hol 1 eisen extra', 'hol 1 stone/../', 'nonsense']) assert.deepEqual(tr(text), {unknown: true});
+  assert.deepEqual(tr('laut'), {verbose: true}); assert.deepEqual(tr('verbose off'), {verbose: false});
+  assert.deepEqual(tr('queue'), {queue: 'list'}); assert.deepEqual(tr('liste'), {queue: 'list'});
+  assert.deepEqual(tr('queue weg 2'), {queue: {remove: 2}}); assert.deepEqual(tr('queue erst 3'), {queue: {first: 3}});
+  assert.deepEqual(tr('alles stopp'), {stopAll: true}); assert.deepEqual(tr('clear'), {stopAll: true}); assert.deepEqual(tr('cancel'), {stop: true});
+  assert.deepEqual(tr('jetzt hol 64 kohle'), {now: {type: 'mine', args: {block: 'coal_ore', count: 64}}});
+  assert.deepEqual(tr('jetzt status'), {unknown: true});
+  assert.deepEqual(tr('kiste'), {chest: 'look'}); assert.deepEqual(tr('kiste 120 64 -340'), {chest: {x: 120, y: 64, z: -340}});
+  assert.deepEqual(tr('lagern'), {type: 'deposit', args: {own: true}});
+  assert.deepEqual(tr('behalte 64 stick'), {keep: {item: 'stick', count: 64}}); assert.deepEqual(tr('behalte nichts stick'), {keep: {item: 'stick', count: 0}});
+  assert.deepEqual(tr('handel sticks'), {type: 'trade', args: {item: 'stick'}});
+  assert.deepEqual(tr('handel sticks 1h'), {type: 'trade', args: {item: 'stick', minutes: 60}});
+  assert.deepEqual(tr('handel sticks 30m'), {type: 'trade', args: {item: 'stick', minutes: 30}});
+  assert.deepEqual(tr('handel sticks 500'), {type: 'trade', args: {item: 'stick', target: 500}});
+  assert.deepEqual(tr('hol 4096 stein'), {type: 'mine', args: {block: 'stone', count: 4096}});
+  assert.deepEqual(tr('farm 256 deepslate'), {type: 'mine', args: {block: 'deepslate', count: 256}});
+  assert.deepEqual(tr('hilfe'), {help: true});
+  for (const s of ['hol 4097 stein', 'queue weg 0', 'queue weg x', 'kiste 1 2', 'behalte 5000 stick', 'handel diamonds', 'handel sticks 0h', 'jetzt']) assert.deepEqual(tr(s), {unknown: true});
+  assert.ok(HELP2.length <= 100); assert.ok(HELP.length <= 100 && /\bhilfe\b/.test(HELP));
+  assert.equal(VALIDATE.mine({block: 'stone', count: 4096}).count, 4096); assert.equal(VALIDATE.chop({count: 4096}).count, 4096); assert.throws(() => VALIDATE.mine({block: 'stone', count: 4097}));
+  for (const text of ['', 'rolle chef', 'rolle', 'komm jetzt', 'wache dort', 'hol 0 eisen', 'hol 4097 eisen', 'hol -1 eisen', 'hol 1.5 eisen', 'hol NaN eisen', 'hol 1 eisen extra', 'hol 1 stone/../', 'nonsense']) assert.deepEqual(tr(text), {unknown: true});
   const sent = [], say = makeSayer((text) => sent.push({text, t: Date.now()}), {gapMs: 40, max: 4});
   say('abcdef'); say('old'); say('newest');
   assert.deepEqual(sent.map((s) => s.text), ['abcd']);
