@@ -207,6 +207,13 @@
     bot.emit('message', msg('jetzt handel sticks', true), 'chat', uuid);
     assert.deepEqual(enqueued.at(-1)[1].sticksFirst, {x: 5, y: 6, z: 7});
     runner.queue = []; runner.current = null;
+    // The lab's hall is {} (built into trade.js): the own chest must still get the emeralds, and the validator keeps them.
+    runner.tradeHalls = {misa: {}};
+    bot.emit('message', msg('handel sticks 30m', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1).slice(0, 2), ['trade', {item: 'stick', minutes: 30, sticksFirst: {x: 5, y: 6, z: 7}, x: 5, y: 6, z: 7}]);
+    assert.deepEqual(VALIDATE.trade(enqueued.at(-1)[1]), {x: 5, y: 6, z: 7, item: 'stick', minutes: 30, sticksFirst: {x: 5, y: 6, z: 7}});
+    runner.tradeHalls = {misa: hallA};
+    runner.queue = []; runner.current = null;
     bot.emit('message', msg('lagern', true), 'chat', uuid);
     assert.deepEqual(enqueued.at(-1), ['deposit', {own: true}, {}]);
     bot.emit('message', msg('jetzt lagern', true), 'chat', uuid);

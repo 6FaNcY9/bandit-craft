@@ -24,5 +24,23 @@ buildNpmPackage {
     runHook postCheck
   '';
   npmFlags = ["--ignore-scripts"];
+  # mineflayer-pathfinder 2.4.5: once a door is clicked nothing is left to place, but `placing` stays on and the next
+  # tick of a bot with scaffolding blocks reads placingBlock.y: an uncaught TypeError that killed the worker and all its
+  # bots at every door (2026-11-03). --replace-fail: a new version has to be looked at again; test/walking.js checks it.
+  preBuild = ''
+    substituteInPlace node_modules/mineflayer-pathfinder/index.js --replace-fail \
+      "      const block = stateMovements.getScaffoldingItem()" \
+      "      if (!placingBlock) { // the door was the last thing to place
+        placing = false
+        lastNodeTime = performance.now()
+        return
+      }
+      const block = stateMovements.getScaffoldingItem()"
+    # The path aimed at the middle of the door's panel: a bot walked into the open panel and stood there (sandbox test
+    # 2026-11-03). A door or gate is walked through in the middle of its cell, like any other free block.
+    substituteInPlace node_modules/mineflayer-pathfinder/index.js --replace-fail \
+      "if (!block || block.shapes.length === 0) return null" \
+      "if (!block || block.shapes.length === 0 || /_door\$|_fence_gate\$/.test(block.name)) return null"
+  '';
   meta.mainProgram = "mcbots";
 }

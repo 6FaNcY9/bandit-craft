@@ -52,17 +52,17 @@
       bots = "bot20,bot21";
       label = "bandit-lab-worker-4";
     };
-    # MidariBread's own bots (owner 2026-10-29, docs/specs/2026-10-29-misa-bots.md): MisaBot is her builder, bot23 her
+    # MidariBread's own bots (owner 2026-10-29, docs/specs/2026-10-29-misa-bots.md): MisaBot is her builder, EM_Trader her
     # trader. They play on the main server, obey MidariBread and the owner, and are in GUEST_BOTS below so no keeper,
     # board, help job or supply chest of the owner's touches them.
     mcbots-worker-5 = {
-      bots = "MisaBot,bot23";
+      bots = "MisaBot,EM_Trader";
       label = "bandit-lab-worker-5";
       owners = "${ownerUuids},06ee5c24-21e7-4c96-8adb-f74ccf20a264"; # + MidariBread
       mainServer = true;
     };
   };
-  guestBots = "MisaBot,bot23";
+  guestBots = "MisaBot,EM_Trader";
   # Worker processes: each shares mcbots' network namespace, so it reaches the
   # hub on 127.0.0.1 (plain ws:// is accepted only there) and Velocity from
   # mcbots' address, which BotGate admits.
@@ -110,7 +110,7 @@ in {
           image = "${image.imageName}:${image.imageTag}";
           imageFile = image;
           environment = {
-            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, MisaBot and bot23 (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
+            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, MisaBot and EM_Trader (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
             # Owner 2026-10-23: helpers test in the sandbox until the board passes (spec 2026-10-23-bots-redesign);
             # the virtual host sandbox.bots routes them there (../minecraft/sandbox.nix).
             MC_VHOST = "sandbox.bots";
@@ -167,11 +167,10 @@ in {
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
             BOARD_BOTS = "bot2,bot3,bot19,bot20,bot21";
             GUEST_BOTS = guestBots;
-            # Misa's trader (app/tradeschedule.js): bot23 trades in the hall "misa" daily from 18:00
+            # Misa's trader (app/tradeschedule.js): EM_Trader trades in the hall "misa" daily from 18:00
             # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}]}}; the other chests in the hall hold the sticks.
-            # Hall scanned 2026-11-02: 32 villagers, floors y 55/59, stick chest 175 59 424, emerald chest 171 59 425.
-            TRADE_HALLS = "{\"misa\":{\"hall\":{\"x1\":-32,\"y1\":60,\"z1\":-132,\"x2\":-14,\"y2\":70,\"z2\":-88},\"stores\":[{\"x\":-25,\"y\":69,\"z\":-95},{\"x\":-27,\"y\":69,\"z\":-95}]}}"; # the two-floor hall south of spawn (owner 2026-11-03: that is Misa's hall; 60 stick chests opposite the villagers), emeralds into the double chest at its south end
-            TRADE_SCHEDULE = "bot23=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60";
+            TRADE_HALLS = "{\"misa\":{}}"; # {}: the hall built into trade.js (three floors south of spawn, the 60 stick chests of its lower two floors, the emerald chest -25/-27 69 -95; owner 2026-11-03)
+            TRADE_SCHEDULE = "EM_Trader=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60";
             # Server panel (admin.js): RCON to Paper through the gateway forwarder; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
             RCON_HOST = bridgeGw;

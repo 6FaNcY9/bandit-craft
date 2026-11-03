@@ -33,7 +33,7 @@ type is one entry in `JOBS` and one in `VALIDATE` in `app/bots.js`.
   hunting). The scripted crew (`bot4`, `bot10` at the gold farm, `bot16`-`bot18`) is retired and the
   plan is off (`PLAN_ENABLE` empty); the text below still describes them where it explains the code.
 - Bots are named `bot1`..`bot4` on the lab (`bot5`+ on the laptop). BotGate
-  admits offline logins only for `^(bot[0-9]{1,2}|MisaBot)$` from the owner laptop
+  admits offline logins only for `^(bot[0-9]{1,2}|MisaBot|EM_Trader)$` from the owner laptop
   (`100.102.247.30/32`) or the `mcbots` Docker network (`10.250.77.0/29`).
 - Lab: container `mcbots` (nix-built image, non-root uid 1000, 2 GiB / 2 CPUs,
   no capabilities, no mounts) on network `mcbots`, connecting to `velocity:25565`.
@@ -60,7 +60,7 @@ Immediate stop without a deploy: `sudo systemctl stop docker-mcbots mcbots-https
 
 ## Guest bot (MidariBread, 2026-10-29)
 
-`MisaBot` (builder) and `bot23` (trader) in `mcbots-worker-5` belong to the player MidariBread: they play on the main
+`MisaBot` (builder) and `EM_Trader` (trader, `bot23` until 2026-11-03) in `mcbots-worker-5` belong to the player MidariBread: they play on the main
 server and obey only MidariBread and the owner (the worker's own `OWNER_UUIDS`; every other process keeps the owner
 alone). Design: `docs/specs/2026-10-29-misa-bots.md`. Orders are chat words (or the in-game menu, see below):
 `MisaBot komm | folge | stopp | wache | wache hier | hol <n> <block> | gib | status`. `hol 20 eisen` fills
@@ -99,14 +99,31 @@ barrels within 8 blocks of her. Both are refused unless the whole box lies insid
 only the areas that do not name it, so a trading hall added to `PROTECTED_AREAS` without `@` stays closed to
 everyone. `bau` never clears other people's blocks (`clearAll` is off): `abbau` the spot first.
 
-`bot23` trades sticks for emeralds on a schedule: `TRADE_SCHEDULE=bot23=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60`
-(daily, Europe/Vienna; several entries with `;`) gives it the `trade` job of hall `misa` at the start and stops it after
-the minutes; a hub restart inside the window resumes it; the window-end stop drops the bot's whole queue. The hall is `TRADE_HALLS` JSON `{"misa": {"hall": {x1,y1,z1,x2,y2,z2},
-"stores": [{x,y,z}], "sticks": [{x,y,z}]}}` (`sticks` optional: every other chest or barrel in the box). Since 2026-11-02
-it holds Misa's hall `{x1:166,y1:54,z1:409,x2:181,y2:61,z2:426}`, stores `171 59 425`, sticks `175 59 424`; its box
-`166,409,181,427` is in `PROTECTED_AREAS`.
+`EM_Trader` sells sticks in Misa's hall, built into `app/trade.js` (`TRADE_HALLS={"misa":{}}`; another hall would be
+`{"name": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}], "sticks": [{x,y,z}]}}`): x -32..-14, y 60..70, z -132..-88,
+three floors (y 63, 66, 69) with 16 villagers on each side and chests in the middle. 64 of the 96 villagers are fletchers
+that buy sticks (32 sticks for one emerald, 16 trades per fill). The 60 stick chests are on the lower two floors (x -22
+y 63/64, x -24 y 66/67); the top floor's chests hold other goods. The flow: start at the deposit chest (`-25 69 -95`, then
+`-27 69 -95`), fill the inventory from chest to chest, trade until under a stack of sticks is left, craft emerald blocks
+at the crafting table (`-24 69 -95`), store them, go again. Empty stick chests end in a wait
+(`the stick chests are empty, waiting for a refill`), so the stock in the chests is the real limit: a full day takes
+about 1500 trades, or 48000 sticks.
+
+`TRADE_SCHEDULE=EM_Trader=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60` (daily, Europe/Vienna; several entries with `;`) gives it
+the job at the start and stops it after the minutes; a hub restart inside the window resumes it; the window-end stop drops
+the bot's whole queue. A manual trade job outside the window is left alone. The old box `166,409,181,427` in `PROTECTED_AREAS` is another place, not this hall.
 `TRADE_HALLS` also goes to every worker in the hub's welcome message so a chat `handel` works on any bot (its own hall, else
 `misa`); a host without `TRADE_HALLS` refuses `handel`.
+
+Restock, measured 2026-11-03 from the villagers' `LastRestock` and `RestocksToday` (Paper 26.2; tick 0 is `time query day`):
+
+- **Morning wave:** all 64 fletchers refill within one second at day tick 2008 to 2028, every 24000 ticks (20 minutes).
+- **Extra refills:** a villager that was traded with refills up to twice more until day tick 9000: the first at the next
+  workstation check (at least 600 ticks after the wave), the second at least 2420 ticks later.
+- **After tick 9000:** nothing until the next morning. A villager sold out then waits for the wave.
+
+So one Minecraft day offers up to 3072 trades and the bot makes about 1500 (1.3 per second). It waits only when every
+villager is sold out, and then by the game's clock (`soldOutUntil` in `app/trade.js`), not by a fixed time.
 
 `GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
 rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
@@ -125,11 +142,14 @@ Spec: `docs/specs/2026-11-02-ingame-bots.md` (its Findings hold the verified con
   `/bots` menu has both as "Seitenleiste". Chat stays quiet: only replies to a player's own orders are told
   (`broadcast-rcon-to-ops = false` in nix-minecraft.nix keeps the hub's RCON traffic out of the ops' chat; deaths are not
   announced).
-- `/bots` (alias `/b`, CommandPanels `commandpanels/bots.yml`, only fancy8869 and MidariBread): heads of bot1, bot2, bot3,
-  bot19, bot20, bot21, MisaBot, bot23 with live lore from `%commandpanels_data_<bot>,mcbots%`
-  (`update-interval: 20`), `Alle stopp`, a click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32,
-  Stein 32, Eisen 16, Kohle 32, Zurück). Limit: `/botmenu` opened directly has no bot selected.
-- Inbox contract: the hub writes `pa data set mcbots <bot> <token>` (one word, spaces become `_`). A click sets the
+- `/bots` (alias `/b`, generated by `minecraft/bots-panel.nix`, only fancy8869 and MidariBread). Top row: bots online and
+  working, problems, the first keeper quota under its target, day or night, sidebar switch, `Alle stopp`. Second row: one item
+  per bot (bot1, bot2, bot3, bot19, bot20, bot21, MisaBot, EM_Trader). The icon is the state: head (working, name aqua; idle,
+  name grey), barrier (an error in the last 5 minutes), red bed (night shelter), skeleton skull (dead), grey dye (offline).
+  The lore shows role, job with progress, runtime and activity, last error, health, food, free slots, held tool, position
+  (`update-interval: 20`). A click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32, Stein 32,
+  Eisen 16, Kohle 32, Zurück). Limit: `/botmenu` opened directly has no bot selected.
+- Inbox contract: while a viewer is online the hub writes `pa data set mcbots <key> <value>` (`<bot>_<field>`, `sum_*`; one word, spaces become non-breaking spaces; only changed keys). A click sets the
   player's `order` data to `<bot>:<words>` (words joined by `_`, same grammar as the chat orders); every 2 s the hub runs
   `pa data get <viewer> order`, deletes it and runs the order. `alle:stopp` stops everything like the dashboard's Stop all.
 - Replies: `tellraw <viewer> [bot] text`, coalesced per viewer+bot (2 s). Bots do not `/tell` any more: Paper rejects an
@@ -970,7 +990,7 @@ dirty tree does not leak).
   itself. Do not restart repeatedly.
 - Kicked with a not-whitelisted/online-mode message: BotGate refused it. Check
   `sudo docker logs velocity 2>&1 | grep -i botgate` for the decision line (name
-  pattern or source address). The name must match `^(bot[0-9]{1,2}|MisaBot)$` and come
+  pattern or source address). The name must match `^(bot[0-9]{1,2}|MisaBot|EM_Trader)$` and come
   from the allowlisted source.
 - Other Velocity problems: `sudo docker logs --tail 100 velocity`.
 - Dashboard: `sudo journalctl -u docker-mcbots -u mcbots-https -n 50`,

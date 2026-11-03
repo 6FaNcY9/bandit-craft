@@ -1,6 +1,6 @@
 'use strict';
 // When a bot works a trading hall (spec 2026-10-29-misa-bots, part D). TRADE_HALLS is JSON {"misa": {hall, stores,
-// sticks?}} (the arguments of the trade job, checked by its validator); TRADE_SCHEDULE is "bot23=misa@mon,wed,sat/18:00+60"
+// sticks?}} (the arguments of the trade job, checked by its validator); TRADE_SCHEDULE is "EM_Trader=misa@mon,wed,sat/18:00+60"
 // (";" between entries): that bot trades in that hall on those days from 18:00 Vienna time for 60 minutes. The state is
 // derived from the clock alone, so a restart inside a window simply starts the job again.
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -15,7 +15,7 @@ function parseHalls(text) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('TRADE_HALLS must be an object of hall name to hall');
   return Object.fromEntries(Object.entries(raw).map(([name, h]) => {
     if (!/^[\w-]{1,24}$/.test(name)) throw new Error(`bad TRADE_HALLS name: ${name}`);
-    if (!h?.hall) throw new Error(`TRADE_HALLS ${name} needs a hall box`);
+    if (!h?.hall && Object.keys(h || {}).length) throw new Error(`TRADE_HALLS ${name} needs a hall box`); // {}: the hall built into trade.js
     return [name, VALIDATE.trade(h)];
   }));
 }
@@ -25,7 +25,7 @@ function parseSchedule(text) {
   return (text || '').split(';').map((s) => s.trim()).filter(Boolean).map((part) => {
     const m = /^(\w+)=([\w-]{1,24})@([a-z,]+)\/(\d{1,2}):(\d{2})\+(\d{1,3})$/.exec(part);
     const days = m && m[3].split(',').map((d) => DAYS.indexOf(d));
-    if (!m || !NAME_RE.test(m[1]) || days.includes(-1) || +m[4] > 23 || +m[5] > 59 || +m[6] < 1 || +m[6] > 240) throw new Error(`bad TRADE_SCHEDULE entry "${part}": want bot23=hall@mon,wed/18:00+60`);
+    if (!m || !NAME_RE.test(m[1]) || days.includes(-1) || +m[4] > 23 || +m[5] > 59 || +m[6] < 1 || +m[6] > 240) throw new Error(`bad TRADE_SCHEDULE entry "${part}": want EM_Trader=hall@mon,wed/18:00+60`);
     return {bot: m[1], hall: m[2], days, start: +m[4] * 60 + +m[5], minutes: +m[6]};
   });
 }

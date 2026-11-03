@@ -1,8 +1,42 @@
 'use strict';
-// Pure helpers for the in-game console channel: sidebar lines (one per bot), panel tokens and the order inbox
-// parser. The Ingame class that pushes them to the Minecraft console builds on these.
-const token = (text) => String(text).trim().replace(/§./g, '').replace(/[^A-Za-z0-9./:+-]+/g, '_').slice(0, 32) || '-';
-const statusToken = (snap) => token(snap.activity || (snap.online ? 'frei' : 'offline'));
+// Pure helpers for the in-game console channel: sidebar lines (one per bot), the values of the /bots panel and the
+// order inbox parser. The Ingame class that pushes them to the Minecraft console builds on these.
+// A panel value is one console word (pa data keeps only the first): NBSP for spaces, and nothing the panel would read as
+// a colour, a tag or a placeholder. Empty is a blank lore line.
+const word = (text, max = 56) => String(text ?? '').replace(/§./g, '').replace(/[&%<>\u0000-\u001f]/g, ' ').trim().replace(/\s+/g, '\u00a0').slice(0, max) || '\u00a0';
+const ago = (s) => (s < 60 ? 'unter 1 min' : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor(s / 60) % 60} min`);
+const DIMENSION = {overworld: 'Oberwelt', the_nether: 'Nether', the_end: 'End'};
+const failing = (s) => typeof s.lastErrorAgoS === 'number' && s.lastErrorAgoS < 300;
+
+// Which icon the panel shows (minecraft/bots-panel.nix).
+const botState = (s) => (!s.online ? 'offline' : s.dead ? 'dead' : failing(s) ? 'error' : s.sheltered ? 'sheltered' : String(s.activity || '').startsWith('idle') ? 'idle' : 'work');
+
+function botFields(s) {
+  const tool = s.tool ? ` · ${s.tool.name}${s.tool.max ? ` ${s.tool.left}/${s.tool.max}` : ''}` : '';
+  return {
+    state: botState(s),
+    role: s.role || 'keine',
+    job: s.job ? s.job.label.trim() + (s.job.progress ? `: ${s.job.progress}` : '') : 'frei',
+    doing: (typeof s.job?.runningS === 'number' ? `seit ${ago(s.job.runningS)} · ` : '') + (s.activity || ''),
+    error: failing(s) && s.lastError ? `Fehler vor ${ago(s.lastErrorAgoS)}: ${s.lastError}` : '',
+    vitals: s.online ? `Leben ${Math.round(s.health)} · Essen ${s.food} · frei ${s.freeSlots}${tool}` : '',
+    where: s.pos ? `${s.pos.join(' ')} ${DIMENSION[s.dimension] || s.dimension || ''}` : 'unbekannt',
+  };
+}
+
+// The top row of /bots. Guests play on the main server, so one of them tells the time of the world the viewer is in.
+function summary(snaps, {guests, quotas}) {
+  const states = snaps.map(botState), online = snaps.filter((s) => s.online);
+  const bad = snaps.filter((_, i) => states[i] === 'error' || states[i] === 'dead');
+  const short = quotas.find((q) => q.have !== null && q.have < q.want);
+  const clock = online.find((s) => guests.includes(s.name)) || online[0];
+  return {
+    sum_bots: `${online.length}/${snaps.length} online · ${states.filter((x) => x === 'work').length} arbeiten`,
+    sum_problems: bad.length ? `${bad.length}: ${bad.map((s) => s.name).join(', ')}` : 'keine',
+    sum_need: short ? `${short.item} ${short.have}/${short.want}` : 'alles da',
+    sum_day: clock ? (clock.isDay ? 'Tag' : 'Nacht') : 'unbekannt',
+  };
+}
 
 function sidebarLines(snaps, {guests}) {
   const list = [...snaps.filter((s) => !guests.includes(s.name)), ...snaps.filter((s) => guests.includes(s.name))].slice(0, 15);
@@ -23,10 +57,10 @@ const PENDING_MS = 30 * 60000;
 const END_WORD = {done: 'fertig', fail: 'Problem', stop: 'gestoppt'};
 
 class Ingame {
-  // call(commands[]) -> replies (RCON); order(viewer, bot, words) -> receipt text, throws on refusal.
-  constructor({call, viewers, guests, snapshots, order, log, now = Date.now, gapMs = 2000}) {
-    Object.assign(this, {call, viewers, guests, snapshots, order, log, now, gapMs,
-      lines: new Map(), tokens: new Map(), pending: new Map(), waiting: new Map(), busy: false, warned: false});
+  // call(commands[]) -> replies (RCON); order(viewer, bot, words) -> receipt text, throws on refusal; quotas() -> the keeper's.
+  constructor({call, viewers, guests, snapshots, order, log, quotas = () => [], now = Date.now, gapMs = 2000}) {
+    Object.assign(this, {call, viewers, guests, snapshots, order, log, quotas, now, gapMs,
+      lines: new Map(), values: new Map(), pending: new Map(), waiting: new Map(), busy: false, warned: false});
   }
 
   async setup() {
@@ -41,20 +75,25 @@ class Ingame {
     if (this.busy) { if (!this.warned) this.log('ingame push: previous push still in flight'); this.warned = true; return; }
     this.busy = true;
     try {
-      const snaps = this.snapshots(), cmds = [], lines = new Map(), tokens = new Map();
+      // Every value is a write to the panel plugin's data file: none while no viewer is online.
+      const [list] = await this.call(['minecraft:list']);
+      if (!this.viewers.some((v) => String(list).includes(v))) return;
+      const snaps = this.snapshots(), cmds = [], lines = new Map(), values = new Map();
       for (const l of sidebarLines(snaps, {guests: this.guests, now: this.now()})) {
         lines.set(l.entry, l.component);
         if (this.lines.get(l.entry) !== l.component) cmds.push(`scoreboard players set ${l.entry} mcbots ${l.score}`, `scoreboard players display name ${l.entry} mcbots ${l.component}`);
       }
       for (const e of this.lines.keys()) if (!lines.has(e)) cmds.push(`scoreboard players reset ${e} mcbots`);
-      for (const s of snaps) {
-        const t = statusToken(s);
-        tokens.set(s.name, t);
-        if (this.tokens.get(s.name) !== t) cmds.push(`pa data del mcbots ${s.name}`, `pa data set mcbots ${s.name} ${t}`);
-      }
+      const set = (key, value) => {
+        const w = word(value);
+        values.set(key, w);
+        if (this.values.get(key) !== w) cmds.push(`pa data del mcbots ${key}`, `pa data set mcbots ${key} ${w}`);
+      };
+      for (const s of snaps) for (const [field, value] of Object.entries(botFields(s))) set(`${s.name}_${field}`, value);
+      for (const [key, value] of Object.entries(summary(snaps, {guests: this.guests, quotas: this.quotas()}))) set(key, value);
       if (!cmds.length) return;
       await this.call(cmds);
-      Object.assign(this, {lines, tokens, warned: false});
+      Object.assign(this, {lines, values, warned: false});
     } catch (e) { this.log('ingame push: ' + e.message); } finally { this.busy = false; }
   }
 
@@ -106,4 +145,4 @@ class Ingame {
   }
 }
 
-module.exports = {token, sidebarLines, parseInbox, statusToken, Ingame};
+module.exports = {word, botState, botFields, summary, sidebarLines, parseInbox, Ingame};

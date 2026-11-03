@@ -34,7 +34,7 @@ const owner = require('./owner');
 const {loadPrefs, savePrefs} = require('./prefs');
 const misa = require('./misa');
 
-const NAME_RE = /^(bot[0-9]{1,2}|MisaBot)$/; // BotGate's pattern (Velocity plugin), case as written in both
+const NAME_RE = /^(bot[0-9]{1,2}|MisaBot|EM_Trader)$/; // BotGate's pattern (Velocity plugin), case as written in both
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
 const WATCH_MS = 5000, STILL_MS = 30000;
@@ -445,7 +445,8 @@ class BotRunner {
           const hall = this.tradeHalls?.[this.name.toLowerCase()] || this.tradeHalls?.misa;
           if (!hall) throw new Error('keine Handelshalle');
           const chest = this.prefs.chest;
-          job.args = {...job.args, ...hall, ...(chest ? {stores: [chest], sticksFirst: chest} : {})};
+          // The hall built into trade.js ({}) takes its emerald chest as x y z: the validator keeps `stores` only with a `hall`.
+          job.args = {...job.args, ...hall, ...(chest ? {sticksFirst: chest, ...(hall.hall ? {stores: [chest]} : chest)} : {})};
         }
         let wait = 0, queued = null;
         if (job) {
