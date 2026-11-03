@@ -87,9 +87,9 @@
     const msg = (text, incoming = false) => ({translate: incoming ? 'commands.message.display.incoming' : 'chat.type.text', with: [{toString: () => 'fancy8869'}, {toString: () => text}]});
     bot.emit('message', msg('bot1 komm'), 'chat', uuid, true);
     assert.deepEqual(enqueued[0], ['come', {player: 'fancy8869'}, {first: true}]);
-    assert.deepEqual(whispers, [{name: 'fancy8869', text: 'ok: komme'}]);
+    assert.deepEqual(whispers, []); // a job that starts at once says no ok: its start line is the receipt
     bot.emit('message', msg('bot1 stopp'), 'chat', other, true);
-    assert.equal(runner.snapshot().strangerOrders, 1); assert.equal(whispers.length, 1); assert.equal(enqueued.length, 1);
+    assert.equal(runner.snapshot().strangerOrders, 1); assert.equal(whispers.length, 0); assert.equal(enqueued.length, 1);
     bot.emit('message', msg('[fancy8869 -> bot1] stopp'), 'system', null);
     assert.equal(enqueued.length, 1);
     const job = runner.queue[0];
@@ -109,23 +109,23 @@
     runner.current = {...runner.queue.shift(), status: 'running'}; // pump is stubbed; follow runs, come waits
     bot.emit('message', msg('stopp', true), 'chat', uuid);
     assert.equal(runner.current.cancelled, true); assert.equal(runner.queue.length, 1);
-    assert.match(whispers.at(-1).text, /^ok: abgebrochen, weiter mit come /);
-    runner.emit('stop', 'stopped: follow fancy8869', runner.current.id); // what the real pump does once the cancelled job ends
+    assert.match(whispers.at(-1).text, /^ok: abgebrochen, weiter mit komm$/);
+    runner.emit('stop', 'stopped: follow fancy8869', runner.current.id, 'folge'); // what the real pump does once the cancelled job ends
     assert.ok(outcomes.some((o) => o[1] === 'stopped'));
     bot.emit('message', msg('alles stopp', true), 'chat', uuid);
     assert.equal(runner.queue.length, 0); assert.equal(whispers.at(-1).text, 'ok: alles gestoppt'); runner.current = null;
     // the player hears how an in-game order ended, and of a death
-    assert.ok(whispers.some((w) => /^gestoppt: stopped: follow/.test(w.text)));
+    assert.ok(whispers.some((w) => w.text === 'gestoppt: folge'));
     // queue words: orders append, stopp keeps the queue, jetzt goes first and re-queues the running job
     runner.queue = []; runner.current = null;
     bot.emit('message', msg('hol 16 stein', true), 'chat', uuid);
-    assert.equal(whispers.at(-1).text, 'ok: sammle');
+    assert.ok(!whispers.some((w) => w.text === 'ok: sammle')); // no receipt for a job that starts at once
     bot.emit('message', msg('hol 16 kohle', true), 'chat', uuid);
     bot.emit('message', msg('hol 8 holz', true), 'chat', uuid);
     assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'mine', 'chop']);
     assert.equal(whispers.at(-1).text, 'ok: kommt dran, Platz 3');
     bot.emit('message', msg('queue', true), 'chat', uuid);
-    assert.equal(whispers.at(-1).text, 'ok: 1 mine stone 16, 2 mine coal_ore 16, 3 chop 8');
+    assert.equal(whispers.at(-1).text, 'ok: 1 hol 16 stein, 2 hol 16 kohle, 3 hol 8 holz');
     bot.emit('message', msg('queue weg 2', true), 'chat', uuid);
     assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'chop']);
     bot.emit('message', msg('queue erst 2', true), 'chat', uuid);
@@ -147,7 +147,7 @@
     assert.equal(whispers.at(-1).text, require('../owner').HELP2);
     runner.snapshot = () => ({health: 20, food: 18, job: {label: 'mine stone 16', done: 4, total: 16}, role: runner.role, freeSlots: 18, strangerOrders: 0});
     bot.emit('message', msg('status', true), 'chat', uuid);
-    assert.equal(whispers.at(-1).text, 'ok: Leben 20, Essen 18, mine stone 16 25%, Liste 0, Inventar 50%, Kiste nein');
+    assert.equal(whispers.at(-1).text, 'ok: Leben 20, Essen 18, hol 16 stein 25%, Liste 0, Inventar 50%, Kiste nein');
     runner.snapshot = () => ({health: 20, food: 18, job: {label: 'mine deepslate_diamond_ore 4096 and more', done: 4, total: 16}, role: runner.role, freeSlots: 0, strangerOrders: 0});
     bot.emit('message', msg('status', true), 'chat', uuid);
     assert.ok(whispers.at(-1).text.length <= 100); assert.match(whispers.at(-1).text, /Kiste nein$/);

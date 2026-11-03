@@ -64,22 +64,58 @@ function translate(words, {owner, ownerPos}) {
   return {unknown: true};
 }
 
-function makeSayer(send, {gapMs = 2000, max = 100} = {}) {
-  let last = -Infinity, waiting = null, timer = null;
-  const flush = () => {
-    timer = null;
-    const text = waiting;
-    waiting = null;
-    last = Date.now();
-    send(text);
-  };
-  return (text) => {
-    waiting = String(text).replace(/[\r\n]+/g, ' ').slice(0, max);
-    if (timer) return;
+// One line per gap. Default: the newest line replaces the one still waiting. queue: every line goes out in order
+// (a start and an end report must both arrive); more than 8 waiting drops the oldest.
+function makeSayer(send, {gapMs = 2000, max = 100, queue = false} = {}) {
+  let last = -Infinity, waiting = [], timer = null;
+  const arm = () => {
     const wait = gapMs - (Date.now() - last);
     if (wait <= 0) flush();
     else { timer = setTimeout(flush, wait); timer.unref?.(); }
   };
+  const flush = () => {
+    timer = null;
+    last = Date.now();
+    send(waiting.shift());
+    if (waiting.length) arm();
+  };
+  return (text) => {
+    const line = String(text).replace(/[\r\n]+/g, ' ').slice(0, max);
+    if (queue) { waiting.push(line); if (waiting.length > 8) waiting.shift(); } else waiting = [line];
+    if (!timer) arm();
+  };
+}
+
+const BLOCK_WORDS = {iron_ore: 'eisen', coal_ore: 'kohle', stone: 'stein'};
+const WORDS = {come: 'komm', follow: 'folge', guard: 'wache', give: 'gib', deposit: 'lagern', clear: 'abbau'};
+// What a player hears of a job; fallback is the English label for types without a word.
+function chatLabel(job, fallback = job.type) {
+  const a = job.args || {};
+  if (job.type === 'mine') return `hol ${a.count} ${BLOCK_WORDS[a.block] ?? a.block}`;
+  if (job.type === 'chop') return `hol ${a.count} holz`;
+  if (job.type === 'schematic') return `bau ${String(a.file).replace(/\.litematic$/i, '')}`;
+  if (job.type === 'trade') return ['handel sticks', a.minutes && `${a.minutes}min`, a.target].filter(Boolean).join(' ');
+  return WORDS[job.type] ?? String(fallback).trim();
+}
+
+// First match wins; the texts are the throws in bots.js, build.js.
+const REASONS = [
+  [/^bot (?:is|went) offline/, () => 'Bot ist offline'],
+  [/^no path to (.+)/, (m) => `kein Weg zu ${m[1]}`],
+  [/^inventory still full/, () => 'Inventar voll, Kiste auch'],
+  [/^no chest at (\S+ \S+ \S+)/, (m) => `keine Kiste bei ${m[1]}`],
+  [/^no chests within/, () => 'keine Kiste in der Nähe'],
+  [/^no pickaxe for (\S+)/, (m) => `keine Spitzhacke für ${m[1]}`],
+  [/^needs a tool that can harvest ([^:\s]+)/, (m) => `kein Werkzeug für ${m[1]}`],
+  [/^no free (\S+) within/, (m) => `kein ${m[1]} in Reichweite`],
+  [/is inside a protected area$/, () => 'liegt im Schutzgebiet'],
+  [/is not visible and not on the map/, () => 'Spieler nicht zu finden'],
+  [/^unknown block: (.+)/, (m) => `unbekannter Block: ${m[1]}`],
+  [/^no torches available/, () => 'keine Fackeln'],
+];
+function germanReason(text) {
+  for (const [re, say] of REASONS) { const m = re.exec(text); if (m) return say(m); }
+  return text;
 }
 
 function makeDemoLog(file, {maxBytes = 10 * 1024 * 1024} = {}) {
@@ -108,4 +144,4 @@ function saveRole(file, name, role) {
   fs.renameSync(`${file}.tmp`, file);
 }
 
-module.exports = {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole, UUID_RE, HELP, HELP2};
+module.exports = {isOwnerMessage, parseOrder, translate, makeSayer, chatLabel, germanReason, makeDemoLog, loadRole, saveRole, UUID_RE, HELP, HELP2};

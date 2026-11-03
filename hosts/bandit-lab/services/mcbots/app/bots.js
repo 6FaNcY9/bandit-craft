@@ -317,6 +317,7 @@ class Cancelled extends Error {}
 const at = (c) => `${Math.round(c.x)} ${Math.round(c.y)} ${Math.round(c.z)}`;
 // "the supply chest" when x,y,z is the configured one, else the coordinates.
 const place = (r, c) => (r.supplyChest && r.supplyChest.x === c.x && r.supplyChest.y === c.y && r.supplyChest.z === c.z ? 'the supply chest' : at(c));
+const chatLabel = (j) => owner.chatLabel(j, jobLabel(j));
 const jobLabel = (j) => `${j.type} ${Object.values(j.args).map((v) => (Array.isArray(v) ? `${v.length} blocks` : v && typeof v === 'object' ? `at ${at(v)}` : v)).join(' ')}`;
 
 class BotRunner {
@@ -361,7 +362,7 @@ class BotRunner {
     this.role = owner.loadRole(this.rolesFile, name);
     this.prefsFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'prefs.json') : null;
     this.prefs = loadPrefs(this.prefsFile, name);
-    this.say = owner.makeSayer((text) => { if (this.answerTo) this.emit('say', `${this.answerTo}: ${text}`); }); // the hub tells it over the console: Paper rejects the bots' /tell (unsigned command)
+    this.say = owner.makeSayer((text) => { if (this.answerTo) this.emit('say', `${this.answerTo}: ${text}`); }, {queue: true}); // the hub tells it over the console: Paper rejects the bots' /tell (unsigned command)
   }
 
   // Every area the hub knows (allAreas) minus those that name this bot (misa.js): consumers read only this view.
@@ -387,7 +388,7 @@ class BotRunner {
     if (left.length) this.emit('info', `scaffold left standing: ${left.length} blocks: ${left.slice(0, 20).map((c) => `${c.x} ${c.y} ${c.z} ${c.name}`).join(', ')}`);
   }
 
-  emit(kind, text, jobId) {
+  emit(kind, text, jobId, chatText = text) { // text is the English log line; chatText what the player hears
     const id = this.orders.get(jobId);
     if (id && ['done', 'fail', 'stop'].includes(kind)) {
       this.orders.delete(jobId);
@@ -395,7 +396,7 @@ class BotRunner {
       catch (e) { this.log(this.name, `demonstration: ${e.message}`); }
     }
     // Without this a player hears only "ok" and must guess whether the order worked (guest bot, 2026-10-29).
-    if (['done', 'fail', 'stop'].includes(kind) && this.chatJobs.delete(jobId)) this.say(`${{done: 'fertig', fail: 'Problem', stop: 'gestoppt'}[kind]}: ${text}`);
+    if (['done', 'fail', 'stop'].includes(kind) && this.chatJobs.delete(jobId)) this.say(`${{done: 'fertig', fail: 'Problem', stop: 'gestoppt'}[kind]}: ${chatText}`);
     try {
       this.onEvent?.(this.name, kind, text, jobId);
     } catch {}
@@ -441,24 +442,24 @@ class BotRunner {
           const next = this.queue[0];
           if (command.stopAll) this.enqueue('stop');
           else { this.stoppedAt = Date.now(); this.cancel(); }
-          queued = command.stopAll ? 'alles gestoppt' : next ? `abgebrochen, weiter mit ${jobLabel(next)}` : 'bleibe stehen';
+          queued = command.stopAll ? 'alles gestoppt' : next ? `abgebrochen, weiter mit ${chatLabel(next)}` : 'bleibe stehen';
         } else if (command.queue) {
           const q = command.queue, n = q.remove ?? q.first;
-          if (q === 'list') queued = this.queue.length ? this.queue.slice(0, 5).map((j, i) => `${i + 1} ${jobLabel(j)}`).join(', ') : 'leer';
+          if (q === 'list') queued = this.queue.length ? this.queue.slice(0, 5).map((j, i) => `${i + 1} ${chatLabel(j)}`).join(', ') : 'leer';
           else if (!(n >= 1 && n <= this.queue.length)) throw new Error(`nur ${this.queue.length} in der Liste`);
           else {
             const [j] = this.queue.splice(n - 1, 1);
-            if (q.first) { this.queue.unshift(j); queued = `als nächstes: ${jobLabel(j)}`; }
-            else { this.orders.delete(j.id); this.chatJobs.delete(j.id); queued = `weg: ${jobLabel(j)}`; }
+            if (q.first) { this.queue.unshift(j); queued = `als nächstes: ${chatLabel(j)}`; }
+            else { this.orders.delete(j.id); this.chatJobs.delete(j.id); queued = `weg: ${chatLabel(j)}`; }
           }
         } else if (command.verbose !== undefined) {
           this.prefs.verbose = command.verbose; savePrefs(this.prefsFile, this.name, {verbose: command.verbose});
           queued = command.verbose ? 'laut' : 'leise';
         } else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
         const s = command.status && this.snapshot();
-        const statusLine = s && `Leben ${s.health}, Essen ${s.food}, ${s.job ? (s.job.label || '').slice(0, 24) + (s.job.total > 0 ? ` ${Math.round(100 * s.job.done / s.job.total)}%` : '') : 'frei'}, Liste ${this.queue.length}, Inventar ${Math.round(100 * (36 - (s.freeSlots ?? 36)) / 36)}%, Kiste ${this.prefs.chest ? 'ja' : 'nein'}`;
+        const statusLine = s && `Leben ${s.health}, Essen ${s.food}, ${s.job ? (this.current ? chatLabel(this.current) : s.job.label || '').slice(0, 24) + (s.job.total > 0 ? ` ${Math.round(100 * s.job.done / s.job.total)}%` : '') : 'frei'}, Liste ${this.queue.length}, Inventar ${Math.round(100 * (36 - (s.freeSlots ?? 36)) / 36)}%, Kiste ${this.prefs.chest ? 'ja' : 'nein'}`;
         const receipt = wait ? `kommt dran, Platz ${wait}` : command.receipt ?? statusLine ?? queued ?? (command.role ? `Rolle ${command.role}` : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz', give: 'bringe dir alles', clear: 'baue ab', schematic: 'baue'}[job?.type] ?? 'verstanden');
-        this.say(`ok: ${receipt}`);
+        if (!job || wait) this.say(`ok: ${receipt}`); // a job that starts at once is acknowledged by its start line
         if (!job) this.demoLog?.outcome(id, 'finished', receipt);
       } catch (e) {
         this.orders.delete(jobId);
@@ -493,7 +494,7 @@ class BotRunner {
   }
 
   dropQueue() {
-    for (const j of this.queue) if (this.orders.has(j.id)) this.emit('stop', `stopped: ${jobLabel(j)}`, j.id);
+    for (const j of this.queue) if (this.orders.has(j.id)) this.emit('stop', `stopped: ${jobLabel(j)}`, j.id, chatLabel(j));
     this.queue = [];
   }
 
@@ -756,7 +757,7 @@ class BotRunner {
     j.interrupted = true;
     const n = (j.interruptions || 0) + (why === 'died' || why === 'disconnected' ? 1 : 0); // only deaths/disconnects count; an order of the player never gives a job up
     if (n > MAX_INTERRUPTIONS) {
-      this.emit('fail', `gave up: ${jobLabel(j)} (${why} ${n} times)`, j.id);
+      this.emit('fail', `gave up: ${jobLabel(j)} (${why} ${n} times)`, j.id, `${chatLabel(j)}: zu oft unterbrochen`);
       return;
     }
     const area = j.t?.area || j.startPos;
@@ -790,6 +791,16 @@ class BotRunner {
     const p = this.bot?.entity?.position;
     job.startPos ||= p ? {x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z)} : null;
     this.emit('job', `${job.resume ? 'resumed' : 'started'}: ${jobLabel(job)}`);
+    let ticker = null;
+    if (this.chatJobs?.has(job.id)) { // some tests call pump on a stub
+      this.say(`${job.resume ? 'weiter' : 'start'}: ${chatLabel(job)}`);
+      let step = 0;
+      ticker = setInterval(() => { // verbose is read at each tick, so laut during a job takes effect
+        const s = Math.floor(job.t.total > 0 ? 10 * job.t.done / job.t.total : 0);
+        if (s > step && s < 10 && this.prefs.verbose) this.say(`${chatLabel(job)} ${(step = s) * 10}%`);
+      }, this.progressEveryMs ??= 10000);
+      ticker.unref();
+    }
     try {
       if (!this.online) throw new Error('bot is offline');
       if (job.resume) {
@@ -825,13 +836,14 @@ class BotRunner {
         this.log(this.name, this.lastError);
       }
     }
+    clearInterval(ticker);
     // Pillars the job left in the open come down before the next one (its own, unchanged ones only; pillars.js).
     if (!job.cancelled && this.online) await unpillar(this, job).catch(() => {});
     const took = Math.round((Date.now() - job.startedAt) / 1000);
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
-    else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id);
-    else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id);
-    else this.emit('fail', `failed: ${jobLabel(job)} - ${this.lastError.replace(/^\w+: /, '')}`, job.id);
+    else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id, `${chatLabel(job)}, ${job.noop ? 'war schon erledigt' : took < 60 ? `${took} s` : `${Math.round(took / 60)} min`}`);
+    else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id, chatLabel(job));
+    else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `failed: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
     this.current = null;
     this.digOnly = null;
     this.digBox = null;
