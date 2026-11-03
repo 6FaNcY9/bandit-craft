@@ -51,7 +51,10 @@ async function run(chestSticks, start = {}) {
     goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
     sleep: async () => { job.cancelled = true; }, // the first wait: the owner presses Stop
     count: (b, name) => inv[name] || 0,
-    ensureItem: async (r, j, name, want) => { const logs = Math.ceil((want - (inv.stick || 0)) / 8); inv.oak_log -= logs; inv.stick = (inv.stick || 0) + logs * 8; },
+    ensureItem: async (r, j, name, want) => {
+      if (name === 'emerald_block') { const n = want - (inv.emerald_block || 0); inv.emerald -= n * 9; inv.emerald_block = (inv.emerald_block || 0) + n; return; }
+      const logs = Math.ceil((want - (inv.stick || 0)) / 8); inv.oak_log -= logs; inv.stick = (inv.stick || 0) + logs * 8;
+    },
     withdraw: async (r, j, item, n, from) => {
       if (item === 'stick') {
         if (!chestSticks) throw new Error('no stick in the chest');
@@ -64,7 +67,7 @@ async function run(chestSticks, start = {}) {
     deposit: async (r, j, store, only) => {
       calls.push(`deposit ${only || 'loot'} at ${store.x}`);
       if (only && store.x === -25) throw new Error('chest full'); // the first chest is full: the one to its right
-      if (only) inv.emerald = 0;
+      if (only) inv[only] = 0;
     },
   });
   const r = {bot, supplyChest: {x: -271, y: 66, z: -214}, emit: () => {}};
@@ -73,14 +76,16 @@ async function run(chestSticks, start = {}) {
 }
 (async () => {
   const a = await run(160);
-  assert.deepStrictEqual(a.calls, ['withdraw stick 1664 at -22 63 -111', 'deposit emerald at -25', 'deposit emerald at -27']);
+  assert.deepStrictEqual(a.calls, ['withdraw stick 1664 at -22 63 -111']); // three emeralds: no block yet, they stay in the inventory
   assert.deepStrictEqual(a.opened, ['c', 'f']); // each once: the fletcher is sold out after 3, the cleric never buys
-  assert.deepStrictEqual([a.inv.emerald, a.job.t.done, a.job.t.doing], [0, 3, 'every villager is sold out, waiting for the restock']);
+  assert.deepStrictEqual([a.inv.emerald, a.job.t.done, a.job.t.doing], [3, 3, 'every villager is sold out, waiting for the restock']);
   const b = await run(0);
   assert.deepStrictEqual([b.calls, b.opened, b.job.t.doing], [[], [], 'the stick chests are empty, waiting for a refill']);
-  // Emeralds left from the last round go to the chest before the refill; the refill fills every slot but four.
-  const c = await run(160, {emerald: 5});
-  assert.deepStrictEqual(c.calls.slice(0, 3), ['deposit emerald at -25', 'deposit emerald at -27', 'withdraw stick 1664 at -22 63 -111']);
+  // Emeralds left from the last round become blocks and go to the chest (the full first chest, then the one right of
+  // it) before the refill; the refill fills every slot but four; the rest under nine stays.
+  const c = await run(160, {emerald: 20});
+  assert.deepStrictEqual(c.calls.slice(0, 3), ['deposit emerald_block at -25', 'deposit emerald_block at -27', 'withdraw stick 1664 at -22 63 -111']);
+  assert.strictEqual(c.inv.emerald, 2 + 3);
   // A full inventory and a walk to storage that keeps failing at one place: two pauses, the third failure ends the job.
   let pauses = 0, tries = 0;
   const bot = {entity: {position: {x: -23, y: 63, z: -110}}, entities: {}, inventory: {items: () => [], emptySlotCount: () => 1}};

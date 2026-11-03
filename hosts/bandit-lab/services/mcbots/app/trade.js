@@ -93,14 +93,23 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
     };
     let sold = 0, emeralds = job.t.done || 0;
     job.t.open = true; // no end: the dashboard shows the count
+    // Emerald blocks go into the chest (owner 2026-11-03); a rest under nine emeralds waits for the next round. Loose
+    // emeralds are stored only when no block could be crafted (no crafting table in reach of the chest).
     const bank = async () => {
-      if (!count(bot, 'emerald')) return;
-      job.t.doing = 'bringing the emeralds to the chest';
-      let last;
-      for (const store of stores) {
-        try { await deposit(r, job, store, 'emerald'); last = null; break; } catch (e) { guard(job); last = e; }
+      if (count(bot, 'emerald') >= 9) {
+        job.t.doing = 'crafting emerald blocks';
+        try { await ensureItem(r, job, 'emerald_block', count(bot, 'emerald_block') + Math.floor(count(bot, 'emerald') / 9)); } catch (e) { guard(job); r.emit('info', `trade: no emerald blocks: ${e.message.slice(0, 80)}`); }
       }
-      if (last) throw new Error(`no room for the emeralds: ${last.message}`);
+      const items = ['emerald_block', 'emerald'].filter((name) => count(bot, name) >= (name === 'emerald' ? 9 : 1));
+      if (!items.length) return;
+      job.t.doing = 'bringing the emeralds to the chest';
+      for (const item of items) {
+        let last;
+        for (const store of stores) {
+          try { await deposit(r, job, store, item); last = null; break; } catch (e) { guard(job); last = e; }
+        }
+        if (last) throw new Error(`no room for the emeralds: ${last.message}`);
+      }
       r.emit('info', `trade: ${sold} trades this run, ${emeralds} emeralds in all, stored`);
     };
     // Loot from the fights on the way goes into storage (sticks, planks and tools stay; deposit's KEEP rules).
