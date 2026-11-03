@@ -23,7 +23,6 @@ const STICK_CHESTS = [
   ...row(-24, 67, [-121, -120, -118, -117, -115, -114, -112, -111, -108, -107, -105, -104, -101, -100]),
 ];
 const EMPTY_MS = 10 * 60 * 1000; // an empty stick chest: look again after this (the owner refills them)
-const STICKS = 640; // taken from the chests at a time
 const BATCH = 320; // sticks crafted at a time (5 stacks), so logs, sticks and emeralds fit together
 
 const inBox = (b, p) => p.x >= b.x1 && p.x <= b.x2 + 1 && p.y >= b.y1 && p.y <= b.y2 + 1 && p.z >= b.z1 && p.z <= b.z2 + 1;
@@ -125,12 +124,13 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
         const chests = sticksAt();
         const c = nextStickChest(bot.entity.position, empty, Date.now(), chests);
         if (c) {
+          await bank(); // a round ends with the emeralds in the chest (owner 2026-11-03), then the inventory is filled
           job.t.doing = 'taking sticks from the hall chests';
           // A chest half shows the whole double chest: both halves are passed over once one is empty.
-          // Room is kept for the emeralds: with every slot full of sticks it would walk to the chest after each villager.
+          // Four slots stay free for the next round's emeralds.
           const room = bot.inventory.emptySlotCount() - 4;
-          if (room < 1) { await bank(); if (bot.inventory.emptySlotCount() - 4 < 1) await clear(); return; }
-          try { await withdraw(r, job, 'stick', Math.min(STICKS, room * 64), c); } catch (e) {
+          if (room < 1) { await clear(); return; }
+          try { await withdraw(r, job, 'stick', room * 64, c); } catch (e) {
             guard(job);
             for (const o of chests) if (o.x === c.x && o.y === c.y && Math.abs(o.z - c.z) <= 1) empty.set(`${o.x},${o.y},${o.z}`, Date.now() + EMPTY_MS);
             if (!/^no stick/.test(e.message)) r.emit('info', `trade: stick chest at ${c.x} ${c.y} ${c.z}: ${e.message.slice(0, 80)}`);

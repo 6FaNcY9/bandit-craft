@@ -29,8 +29,8 @@ assert.deepStrictEqual(nextStickChest({x: -23, y: 66, z: -110}, new Map(), 0), {
 assert.deepStrictEqual(nextStickChest({x: -23, y: 63, z: -110}, new Map(STICK_CHESTS.map((c) => [`${c.x},${c.y},${c.z}`, 99])), 50), null);
 // Runs with a fake bot: sticks from a hall chest, a fletcher sold out, a cleric learned as never, the emeralds into the
 // chest right of the full first one, then the Stop ends the wait. With every stick chest empty it waits, no base trip.
-async function run(chestSticks) {
-  const inv = {};
+async function run(chestSticks, start = {}) {
+  const inv = {...start};
   const items = () => Object.entries(inv).filter(([, n]) => n > 0).map(([name, count]) => ({name, count}));
   const fletcher = {...v(1, -28.5, 63, -110), uuid: 'f'}, cleric = {...v(2, -28.5, 63, -112), uuid: 'c'};
   const trades = {f: [offer({maximumNbTradeUses: 3})], c: [offer({inputItem1: {name: 'rotten_flesh', count: 32}})]};
@@ -55,7 +55,7 @@ async function run(chestSticks) {
     withdraw: async (r, j, item, n, from) => {
       if (item === 'stick') {
         if (!chestSticks) throw new Error('no stick in the chest');
-        calls.push(`withdraw stick at ${from.x} ${from.y} ${from.z}`);
+        calls.push(`withdraw stick ${n} at ${from.x} ${from.y} ${from.z}`);
         inv.stick = (inv.stick || 0) + chestSticks; chestSticks = 0;
         return;
       }
@@ -73,11 +73,14 @@ async function run(chestSticks) {
 }
 (async () => {
   const a = await run(160);
-  assert.deepStrictEqual(a.calls, ['withdraw stick at -22 63 -111', 'deposit emerald at -25', 'deposit emerald at -27']);
+  assert.deepStrictEqual(a.calls, ['withdraw stick 1664 at -22 63 -111', 'deposit emerald at -25', 'deposit emerald at -27']);
   assert.deepStrictEqual(a.opened, ['c', 'f']); // each once: the fletcher is sold out after 3, the cleric never buys
   assert.deepStrictEqual([a.inv.emerald, a.job.t.done, a.job.t.doing], [0, 3, 'every villager is sold out, waiting for the restock']);
   const b = await run(0);
   assert.deepStrictEqual([b.calls, b.opened, b.job.t.doing], [[], [], 'the stick chests are empty, waiting for a refill']);
+  // Emeralds left from the last round go to the chest before the refill; the refill fills every slot but four.
+  const c = await run(160, {emerald: 5});
+  assert.deepStrictEqual(c.calls.slice(0, 3), ['deposit emerald at -25', 'deposit emerald at -27', 'withdraw stick 1664 at -22 63 -111']);
   // A full inventory and a walk to storage that keeps failing at one place: two pauses, the third failure ends the job.
   let pauses = 0, tries = 0;
   const bot = {entity: {position: {x: -23, y: 63, z: -110}}, entities: {}, inventory: {items: () => [], emptySlotCount: () => 1}};

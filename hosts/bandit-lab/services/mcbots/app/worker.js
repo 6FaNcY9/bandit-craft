@@ -26,3 +26,4 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+process.on('unhandledRejection', (e) => log('worker', `unhandled rejection: ${e?.stack || e}`)); // mineflayer's openVillager leaks a timeout rejection (windowOpen, 2026-11-03): log it, never die with every bot
