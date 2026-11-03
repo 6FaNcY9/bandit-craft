@@ -110,7 +110,7 @@
       findBlocks: () => [{x: 1, y: 61, z: 1}, {x: 4, y: 61, z: 4}, {x: 50, y: 61, z: 4}], // the store, a stick chest, one outside the hall
     };
     const {trade: run} = trade.makeTrade({
-      goNear: async (rr, j, x, y, z) => { calls.push(`go ${x} ${y} ${z}`); job.cancelled = true; },
+      goNear: async (rr, j, x, y, z) => { calls.push(`go ${x} ${y} ${z}`); if (x !== 1) job.cancelled = true; }, // 1: the walk to its store at the start
       guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
       sleep: async () => { job.cancelled = true; },
       count: (b, n) => inv[n] || 0, ensureItem: async () => {},
@@ -118,7 +118,7 @@
       deposit: async () => {},
     });
     await assert.rejects(run({bot, emit: () => {}}, job), /stopped/);
-    assert.deepEqual(calls[0], 'withdraw 4 61 4');
+    assert.deepEqual(calls.slice(0, 2), ['go 1 61 1', 'withdraw 4 61 4']);
     assert.ok(calls.includes('go 4.5 63 2.5'), 'no villager in the box: walk to the middle of its hall');
   }
 
@@ -127,6 +127,7 @@
   assert.deepEqual(parseHalls(JSON.stringify({misa: mh})).misa.stores, [{x: 1, y: 61, z: 1}]);
   assert.throws(() => parseHalls('{'), /JSON/);
   assert.throws(() => parseHalls('{"misa": {"stores": []}}'), /needs a hall/);
+  assert.deepEqual(parseHalls('{"misa": {}}').misa, {}, 'no arguments: the hall built into trade.js');
   assert.deepEqual(parseSchedule('bot23=misa@mon,wed,sat/18:00+60'), [{bot: 'bot23', hall: 'misa', days: [1, 3, 6], start: 1080, minutes: 60}]);
   assert.deepEqual(parseSchedule(''), []);
   for (const bad of ['bot23=misa@mon/18:00', 'x=misa@mon/18:00+60', 'bot23=misa@xyz/18:00+60', 'bot23=misa@mon/25:00+60', 'bot23=misa@mon/18:00+0']) assert.throws(() => parseSchedule(bad), /TRADE_SCHEDULE|./, bad);

@@ -24,5 +24,18 @@ buildNpmPackage {
     runHook postCheck
   '';
   npmFlags = ["--ignore-scripts"];
+  # mineflayer-pathfinder 2.4.5: once a door is clicked nothing is left to place, but `placing` stays on and the next
+  # tick of a bot with scaffolding blocks reads placingBlock.y: an uncaught TypeError that killed the worker and all its
+  # bots at every door (2026-11-03). --replace-fail: a new version has to be looked at again; test/walking.js checks it.
+  preBuild = ''
+    substituteInPlace node_modules/mineflayer-pathfinder/index.js --replace-fail \
+      "      const block = stateMovements.getScaffoldingItem()" \
+      "      if (!placingBlock) { // the door was the last thing to place
+        placing = false
+        lastNodeTime = performance.now()
+        return
+      }
+      const block = stateMovements.getScaffoldingItem()"
+  '';
   meta.mainProgram = "mcbots";
 }

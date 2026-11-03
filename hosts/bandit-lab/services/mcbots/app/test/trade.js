@@ -29,7 +29,8 @@ assert.deepStrictEqual(nextStickChest({x: -23, y: 66, z: -110}, new Map(), 0), {
 assert.deepStrictEqual(nextStickChest({x: -23, y: 63, z: -110}, new Map(STICK_CHESTS.map((c) => [`${c.x},${c.y},${c.z}`, 99])), 50), null);
 // Runs with a fake bot: sticks from a hall chest, a fletcher sold out, a cleric learned as never, the emeralds into the
 // chest right of the full first one, then the Stop ends the wait. With every stick chest empty it waits, no base trip.
-async function run(chestSticks, start = {}) {
+async function run(chestSticks, start = {}, chestsWithSticks = 1) {
+  const walks = [];
   const inv = {...start};
   const items = () => Object.entries(inv).filter(([, n]) => n > 0).map(([name, count]) => ({name, count}));
   const fletcher = {...v(1, -28.5, 63, -110), uuid: 'f'}, cleric = {...v(2, -28.5, 63, -112), uuid: 'c'};
@@ -48,7 +49,7 @@ async function run(chestSticks, start = {}) {
   };
   const calls = [];
   const {trade} = makeTrade({
-    goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+    goNear: async (r, j, x, y, z) => { walks.push(`walk ${x} ${y} ${z}`); }, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
     sleep: async () => { job.cancelled = true; }, // the first wait: the owner presses Stop
     count: (b, name) => inv[name] || 0,
     ensureItem: async (r, j, name, want) => {
@@ -57,9 +58,10 @@ async function run(chestSticks, start = {}) {
     },
     withdraw: async (r, j, item, n, from) => {
       if (item === 'stick') {
-        if (!chestSticks) throw new Error('no stick in the chest');
+        if (!chestSticks || !chestsWithSticks) throw new Error('no stick in the chest');
         calls.push(`withdraw stick ${n} at ${from.x} ${from.y} ${from.z}`);
-        inv.stick = (inv.stick || 0) + chestSticks; chestSticks = 0;
+        inv.stick = (inv.stick || 0) + chestSticks;
+        if (!--chestsWithSticks) chestSticks = 0;
         return;
       }
       calls.push(`withdraw ${item} ${n}`);
@@ -72,7 +74,7 @@ async function run(chestSticks, start = {}) {
   });
   const r = {bot, supplyChest: {x: -271, y: 66, z: -214}, emit: () => {}};
   await assert.rejects(trade(r, job), /stopped/);
-  return {calls, opened: opened.sort(), inv, job};
+  return {calls, opened: opened.sort(), inv, job, walks};
 }
 (async () => {
   const a = await run(160);
@@ -86,6 +88,11 @@ async function run(chestSticks, start = {}) {
   const c = await run(160, {emerald: 20});
   assert.deepStrictEqual(c.calls.slice(0, 3), ['deposit emerald_block at -25', 'deposit emerald_block at -27', 'withdraw stick 1664 at -22 63 -111']);
   assert.strictEqual(c.inv.emerald, 2 + 3);
+  // The inventory is filled from chest to chest: a chest that gave all it had is not walked to again, the next one is.
+  const f = await run(160, {}, 2);
+  assert.deepStrictEqual(f.calls.filter((l) => l.startsWith('withdraw')).length, 2);
+  assert.notStrictEqual(f.calls[0], f.calls[1]);
+  assert.deepStrictEqual(f.walks[0], 'walk -25 69 -95', 'the run starts at the emerald chest');
   // A full inventory and a walk to storage that keeps failing at one place: two pauses, the third failure ends the job.
   let pauses = 0, tries = 0;
   const bot = {entity: {position: {x: -23, y: 63, z: -110}}, entities: {}, inventory: {items: () => [], emptySlotCount: () => 1}};

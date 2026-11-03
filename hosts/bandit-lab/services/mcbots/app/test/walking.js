@@ -152,6 +152,8 @@ const assert = require('node:assert');
   assert.deepStrictEqual(at(1, 65), [false, true], 'closed upper half: the click below opens it');
   assert.deepStrictEqual(at(2, 64), [false, true], 'open door: walk through, never click it shut');
   assert.deepStrictEqual(at(3, 64), [false, false], 'iron door: a wall');
+  // package.nix patches the library: a bot with scaffolding blocks crashed its worker after clicking a door (2026-11-03).
+  assert.ok(require('node:fs').readFileSync(require.resolve('mineflayer-pathfinder'), 'utf8').includes('if (!placingBlock) {'), 'the door patch is in the library');
   assert.deepStrictEqual(at(4, 64), [false, true], 'open gate: walk through');
   assert.deepStrictEqual(at(5, 64), [true, false], 'closed gate: click it');
 })();

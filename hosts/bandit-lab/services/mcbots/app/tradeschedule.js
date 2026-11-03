@@ -15,7 +15,7 @@ function parseHalls(text) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('TRADE_HALLS must be an object of hall name to hall');
   return Object.fromEntries(Object.entries(raw).map(([name, h]) => {
     if (!/^[\w-]{1,24}$/.test(name)) throw new Error(`bad TRADE_HALLS name: ${name}`);
-    if (!h?.hall) throw new Error(`TRADE_HALLS ${name} needs a hall box`);
+    if (!h?.hall && Object.keys(h || {}).length) throw new Error(`TRADE_HALLS ${name} needs a hall box`); // {}: the hall built into trade.js
     return [name, VALIDATE.trade(h)];
   }));
 }

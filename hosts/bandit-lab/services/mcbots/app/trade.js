@@ -128,27 +128,36 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
     const step = async () => {
       guard(job);
       const logs = bot.inventory.items().filter((i) => i.name.endsWith('_log')).reduce((n, i) => n + i.count, 0);
-      // At least a stack: a price raised by demand is at most 64 sticks, so every offer stays affordable.
-      if (count(bot, 'stick') < 64) {
+      // A round (owner 2026-11-03): under a stack of sticks (a price raised by demand is at most 64, so every offer stays
+      // affordable) the emeralds go to the chest, then the inventory is filled from chest to chest before it trades again.
+      if (count(bot, 'stick') < 64) job.tradeFilling = true;
+      if (job.tradeFilling) {
+        await bank();
         const chests = sticksAt();
         const c = nextStickChest(bot.entity.position, empty, Date.now(), chests);
-        if (c) {
-          await bank(); // a round ends with the emeralds in the chest (owner 2026-11-03), then the inventory is filled
+        const room = bot.inventory.emptySlotCount() - 4; // four slots stay free for the emeralds of the next round
+        if (c && room >= 1) {
           job.t.doing = 'taking sticks from the hall chests';
           // A chest half shows the whole double chest: both halves are passed over once one is empty.
-          // Four slots stay free for the next round's emeralds.
-          const room = bot.inventory.emptySlotCount() - 4;
-          if (room < 1) { await clear(); return; }
-          try { await withdraw(r, job, 'stick', room * 64, c); } catch (e) {
+          const dry = () => { for (const o of chests) if (o.x === c.x && o.y === c.y && Math.abs(o.z - c.z) <= 1) empty.set(`${o.x},${o.y},${o.z}`, Date.now() + EMPTY_MS); };
+          const before = count(bot, 'stick');
+          try {
+            await withdraw(r, job, 'stick', room * 64, c);
+            if (count(bot, 'stick') - before < room * 64) dry(); // it gave all it had: no second walk to it
+          } catch (e) {
             guard(job);
-            for (const o of chests) if (o.x === c.x && o.y === c.y && Math.abs(o.z - c.z) <= 1) empty.set(`${o.x},${o.y},${o.z}`, Date.now() + EMPTY_MS);
+            dry();
             if (!/^no stick/.test(e.message)) r.emit('info', `trade: stick chest at ${c.x} ${c.y} ${c.z}: ${e.message.slice(0, 80)}`);
           }
           return;
         }
-        if (!logs) { await bank(); await wait('the stick chests are empty, waiting for a refill'); return; }
-        job.t.doing = 'crafting sticks';
-        await ensureItem(r, job, 'stick', Math.min(BATCH, count(bot, 'stick') + logs * 8));
+        job.tradeFilling = false;
+        if (count(bot, 'stick') < 64) {
+          if (room < 1) { await clear(); return; }
+          if (!logs) { await wait('the stick chests are empty, waiting for a refill'); return; }
+          job.t.doing = 'crafting sticks';
+          await ensureItem(r, job, 'stick', Math.min(BATCH, count(bot, 'stick') + logs * 8));
+        }
       }
       // Few free slots left: the emeralds go first.
       if (bot.inventory.emptySlotCount() < 2) {
@@ -217,6 +226,11 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
         win.close();
       }
     };
+    // Every run starts at the emerald chest (owner 2026-11-03); a failed walk there is no reason to give up the run.
+    if (!job.tradeStarted) {
+      job.tradeStarted = true;
+      try { await goNear(r, job, stores[0].x, stores[0].y, stores[0].z, 3, {doing: 'walking to the emerald chest'}); } catch (e) { guard(job); r.emit('info', `trade: emerald chest out of reach: ${e.message.slice(0, 80)}`); }
+    }
     for (let fails = 0, at = null; ;) {
       try { await step(); fails = 0; } catch (e) {
         guard(job);

@@ -170,7 +170,7 @@ in {
             # Misa's trader (app/tradeschedule.js): bot23 trades in the hall "misa" daily from 18:00
             # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}]}}; the other chests in the hall hold the sticks.
             # Hall scanned 2026-11-02: 32 villagers, floors y 55/59, stick chest 175 59 424, emerald chest 171 59 425.
-            TRADE_HALLS = "{\"misa\":{\"hall\":{\"x1\":-32,\"y1\":60,\"z1\":-132,\"x2\":-14,\"y2\":70,\"z2\":-88},\"stores\":[{\"x\":-25,\"y\":69,\"z\":-95},{\"x\":-27,\"y\":69,\"z\":-95}]}}"; # the two-floor hall south of spawn (owner 2026-11-03: that is Misa's hall; 60 stick chests opposite the villagers), emeralds into the double chest at its south end
+            TRADE_HALLS = "{\"misa\":{}}"; # {}: the hall built into trade.js (three floors south of spawn, the 60 stick chests of its lower two floors, the emerald chest -25/-27 69 -95; owner 2026-11-03)
             TRADE_SCHEDULE = "bot23=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60";
             # Server panel (admin.js): RCON to Paper through the gateway forwarder; the password
             # (RCON_PASSWORD) arrives in seed.env, and only the human dashboard path can use it.
