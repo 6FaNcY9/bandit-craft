@@ -525,7 +525,7 @@ dashboard radar and served by `GET /api/state` (`bots`, `world`,
   inventory (swords before axes). The server takes a hit from up to 6 blocks, eye to hitbox (its interaction range
   3 plus 3 for lag: bot50 hit a still creeper from 6.0 blocks, not 6.5), so a bot strikes from 5, out of a zombie's
   reach. A hunting bot follows its mob at 3 blocks.
-- **Fight or keep away** (`app/odds.js`): the bot works out what clearing the hostiles within 16 blocks would cost:
+- **Fight or keep away** (`app/odds.js`): the bot works out what clearing the hostiles within 16 blocks that can get at it would cost (a wall counts only from 5 blocks out, and not for a kind that just hit it):
   nearest first, each killed in its health over the weapon's damage times speed; a zombie hits once it has walked up,
   an archer from the start, half the hits each could land, after armour (the vanilla formula). It fights while the
   expected loss leaves more than 6 health, else it kites (melee) or walks off (archers); `retreatHealth` stays a floor.

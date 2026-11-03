@@ -51,6 +51,7 @@ const MODE_MAX_MS = {hunt: 20000, retreat: 30000, creeper: 15000, air: 20000};
 const AIR_LOW = 12;
 const IGNORE_MS = 120000;
 const SEE_RANGE = 24;
+const AROUND_CORNER = 5; // blocks: a mob this close is on the bot within two seconds, wall or not
 const SCAN_EVERY = 20; // ticks between notable-block scans (10 s)
 const MATERIALS = ['wooden', 'golden', 'stone', 'iron', 'diamond', 'netherite'];
 const AVOID_FOOD = new Set(['pufferfish', 'spider_eye', 'poisonous_potato', 'rotten_flesh', 'chicken', 'golden_apple', 'enchanted_golden_apple', 'chorus_fruit', 'suspicious_stew']);
@@ -106,6 +107,20 @@ class Combat {
     const me = this.r.bot.entity?.position;
     const threats = me ? mobs.filter((e) => e.name !== 'creeper').map((e) => ({name: e.name, dist: mobLocation(e).position.distanceTo(me)})) : [];
     return odds({health: this.r.bot.health, ...this.gear(), threats: threats.length || !night ? threats : NIGHT});
+  }
+
+  // Whether this mob counts against the bot now: a wall stops its hits and shots, so one behind a wall does not, unless it
+  // is close enough to come around the corner or its kind just hit the bot (a shot through a gap the ray misses).
+  canGetAt(e, now) {
+    const {bot, hits = []} = this.r;
+    const eye = bot.entity.position.offset(0, 1.62, 0), at = mobLocation(e).position.offset(0, (e.height || 1.8) * 0.85, 0);
+    const d = at.distanceTo(eye);
+    if (d <= AROUND_CORNER || hits.some((h) => h.by === e.name && now - h.t < 10000)) return true;
+    try {
+      return !bot.world.raycast(eye, at.minus(eye).normalize(), d);
+    } catch {
+      return true; // an unloaded chunk or a world without rays: count it, as before
+    }
   }
 
   // True when this bot can clear the hostiles it sees (or a usual night) and keep more than odds.KEEP health. Fists
@@ -272,7 +287,7 @@ class Combat {
     const near = threats.find((e) => !this.ignore.has(e.id));
     const dist = near ? mobLocation(near).position.distanceTo(me) : Infinity;
     // Numbers, not a fixed health line: three zombies cost an unarmoured bot 13 health, an iron one 2 (arena 2026-10-18).
-    const forecast = this.odds(threats.filter((e) => mobLocation(e).position.distanceTo(me) <= 16));
+    const forecast = this.odds(threats.filter((e) => mobLocation(e).position.distanceTo(me) <= 16 && this.canGetAt(e, now)));
     if (near && near.name !== 'creeper') {
       const key = `${near.name}:${forecast.fight}`;
       if (this.lastOdds !== key) r.log(r.name, `odds: ${threats.filter((e) => e.name !== 'creeper').length} ${near.name} -> ${forecast.fight ? 'fight' : 'keep away'} (loss ~${Math.round(forecast.loss)} of ${Math.round(bot.health)}, ${Math.round(forecast.secs)} s)`);
@@ -284,9 +299,11 @@ class Combat {
       r.log(r.name, `${this.mode}: gave up on ${this.target?.name || 'a mob'} after ${Math.round((now - this.since) / 1000)} s`);
       return this.release(); // the next tick sees the mob ignored
     }
-    // Retreat until healthy again or nothing hostile is close, eating meanwhile (health only comes back at food 18+).
+    // Retreat until healthy again with odds it can fight, or nothing hostile is close, eating meanwhile (health only comes
+    // back at food 18+). Health alone let a healthy bot go every other tick and start over, each start replacing its job's
+    // walk: EM_Trader "retreating to heal" at 20 health for hours while the trade stood still (main server 2026-11-03).
     if (this.mode === 'retreat') {
-      if (bot.health >= Math.min(20, s.retreatHealth + 4) || dist > 16) this.release();
+      if ((bot.health >= Math.min(20, s.retreatHealth + 4) && forecast.fight) || dist > 16) this.release();
       else if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
       return;
     }
