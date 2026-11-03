@@ -33,27 +33,52 @@
 <body>
 
 <h1>Deine Bots</h1>
-<p class="lead">Eine Anleitung für Misa: wie du mit deinen zwei Bots sprichst, was sie für dich tun und was sie nicht dürfen.</p>
+<p class="lead">Eine Anleitung für Misa: wie du deine zwei Bots im Menü und im Chat steuerst, was sie für dich tun und was sie nicht dürfen.</p>
 
 <div class="cards">
   <div class="card">
-    <h3>MisaBot – dein Helfer</h3>
-    <p>Hört nur auf dich (und auf den Server-Besitzer). Er kommt zu dir, folgt dir, beschützt dich, sammelt Rohstoffe,
+    <h3>MisaBot – deine Helferin</h3>
+    <p>Hört nur auf dich (und auf den Server-Besitzer). Sie kommt zu dir, folgt dir, beschützt dich, sammelt Rohstoffe,
     gräbt Bereiche in deiner Basis ab und baut Schematics für dich.</p>
   </div>
   <div class="card">
     <h3>EM_Trader – dein Händler</h3>
     <p>Arbeitet von allein: <b>jeden Tag ab 18 Uhr</b> eine Stunde lang in deiner Handelshalle.
-    Er verkauft Sticks an deine Villager und legt die Smaragdblöcke in deine Truhe.</p>
+    Er verkauft Sticks an deine Villager und legt die Smaragdblöcke in deine Truhe. Früher hieß er bot23.</p>
   </div>
 </div>
 
-<h2>1. So sprichst du mit einem Bot</h2>
-<p>Du flüsterst ihm. Drück <b>T</b> (Chat), schreib <code>/msg MisaBot</code> und dahinter den Befehl, dann <b>Enter</b>.
+<h2>1. Das Menü: /bots</h2>
+<p>Am einfachsten geht es über das Menü: Schreib <code>/bots</code> (kurz <code>/b</code>) in den Chat. Nichts liegt mehr über
+deinem Spielbild, alles steht im Menü und ist weg, sobald du es schließt.</p>
+<table>
+  <tr><th>Im Menü</th><th>Was du dort siehst</th></tr>
+  <tr><td>Obere Reihe</td><td>Wie viele Bots online sind und arbeiten, welcher ein Problem hat, was dem Lager des Besitzers fehlt und ob gerade Tag oder Nacht ist. Rechts: Seitenleiste und <code>Alle stopp</code>.</td></tr>
+  <tr><td>Zweite Reihe</td><td>Ein Feld pro Bot. Fahr mit der Maus darüber: Auftrag und Fortschritt, Laufzeit, was er gerade tut, letzter Fehler, Leben, Essen, freie Plätze, Werkzeug und Position. Die Werte laufen mit, solange das Menü offen ist.</td></tr>
+  <tr><td>Klick auf einen Bot</td><td>Seine Befehle: Komm, Folge, Wache, Gib, Status, Stopp, Holz 32, Stein 32, Eisen 16, Kohle 32. <code>Zurück</code> führt zur Übersicht.</td></tr>
+  <tr><td>Seitenleiste</td><td>Eine Liste der Bots am rechten Bildrand. Sie ist aus. Rechtsklick schaltet sie ein, Linksklick wieder aus.</td></tr>
+</table>
+<table>
+  <tr><th>Das Bild im Feld</th><th>Bedeutet</th></tr>
+  <tr><td>Kopf, Name blau</td><td>Er arbeitet.</td></tr>
+  <tr><td>Kopf, Name grau</td><td>Er hat nichts zu tun.</td></tr>
+  <tr><td>Barriere</td><td>Er hatte in den letzten 5 Minuten einen Fehler.</td></tr>
+  <tr><td>Rotes Bett</td><td>Er ist im Nachtlager.</td></tr>
+  <tr><td>Skelettschädel</td><td>Er ist gestorben und steht gleich wieder auf.</td></tr>
+  <tr><td>Graue Farbe</td><td>Er ist nicht auf dem Server.</td></tr>
+</table>
+<p>Das Bild wechselt erst, wenn du das Menü neu öffnest. Der Text darunter ist immer aktuell.</p>
+<div class="box warn">
+  <b>Wichtig:</b> Deine Bots sind <b>MisaBot</b> und <b>EM_Trader</b>. Zurzeit stehen auch die Bots des Besitzers im Menü: Lass die bitte in Ruhe.
+  <code>Alle stopp</code> hält alle Bots an, auch die des Besitzers. Nimm es nur im Notfall.
+</div>
+
+<h2>2. Im Chat mit einem Bot sprechen</h2>
+<p>Alles aus dem Menü und noch mehr geht auch im Chat. Du flüsterst dem Bot: Drück <b>T</b> (Chat), schreib <code>/msg MisaBot</code> und dahinter den Befehl, dann <b>Enter</b>.
 Den Namen kannst du nach <code>/msg Mi</code> mit der <b>Tab</b>-Taste ergänzen lassen.</p>
 <div class="box">
-  <b>Beispiel:</b> <code>/msg MisaBot komm</code> – MisaBot antwortet geflüstert <code>ok: komme</code> und läuft zu dir.
-  Wenn er fertig ist, flüstert er <code>fertig: …</code>.
+  <b>Beispiel:</b> <code>/msg MisaBot komm</code> – im Chat erscheint nur für dich <code>[MisaBot] ok: komme</code>, und sie läuft zu dir.
+  Ist sie fertig, kommt <code>[MisaBot] fertig: …</code>. Sonst bleibt der Chat ruhig: Du siehst nur Antworten auf deine eigenen Befehle.
 </div>
 <p>Der Bot muss auf dem Server sein (in der Spielerliste mit <b>Tab</b> zu sehen). Groß- und Kleinschreibung ist egal.</p>
 <p>Die Bots verstehen <b>nur genau diese Wörter</b> und nur in dieser Reihenfolge, ein Befehl pro Nachricht. Bei <code>hol</code>
@@ -61,42 +86,42 @@ kommt erst die Zahl, dann der Block (<code>hol 20 eisen</code>, nicht <code>hol 
 laufenden ab, du musst vorher nicht <code>stopp</code> sagen. Im normalen Chat geht es auch, wenn die Nachricht mit dem
 Bot-Namen beginnt: <code>MisaBot komm</code> (dann lesen es aber alle mit).</p>
 
-<h2>2. Alle Befehle für MisaBot</h2>
+<h2>3. Alle Befehle für MisaBot</h2>
 <table>
   <tr><th>Du schreibst</th><th>Was passiert</th></tr>
-  <tr><td><code>/msg MisaBot komm</code></td><td>Er läuft zu dir und bleibt dann stehen.</td></tr>
-  <tr><td><code>/msg MisaBot folge</code></td><td>Er folgt dir, bis du <code>stopp</code> sagst.</td></tr>
-  <tr><td><code>/msg MisaBot stopp</code></td><td>Er hört sofort mit allem auf und bleibt stehen. <code>bleib</code> und <code>fertig</code> tun dasselbe.</td></tr>
-  <tr><td><code>/msg MisaBot wache</code></td><td>Er bleibt bei dir und kämpft gegen Monster in deiner Nähe.</td></tr>
-  <tr><td><code>/msg MisaBot wache hier</code></td><td>Er bewacht die Stelle, an der du gerade stehst.</td></tr>
-  <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 256.</td></tr>
-  <tr><td><code>/msg MisaBot gib</code></td><td>Er kommt zu dir und wirft dir alles hin, was er gesammelt hat. Werkzeug, Rüstung und Essen behält er.</td></tr>
-  <tr><td><code>/msg MisaBot status</code></td><td>Er sagt dir Leben, Essen und was er gerade tut.</td></tr>
-  <tr><td><i>Rüstung geben</i></td><td>Kein Befehl: Wirf ihm Helm, Brustpanzer, Hose, Schuhe oder Schild vor die Füße (Taste <b>Q</b>). Er hebt sie auf und zieht sie sofort an.</td></tr>
-  <tr><td><code>/msg MisaBot ecke</code></td><td>Merkt sich den Block unter dir als Ecke (für <code>abbau</code>, siehe 3).</td></tr>
-  <tr><td><code>/msg MisaBot abbau</code></td><td>Reißt alles zwischen deinen zwei Ecken ab (siehe 3).</td></tr>
-  <tr><td><code>/msg MisaBot bau haus</code></td><td>Baut das Schematic „haus“ an deiner Stelle (siehe 4).</td></tr>
+  <tr><td><code>/msg MisaBot komm</code></td><td>Sie läuft zu dir und bleibt dann stehen.</td></tr>
+  <tr><td><code>/msg MisaBot folge</code></td><td>Sie folgt dir, bis du <code>stopp</code> sagst.</td></tr>
+  <tr><td><code>/msg MisaBot stopp</code></td><td>Sie hört sofort mit allem auf und bleibt stehen. <code>bleib</code> und <code>fertig</code> tun dasselbe.</td></tr>
+  <tr><td><code>/msg MisaBot wache</code></td><td>Sie bleibt bei dir und kämpft gegen Monster in deiner Nähe.</td></tr>
+  <tr><td><code>/msg MisaBot wache hier</code></td><td>Sie bewacht die Stelle, an der du gerade stehst.</td></tr>
+  <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Sie baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 256.</td></tr>
+  <tr><td><code>/msg MisaBot gib</code></td><td>Sie kommt zu dir und wirft dir alles hin, was sie gesammelt hat. Werkzeug, Rüstung und Essen behält sie.</td></tr>
+  <tr><td><code>/msg MisaBot status</code></td><td>Sie sagt dir Leben, Essen und was sie gerade tut.</td></tr>
+  <tr><td><i>Rüstung geben</i></td><td>Kein Befehl: Wirf ihr Helm, Brustpanzer, Hose, Schuhe oder Schild vor die Füße (Taste <b>Q</b>). Sie hebt alles auf und zieht es sofort an.</td></tr>
+  <tr><td><code>/msg MisaBot ecke</code></td><td>Merkt sich den Block unter dir als Ecke (für <code>abbau</code>, siehe 4).</td></tr>
+  <tr><td><code>/msg MisaBot abbau</code></td><td>Reißt alles zwischen deinen zwei Ecken ab (siehe 4).</td></tr>
+  <tr><td><code>/msg MisaBot bau haus</code></td><td>Baut das Schematic „haus“ an deiner Stelle (siehe 5).</td></tr>
 </table>
 
-<h2>3. Etwas abreißen lassen</h2>
+<h2>4. Etwas abreißen lassen</h2>
 <ol>
   <li>Stell dich auf eine Ecke des Bereichs, der weg soll, und flüstere <code>/msg MisaBot ecke</code>.
       Antwort: <code>ok: Ecke 1: x y z</code>.</li>
   <li>Geh zur <b>gegenüberliegenden</b> Ecke – auch in der Höhe: Soll etwas 5 Blöcke Hohes weg, stell dich oben drauf
       (oder unten hin, wenn du oben angefangen hast). Flüstere wieder <code>/msg MisaBot ecke</code> → <code>ok: Ecke 2: x y z</code>.</li>
-  <li>Flüstere <code>/msg MisaBot abbau</code>. Er arbeitet von oben nach unten und meldet <code>fertig: …</code>.</li>
+  <li>Flüstere <code>/msg MisaBot abbau</code>. Sie arbeitet von oben nach unten und meldet <code>fertig: …</code>.</li>
   <li>Hol dir die abgebauten Blöcke mit <code>/msg MisaBot gib</code>.</li>
 </ol>
 <div class="box warn">
-  <b>Gut zu wissen:</b> Er reißt <b>alles</b> zwischen den Ecken ab, auch Gebautes – nur <b>Truhen, Fässer, Öfen und ähnliche
-  Behälter bleiben stehen</b> (samt Inhalt). Er arbeitet nur innerhalb deiner Basis, nie in deiner Handelshalle und nie bei anderen.
+  <b>Gut zu wissen:</b> Sie reißt <b>alles</b> zwischen den Ecken ab, auch Gebautes – nur <b>Truhen, Fässer, Öfen und ähnliche
+  Behälter bleiben stehen</b> (samt Inhalt). Sie arbeitet nur innerhalb deiner Basis, nie in deiner Handelshalle und nie bei anderen.
   Höchstens 32 × 32 Blöcke groß und 24 hoch. Hast du dich vertan: sofort <code>/msg MisaBot stopp</code>.
 </div>
 
-<h2>4. Etwas bauen lassen (Schematic)</h2>
+<h2>5. Etwas bauen lassen (Schematic)</h2>
 <ol>
   <li><b>Schematic besorgen:</b> Ein Schematic ist eine Bauplan-Datei (<code>.litematic</code>, z.&nbsp;B. aus Litematica).
-      Schick die Datei dem Server-Besitzer und sag ihm, wie sie heißen soll, z.&nbsp;B. <code>haus</code>. Er lädt sie hoch.</li>
+      Schick die Datei dem Server-Besitzer mit dem Namen, den sie haben soll, z.&nbsp;B. <code>haus</code>. Von dort kommt sie auf den Server.</li>
   <li><b>Material bereitlegen:</b> Stell eine Truhe mit allen Blöcken, die das Bauwerk braucht, <b>höchstens 8 Blöcke</b>
       von der Baustelle entfernt hin. Mehrere Truhen sind ok.</li>
   <li><b>Platz frei machen:</b> Der Bauplatz muss leer sein (nur Luft). Steht dort etwas, lass es vorher mit
@@ -105,37 +130,48 @@ Bot-Namen beginnt: <code>MisaBot komm</code> (dann lesen es aber alle mit).</p>
       des Bauwerks. Mit Litematica siehst du den Startpunkt vorher.</li>
   <li><b>Befehl:</b> <code>/msg MisaBot bau haus</code>. Gedreht: <code>/msg MisaBot bau haus 90</code> (oder <code>180</code>, <code>270</code>).</li>
 </ol>
-<p>Er meldet <code>fertig: …</code>, wenn alles steht, oder <code>Problem: …</code> mit dem Grund, z.&nbsp;B. wenn Material fehlt.
-Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>.
+<p>Sie meldet <code>fertig: …</code>, wenn alles steht, oder <code>Problem: …</code> mit dem Grund, z.&nbsp;B. wenn Material fehlt.
+Kennt sie den Namen nicht, antwortet sie <code>geht nicht: kenne haus nicht</code>.
 <b>Tipp:</b> Probier es zuerst mit etwas Kleinem.</p>
 
-<h2>5. Dein Händler (EM_Trader)</h2>
-<ul>
-  <li>Er kommt <b>jeden Tag um 18 Uhr</b> in deine Handelshalle, handelt eine Stunde und hört dann von selbst auf.</li>
-  <li>Er nimmt die Sticks aus den Stick-Truhen deiner Halle, verkauft sie an deine Villager und legt die <b>Smaragdblöcke in deine Truhe</b>.</li>
-  <li>Du musst nur dafür sorgen, dass genug Sticks in den Truhen sind.</li>
-  <li>In der Halle baut kein Bot etwas ab oder hin – auch MisaBot nicht.</li>
-  <li>Du kannst ihn auch ansprechen: <code>/msg EM_Trader status</code> oder <code>/msg EM_Trader stopp</code>.</li>
-</ul>
+<h2>6. Dein Händler (EM_Trader)</h2>
+<p>Er kommt <b>jeden Tag um 18 Uhr</b> in deine Handelshalle, handelt eine Stunde und hört dann von selbst auf. So arbeitet er:</p>
+<ol>
+  <li>Er startet an der Smaragd-Truhe auf der obersten Etage bei <code>-25 69 -95</code>.</li>
+  <li>Er füllt sein Inventar aus den Stick-Truhen im Erdgeschoss und im 1. Stock, Truhe für Truhe.</li>
+  <li>Er verkauft an die Villager auf allen Etagen und auf beiden Seiten, bis die Sticks fast weg sind.</li>
+  <li>Er macht aus den Smaragden <b>Smaragdblöcke</b>, legt sie in die Truhe und fängt wieder bei Schritt 2 an.</li>
+</ol>
+<table>
+  <tr><th>Gut zu wissen</th><th></th></tr>
+  <tr><td>Preis</td><td>32 Sticks ergeben 1 Smaragd, 288 Sticks ergeben 1 Block.</td></tr>
+  <tr><td>Tempo</td><td>Er verkauft rund 2.500 Sticks pro Minute.</td></tr>
+  <tr><td>Volle Stick-Truhen</td><td>Die 60 Truhen fassen 103.680 Sticks. Das sind 360 Blöcke und rund 41 Minuten Arbeit.</td></tr>
+  <tr><td>Villager</td><td>64 von 96 kaufen Sticks. Alle 20 Minuten füllen sich alle wieder auf, und wer gehandelt hat, im selben Spieltag bis zu zweimal zusätzlich. Sind alle ausverkauft, wartet er bis zur nächsten Auffüllung.</td></tr>
+  <tr><td>Nachschub</td><td>Die Sticks laufen über die Hopper in die Truhen. Du musst nur dafür sorgen, dass welche nachkommen. Sind die Truhen leer, wartet er.</td></tr>
+  <tr><td>Werkbank</td><td>Die Werkbank bei <code>-24 69 -95</code> braucht er für die Blöcke. Lass sie bitte stehen.</td></tr>
+  <tr><td>Monster</td><td>Monster in der Halle kosten ihn Zeit, er weicht ihnen aus. Gutes Licht hilft.</td></tr>
+</table>
+<p>In der Halle baut kein anderer Bot etwas ab oder hin, auch MisaBot nicht. Du kannst ihn auch ansprechen:
+<code>/msg EM_Trader status</code> oder <code>/msg EM_Trader stopp</code>.</p>
 
-<h2>6. Was die Antworten bedeuten</h2>
+<h2>7. Was die Antworten bedeuten</h2>
 <table>
   <tr><th>Antwort</th><th>Bedeutung</th></tr>
-  <tr><td><code>ok: …</code></td><td>Verstanden, er fängt an.</td></tr>
+  <tr><td><code>ok: …</code></td><td>Verstanden, der Bot fängt an.</td></tr>
   <tr><td><code>fertig: …</code></td><td>Auftrag erledigt.</td></tr>
-  <tr><td><code>Problem: …</code></td><td>Er hat aufgegeben; dahinter steht warum.</td></tr>
+  <tr><td><code>Problem: …</code></td><td>Der Bot hat aufgegeben; dahinter steht warum.</td></tr>
   <tr><td><code>gestoppt: …</code></td><td>Ein Auftrag wurde abgebrochen (von dir, vom Besitzer oder durch einen neuen Auftrag).</td></tr>
-  <tr><td><code>gestorben: …</code></td><td>Er ist gestorben und steht gleich wieder auf.</td></tr>
-  <tr><td><code>geht nicht: …</code></td><td>Diesen Auftrag kann er nicht annehmen; dahinter steht warum. Die häufigsten Gründe:<br>
+  <tr><td><code>geht nicht: …</code></td><td>Diesen Auftrag kann der Bot nicht annehmen; dahinter steht warum. Die häufigsten Gründe:<br>
     <code>erst zweimal ecke sagen</code> – dir fehlt noch eine Ecke.<br>
     <code>das liegt nicht ganz in deinem Bereich</code> – ein Teil liegt außerhalb deiner Basis.<br>
     <code>dort ist gesperrtes Gebiet</code> – der Bereich berührt deine Handelshalle oder eine fremde Basis.<br>
     <code>kenne haus nicht</code> – dieses Schematic gibt es (noch) nicht.<br>
     <code>ich sehe dich nicht</code> – geh näher zum Bot.</td></tr>
-  <tr><td><code>kenne ich nicht: …</code></td><td>Tippfehler, falsche Reihenfolge oder ein Wort zu viel. Er zählt dir die Befehle auf, die er kennt.</td></tr>
+  <tr><td><code>kenne ich nicht: …</code></td><td>Tippfehler, falsche Reihenfolge oder ein Wort zu viel. Der Bot zählt dir die Befehle auf, die er kennt.</td></tr>
 </table>
 
-<h2>7. Was die Bots nicht tun</h2>
+<h2>8. Was die Bots nicht tun</h2>
 <ul>
   <li>Sie hören nicht auf andere Spieler – nur auf dich und den Server-Besitzer.</li>
   <li>Sie graben und bauen nicht in fremden Basen, nicht in deiner Handelshalle und nicht am Spawn.</li>
@@ -144,16 +180,20 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <li>Neue Wörter oder ganze Sätze verstehen sie nicht – nur die Befehle oben. Sie lernen auch nichts dazu.</li>
 </ul>
 
-<h2>8. Wenn etwas nicht klappt</h2>
+<h2>9. Wenn etwas nicht klappt</h2>
 <table>
   <tr><th>Problem</th><th>Was du tust</th></tr>
   <tr><td>Keine Antwort</td><td>Steht der Bot in der Spielerliste (<b>Tab</b>)? Stimmt der Name? Sonst dem Besitzer Bescheid geben.</td></tr>
-  <tr><td>Er hängt fest</td><td><code>stopp</code>, dann <code>komm</code>. Hilft das nicht: Besitzer fragen.</td></tr>
-  <tr><td>Er ist weit weg</td><td><code>komm</code> – er läuft den ganzen Weg, das kann dauern. <code>status</code> zeigt, was er tut.</td></tr>
-  <tr><td><code>Problem: no path to …</code></td><td>Er hat 30 Sekunden keinen Weg zu dir gefunden (Klippe, Wasser, Eisentür). Geh ihm ein Stück entgegen und sag nochmal <code>komm</code>. Hinunter springt er bis zu 12 Blöcke, wenn er genug Leben hat.</td></tr>
-  <tr><td>Er reißt das Falsche ab</td><td>Sofort <code>stopp</code>.</td></tr>
+  <tr><td>Der Bot hängt fest</td><td><code>stopp</code>, dann <code>komm</code>. Hilft das nicht: Besitzer fragen.</td></tr>
+  <tr><td>Der Bot ist weit weg</td><td><code>komm</code> – er läuft den ganzen Weg, das kann dauern. <code>status</code> zeigt, was er tut.</td></tr>
+  <tr><td><code>Problem: no path to …</code></td><td>Der Bot hat 30 Sekunden keinen Weg zu dir gefunden (Klippe, Wasser, Eisentür). Geh ihm ein Stück entgegen und sag nochmal <code>komm</code>. Hinunter springt er bis zu 12 Blöcke, wenn er genug Leben hat.</td></tr>
+  <tr><td>MisaBot reißt das Falsche ab</td><td>Sofort <code>stopp</code>.</td></tr>
+  <tr><td>Das Bild im Menü passt nicht</td><td>Menü schließen und neu öffnen.</td></tr>
+  <tr><td>Die Liste am Bildrand stört</td><td><code>/bots</code>, dann Linksklick auf <code>Seitenleiste</code>.</td></tr>
+  <tr><td>Im Menü steht bei EM_Trader <code>the stick chests are empty</code></td><td>Die Stick-Truhen sind leer. Er macht von selbst weiter, sobald neue Sticks da sind.</td></tr>
+  <tr><td>Im Menü steht bei EM_Trader <code>every villager is sold out</code></td><td>Alle Villager sind ausverkauft. Er wartet bis zur nächsten Auffüllung, das dauert höchstens rund 20 Minuten.</td></tr>
 </table>
-<p class="small">Stand: 01.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
+<p class="small">Stand: 03.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
 
 </body>
 </html>

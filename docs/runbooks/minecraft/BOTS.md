@@ -98,12 +98,31 @@ Restock, measured 2026-11-03 from the villagers' `LastRestock` and `RestocksToda
 - **After tick 9000:** nothing until the next morning. A villager sold out then waits for the wave.
 
 So one Minecraft day offers up to 3072 trades and the bot makes about 1500 (1.3 per second). It waits only when every
-villager is sold out, and then by the game's clock (`soldOutUntil` in `app/trade.js`), not by a fixed time.
+villager is sold out, and then by the game's clock (`soldOutUntil` in `app/trade.js`), not by a fixed time. The prices stay
+at 32 sticks: all 64 fletchers had a demand between -34208 and -24324 on 2026-11-03, far below where the price would rise.
+
+Stick supply, measured 2026-11-03 over 100 s (the 8 minutes before agree): 126 sticks per minute reach the chests through
+the hoppers under the floors (x -24 y 68 and x -22 y 65, both flowing north). The upper line starts on the top floor around
+`-23 69 -94`; the farm behind it was not traced, and nearly nothing arrived between 04:29 and about 05:41 for a reason not
+known. The numbers that follow from it:
+
+| What | Sticks | Emerald blocks |
+| --- | --- | --- |
+| One hour of production | 7560 | 26 |
+| 24 hours of production | 181000 | 630 |
+| The bot's 60 minutes (about 2500 sticks per minute) | up to 150000 | 520 |
+| The 60 chests when full (after almost 14 hours) | 103680 | 360 |
+
+One window a day stops at about 385 blocks, because the chests are full before the next one and the hoppers back up. Two
+windows 12 hours apart, 40 minutes each, would sell all of it; `TRADE_SCHEDULE` still has the one window. A hopper moves at most
+150 items per minute, so more production than that needs a second line.
 
 `GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
 rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
 MidariBread gets no dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop them
-(`alle stopp`). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
+(`alle stopp`). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays. After a rename the
+inventory stays with the old name and the skin must be set again from the Velocity console:
+`skin set shopkeeper EM_Trader` once the bot is online.
 
 ## In the game: sidebar, /bots, replies (2026-11-02)
 
@@ -125,16 +144,18 @@ Spec: `docs/specs/2026-11-02-ingame-bots.md` (its Findings hold the verified con
   icon needs the panel opened again.
   The lore shows role, job with progress, runtime and activity, last error, health, food, free slots, held tool, position
   (`update-interval: 20`). A click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32, Stein 32,
-  Eisen 16, Kohle 32, Zurück). Limit: `/botmenu` opened directly has no bot selected.
+  Eisen 16, Kohle 32, Zurück). Limits: `/botmenu` opened directly has no bot selected, and both viewers see all eight bots
+  and can order them all, `Alle stopp` included, until phase E of `docs/specs/2026-11-03-ingame-bots-v2.md`.
 - Inbox contract: while a viewer is online the hub writes `pa data set mcbots <key> <value>` (`<bot>_<field>`, `sum_*`; one word, spaces become non-breaking spaces; only changed keys). A click sets the
   player's `order` data to `<bot>:<words>` (words joined by `_`, same grammar as the chat orders); every 2 s the hub runs
   `pa data get <viewer> order`, deletes it and runs the order. `alle:stopp` stops everything like the dashboard's Stop all.
 - Replies: `tellraw <viewer> [bot] text`, coalesced per viewer+bot (2 s). Bots do not `/tell` any more: Paper rejects an
   unsigned `/tell` from an offline-mode bot ("Received unsigned command packet ... requires signable arguments";
   `enforce-secure-profile` stays on). A runner emits event kind `say` with text `"<player>: <text>"` and the hub turns it
-  into `tellraw`. Deaths go to every viewer. Chat orders ("MisaBot komm") work as before.
-- Console cost: about 1 RCON command/s for the polls (2 s per viewer) plus pushes only when something changed.
-- Troubleshooting (RCON): `pa data get mcbots bot1` (what the panel shows), `pa data get <you> order` (stuck order),
+  into `tellraw`. Chat orders ("MisaBot komm") work as before.
+- Console cost: about 1 RCON command/s for the polls (2 s per viewer) plus one `minecraft:list` every 5 s; pushes run only
+  while a viewer is online and only for what changed, since each value is a write to the panel plugin's data file.
+- Troubleshooting (RCON): `pa data get mcbots bot1_job` (what the panel shows), `pa data get <you> order` (stuck order),
   `scoreboard objectives list` (objective exists), `team list mcbots` (who sees it).
 
 ## Phone notifications
