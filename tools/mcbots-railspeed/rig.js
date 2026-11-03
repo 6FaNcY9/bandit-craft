@@ -25,7 +25,8 @@ function forced(verb, {x1, x2, z}) {
 
 const railLane = (lane) => {
   const {x1, x2, y, z} = row(lane);
-  return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z} stone`, `fill ${x1} ${y} ${z} ${x2} ${y} ${z} rail[shape=east_west]`];
+  // The end wall: a cart flying on would land outside the forced chunks, where no kill can reach it.
+  return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z} stone`, `fill ${x1} ${y} ${z} ${x2} ${y} ${z} rail[shape=east_west]`, `fill ${x2 + 1} ${y} ${z} ${x2 + 1} ${y + 1} ${z} stone`];
 };
 
 function powerEvery({x1, x2, y, z}, spacing) {
@@ -43,8 +44,9 @@ const launch = ({x1, y, z}, tag = 'rs') => [
 function iceLane(lane, width) {
   const {x1, x2, y, z} = row(lane);
   const wall = (at) => `fill ${x1} ${y} ${at} ${x2} ${y + 1} ${at} stone_bricks`;
-  if (width === 2) return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z + 1} blue_ice`, wall(z - 1), wall(z + 2)];
-  if (width === 1) return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z} blue_ice`, wall(z - 2), wall(z + 2)];
+  const end = (z1, z2) => `fill ${x2 + 1} ${y} ${z1} ${x2 + 1} ${y + 1} ${z2} stone_bricks`;
+  if (width === 2) return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z + 1} blue_ice`, wall(z - 1), wall(z + 2), end(z - 2, z + 2)];
+  if (width === 1) return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z} blue_ice`, wall(z - 2), wall(z + 2), end(z - 2, z + 2)];
   throw new Error(`ice lane width ${width}: only 1 or 2`);
 }
 
@@ -54,7 +56,7 @@ function clearLane(lane, tag = 'rs') {
   const {x1, x2, y, z} = row(lane);
   const out = [`kill @e[tag=${tag}]`];
   const step = Math.floor(MAX_FILL / (3 * 5)); // y-1 to y+1, z-2 to z+2
-  for (let x = x1; x <= x2; x += step) out.push(`fill ${x} ${y - 1} ${z - 2} ${Math.min(x2, x + step - 1)} ${y + 1} ${z + 2} air`);
+  for (let x = x1; x <= x2 + 1; x += step) out.push(`fill ${x} ${y - 1} ${z - 2} ${Math.min(x2 + 1, x + step - 1)} ${y + 1} ${z + 2} air`);
   return [...out, ...forced('remove', lane)];
 }
 
@@ -82,9 +84,8 @@ function summarize(samples, lane) {
   for (const s of samples) {
     if (!s) { lost = true; break; }
     const onLane = Math.abs(s.y - lane.y) <= 1.5 && Math.abs(s.z - (lane.z + 0.5)) <= 1;
-    if (s.x >= lane.x2 - 1) { // past the last rail it flies on, which is not a derail and not a speed
+    if (s.x >= lane.x2 - 1) { // it stands at the end wall by now, so this sample is no speed
       reachedEnd = true;
-      if (onLane) seen.push(s);
       break;
     }
     if (!onLane) { derailed = true; break; }
