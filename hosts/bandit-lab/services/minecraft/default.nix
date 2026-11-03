@@ -8,7 +8,7 @@
   scripts = import ./scripts.nix {inherit pkgs;};
   plugins = import ./plugins.nix {inherit pkgs;};
 
-  # CommandPanels menus: the hand-written ones plus the generated /kit menus (kits.nix, JSON is YAML).
+  # CommandPanels menus: the hand-written ones plus the generated /kit and /bots menus (JSON is YAML).
   panels = pkgs.linkFarm "minecraft-panels" (
     map (f: {
       name = f;
@@ -17,7 +17,7 @@
     ++ lib.mapAttrsToList (name: panel: {
       name = "${name}.yml";
       path = pkgs.writeText "${name}.yml" (builtins.toJSON panel);
-    }) (import ./kits.nix {inherit lib;})
+    }) (import ./kits.nix {inherit lib;} // import ./bots-panel.nix {inherit lib;})
   );
 
   # Map, pinned and owned by Nix (see stage.sh for the ownership split).

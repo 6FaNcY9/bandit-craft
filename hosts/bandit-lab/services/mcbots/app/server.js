@@ -167,6 +167,7 @@ function stopAll() {
 }
 // The sidebar, the panel inbox and the replies of the in-game channel (ingame.js), over the main console.
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
+  quotas: () => keeper?.state().quotas || [],
   snapshots: () => [...runners.values()].map((r) => r.snapshot()),
   // Mirrors bots.js bindOwner for a runner of the map (local or remote); throws the refusal text.
   order: (viewer, name, words) => {
