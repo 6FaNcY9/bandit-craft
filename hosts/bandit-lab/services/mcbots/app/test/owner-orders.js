@@ -173,6 +173,23 @@
     runner.queue = []; run({id: 95, type: 'mine', args: {block: 'stone', count: 1}}); runner.chatJobs.add(95);
     bot.emit('message', msg('komm', true), 'chat', uuid);
     assert.deepEqual(runner.queue.map((j) => j.type), ['come', 'mine']);
+    runner.queue = []; run({id: 96, type: 'trade', args: {item: 'stick'}}); // hub trade: interrupted, not dropped
+    bot.emit('message', msg('hol 16 stein', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'trade']); assert.ok(runner.queue[1].resume);
+    runner.queue = []; run({id: 97, type: 'craft', args: {item: 'stick', count: 1}}); // non-resumable hub job stops as under replace
+    bot.emit('message', msg('hol 16 stein', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['mine']);
+    // chat interruptions do not use up the death budget
+    runner.queue = []; const long = {id: 98, type: 'mine', args: {block: 'stone', count: 99}, status: 'running', interruptions: 0}; runner.chatJobs.add(98);
+    for (let i = 0; i < 4; i++) {
+      run(runner.queue.length ? runner.queue.splice(runner.queue.findIndex((j) => j.id === 98), 1)[0] : long); // the pump would take it back
+      bot.emit('message', msg('komm', true), 'chat', uuid);
+      runner.queue = runner.queue.filter((j) => j.type !== 'come');
+    }
+    assert.deepEqual(runner.queue.map((j) => j.id), [98]); assert.equal(runner.queue[0].interruptions || 0, 0);
+    runner.queue = []; const gave = [], emit0 = runner.emit.bind(runner); runner.emit = (k, ...r) => { gave.push(k); return emit0(k, ...r); };
+    runner.resumeLater({id: 99, type: 'mine', args: {}, interruptions: 3}, 'died');
+    assert.equal(runner.queue.length, 0); assert.ok(gave.includes('fail')); runner.emit = emit0;
     runner.queue = []; runner.current = null; runner.chatJobs.clear();
     runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
     const nw = whispers.length; runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.length, nw); // the hub tells of deaths, not the runner
