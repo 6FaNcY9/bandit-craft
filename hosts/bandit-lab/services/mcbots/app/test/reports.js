@@ -27,7 +27,9 @@
   // a runner with a fake job type
   let fail = false, noop = false;
   VALIDATE.fake = (a) => a;
+  let lastJob;
   JOBS.fake = async (r, job) => {
+    lastJob = job;
     Object.assign(job.t, {total: 10, done: 0});
     job.t.done = 5; await sleep(30); job.t.done = 10; await sleep(30);
     if (noop) job.noop = true;
@@ -55,7 +57,8 @@
   // laut during the job takes effect; nothing after the end
   t = mk(true, false); t.r.prefs.verbose = false; setTimeout(() => { t.r.prefs.verbose = true; }, 10); await sleep(200);
   assert.deepEqual(t.said, ['start: fake', 'fake 50%', 'fertig: fake, 0 s']);
-  const n = t.said.length; await sleep(60); assert.equal(t.said.length, n);
+  const n = t.said.length; lastJob.t.done = 8; lastJob.t.total = 10; await sleep(60); // would be 80 % if the timer still ran
+  assert.equal(t.said.length, n);
   // dropped queue and "zu oft unterbrochen"
   t = mk(true, false); t.r.queue = [{id: 50, type: 'come', args: {}}]; t.r.chatJobs.add(50); t.r.orders.set(50, 'x'); t.r.dropQueue();
   assert.equal(t.said.at(-1), 'gestoppt: komm');

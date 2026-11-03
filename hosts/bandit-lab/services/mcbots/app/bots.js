@@ -438,6 +438,11 @@ class BotRunner {
           if (id) this.orders.set(jobId, id);
           this.chatJobs.add(jobId);
           wait = this.chatEnqueue(job.type, job.args, {now: !!now});
+          if (!wait && jobId !== this.current?.id && !this.queue.some((j) => j.id === jobId)) { // a duplicate area order: enqueue dropped it
+            this.chatJobs.delete(jobId); this.orders.delete(jobId);
+            this.say('ok: läuft schon'); this.demoLog?.outcome(id, 'finished', 'läuft schon');
+            return;
+          }
         } else if (command.stop || command.stopAll) {
           const next = this.queue[0];
           if (command.stopAll) this.enqueue('stop');
@@ -792,7 +797,7 @@ class BotRunner {
     job.startPos ||= p ? {x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z)} : null;
     this.emit('job', `${job.resume ? 'resumed' : 'started'}: ${jobLabel(job)}`);
     let ticker = null;
-    if (this.chatJobs?.has(job.id)) { // some tests call pump on a stub
+    if (this.chatJobs.has(job.id)) {
       this.say(`${job.resume ? 'weiter' : 'start'}: ${chatLabel(job)}`);
       let step = 0;
       ticker = setInterval(() => { // verbose is read at each tick, so laut during a job takes effect

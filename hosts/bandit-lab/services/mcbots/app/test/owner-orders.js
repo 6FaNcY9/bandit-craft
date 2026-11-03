@@ -96,7 +96,7 @@
     runner.emit('done', 'finished: come', job.id + 1); assert.equal(outcomes.length, 0);
     runner.emit('done', 'finished: come', job.id); assert.deepEqual(outcomes[0], ['1', 'finished', 'finished: come']);
     runner.emit('done', 'finished: come', job.id); assert.equal(outcomes.length, 1);
-    runner.say = (text) => runner.emit('say', `fancy8869: ${text}`); // unthrottled stand-in; the first assertion above ran the real sayer
+    runner.say = (text) => runner.emit('say', `fancy8869: ${text}`); // unthrottled stand-in for the queueing sayer
     runner.rolesFile = roles; runner.prefsFile = path.join(dir, 'prefs.json');
     bot.emit('message', msg('rolle sammler', true), 'chat', uuid);
     assert.equal(runner.role, 'sammler'); assert.equal(loadRole(roles, 'bot1'), 'sammler');
@@ -148,9 +148,10 @@
     runner.snapshot = () => ({health: 20, food: 18, job: {label: 'mine stone 16', done: 4, total: 16}, role: runner.role, freeSlots: 18, strangerOrders: 0});
     bot.emit('message', msg('status', true), 'chat', uuid);
     assert.equal(whispers.at(-1).text, 'ok: Leben 20, Essen 18, hol 16 stein 25%, Liste 0, Inventar 50%, Kiste nein');
-    runner.snapshot = () => ({health: 20, food: 18, job: {label: 'mine deepslate_diamond_ore 4096 and more', done: 4, total: 16}, role: runner.role, freeSlots: 0, strangerOrders: 0});
+    runner.snapshot = () => ({health: 20, food: 18, job: {label: 'x', done: 4, total: 16}, role: runner.role, freeSlots: 0, strangerOrders: 0});
+    runner.current = {id: 1, type: 'mine', args: {block: 'deepslate_diamond_ore', count: 4096}};
     bot.emit('message', msg('status', true), 'chat', uuid);
-    assert.ok(whispers.at(-1).text.length <= 100); assert.match(whispers.at(-1).text, /Kiste nein$/);
+    assert.ok(whispers.at(-1).text.length <= 100); assert.match(whispers.at(-1).text, /^ok: Leben 20, Essen 18, hol 4096 deepslate_diamo 25%, Liste 0, Inventar 100%, Kiste nein$/);
     // placeholders: nothing is queued and nothing unbounded starts
     for (const s of ['kiste', 'behalte 64 stick', 'lagern', 'handel sticks', 'jetzt handel sticks']) {
       bot.emit('message', msg(s, true), 'chat', uuid);
@@ -190,7 +191,14 @@
     runner.queue = []; const gave = [], emit0 = runner.emit.bind(runner); runner.emit = (k, ...r) => { gave.push(k); return emit0(k, ...r); };
     runner.resumeLater({id: 99, type: 'mine', args: {}, interruptions: 3}, 'died');
     assert.equal(runner.queue.length, 0); assert.ok(gave.includes('fail')); runner.emit = emit0;
+    // a duplicate area order is answered, and its id does not stay behind in chatJobs
     runner.queue = []; runner.current = null; runner.chatJobs.clear();
+    runner.builderOrder = () => ({type: 'clear', args: {x1: 0, y1: 60, z1: 0, x2: 2, y2: 62, z2: 2}});
+    const before = whispers.length;
+    bot.emit('message', msg('abbau', true), 'chat', uuid); bot.emit('message', msg('abbau', true), 'chat', uuid);
+    assert.deepEqual(whispers.slice(before).map((w) => w.text), ['ok: läuft schon']); assert.equal(runner.queue.length, 1);
+    assert.deepEqual([...runner.chatJobs], [runner.queue[0].id]); assert.ok(!runner.orders.has(runner.jobSeq + 1));
+    delete runner.builderOrder; runner.queue = []; runner.current = null; runner.chatJobs.clear();
     runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
     const nw = whispers.length; runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.length, nw); // the hub tells of deaths, not the runner
     // the main server sends the format text instead of the key: no bot ever answered there (probe 2026-10-15)

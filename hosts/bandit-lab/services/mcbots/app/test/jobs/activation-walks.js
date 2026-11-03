@@ -68,7 +68,7 @@ module.exports = async () => {
       pathfinder: {goto: async () => {}, stop() {}, setGoal() {}, isMining: () => true}, tool: {equipForBlock: async () => {}},
       dig: async (b) => { dug.push(b.name); }, equip: async () => {}, placeBlock: async () => {}, stopDigging() {}, on() {}, getEquipmentDestSlot: () => 5,
     };
-    const runner = Object.assign(Object.create(BotRunner.prototype), {name: 'bot5', bot, world: {hostilesNear: () => [], claim: async () => true, release() {}}, emit() {}, log() {}, protectedAreas: [], supplyChest: null, combat: {epoch: 0}, current: null, online: true, queue: []});
+    const runner = Object.assign(Object.create(BotRunner.prototype), {name: 'bot5', chatJobs: new Set(), bot, world: {hostilesNear: () => [], claim: async () => true, release() {}}, emit() {}, log() {}, protectedAreas: [], supplyChest: null, combat: {epoch: 0}, current: null, online: true, queue: []});
     guardDigs(runner, bot);
     const seen = {};
     const real = JOBS.treefarm;
