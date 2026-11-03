@@ -31,6 +31,7 @@ const planConfig = require('./plan-config');
 const gearJob = require('./gear');
 const sealJob = require('./seal');
 const owner = require('./owner');
+const {loadPrefs, savePrefs} = require('./prefs');
 const misa = require('./misa');
 
 const NAME_RE = /^(bot[0-9]{1,2}|MisaBot)$/; // BotGate's pattern (Velocity plugin), case as written in both
@@ -358,6 +359,8 @@ class BotRunner {
     this.strangerOrders = 0;
     this.rolesFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'roles.json') : null;
     this.role = owner.loadRole(this.rolesFile, name);
+    this.prefsFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'prefs.json') : null;
+    this.prefs = loadPrefs(this.prefsFile, name);
     this.say = owner.makeSayer((text) => { if (this.answerTo) this.emit('say', `${this.answerTo}: ${text}`); }); // the hub tells it over the console: Paper rejects the bots' /tell (unsigned command)
   }
 
@@ -421,19 +424,42 @@ class BotRunner {
         id = this.demoLog?.add({bot: this.name, via: whisper ? 'whisper' : 'chat', text, command, state: this.snapshot()});
         command = this.builderOrder(command, player, name);
         if (command.unknown) { this.say(owner.HELP); this.demoLog?.outcome(id, 'unknown', owner.HELP); return; }
-        if (command.type) {
+        if (command.help) { this.say(owner.HELP2); this.demoLog?.outcome(id, 'finished', owner.HELP2); return; }
+        if (command.chest || command.keep || command.args?.own || command.type === 'trade') throw new Error('noch nicht'); // Tasks 5-6
+        const now = command.now;
+        if (now?.args?.own || now?.type === 'trade') throw new Error('noch nicht');
+        const job = command.type ? command : now;
+        let wait = 0, queued = null;
+        if (job) {
           if (!this.online || this.dead) throw new Error(this.dead ? 'bot is dead' : 'bot is offline');
-          VALIDATE[command.type](command.args); // refuse before replacing the active job
+          VALIDATE[job.type](job.args); // refuse before touching the queue
           jobId = this.jobSeq + 1;
           if (id) this.orders.set(jobId, id);
           this.chatJobs.add(jobId);
-          this.enqueue(command.type, command.args, {replace: true});
-        } else if (command.stop) this.enqueue('stop');
-        else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
+          wait = this.chatEnqueue(job.type, job.args, {now: !!now});
+        } else if (command.stop || command.stopAll) {
+          const next = this.queue[0];
+          if (command.stopAll) this.enqueue('stop');
+          else { this.stoppedAt = Date.now(); this.cancel(); }
+          queued = command.stopAll ? 'alles gestoppt' : next ? `abgebrochen, weiter mit ${jobLabel(next)}` : 'bleibe stehen';
+        } else if (command.queue) {
+          const q = command.queue, n = q.remove ?? q.first;
+          if (q === 'list') queued = this.queue.length ? this.queue.slice(0, 5).map((j, i) => `${i + 1} ${jobLabel(j)}`).join(', ') : 'leer';
+          else if (!(n >= 1 && n <= this.queue.length)) throw new Error(`nur ${this.queue.length} in der Liste`);
+          else {
+            const [j] = this.queue.splice(n - 1, 1);
+            if (q.first) { this.queue.unshift(j); queued = `als nächstes: ${jobLabel(j)}`; }
+            else { this.orders.delete(j.id); this.chatJobs.delete(j.id); queued = `weg: ${jobLabel(j)}`; }
+          }
+        } else if (command.verbose !== undefined) {
+          this.prefs.verbose = command.verbose; savePrefs(this.prefsFile, this.name, {verbose: command.verbose});
+          queued = command.verbose ? 'laut' : 'leise';
+        } else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
         const s = command.status && this.snapshot();
-        const receipt = command.receipt ?? (s ? `Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}` : command.role ? `Rolle ${command.role}` : command.stop ? 'bleibe stehen' : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz', give: 'bringe dir alles', clear: 'baue ab', schematic: 'baue'}[command.type]);
+        const statusLine = s && `Leben ${s.health}, Essen ${s.food}, ${s.job ? (s.job.label || '').slice(0, 24) + (s.job.total > 0 ? ` ${Math.round(100 * s.job.done / s.job.total)}%` : '') : 'frei'}, Liste ${this.queue.length}, Inventar ${Math.round(100 * (36 - (s.freeSlots ?? 36)) / 36)}%, Kiste ${this.prefs.chest ? 'ja' : 'nein'}`;
+        const receipt = wait ? `kommt dran, Platz ${wait}` : command.receipt ?? statusLine ?? queued ?? (command.role ? `Rolle ${command.role}` : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz', give: 'bringe dir alles', clear: 'baue ab', schematic: 'baue'}[job?.type] ?? 'verstanden');
         this.say(`ok: ${receipt}`);
-        if (!command.type) this.demoLog?.outcome(id, 'finished', receipt);
+        if (!job) this.demoLog?.outcome(id, 'finished', receipt);
       } catch (e) {
         this.orders.delete(jobId);
         this.chatJobs.delete(jobId);
@@ -660,7 +686,7 @@ class BotRunner {
   // replace: drop the queue and the running job first, so a click means "do
   // this now" instead of waiting behind earlier clicks.
   // first: the job goes ahead of the running one, which is interrupted and goes on afterwards (as after a death).
-  enqueue(type, args = {}, {replace = false, first = false} = {}) {
+  enqueue(type, args = {}, {replace = false, first = false, at} = {}) {
     if (replace && type !== 'stop' && type !== 'remove') {
       this.dropQueue();
       this.stoppedAt = Date.now();
@@ -689,8 +715,25 @@ class BotRunner {
       this.cancel();
       this.resumeLater(was, type);
       this.queue.unshift(job);
-    } else this.queue.push(job);
+    } else if (at !== undefined) this.queue.splice(at, 0, job);
+    else this.queue.push(job);
     this.pump();
+  }
+
+  // In-game orders queue up. Player orders beat self-chosen work: come/follow/guard/give, `jetzt`, or any order while an
+  // open-ended or non-chat job runs go first (the running job resumes after); the rest append, but before the first queued
+  // open-ended or non-chat job so that one never blocks them. Returns the queue place (1-based) when the order must wait, else 0.
+  chatEnqueue(type, args, {now = false} = {}) {
+    const open = (j) => ['follow', 'guard', 'shift'].includes(j.type) || (j.type === 'trade' && !j.args.minutes && !j.args.target);
+    const blocks = (j) => open(j) || !this.chatJobs.has(j.id);
+    const running = this.current && !this.current.cancelled ? this.current : null;
+    const first = now || ['come', 'follow', 'guard', 'give'].includes(type) || !!(running && blocks(running));
+    const busy = !!running || this.queue.length > 0;
+    const at = this.queue.findIndex(blocks);
+    const id = this.jobSeq + 1;
+    this.enqueue(type, args, first ? {first: true} : at < 0 ? {} : {at});
+    const place = this.queue.findIndex((j) => j.id === id);
+    return !first && busy && place >= 0 ? place + 1 : 0;
   }
 
   cancel() {

@@ -183,6 +183,7 @@ const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole
     if (c.unknown) throw new Error(owner.HELP);
     if (c.role) throw new Error('Rolle nur im Chat');
     if (c.type) {
+      if (c.type === 'trade' || c.args?.own) throw new Error('nur im Chat'); // needs the chat flow (own chest, timed trade)
       VALIDATE[c.type](c.args); // refuse before replacing the active job
       r.enqueue(c.type, c.args, {replace: true});
       ownerOrders.set(name, {type: c.type, args: c.args}); saveOrders();

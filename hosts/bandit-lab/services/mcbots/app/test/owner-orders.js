@@ -79,14 +79,14 @@
     const outcomes = [], orders = [];
     const runner = new BotRunner('bot1', {log: () => {}, ownerUuids: [uuid], onEvent: (b, k, t) => { if (k === 'say') whispers.push({name: t.split(': ')[0], text: t.slice(t.indexOf(': ') + 2)}); }, demoLog: {add: (e) => { orders.push(e); return String(orders.length); }, outcome: (...a) => outcomes.push(a)}});
     runner.bot = bot; runner.online = true;
-    runner.snapshot = () => ({health: 20, food: 18, job: null, role: runner.role, strangerOrders: runner.strangerOrders});
+    runner.snapshot = () => ({health: 20, food: 18, job: null, role: runner.role, freeSlots: 36, strangerOrders: runner.strangerOrders});
     runner.pump = () => {}; // keep the real enqueue/validation; no Minecraft work
     runner.bindOwner(bot);
     const enqueued = [], enqueue = runner.enqueue.bind(runner);
     runner.enqueue = (...args) => { enqueued.push(args); return enqueue(...args); };
     const msg = (text, incoming = false) => ({translate: incoming ? 'commands.message.display.incoming' : 'chat.type.text', with: [{toString: () => 'fancy8869'}, {toString: () => text}]});
     bot.emit('message', msg('bot1 komm'), 'chat', uuid, true);
-    assert.deepEqual(enqueued[0], ['come', {player: 'fancy8869'}, {replace: true}]);
+    assert.deepEqual(enqueued[0], ['come', {player: 'fancy8869'}, {first: true}]);
     assert.deepEqual(whispers, [{name: 'fancy8869', text: 'ok: komme'}]);
     bot.emit('message', msg('bot1 stopp'), 'chat', other, true);
     assert.equal(runner.snapshot().strangerOrders, 1); assert.equal(whispers.length, 1); assert.equal(enqueued.length, 1);
@@ -97,19 +97,83 @@
     runner.emit('done', 'finished: come', job.id); assert.deepEqual(outcomes[0], ['1', 'finished', 'finished: come']);
     runner.emit('done', 'finished: come', job.id); assert.equal(outcomes.length, 1);
     runner.say = (text) => runner.emit('say', `fancy8869: ${text}`); // unthrottled stand-in; the first assertion above ran the real sayer
-    runner.rolesFile = roles;
+    runner.rolesFile = roles; runner.prefsFile = path.join(dir, 'prefs.json');
     bot.emit('message', msg('rolle sammler', true), 'chat', uuid);
     assert.equal(runner.role, 'sammler'); assert.equal(loadRole(roles, 'bot1'), 'sammler');
     bot.emit('message', msg('status', true), 'chat', uuid);
-    assert.match(whispers.at(-1).text, /Leben 20, Essen 18, frei, Rolle sammler/);
+    assert.match(whispers.at(-1).text, /^ok: Leben 20, Essen 18, frei, Liste 1, Inventar 0%, Kiste nein$/);
     bot.emit('message', msg('folge', true), 'chat', uuid);
     assert.equal(runner.queue[0].type, 'follow');
     bot.emit('message', msg('hol 1 torch', true), 'chat', uuid);
     assert.match(whispers.at(-1).text, /^geht nicht:/); assert.equal(runner.queue[0].type, 'follow');
+    runner.current = {...runner.queue.shift(), status: 'running'}; // pump is stubbed; follow runs, come waits
     bot.emit('message', msg('stopp', true), 'chat', uuid);
-    assert.equal(runner.queue.length, 0); assert.ok(outcomes.some((o) => o[1] === 'stopped'));
+    assert.equal(runner.current.cancelled, true); assert.equal(runner.queue.length, 1);
+    assert.match(whispers.at(-1).text, /^ok: abgebrochen, weiter mit come /);
+    runner.emit('stop', 'stopped: follow fancy8869', runner.current.id); // what the real pump does once the cancelled job ends
+    assert.ok(outcomes.some((o) => o[1] === 'stopped'));
+    bot.emit('message', msg('alles stopp', true), 'chat', uuid);
+    assert.equal(runner.queue.length, 0); assert.equal(whispers.at(-1).text, 'ok: alles gestoppt'); runner.current = null;
     // the player hears how an in-game order ended, and of a death
     assert.ok(whispers.some((w) => /^gestoppt: stopped: follow/.test(w.text)));
+    // queue words: orders append, stopp keeps the queue, jetzt goes first and re-queues the running job
+    runner.queue = []; runner.current = null;
+    bot.emit('message', msg('hol 16 stein', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, 'ok: sammle');
+    bot.emit('message', msg('hol 16 kohle', true), 'chat', uuid);
+    bot.emit('message', msg('hol 8 holz', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'mine', 'chop']);
+    assert.equal(whispers.at(-1).text, 'ok: kommt dran, Platz 3');
+    bot.emit('message', msg('queue', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, 'ok: 1 mine stone 16, 2 mine coal_ore 16, 3 chop 8');
+    bot.emit('message', msg('queue weg 2', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'chop']);
+    bot.emit('message', msg('queue erst 2', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['chop', 'mine']);
+    bot.emit('message', msg('queue weg 9', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, 'geht nicht: nur 2 in der Liste');
+    runner.current = {...runner.queue.shift(), status: 'running', t: {done: 3, total: 8}};
+    bot.emit('message', msg('stopp', true), 'chat', uuid);
+    assert.equal(runner.current.cancelled, true); assert.equal(runner.queue.length, 1);
+    runner.current = {id: 77, type: 'mine', args: {block: 'stone', count: 16}, status: 'running', t: {done: 4, total: 16}};
+    bot.emit('message', msg('jetzt hol 2 kohle', true), 'chat', uuid);
+    assert.equal(runner.queue[0].args.block, 'coal_ore'); assert.equal(runner.queue[1].id, 77); assert.ok(runner.queue[1].resume);
+    bot.emit('message', msg('alles stopp', true), 'chat', uuid);
+    assert.equal(runner.queue.length, 0);
+    bot.emit('message', msg('laut', true), 'chat', uuid);
+    assert.equal(runner.prefs.verbose, true); assert.equal(whispers.at(-1).text, 'ok: laut');
+    assert.equal(JSON.parse(fs.readFileSync(runner.prefsFile, 'utf8')).bot1.verbose, true);
+    bot.emit('message', msg('hilfe', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, require('../owner').HELP2);
+    runner.snapshot = () => ({health: 20, food: 18, job: {label: 'mine stone 16', done: 4, total: 16}, role: runner.role, freeSlots: 18, strangerOrders: 0});
+    bot.emit('message', msg('status', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, 'ok: Leben 20, Essen 18, mine stone 16 25%, Liste 0, Inventar 50%, Kiste nein');
+    runner.snapshot = () => ({health: 20, food: 18, job: {label: 'mine deepslate_diamond_ore 4096 and more', done: 4, total: 16}, role: runner.role, freeSlots: 0, strangerOrders: 0});
+    bot.emit('message', msg('status', true), 'chat', uuid);
+    assert.ok(whispers.at(-1).text.length <= 100); assert.match(whispers.at(-1).text, /Kiste nein$/);
+    // placeholders: nothing is queued and nothing unbounded starts
+    for (const s of ['kiste', 'behalte 64 stick', 'lagern', 'handel sticks', 'jetzt handel sticks']) {
+      bot.emit('message', msg(s, true), 'chat', uuid);
+      assert.equal(whispers.at(-1).text, 'geht nicht: noch nicht'); assert.equal(runner.queue.length, 0);
+    }
+    // placement against open-ended and non-chat jobs
+    const run = (j) => { runner.current = {status: 'running', args: {}, ...j}; };
+    runner.queue = []; run({id: 90, type: 'follow'}); runner.chatJobs.add(90);
+    bot.emit('message', msg('hol 16 stein', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'follow']); assert.ok(runner.queue[1].resume);
+    run({id: 91, type: 'mine', args: {block: 'stone', count: 1}}); runner.chatJobs.add(91); // stone runs, follow waits
+    bot.emit('message', msg('hol 8 holz', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['mine', 'chop', 'follow']);
+    runner.queue = []; run({id: 92, type: 'mine', args: {block: 'stone', count: 1}}); // hub job, not a chat job
+    bot.emit('message', msg('hol 16 stein', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.id), [runner.jobSeq, 92]);
+    runner.queue = [{id: 93, type: 'mine', args: {block: 'stone', count: 1}, status: 'queued'}]; run({id: 94, type: 'chop', args: {count: 1}}); runner.chatJobs.add(94);
+    bot.emit('message', msg('hol 16 kohle', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.id), [runner.jobSeq, 93]);
+    runner.queue = []; run({id: 95, type: 'mine', args: {block: 'stone', count: 1}}); runner.chatJobs.add(95);
+    bot.emit('message', msg('komm', true), 'chat', uuid);
+    assert.deepEqual(runner.queue.map((j) => j.type), ['come', 'mine']);
+    runner.queue = []; runner.current = null; runner.chatJobs.clear();
     runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
     const nw = whispers.length; runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.length, nw); // the hub tells of deaths, not the runner
     // the main server sends the format text instead of the key: no bot ever answered there (probe 2026-10-15)
