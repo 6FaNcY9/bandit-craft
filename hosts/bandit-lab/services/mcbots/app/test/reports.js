@@ -75,8 +75,9 @@
   JOBS.trade = realTrade;
   // through the real constructor sayer both lines arrive
   const heard = [];
-  const real = new BotRunner('bot1', {log: () => {}, ownerUuids: [], onEvent: (b, k, x) => { if (k === 'say') heard.push(x); }});
+  const real = new BotRunner('bot1', {log: () => {}, ownerUuids: [], onEvent: (b, k, x) => { if (k === 'say') { heard.push(x); at.push(Date.now()); } }}), at = [];
   real.answerTo = 'fancy8869'; real.say('start: x'); real.say('fertig: x, 0 s');
-  await sleep(2600);
+  for (let i = 0; i < 100 && heard.length < 2; i++) await sleep(50); // the gap is 3 s
   assert.deepEqual(heard, ['fancy8869: start: x', 'fancy8869: fertig: x, 0 s']);
+  assert.ok(at[1] - at[0] >= 2900, `lines ${at[1] - at[0]} ms apart: 3 s keeps them clear of Ingame's 2 s gap`);
 })();

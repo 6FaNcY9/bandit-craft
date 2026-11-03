@@ -375,7 +375,8 @@ class BotRunner {
     this.role = owner.loadRole(this.rolesFile, name);
     this.prefsFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'prefs.json') : null;
     this.prefs = loadPrefs(this.prefsFile, name);
-    this.say = owner.makeSayer((text) => { if (this.answerTo) this.emit('say', `${this.answerTo}: ${text}`); }, {queue: true}); // the hub tells it over the console: Paper rejects the bots' /tell (unsigned command)
+    // gapMs 3 s: Ingame.say replaces a waiting line within its 2 s gap and worker lines arrive in 1 s status frames, so lines 2 s apart can race and lose "fertig"; 3 s stays 3 s after the rounding.
+    this.say = owner.makeSayer((text) => { if (this.answerTo) this.emit('say', `${this.answerTo}: ${text}`); }, {queue: true, gapMs: 3000}); // the hub tells it over the console: Paper rejects the bots' /tell (unsigned command)
   }
 
   // Every area the hub knows (allAreas) minus those that name this bot (misa.js): consumers read only this view.
@@ -476,18 +477,18 @@ class BotRunner {
             else { this.orders.delete(j.id); this.chatJobs.delete(j.id); queued = `weg: ${chatLabel(j)}`; }
           }
         } else if (command.verbose !== undefined) {
-          this.prefs.verbose = command.verbose; savePrefs(this.prefsFile, this.name, {verbose: command.verbose});
+          savePrefs(this.prefsFile, this.name, {verbose: command.verbose}); this.prefs.verbose = command.verbose;
           queued = command.verbose ? 'laut' : 'leise';
         } else if (command.chest) {
           const c = this.ownChest(bot, player, command.chest);
-          this.prefs.chest = c; savePrefs(this.prefsFile, this.name, {chest: c});
+          savePrefs(this.prefsFile, this.name, {chest: c}); this.prefs.chest = c;
           queued = `Kiste: ${c.x} ${c.y} ${c.z}`;
         } else if (command.keep) {
           const {item, count} = command.keep;
           if (!bot.registry.itemsByName[item]) throw new Error(`kenne ${item} nicht`);
           const keep = {...this.prefs.keep, [item]: count};
           if (!count) delete keep[item];
-          this.prefs.keep = keep; savePrefs(this.prefsFile, this.name, {keep});
+          savePrefs(this.prefsFile, this.name, {keep}); this.prefs.keep = keep;
           queued = count ? `behalte ${count} ${item}` : `behalte ${item} nicht mehr`;
         } else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
         const s = command.status && this.snapshot();

@@ -200,6 +200,12 @@
     assert.equal(say('behalte 8 coal'), 'ok: behalte 8 coal'); assert.deepEqual(runner.prefs.keep, {stick: 64, coal: 8});
     assert.equal(say('behalte 8 kohle'), 'geht nicht: kenne kohle nicht'); assert.deepEqual(runner.prefs.keep, {stick: 64, coal: 8});
     assert.equal(say('behalte nichts stick'), 'ok: behalte stick nicht mehr'); assert.deepEqual(loadPrefs(runner.prefsFile, 'bot1').keep, {coal: 8});
+    { // a save that fails (corrupt prefs file) leaves the settings in memory as they were
+      const good = fs.readFileSync(runner.prefsFile, 'utf8'), was = JSON.stringify(runner.prefs);
+      fs.writeFileSync(runner.prefsFile, '{broken');
+      for (const s of ['laut', 'leise', 'kiste 8 9 10', 'behalte 64 stick']) { assert.equal(say(s), 'geht nicht: Einstellungen nicht lesbar', s); assert.equal(JSON.stringify(runner.prefs), was, s); }
+      fs.writeFileSync(runner.prefsFile, good);
+    }
     runner.queue = []; runner.current = null;
     bot.emit('message', msg('handel sticks 30m', true), 'chat', uuid);
     assert.deepEqual(enqueued.at(-1).slice(0, 2), ['trade', {item: 'stick', minutes: 30, ...hallA, stores: [{x: 5, y: 6, z: 7}], sticksFirst: {x: 5, y: 6, z: 7}}]);
@@ -259,7 +265,7 @@
     const before = whispers.length;
     bot.emit('message', msg('abbau', true), 'chat', uuid); bot.emit('message', msg('abbau', true), 'chat', uuid);
     assert.deepEqual(whispers.slice(before).map((w) => w.text), ['ok: läuft schon']); assert.equal(runner.queue.length, 1);
-    assert.deepEqual([...runner.chatJobs], [runner.queue[0].id]); assert.ok(!runner.orders.has(runner.jobSeq + 1));
+    assert.deepEqual([...runner.chatJobs], [runner.queue[0].id]); assert.ok(!runner.orders.has(runner.jobSeq)); assert.deepEqual(outcomes.at(-1).slice(1), ['finished', 'läuft schon']);
     delete runner.builderOrder; runner.queue = []; runner.current = null; runner.chatJobs.clear();
     runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
     const nw = whispers.length; runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.length, nw); // the hub tells of deaths, not the runner

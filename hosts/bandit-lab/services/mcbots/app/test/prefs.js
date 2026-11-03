@@ -15,5 +15,10 @@
     assert.deepEqual(loadPrefs(file, 'MisaBot'), {chest: null, keep: {}, verbose: false});
     assert.deepEqual(loadPrefs(null, 'MisaBot'), {chest: null, keep: {}, verbose: false});
     savePrefs(null, 'MisaBot', {verbose: true}); // no throw
+    // a corrupt file is not overwritten (that would wipe the other bots' prefs); loading stays tolerant
+    fs.writeFileSync(file, '{"bot23": {"verbose": tr');
+    assert.throws(() => savePrefs(file, 'MisaBot', {verbose: true}), /^Error: Einstellungen nicht lesbar$/);
+    assert.equal(fs.readFileSync(file, 'utf8'), '{"bot23": {"verbose": tr');
+    assert.deepEqual(loadPrefs(file, 'MisaBot'), {chest: null, keep: {}, verbose: false});
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 })();

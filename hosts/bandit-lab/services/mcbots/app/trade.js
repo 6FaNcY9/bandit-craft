@@ -184,6 +184,7 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
             if (!chat) { await wait('the stick chests are empty, waiting for a refill'); return; }
             try { await ensureItem(r, job, 'stick', 64); } catch {
               guard(job);
+              await bank(true); // so the count in the text is what is stored
               throw Object.assign(new Error(`keine Sticks, Smaragde: ${emeralds}`), {final: true}); // not worth the retries
             }
             return;

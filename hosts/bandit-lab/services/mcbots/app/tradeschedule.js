@@ -59,9 +59,12 @@ class TradeSchedule {
           r.enqueue('trade', args);
           this.log('trade', `${e.bot}: ${e.hall} hall, trading`);
         }
-      } else if (this.mine.delete(e.bot) && (s.job?.type === 'trade' || s.queue.some((q) => /^trade /.test(q)))) {
-        r.enqueue('stop');
-        this.log('trade', `${e.bot}: window over, stopped`);
+      } else if (this.mine.delete(e.bot)) {
+        // Only the trade goes: "stop" would also drop the orders players gave meanwhile (queue and queueIds line up).
+        const ids = s.queueIds ? s.queue.flatMap((q, i) => (/^trade /.test(q) ? [s.queueIds[i]] : [])) : [];
+        if (s.job?.type === 'trade') r.enqueue('stop');
+        else for (const id of ids) r.enqueue('remove', {id});
+        if (s.job?.type === 'trade' || ids.length) this.log('trade', `${e.bot}: window over, stopped`);
       }
     }
   }

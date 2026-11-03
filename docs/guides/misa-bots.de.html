@@ -65,14 +65,14 @@ Bot-Namen beginnt: <code>MisaBot komm</code> (dann lesen es aber alle mit).</p>
 <h2>2. Alle Befehle für MisaBot</h2>
 <table>
   <tr><th>Du schreibst</th><th>Was passiert</th></tr>
-  <tr><td><code>/msg MisaBot komm</code></td><td>Er läuft zu dir und bleibt dann stehen.</td></tr>
-  <tr><td><code>/msg MisaBot folge</code></td><td>Er folgt dir, bis du <code>stopp</code> sagst.</td></tr>
+  <tr><td><code>/msg MisaBot komm</code></td><td>Er läuft zu dir. Hat er gerade etwas anderes getan, macht er danach damit weiter. Soll er bei dir stehen bleiben, sag zuerst <code>alles stopp</code> und dann <code>komm</code>.</td></tr>
+  <tr><td><code>/msg MisaBot folge</code></td><td>Er folgt dir, bis du <code>stopp</code> sagst (<code>abgebrochen, weiter mit …</code>); dann macht er mit dem weiter, was er vorher getan hat.</td></tr>
   <tr><td><code>/msg MisaBot stopp</code></td><td>Er bricht nur den laufenden Auftrag ab und macht mit dem nächsten in der Liste weiter. <code>bleib</code> und <code>fertig</code> tun dasselbe.</td></tr>
   <tr><td><code>/msg MisaBot alles stopp</code></td><td>Er bricht den laufenden Auftrag ab und wirft die ganze Liste weg. <code>clear</code> tut dasselbe.</td></tr>
-  <tr><td><code>/msg MisaBot wache</code></td><td>Er bleibt bei dir und kämpft gegen Monster in deiner Nähe.</td></tr>
+  <tr><td><code>/msg MisaBot wache</code></td><td>Er bleibt bei dir und kämpft gegen Monster in deiner Nähe, bis du <code>stopp</code> sagst; dann macht er mit dem weiter, was er vorher getan hat.</td></tr>
   <tr><td><code>/msg MisaBot wache hier</code></td><td>Er bewacht die Stelle, an der du gerade stehst.</td></tr>
   <tr><td><code>/msg MisaBot hol 20 eisen</code></td><td>Er baut 20 Eisenerz ab. Kurze Wörter: <code>eisen</code>, <code>kohle</code>, <code>stein</code>, <code>holz</code>. Andere Blöcke mit ihrem englischen Namen, klein und mit Unterstrich, z.&nbsp;B. <code>hol 5 diamond_ore</code> oder <code>hol 64 oak_log</code>. Zahl 1 bis 4096.</td></tr>
-  <tr><td><code>/msg MisaBot gib</code></td><td>Er kommt zu dir und wirft dir alles hin, was er gesammelt hat. Werkzeug, Rüstung und Essen behält er.</td></tr>
+  <tr><td><code>/msg MisaBot gib</code></td><td>Er kommt zu dir und wirft dir alles hin, was er gesammelt hat. Werkzeug, Rüstung und Essen behält er. Danach macht er mit dem weiter, was er vorher getan hat.</td></tr>
   <tr><td><code>/msg MisaBot status</code></td><td>Er sagt dir Leben, Essen, was er gerade tut, wie lang die Liste ist, wie voll das Inventar ist und ob er eine Kiste hat.</td></tr>
   <tr><td><code>/msg MisaBot hilfe</code></td><td>Er antwortet mit einer Zeile, in der nur die neuen Wörter stehen (<code>laut</code>, <code>queue</code>, <code>kiste</code>, <code>handel</code> …). Die alte Liste kommt, wenn du ein Wort tippst, das er nicht kennt.</td></tr>
   <tr><td><code>/msg MisaBot liste</code></td><td>Er sagt dir die ersten 5 Aufträge in seiner Liste (nur die wartenden, nicht den laufenden). <code>queue</code> tut dasselbe.</td></tr>

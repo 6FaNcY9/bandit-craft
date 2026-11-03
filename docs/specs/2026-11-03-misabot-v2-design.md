@@ -147,6 +147,7 @@ Where the build differs from the design above:
 - Failure reasons were not already German: about 15 common ones have a table (`owner.germanReason`), rare ones stay English.
 - `handel` does not chop when out of sticks (Phase 2, self-supply): it ends with `keine Sticks`.
 - `komm`, `folge`, `wache`, `gib` go first, and chat orders go ahead of open-ended and non-chat jobs, which resume after.
+- `komm`, `gib` (and `folge`, `wache` after `stopp`) resume the interrupted job (ruling R36): a bot that was working carries on after `komm`; to keep him at the player: `alles stopp`, then `komm`.
 - Own deposits also store sticks, coal and torches (`KEEP_RE` does not apply); the bot cannot fetch them back yet.
 
 ## Verification

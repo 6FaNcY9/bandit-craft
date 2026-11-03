@@ -180,6 +180,13 @@
   assert.equal(sent.length, stops, 'by hand: not stopped');
   const none = mk({}); snap.job = null; now = at('2026-10-26T17:30:00Z'); none.tick();
   assert.equal(sent.length, stops, 'hall not configured: nothing runs');
+  // A chat job running with the trade queued behind it: only the trade goes, the player's orders stay.
+  const spare = mk({misa: VALIDATE.trade(mh)});
+  now = at('2026-10-26T17:30:00Z'); snap.job = {type: 'trade'}; spare.tick();
+  Object.assign(snap, {job: {type: 'mine'}, queue: ['hol 32 kohle', 'trade stick 60min', 'komm'], queueIds: [7, 8, 9]});
+  const before = sent.length; now = at('2026-10-26T18:30:00Z'); spare.tick();
+  assert.deepEqual(sent.slice(before), [['remove', {id: 8}]], 'the trade is removed, nothing is stopped');
+  Object.assign(snap, {job: null, queue: [], queueIds: []});
   console.log('misa ok');
 })();
 

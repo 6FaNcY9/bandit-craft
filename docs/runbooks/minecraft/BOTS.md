@@ -110,10 +110,10 @@ at the crafting table (`-24 69 -95`), store them, go again. Empty stick chests e
 about 1500 trades, or 48000 sticks.
 
 `TRADE_SCHEDULE=EM_Trader=misa@mon,tue,wed,thu,fri,sat,sun/18:00+60` (daily, Europe/Vienna; several entries with `;`) gives it
-the job at the start and stops it after the minutes; a hub restart inside the window resumes it; the window-end stop drops
-the bot's whole queue. A manual trade job outside the window is left alone. The old box `166,409,181,427` in `PROTECTED_AREAS` is another place, not this hall.
+the job at the start and stops it after the minutes; a hub restart inside the window resumes it; at the window end a running trade is stopped (`stop` also drops the queue behind it); otherwise the queued `trade` entries are removed; the orders players gave meanwhile stay. If the bot is running another job, that one is not touched. A manual trade job outside the window is left alone. The old box `166,409,181,427` in `PROTECTED_AREAS` is another place, not this hall.
 `TRADE_HALLS` also goes to every worker in the hub's welcome message so a chat `handel` works on any bot (its own hall, else
-`misa`); a host without `TRADE_HALLS` refuses `handel`.
+`misa`); a host without `TRADE_HALLS` refuses `handel`. So a new guest worker's bots can also take the hall's sticks and bank into
+their own chest: consider that before adding a guest worker. A chat `handel` on a bot with a supply chest that finds the stick chests empty may fetch logs from the supply chest (a long walk to the base).
 
 Restock, measured 2026-11-03 from the villagers' `LastRestock` and `RestocksToday` (Paper 26.2; tick 0 is `time query day`):
 

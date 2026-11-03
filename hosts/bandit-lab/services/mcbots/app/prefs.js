@@ -11,13 +11,16 @@ function clean(p) {
   const keep = isObj(p.keep) ? Object.fromEntries(Object.entries(p.keep).filter(([k, n]) => /^[a-z_]{1,48}$/.test(k) && Number.isInteger(n) && n >= 0 && n <= 4096)) : {};
   return {chest, keep, verbose: p.verbose === true};
 }
-function read(file) {
-  try { const all = JSON.parse(fs.readFileSync(file, 'utf8')); return isObj(all) ? all : {}; } catch (e) { if (e.code !== 'ENOENT' && !(e instanceof SyntaxError)) throw e; return {}; }
+function read(file, strict = false) {
+  try { const all = JSON.parse(fs.readFileSync(file, 'utf8')); return isObj(all) ? all : {}; } catch (e) {
+    if (strict && e instanceof SyntaxError) throw new Error('Einstellungen nicht lesbar'); // saving over it would wipe the other bots' prefs; the text reaches the chat
+    if (e.code !== 'ENOENT' && !(e instanceof SyntaxError)) throw e; return {};
+  }
 }
 const loadPrefs = (file, name) => clean(file ? read(file)[name] : null);
 function savePrefs(file, name, patch) {
   if (!file) return;
-  const all = read(file);
+  const all = read(file, true);
   fs.mkdirSync(path.dirname(file), {recursive: true});
   fs.writeFileSync(`${file}.tmp`, JSON.stringify({...all, [name]: {...(isObj(all[name]) ? all[name] : {}), ...patch}}), {mode: 0o600});
   fs.renameSync(`${file}.tmp`, file);

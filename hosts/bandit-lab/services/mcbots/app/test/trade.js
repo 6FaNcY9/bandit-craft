@@ -179,6 +179,8 @@ async function run(chestSticks, start = {}, chestsWithSticks = 1) {
   const noSticks = async () => { throw new Error('need 8 more planks and have no logs (chop first)'); };
   k = rig({args: {item: 'stick', target: 50}, inv: {emerald: 4}, job: {emeralds: 4}, ensure: noSticks});
   await assert.rejects(k.run(), /^Error: keine Sticks, Smaragde: 4$/); assert.deepStrictEqual(k.pauses, []);
+  k = rig({args: {item: 'stick', target: 50}, inv: {emerald: 3}, job: {emeralds: 3}, ensure: noSticks});
+  await assert.rejects(k.run(), /^Error: keine Sticks, Smaragde: 3$/); assert.deepStrictEqual([k.calls.filter((c) => c.startsWith('deposit')), k.stock.emerald], [['deposit emerald -25'], 0], 'the 3 loose emeralds are stored before it gives up');
   // ... but ensureItem may fetch logs and craft: then it trades on.
   let crafted = 0;
   k = rig({args: {item: 'stick', target: 2}, ensure: async (r, j, name) => { if (name === 'stick') { crafted++; k.stock.stick = 64; } }});
