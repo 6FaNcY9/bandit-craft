@@ -23,7 +23,7 @@ layout:
   6:
     - MisaBot
   7:
-    - bot23
+    - EM_Trader
   18:
     - allstop
   26:
@@ -99,15 +99,15 @@ items:
       commands:
         - '[session] set bot MisaBot'
         - '[open] botmenu'
-  bot23:
-    material: '[head] bot23'
-    name: '&bbot23'
+  EM_Trader:
+    material: '[head] EM_Trader'
+    name: '&bEM_Trader'
     lore:
-      - '&7%commandpanels_data_bot23,mcbots%'
+      - '&7%commandpanels_data_EM_Trader,mcbots%'
       - '&8Klick: Befehle'
     left-click:
       commands:
-        - '[session] set bot bot23'
+        - '[session] set bot EM_Trader'
         - '[open] botmenu'
   allstop:
     material: BARRIER

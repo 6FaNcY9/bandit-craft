@@ -29,7 +29,7 @@ bot). v2 builds the actual management surface on top of it.
 3. Every order the dashboard offers for a single bot is reachable in at most three clicks, including those
    that need a number or a place.
 4. Events, supply needs and chests are browsable in the game.
-5. Misa (`MidariBread`) gets the same screens but sees only her bots (`MisaBot`, `bot23`).
+5. Misa (`MidariBread`) gets the same screens but sees only her bots (`MisaBot`, `EM_Trader`).
 
 Non-goals: editing crews/plan/projects, the server panel (restart, whitelist), BlueMap, schematic builds
 (`bau` stays a chat order with Litematica), per-player sidebar content.
@@ -54,7 +54,7 @@ slot (DeluxeMenus pattern), so the icon is the state.
 
 ```
 row 1  [Σ Bots 7/8]  [⚠ Probleme 1]  [⛏ Bedarf: Eisen 13/16]  [☀ Tag]  [📜 Ereignisse]  [📦 Kisten]  [≡ Sidebar]  [? Hilfe]  [■ Alle stopp]
-row 2  [bot1]  [bot2]  [bot3]  [bot19]  [bot20]  [bot21]  [MisaBot]  [bot23]  [ ]
+row 2  [bot1]  [bot2]  [bot3]  [bot19]  [bot20]  [bot21]  [MisaBot]  [EM_Trader]  [ ]
 row 3  (free for up to 9 more bots)
 row 4-6 filler
 ```
@@ -128,14 +128,14 @@ for 5 s. Not visible viewers (offline) skip the distance line.
 
 ### Misa's view
 
-`INGAME_VIEWERS` becomes a map `name=bot,bot;name=*` (env `INGAME_VIEWERS = "fancy8869=*;MidariBread=MisaBot,bot23"`).
+`INGAME_VIEWERS` becomes a map `name=bot,bot;name=*` (env `INGAME_VIEWERS = "fancy8869=*;MidariBread=MisaBot,EM_Trader"`).
 The hub pushes `view.<viewer>.<n>` = bot name for the heads the viewer may see; panel heads are
 conditioned on `%commandpanels_data_view.%player_name%.1,mcbots% $EQUALS bot1` etc. Orders to a bot
 outside the viewer's list are refused ("nicht dein Bot").
 
 ## Open questions for the owner (answer in chat; defaults in brackets)
 
-1. Which bots should Misa see and order? [MisaBot and bot23]
+1. Which bots should Misa see and order? [MisaBot and EM_Trader]
 2. Amounts for the Sammeln buttons: 16 / 32 / 64 by click type, or a fixed 32? [click type]
 3. Confirmation for `Alle stopp`? [yes, a 2-button sub-panel]
 4. Should `Komm` for a sandbox bot be hidden (it cannot reach a player on the main server)? [shown, refused with reason]

@@ -42,8 +42,8 @@ function loadConfig(env = process.env) {
   // namespace (the worker) could send it itself (Codex R2-1).
   const trustedProxies = list(env.TRUSTED_PROXIES);
   if (trustedProxies.some((a) => !/^[\d.]+$|^[\da-f:]+$/i.test(a))) throw new Error('TRUSTED_PROXIES must be IP addresses');
-  // "x1,z1,x2,z2;..." boxes where bots never dig or place (player bases). "x1,z1,x2,z2@MisaBot+bot23" names bots that
-  // are allowed inside: the box becomes [x1,z1,x2,z2,null,null,['MisaBot','bot23']] (misa.js filters it per bot).
+  // "x1,z1,x2,z2;..." boxes where bots never dig or place (player bases). "x1,z1,x2,z2@MisaBot+EM_Trader" names bots that
+  // are allowed inside: the box becomes [x1,z1,x2,z2,null,null,['MisaBot','EM_Trader']] (misa.js filters it per bot).
   const protectedAreas = (env.PROTECTED_AREAS || '').split(';').map((b) => b.trim()).filter(Boolean).map((b) => {
     const [box, who] = b.split('@');
     const n = box.split(',').map(Number);

@@ -33,7 +33,7 @@ const sealJob = require('./seal');
 const owner = require('./owner');
 const misa = require('./misa');
 
-const NAME_RE = /^(bot[0-9]{1,2}|MisaBot)$/; // BotGate's pattern (Velocity plugin), case as written in both
+const NAME_RE = /^(bot[0-9]{1,2}|MisaBot|EM_Trader)$/; // BotGate's pattern (Velocity plugin), case as written in both
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
 const WATCH_MS = 5000, STILL_MS = 30000;

@@ -10,9 +10,9 @@
   const {parseHalls, parseSchedule, inWindow, TradeSchedule} = require('../tradeschedule');
   const trade = require('../trade');
 
-  // names: exactly the one extra name, case as written
-  for (const n of ['bot1', 'bot23', 'MisaBot']) assert.ok(NAME_RE.test(n), n);
-  for (const n of ['misabot', 'MisaBot2', 'xMisaBot', 'bot100']) assert.ok(!NAME_RE.test(n), n);
+  // names: exactly the extra names, case as written
+  for (const n of ['bot1', 'bot23', 'MisaBot', 'EM_Trader']) assert.ok(NAME_RE.test(n), n);
+  for (const n of ['misabot', 'MisaBot2', 'xMisaBot', 'bot100', 'em_trader', 'EM_Trader2', 'EM_Trader ']) assert.ok(!NAME_RE.test(n), n);
 
   // PROTECTED_AREAS with @bots: a fifth/sixth null and the names in the seventh slot, plain boxes unchanged
   const areas = loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '-80,-144,80,80;272,592,112,368@MisaBot;0,0,9,9@MisaBot+bot23'}).protectedAreas;
