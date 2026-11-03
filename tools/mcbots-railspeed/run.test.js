@@ -1,7 +1,7 @@
 'use strict';
 // Unit test for the sweep and the tracker, against a fake console: node tools/mcbots-railspeed/run.test.js
 const assert = require('node:assert/strict');
-const {sweep, track, rig} = require('./run');
+const {sweep, track, rig, unrig} = require('./run');
 
 // A console with a cart that runs 40 m/s, and a clock that moves when the code sleeps.
 function fake({failAfter = Infinity, gone = false} = {}) {
@@ -129,6 +129,29 @@ function fake({failAfter = Infinity, gone = false} = {}) {
   await rig({...ice1.deps, kind: 'ice1'});
   assert.ok(ice1.sent.includes('execute if block 5300 199 60 blue_ice'));
   await assert.rejects(rig({...fake().deps, kind: 'gravel'}), /kind/);
+
+  // The dip lane: a short start of boosters, then no gold, and something to board at each start
+  const dip = fake();
+  await rig({...dip.deps, kind: 'dip', speed: 200});
+  assert.ok(dip.sent.includes('gamerule max_minecart_speed 200'));
+  assert.ok(dip.sent.includes('setblock 596 200 70 powered_rail[shape=east_west,powered=true]'));
+  assert.ok(!dip.sent.includes('setblock 604 200 70 powered_rail[shape=east_west,powered=true]'), 'boosters only for the first 300 blocks');
+  assert.ok(dip.sent.includes('setblock 610 199 70 rail[shape=ascending_west]'));
+  assert.ok(dip.sent.includes('execute if block 5300 200 70 #minecraft:rails'));
+  assert.ok(dip.sent.includes('execute if block 610 199 70 rail[shape=ascending_west]'));
+  assert.ok(dip.sent.some((s) => s.startsWith('summon minecart 302.5 200.1 70.5')));
+  assert.ok(h.sent.some((s) => s.startsWith('summon minecart 302.5 200.1 40.5')));
+  assert.ok(ice2.sent.some((s) => s.startsWith('summon oak_boat 301 200 51')));
+  assert.ok(ice1.sent.some((s) => s.startsWith('summon oak_boat 301 200 60.5')));
+
+  // Taking all ride lanes away: loaded first because fill refuses unloaded chunks, with the floor under the dips and the platforms, and the rule back
+  const gone2 = fake();
+  await unrig({...gone2.deps});
+  for (const z of [40, 50, 60, 70]) assert.ok(gone2.sent.includes(`fill 299 199 ${z - 2} 2482 201 ${z + 2} air`), `lane at z ${z}`);
+  assert.ok(gone2.sent.includes('fill 299 198 70 5301 198 70 air'));
+  assert.ok(gone2.sent.includes('fill 296 199 48 299 199 52 air'), 'the platform before the ice');
+  assert.ok(gone2.sent.findIndex((s) => s.startsWith('forceload add')) < gone2.sent.findIndex((s) => s.startsWith('fill')));
+  assert.equal(gone2.sent.at(-1), 'gamerule max_minecart_speed 8');
 
   // A far end that did not come out is an error, and the chunks are still freed
   const broken = fake();

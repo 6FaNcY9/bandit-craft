@@ -68,15 +68,16 @@ async function starts(bot) {
 async function ride(bot, state) {
   const samples = [];
   const started = Date.now();
-  let lag = 0;
+  let lag = 0, vehicleLag = 0;
   const input = setInterval(() => bot.vehicle && bot.moveVehicle(0, 1), 200);
   try {
     for (;;) {
       const s = await cartAt();
       samples.push(s && {...s, wall: Date.now()});
       if (s) lag = Math.max(lag, Math.abs(bot.entity.position.x - s.x));
+      if (s && bot.vehicle) vehicleLag = Math.max(vehicleLag, Math.abs(bot.vehicle.position.x - s.x));
       const sum = summarize(samples, LANE);
-      if (sum.lost || sum.derailed || sum.reachedEnd || state.kicked || Date.now() - started > 150000) return {...sum, lag};
+      if (sum.lost || sum.derailed || sum.reachedEnd || state.kicked || Date.now() - started > 150000) return {...sum, lag, vehicleLag};
       await sleep(500);
     }
   } finally {
@@ -115,9 +116,18 @@ async function main([setting, spacing]) {
       Object.assign(out, await ride(bot, state));
       out.moved = out.top !== null && out.top > 1;
       out.followed = out.lag < 5;
+      // mineflayer 4.39's dismount sends jump, which only leaves a vehicle on old protocols; since the new input packet it is sneak.
+      out.ridingBefore = /Test passed/.test((await call([`execute as ${BOT} on vehicle if entity @s`]))[0]);
       if (bot.vehicle) bot.dismount();
+      await sleep(2000);
+      out.ridingAfterJump = /Test passed/.test((await call([`execute as ${BOT} on vehicle if entity @s`]))[0]);
+      out.dismountedByMineflayer = !bot.vehicle;
+      if (bot.vehicle) bot._client.write('player_input', {inputs: {shift: true}});
       for (let i = 0; i < 30 && bot.vehicle; i++) await sleep(100);
+      bot._client.write('player_input', {inputs: {}});
       out.dismounted = !bot.vehicle;
+      // What the server says, because mineflayer may have missed the packet.
+      out.serverRiding = /Test passed/.test((await call([`execute as ${BOT} on vehicle if entity @s`]))[0]);
       await sleep(2000);
       const [pos] = await send(call, [`data get entity ${BOT} Pos`]);
       const m = /\[(-?[\d.E-]+)d/.exec(pos);

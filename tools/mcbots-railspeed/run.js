@@ -5,18 +5,27 @@
 //   node run.js sweep [--speed a,b --spacing c,d]   rail at each setting, results in ~/.local/state/mcbots/railspeed.jsonl
 //   node run.js rig rail <speed> <spacing>      5 km ride lane at z 40 from x 300, rule set to <speed>
 //   node run.js rig ice2 | rig ice1             5 km blue ice lane at z 50 | z 60
+//   node run.js rig dip <speed>                 5 km lane with dips at z 70, rule set to <speed>
+//   node run.js unrig                           takes all ride lanes away, rule back to 8
 //   node run.js track <player> [seconds]        a player's speed, results in railspeed-track.jsonl
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {SPEEDS, SPACINGS, SWEEP_LANE, railLane, powerEvery, launch, iceLane, setSpeed, clearLane, batches, parseSample, summarize} = require('./rig');
+const {SPEEDS, SPACINGS, SWEEP_LANE, railLane, powerEvery, dipEvery, launch, iceLane, setSpeed, clearLane, batches, parseSample, summarize} = require('./rig');
 
 const RUN_MS = 150000; // at 8 m/s a cart covers 1200 m of the lane in this time, which is enough for a speed
 const SAMPLE_MS = 500;
+const DIP_RAMP = 300, DIP_BOOST = 4, DIP_EVERY = 16; // measured: 75 boosters are enough for the dips to take over
 const WORLD_SPEED = 8;
-const RIDE_LANES = {rail: {x1: 300, x2: 5300, y: 200, z: 40}, ice2: {x1: 300, x2: 5300, y: 200, z: 50}, ice1: {x1: 300, x2: 5300, y: 200, z: 60}};
+const RIDE_LANES = {rail: {x1: 300, x2: 5300, y: 200, z: 40}, ice2: {x1: 300, x2: 5300, y: 200, z: 50}, ice1: {x1: 300, x2: 5300, y: 200, z: 60}, dip: {x1: 300, x2: 5300, y: 200, z: 70}};
 // What the console answers when a command did nothing. A lane with a gap would read as a derail at that speed.
 const REFUSED = /not loaded|Incorrect argument|Unknown|Too many|Expected|Invalid|Can't/i;
+// Something to stand on and something to board at a ride lane's start. Tagged, so that taking the lane away takes these too.
+function boarding({x1, y, z}, kind) {
+  if (kind === 'rail' || kind === 'dip') return [`fill ${x1} ${y - 1} ${z + 1} ${x1 + 4} ${y - 1} ${z + 2} stone`, `summon minecart ${x1 + 2.5} ${y + 0.1} ${z + 0.5} {Tags:["rs"]}`];
+  const wide = kind === 'ice2';
+  return [`fill ${x1 - 4} ${y - 1} ${z} ${x1 - 1} ${y - 1} ${wide ? z + 1 : z} stone`, `summon oak_boat ${x1 + 1} ${y} ${wide ? z + 1 : z + 0.5} {Tags:["rs"],Rotation:[-90.0f,0.0f]}`];
+}
 const isForce = (c) => c.startsWith('forceload');
 const free = (lane) => railLane(lane).filter(isForce).map((c) => c.replace('forceload add', 'forceload remove'));
 
@@ -94,21 +103,29 @@ async function track({call, player, ms, out, now, sleep}) {
 
 async function rig({call, sleep, kind, speed, spacing}) {
   const lane = RIDE_LANES[kind];
-  if (!lane) throw new Error(`rig kind ${kind}: only rail, ice2 or ice1`);
-  const {x2, y, z} = lane;
+  if (!lane) throw new Error(`rig kind ${kind}: only rail, ice2, ice1 or dip`);
+  const {x1, x2, y, z} = lane;
   try {
-    if (kind === 'rail') {
-      await send(call, [setSpeed(speed)]);
-      await lay(call, sleep, lane, [...railLane(lane), ...powerEvery(lane, spacing)]);
-    } else {
-      await lay(call, sleep, lane, iceLane(lane, kind === 'ice2' ? 2 : 1));
-    }
-    const check = kind === 'rail' ? `execute if block ${x2} ${y} ${z} #minecraft:rails` : `execute if block ${x2} ${y - 1} ${z} blue_ice`;
-    const [reply] = await send(call, [check]);
-    if (!/Test passed/.test(reply)) throw new Error(`far end did not come out: ${check}: ${reply}`);
+    if (kind === 'rail' || kind === 'dip') await send(call, [setSpeed(speed)]);
+    if (kind === 'rail') await lay(call, sleep, lane, [...railLane(lane), ...powerEvery(lane, spacing)]);
+    else if (kind === 'dip') await lay(call, sleep, lane, [...railLane(lane), ...powerEvery({...lane, x2: x1 + DIP_RAMP}, DIP_BOOST), ...dipEvery(lane, DIP_EVERY, x1 + DIP_RAMP + 10)]);
+    else await lay(call, sleep, lane, iceLane(lane, kind === 'ice2' ? 2 : 1));
+    await send(call, boarding(lane, kind));
+    const checks = kind === 'rail' || kind === 'dip' ? [`execute if block ${x2} ${y} ${z} #minecraft:rails`] : [`execute if block ${x2} ${y - 1} ${z} blue_ice`];
+    if (kind === 'dip') checks.push(`execute if block ${x1 + DIP_RAMP + 10} ${y - 1} ${z} rail[shape=ascending_west]`);
+    (await send(call, checks)).forEach((reply, i) => { if (!/Test passed/.test(reply)) throw new Error(`far end did not come out: ${checks[i]}: ${reply}`); });
   } finally {
     await send(call, free(lane));
   }
+}
+
+async function unrig({call, sleep}) {
+  for (const lane of Object.values(RIDE_LANES)) {
+    const {x1, y, z} = lane;
+    await lay(call, sleep, lane, railLane(lane).filter(isForce));
+    await send(call, [`fill ${x1 - 4} ${y - 1} ${z - 2} ${x1 - 1} ${y - 1} ${z + 2} air`, ...clearLane(lane, 'rs', 2)]);
+  }
+  await send(call, [setSpeed(WORLD_SPEED)]);
 }
 
 function consoleCall(base) {
@@ -141,15 +158,18 @@ async function main([verb, ...args]) {
   } else if (verb === 'rig') {
     await rig({call, sleep, kind: args[0], speed: Number(args[1]), spacing: Number(args[2])});
     console.log(`lane ${args[0]} ready`);
+  } else if (verb === 'unrig') {
+    await unrig({call, sleep});
+    console.log('ride lanes gone, rule back to 8');
   } else if (verb === 'track') {
     const {write} = appender('railspeed-track.jsonl');
     const player = args[0];
     console.log(JSON.stringify({player, ...await track({call, player, ms: Number(args[1] || 300) * 1000, out: (s) => write({player, ...s}), now, sleep})}));
   } else {
-    throw new Error('usage: run.js sweep [--speed n --spacing n] | rig rail <speed> <spacing> | rig ice2 | rig ice1 | track <player> [seconds]');
+    throw new Error('usage: run.js sweep [--speed n --spacing n] | rig rail <speed> <spacing> | rig ice2 | rig ice1 | rig dip <speed> | unrig | track <player> [seconds]');
   }
 }
 
 if (require.main === module) main(process.argv.slice(2)).catch((e) => { console.error(e.message); process.exitCode = 1; });
 
-module.exports = {sweep, track, rig, send, lay, free, isForce, consoleCall};
+module.exports = {sweep, track, rig, unrig, send, lay, free, isForce, consoleCall};

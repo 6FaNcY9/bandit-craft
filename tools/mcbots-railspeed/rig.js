@@ -36,6 +36,18 @@ function powerEvery({x1, x2, y, z}, spacing) {
   return out;
 }
 
+// Rails one lower on a floor one lower, down then up going east. In 26.2 only the first slope rail in a tick counts, so a
+// fast cart gains on the way down and is not braked on the way up, which needs no gold.
+function dipEvery({x2, y, z}, spacing, from) {
+  const out = [], rails = [];
+  for (let x = from; x <= x2 - 20; x += spacing) {
+    const these = [`setblock ${x} ${y - 1} ${z} rail[shape=ascending_west]`, `setblock ${x + 1} ${y - 1} ${z} rail[shape=ascending_east]`];
+    out.push(`setblock ${x} ${y - 2} ${z} stone`, `setblock ${x + 1} ${y - 2} ${z} stone`, `setblock ${x} ${y} ${z} air`, `setblock ${x + 1} ${y} ${z} air`, ...these);
+    rails.push(...these);
+  }
+  return [...out, ...rails]; // placing a rail can reshape it against its neighbours; a second set leaves it as asked
+}
+
 // Both tagged: killing a cart leaves its rider standing in the air otherwise. Occupied, because an empty cart brakes harder.
 const launch = ({x1, y, z}, tag = 'rs') => [
   `kill @e[tag=${tag}]`,
@@ -53,11 +65,12 @@ function iceLane(lane, width) {
 
 const setSpeed = (n) => `gamerule max_minecart_speed ${n}`;
 
-function clearLane(lane, tag = 'rs') {
+function clearLane(lane, tag = 'rs', depth = 1) {
   const {x1, x2, y, z} = row(lane);
   const out = [`kill @e[tag=${tag}]`];
   const step = Math.floor(MAX_FILL / (3 * 5)); // y-1 to y+1, z-2 to z+2
   for (let x = x1 - 1; x <= x2 + 1; x += step) out.push(`fill ${x} ${y - 1} ${z - 2} ${Math.min(x2 + 1, x + step - 1)} ${y + 1} ${z + 2} air`);
+  if (depth === 2) out.push(`fill ${x1 - 1} ${y - 2} ${z} ${x2 + 1} ${y - 2} ${z} air`);
   return [...out, ...forced('remove', lane)];
 }
 
@@ -110,4 +123,4 @@ function summarize(samples, lane) {
   };
 }
 
-module.exports = {SPEEDS, SPACINGS, SWEEP_LANE, railLane, powerEvery, launch, iceLane, setSpeed, clearLane, batches, parseSample, summarize};
+module.exports = {SPEEDS, SPACINGS, SWEEP_LANE, railLane, powerEvery, dipEvery, launch, iceLane, setSpeed, clearLane, batches, parseSample, summarize};

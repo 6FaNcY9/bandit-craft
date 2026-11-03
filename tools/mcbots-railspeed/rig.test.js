@@ -1,7 +1,7 @@
 'use strict';
 // Unit test for the pure parts of the rail measurement: node tools/mcbots-railspeed/rig.test.js
 const assert = require('node:assert/strict');
-const {SPEEDS, SPACINGS, SWEEP_LANE, railLane, powerEvery, launch, iceLane, setSpeed, clearLane, batches, parseSample, summarize} = require('./rig');
+const {SPEEDS, SPACINGS, SWEEP_LANE, railLane, powerEvery, dipEvery, launch, iceLane, setSpeed, clearLane, batches, parseSample, summarize} = require('./rig');
 
 const lane = {x1: 300, x2: 2300, y: 200, z: 10};
 
@@ -51,6 +51,22 @@ assert.ok(ice1.includes('fill 300 199 60 310 199 60 blue_ice'));
 assert.ok(ice1.includes('fill 300 200 58 310 201 58 stone_bricks') && ice1.includes('fill 300 200 62 310 201 62 stone_bricks'));
 assert.ok(!ice1.some((c) => /^fill \S+ 199 59 /.test(c)), 'nothing under the air gap');
 assert.throws(() => iceLane(lane, 3), /width/);
+
+// Dips: the rails one lower on a floor one lower, down then up going east. In 26.2 only the first slope rail in a tick
+// counts, so a fast cart gains on the way down and is not braked on the way up, which needs no gold.
+const dips = dipEvery({x1: 300, x2: 400, y: 200, z: 70}, 40, 330);
+assert.deepEqual(dips.slice(0, 6), ['setblock 330 198 70 stone', 'setblock 331 198 70 stone', 'setblock 330 200 70 air', 'setblock 331 200 70 air', 'setblock 330 199 70 rail[shape=ascending_west]', 'setblock 331 199 70 rail[shape=ascending_east]']);
+assert.ok(dips.includes('setblock 370 199 70 rail[shape=ascending_west]'), 'every 40 blocks');
+assert.ok(!dips.some((c) => /^setblock (39\d|4\d\d) /.test(c)), 'none near the end wall, a cart must arrive on the flat');
+// Placing a rail can reshape it against its neighbours; setting it a second time leaves it as asked, so the rails come twice.
+assert.equal(dips.filter((c) => c === 'setblock 330 199 70 rail[shape=ascending_west]').length, 2);
+assert.ok(dips.lastIndexOf('setblock 330 199 70 rail[shape=ascending_west]') > dips.indexOf('setblock 370 199 70 rail[shape=ascending_west]'), 'after all neighbours are placed');
+
+// The floor under the dips goes too
+const dipClear = clearLane({x1: 300, x2: 400, y: 200, z: 70}, 'rs', 2);
+assert.ok(dipClear.includes('fill 299 198 70 401 198 70 air'));
+assert.ok(dipClear.findIndex((c) => c.startsWith('fill 299 198')) < dipClear.findIndex((c) => c.startsWith('forceload remove')));
+assert.ok(!clearLane({x1: 300, x2: 400, y: 200, z: 70}).some((c) => c.includes(' 198 ')), 'a flat lane has none');
 
 // Taking it away again frees what railLane forced
 const cleared = clearLane(lane);
