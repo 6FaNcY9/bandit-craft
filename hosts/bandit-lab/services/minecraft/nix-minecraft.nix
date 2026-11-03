@@ -243,6 +243,7 @@ in {
       symlinks = {
         "plugins/${plugins.viaversion.file}" = plugins.viaversion.src;
         "plugins/${plugins.viabackwards.file}" = plugins.viabackwards.src;
+        "plugins/${plugins.skinsrestorer.file}" = plugins.skinsrestorer.src; # proxy mode wants it on every backend
       };
       path = [pkgs.yq-go];
       extraStartPre = ''
@@ -266,6 +267,7 @@ in {
         "plugins/botgate.jar" = vplugins.botgate;
         "plugins/veloauth.jar" = vplugins.veloauthJar;
         "plugins/veloauth/config.yml" = vplugins.veloauthConfig;
+        "plugins/${plugins.skinsrestorer.file}" = plugins.skinsrestorer.src; # the bots' skins (plugins.nix)
       };
       # Workstation plus the mcbots bridge without its gateway (.1) and the host: the bots are .2-.7.
       environment.BOTGATE_SOURCES = "${repoConfig.lab.workstationTailscaleIp}/32,10.250.77.2/31,10.250.77.4/30";

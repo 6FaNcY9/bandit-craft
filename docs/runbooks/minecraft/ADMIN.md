@@ -84,6 +84,7 @@ time and weather, the ImageFrame list, a command console and "restart with warni
 | AxGraves | 1.32.0 | https://modrinth.com/plugin/axgraves | Enabled |
 | ViaVersion | 5.12.0 | https://hangar.papermc.io/ViaVersion/ViaVersion | Live |
 | ViaBackwards | 5.12.0 | https://hangar.papermc.io/ViaVersion/ViaBackwards | Live |
+| SkinsRestorer | 15.12.6 | https://github.com/SkinsRestorer/SkinsRestorer | Live (also on the sandbox and Velocity: proxy mode; the bots' skins, set from the Velocity console: `skin set <skin> <bot>`) |
 | CommandPanels | 4.2.4 | https://github.com/rockyhawk64/CommandPanels/releases/tag/4.2.4 | Live |
 | PlaceholderAPI | 2.12.3 + Player expansion | https://hangar.papermc.io/HelpChat/PlaceholderAPI | Enabled and verified live |
 | Citizens | 2.0.44 build 4258 | https://ci.citizensnpcs.co/job/Citizens2/4258/ | Enabled 2026-10-08 (required by Jarvis) |

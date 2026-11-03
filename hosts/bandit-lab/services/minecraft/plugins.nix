@@ -134,6 +134,19 @@ in
         source = "https://modrinth.com/plugin/thizzyz-tree-feller/versions";
       };
     };
+    # Skins for the offline-mode bots (owner 2026-11-03): one jar on Velocity and every backend (proxy mode,
+    # https://skinsrestorer.net/docs/installation/velocity); skins are set from the proxy console (`skin set <bot> <url>`).
+    skinsrestorer = {
+      file = "SkinsRestorer-15.12.6.jar";
+      version = "15.12.6";
+      url = "https://github.com/SkinsRestorer/SkinsRestorer/releases/download/15.12.6/SkinsRestorer.jar";
+      hash = "sha256-qFtKNw+Yh0HJo49NBJgmLtrL8yIDFHkKwcEnRhmWNZw=";
+      mc263 = {
+        status = "exists";
+        build = "15.12.6";
+        source = "https://github.com/SkinsRestorer/SkinsRestorer/releases/tag/15.12.6";
+      };
+    };
     viabackwards = {
       file = "ViaBackwards-5.12.0.jar";
       version = "5.12.0";
