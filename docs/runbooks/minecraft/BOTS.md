@@ -69,24 +69,27 @@ reports how an order ended (`fertig: ..., 3 min`, `Problem: ...: <reason>`, `ges
 comes from the console as `tellraw`, not as a `/tell` from the bot.
 
 Phase 1 orders (MisaBot v2, spec `docs/specs/2026-11-03-misabot-v2-design.md`; valid for every bot):
-`hol <n> <block>` takes 1..4096; `hilfe` (two lines); `status` also gives list length, inventory % and chest yes/no.
-Chat orders **queue**: they run one after another, `komm | folge | wache | gib` go first and the interrupted job
-resumes after them (`weiter: ...`), a job that starts at once answers `start: ...` (no `ok:`), a waiting one `ok: kommt dran,
-Platz n`, a duplicate area order `ok: läuft schon`. `liste` / `queue` lists the first 5, `queue weg n` drops, `queue erst n`
-moves to the front, `jetzt <order>` runs it ahead and the current job resumes. `stopp` (also `bleib`, `fertig`,
-`cancel`) ends only the running job, `alles stopp` / `clear` also drops the list. `laut` / `leise` (also `verbose on|off`)
+`hol <n> <block>` takes 1..4096; `hilfe` answers one line with the new words only (`HELP2`; the old list `HELP` comes with an unknown word); `status` also gives list length, inventory % and chest yes/no.
+Chat orders **queue**: they run one after another. `komm | folge | wache | gib` and `jetzt <order>` go first, and so does any chat
+order while the bot follows, guards, runs an unlimited `handel sticks` (no minutes/target) or a job not ordered in chat (the scheduled
+trade): the interrupted job resumes afterwards (`weiter: ...`; `chatEnqueue`). A job that starts at once answers `start: ...` (no
+`ok:`), a waiting one `ok: kommt dran, Platz n` (n counts the waiting list, not the running job), a repeated identical area order
+(`abbau`) `ok: läuft schon`. `liste` / `queue` lists the first 5 waiting jobs, `queue weg n` drops, `queue erst n`
+moves to the front, `jetzt <order>` runs it ahead and the current job resumes (only komm, folge, wache, hol, gib, lagern, handel; `jetzt abbau`, `jetzt stopp` etc. answer `kenne ich nicht`). `stopp` (also `bleib`, `fertig`,
+`cancel`) ends only the running job, `alles stopp` / `clear` also drops the list (to all bots at once: `alle alles stopp` in public chat, `parseOrder` head `alle`). `laut` / `leise` (also `verbose on|off`)
 switches a progress line every 10 %. `kiste` (the block she looks at) or `kiste x y z` sets the bot's own chest (chest,
 trapped chest, barrel), `lagern` deposits into it, `behalte <n> <item>` / `behalte nichts <item>` edits the keep list
 (English item names; `kenne <item> nicht` otherwise). `handel sticks [1h|30m|<emeralds>]` runs the `trade` job in the
 hall `TRADE_HALLS[bot]`, else `TRADE_HALLS.misa` (no hall: `geht nicht: keine Handelshalle`). `lagern` and `handel` need the
-chat flow: the in-game menu and dashboard answer `nur im Chat`. Replies go to whoever gave the last order. Failure
+chat flow: the in-game menu (`/bots`) answers `nur im Chat`; the dashboard goes through `/api/job`. A menu click replaces the running job and the list, and its Stopp drops everything. Replies go to whoever gave the last order. Failure
 reasons are German for about 15 common cases (`owner.germanReason`), rare ones stay English.
-With a chest set, a full inventory walks there, stores everything except tools, armour, food and the keep list
-(sticks, coal and torches **are** stored: `KEEP_RE` does not apply to own deposits), walks back and continues; a full
-chest falls back to any chest or barrel within 2 blocks, else `Kiste voll`. Nothing is fetched back out of it yet.
+With a chest set, a job with fewer than 4 free slots walks there, stores everything except tools, armour, food, 6 cobblestone (`TOOL_STOCK`) and the keep list
+(sticks, planks, coal, charcoal, torches, crafting table and furnace **are** stored: `KEEP_RE` does not apply to own deposits;
+`behalte 8 stick` / `behalte 8 oak_planks` keep what a replacement pickaxe needs, `ensureTool`/`replacePickaxe`: 2 sticks plus 3 planks or 3 cobblestone, a crafting table, logs chopped when none are carried), walks back and continues; a full
+chest falls back to any chest or barrel within 2 blocks, else `Kiste voll`. Nothing is fetched back out of it yet, except sticks for `handel`. `lagern` without a chest: `Problem: lagern: keine Kiste zugewiesen`.
 `kiste x y z` needs the block loaded (`zu weit weg` otherwise); `kiste` alone can fail with `schau auf eine Kiste` although
 the player looks at one: use the coordinates. Per bot `STATE_DIR/prefs.json` holds chest, keep list and verbose. The queue
-is not persisted: a worker restart loses it (a running job still resumes via `KEEP`/`keptOf`).
+is not persisted as such: `keptOf` keeps the running job and everything from the first `KEEP` job on (mine, chop, guard, build, excavate ...); those come back silently after a worker restart (no `start:`/`fertig:`), shorter orders ahead of them are lost.
 
 Building words (`app/misa.js`): `ecke` notes the block she stands on as corner 1, the next as corner 2 (then 1 again);
 `abbau` removes everything between the corners except containers (up to 32 x 32 x 24, top down); `bau <name> [90|180|270]`
@@ -108,7 +111,7 @@ it holds Misa's hall `{x1:166,y1:54,z1:409,x2:181,y2:61,z2:426}`, stores `171 59
 `GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
 rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
 MidariBread gets no dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop them
-(`alle stopp`). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
+(`alle alles stopp` in chat, or the dashboard's Stop all; plain `stopp` only ends one bot's running job and its list goes on). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
 
 ## In the game: sidebar, /bots, replies (2026-11-02)
 
@@ -557,7 +560,7 @@ Each bot runs its queue one job at a time. Chat is never read as a command.
 | `homebed` | optional `slot` 0-13, or x y z (+ `facing`) | the bot's own bed in the storage rooms (`app/homebed.js`, agents: `!setHomeBed`). Slot = foot at z -213 (room 1, x -272..-266, y 58) or z -205 (room 2, slots 7-13), head towards north; without `slot` the crew order bot1 bot2 bot3 bot4 bot16 bot17 bot18 gives slots 0-6. Walks there, refuses protected cells, only clicks when a bed already lies there. Otherwise gets 3 wool of one colour (supply chest first; else `hunt` sheep here, then at 8 stops on a ring 70/140 blocks around the chest), planks (a log from the chest, else `chop`), crafts the bed, stands in the head cell facing north, places it and hands the click to `bed` (spawn set). |
 | `grave` | x y z | walks to where a bot died, finds AxGraves' grave entity within 3 blocks, sneaks, right-clicks it (only the owner can), checks the inventory grew, puts on better armour, then deposits everything except tools, food and `KEEP_RE` into the supply chest; event `grave at x y z: N items back`; refused inside protected areas; fails `gave nothing` when it is not the bot's grave or already taken |
 | `graves` | none | fetches this bot's open overworld graves from its deaths in the last 24 h, nearest first; skips graves that are gone or out of reach and reports fetched/gone/out-of-reach totals |
-| `trade` | optional x y z (the emerald chest) | sells sticks to every villager of the trading hall (x -32..-14, z -132..-88, both floors) that buys them, until stopped (`app/trade.js`, dashboard "Sticks → Emeralds"): sticks from the owner's stick chests between the cell rows (x -22 y 63/64, x -24 y 66/67), logs it carries become sticks; emeralds into the double chest at -25 69 -95, when full the one to its right (-27 69 -95). Sold-out villagers are visited again after 10 min, villagers without a stick offer never; with every stick chest empty it waits for a refill (no walk to the base). A failed walk is retried after 30 s, three failures at one place end it. Optional `item` (`stick`), `minutes` (stop after), `target` (stop at that many emeralds), `sticksFirst` (chest {x,y,z} whose sticks are used before the hall's; a chat `handel` passes the bot's own chest as `stores` and `sticksFirst`); out of sticks it ends with `keine Sticks, Smaragde: n` (no chopping yet), the count `Smaragde: n` is in the end line |
+| `trade` | optional x y z (the emerald chest) | sells sticks to every villager of the trading hall (x -32..-14, z -132..-88, both floors) that buys them, until stopped (`app/trade.js`, dashboard "Sticks → Emeralds"): sticks from the owner's stick chests between the cell rows (x -22 y 63/64, x -24 y 66/67), logs it carries become sticks; emeralds into the double chest at -25 69 -95, when full the one to its right (-27 69 -95). Sold-out villagers are visited again after 10 min, villagers without a stick offer never; with every stick chest empty it waits for a refill (no walk to the base). A failed walk is retried after 30 s, three failures at one place end it. Optional `item` (`stick`), `minutes` (stop after), `target` (stop at that many emeralds), `sticksFirst` (chest {x,y,z} whose sticks are used before the hall's; a chat `handel` passes the bot's own chest as `stores` and `sticksFirst`); out of sticks a chat trade ends with `keine Sticks, Smaragde: n` (no chopping yet; the scheduled trade waits for a refill); limits 24 h and 4096 emeralds; the emeralds go in mostly as emerald blocks, the count `Smaragde: n` is in the end line |
 | `level` | x1 z1 x2 z2 (the shaft's box), y, optional top, length, branch | mining at one height of a shaft: see "Mining levels" |
 | `seal` | x1 z1 x2 z2, y1, y2 | walls over the cave openings in the four side faces of a box (at most 24 x 24, 160 high; the shaft plus a margin): see "Sealing cave openings" |
 | `treefarm` | x1 z1 x2 z2 | tree farm in an area of 3 x 3 to 24 x 24 until stopped: plants saplings (oak first, then birch, spruce, acacia, cherry, jungle; never dark oak or pale oak, which need a 2x2) on a 3-block grid on grass/dirt cells with 4 free blocks above, takes saplings from the supply chest when it has none, chops grown trees (only natural `*_log` blocks inside the area whose base stands on soil and that carry leaves; leaves stay), picks up saplings, apples and logs that fall inside the area, replants, uses bone meal if it has some, and puts the logs into the supply chest when the inventory fills or there is nothing to do. Fails with `no saplings` when the chest has none and nothing grows. Protected areas are skipped; the pathfinder may dig only logs and leaves on the way. Needs room in the supply chest (a full chest fails the job with `destination full`). Live (laptop, 2026-10-10): 4 saplings planted in 90 s, a grown oak chopped (4 logs), its drops and the saplings from decaying leaves picked up and replanted, Stop ends it as `stopped`. Agent command `!tendTreeFarm(x1, z1, x2, z2)` |
