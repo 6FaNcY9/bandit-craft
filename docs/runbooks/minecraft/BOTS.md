@@ -89,7 +89,7 @@ With a chest set, a job with fewer than 4 free slots walks there, stores everyth
 chest falls back to any chest or barrel within 2 blocks, else `Kiste voll`. Nothing is fetched back out of it yet, except sticks for `handel`. `lagern` without a chest: `Problem: lagern: keine Kiste zugewiesen`.
 `kiste x y z` needs the block loaded (`zu weit weg` otherwise); `kiste` alone can fail with `schau auf eine Kiste` although
 the player looks at one: use the coordinates. Per bot `STATE_DIR/prefs.json` holds chest, keep list and verbose. The queue
-is not persisted as such: `keptOf` keeps the running job and everything from the first `KEEP` job on (mine, chop, guard, build, excavate ...); those come back silently after a worker restart (no `start:`/`fertig:`), shorter orders ahead of them are lost.
+is not persisted as such: `keptOf` keeps the running job only if it is a `KEEP` job, plus everything from the first `KEEP` job on (mine, chop, guard, build, excavate ...); those come back silently after a worker restart (no `start:`/`fertig:`), shorter orders ahead of them are lost.
 
 Building words (`app/misa.js`): `ecke` notes the block she stands on as corner 1, the next as corner 2 (then 1 again);
 `abbau` removes everything between the corners except containers (up to 32 x 32 x 24, top down); `bau <name> [90|180|270]`
@@ -111,7 +111,7 @@ it holds Misa's hall `{x1:166,y1:54,z1:409,x2:181,y2:61,z2:426}`, stores `171 59
 `GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
 rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
 MidariBread gets no dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop them
-(`alle alles stopp` in chat, or the dashboard's Stop all; plain `stopp` only ends one bot's running job and its list goes on). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
+(`alle alles stopp` in chat, or the main dashboard's "⏹ Alle" button; plain `stopp` only ends one bot's running job and its list goes on). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
 
 ## In the game: sidebar, /bots, replies (2026-11-02)
 

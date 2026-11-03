@@ -141,7 +141,7 @@ stay ≤ 100 chars: put the new words into a second `hilfe 2` line.
 Where the build differs from the design above:
 
 - Prefs (chest, keep list, verbose) live in one file `STATE_DIR/prefs.json`, not `STATE_DIR/<bot>/chest.json`.
-- The queue is not persisted as such (deferred): `keptOf` keeps the running job and everything from the first long (`KEEP`) job on, silently; shorter orders ahead of them are lost on a worker restart.
+- The queue is not persisted as such (deferred): `keptOf` keeps the running job only if it is a long (`KEEP`) job, plus everything from the first one on, silently (within 5 minutes, `resumeUntil`); shorter orders ahead of them are lost on a worker restart.
 - `hilfe` answers one line with the new words only (`HELP2`); the older list (`HELP`) comes with an unknown word.
 - The own-chest deposit starts when fewer than 4 slots are free.
 - Failure reasons were not already German: about 15 common ones have a table (`owner.germanReason`), rare ones stay English.

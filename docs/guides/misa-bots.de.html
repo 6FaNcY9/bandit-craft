@@ -98,17 +98,17 @@ ein <code>handel sticks</code> ohne Grenze macht oder etwas tut, was nicht aus d
 kommt ein neuer Befehl sofort dran; was er unterbrochen hat, macht er danach weiter (<code>weiter: …</code>).
 <code>ok: kommt dran, Platz 2</code> heißt: Platz 2 unter den wartenden Aufträgen (der laufende zählt nicht).
 <code>ok: läuft schon</code> kommt nur, wenn du genau denselben <code>abbau</code> noch einmal gibst.</p>
-<p><b>Neustart.</b> Wird der Bot neu gestartet, sind kurze Aufträge weg. Lange Aufträge (z.&nbsp;B. <code>hol</code>, <code>wache</code>, <code>bau</code>,
-<code>abbau</code> eines großen Bereichs) und alles, was hinter dem ersten davon steht, kommen leise zurück, ohne <code>start:</code> oder
-<code>fertig:</code>. Schau nach einem Neustart mit <code>liste</code> und <code>status</code> nach, bevor du neu bestellst.</p>
+<p><b>Neustart.</b> Wird der Bot neu gestartet, ist die Liste größtenteils weg. Nur ein langer Auftrag (<code>hol</code>, <code>wache</code>, <code>bau</code>)
+und alles, was hinter dem ersten solchen steht, kommt leise zurück, ohne <code>start:</code> oder <code>fertig:</code>, und nur wenn der Bot
+innerhalb von 5 Minuten wieder da ist. <code>abbau</code>, <code>folge</code>, <code>handel</code> und <code>komm</code> sind weg, wenn sie nicht hinter einem solchen langen Auftrag stehen. Schau nach einem Neustart mit <code>liste</code> und <code>status</code> nach, bevor du neu bestellst.</p>
 <p><b>Die Kiste.</b> Hat der Bot eine Kiste (<code>kiste</code>), geht er bei fast vollem Inventar (weniger als 4 freie Plätze) von selbst
 dorthin, legt alles ab außer Werkzeug, Rüstung, Essen, sechs Cobblestone und dem, was du mit <code>behalte</code> festgelegt hast,
 und läuft zurück zur Arbeit. Auch <b>Sticks, Bretter, Kohle, Holzkohle, Fackeln, Werkbank und Ofen</b> landen in der Kiste.
 Aus seiner eigenen Kiste holt der Bot nichts zurück (nur <code>handel</code> nimmt sich Sticks daraus): Hol es dir selbst.</p>
 <p><b>Werkzeug und <code>behalte</code>.</b> Geht die Spitzhacke kaputt, baut er eine neue: aus Holz (2 Sticks, 3 Bretter, dazu eine Werkbank,
-die er sich aus 4 Brettern macht oder in der Nähe findet) oder aus Stein (2 Sticks, 3 Cobblestone). Fehlendes macht er aus Holz, das er trägt;
+die er sich aus 4 Brettern macht oder in der Nähe findet) oder aus Stein (2 Sticks, 3 Cobblestone, auch dafür eine Werkbank). Fehlendes macht er aus Holz, das er trägt;
 trägt er gar keins, schlägt er selbst welches. Sicherer ist es, wenn du ihm etwas lässt: <code>behalte 8 stick</code> und
-<code>behalte 8 oak_planks</code>, und <code>behalte 64 torch</code>, wenn er sich den Weg beleuchten soll. Sonst kann ein Auftrag mit
+<code>behalte 8 oak_planks</code> (der Name muss genau stimmen: <code>oak_planks</code> behält keine Fichtenbretter, nimm die Bretter, die dein Bot wirklich trägt), und <code>behalte 64 torch</code>, wenn er sich den Weg beleuchten soll. Sonst kann ein Auftrag mit
 <code>Problem: hol 20 eisen: keine Spitzhacke für iron_ore</code> enden. Die Namen sind die englischen Minecraft-Namen
 (<code>stick</code>, <code>coal</code>, <code>torch</code>); <code>behalte 8 kohle</code> antwortet <code>geht nicht: kenne kohle nicht</code>.</p>
 <p>Ist die Kiste voll, nimmt er jede andere Kiste oder jedes Fass im Umkreis von 2 Blöcken, sonst meldet er
