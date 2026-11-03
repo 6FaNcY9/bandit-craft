@@ -14,6 +14,7 @@
 
 - Console only through `https://bandit-lab.tail7facc9.ts.net:8445/api/sandbox/console` (`MCBOTS_URL` overrides), with header `Origin` set to that base URL. At most 64 commands per call, at most 1400 characters per command.
 - Speed settings: 8, 20, 40, 72, 100, 150, 200, 400, 1000. The rule is `gamerule max_minecart_speed <n>`; the world value is 8 and is restored after every run.
+- Read from the sandbox console on 2026-11-04: the rule is 8, the `minecart_improvements` feature pack is enabled, the border is 59999968 wide, no chunks are forced.
 - Sweep lane at least 2 km. Ride lanes 5 km. All lanes in the air at `y 200` above generated land, east of the base, never touching the ground.
 - Winner rule, from the spec: the highest speed a real client rides 5 km on generated chunks without a kick, derail or stop wins, even if materials slow the road's growth. A tie goes to the cheaper material.
 - The laptop bot is `bot50`, password from `~/.local/state/mcbots/seed`, as in `tools/mcbots-placetest/placetest.js`.
@@ -36,7 +37,7 @@
 - Test: `tools/mcbots-railspeed/rig.test.js`
 
 **Interfaces:**
-- Produces, all pure: `SPEEDS`, `SPACINGS` (`[2, 4, 8, 16, 38]`), `SWEEP_LANE` (`{x1: 300, x2: 2300, y: 200, z: 10}`), `railLane(lane) -> string[]`, `powerEvery(lane, spacing) -> string[]`, `launch(lane, tag = 'rs') -> string[]`, `iceLane(lane, width) -> string[]`, `setSpeed(n) -> string`, `clearLane(lane, tag = 'rs') -> string[]`, `batches(commands, max = 64) -> string[][]`, `parseSample(replies) -> {tick, x, y, z} | null`, `summarize(samples, lane) -> {top, sustained, tps, derailed, reachedEnd, lost}`.
+- Produces, all pure: `SPEEDS`, `SPACINGS` (`[2, 4, 8, 16, 38]`), `SWEEP_LANE` (`{x1: 300, x2: 2300, y: 200, z: 10}`), `railLane(lane) -> string[]`, `powerEvery(lane, spacing) -> string[]`, `launch(lane, tag = 'rs') -> string[]`, `iceLane(lane, width) -> string[]`, `setSpeed(n) -> string`, `clearLane(lane, tag = 'rs') -> string[]`, `batches(commands, max = 64) -> string[][]`, `parseSample(replies) -> {tick, x, y, z} | null`, `summarize(samples, lane) -> {top, sustained, tps, derailed, reachedEnd, lost}`, where a sample is `{tick, wall, x, y, z}` or `null`.
 
 - [ ] **Step 1: Write the failing tests** in `rig.test.js`, with these assertions:
 
@@ -48,6 +49,11 @@ assert.ok(railLane(lane).includes('fill 300 199 10 2300 199 10 stone'));
 assert.ok(railLane(lane).includes('fill 300 200 10 2300 200 10 rail[shape=east_west]'));
 assert.deepStrictEqual(powerEvery({...lane, x2: 340}, 38).slice(0, 2), ['setblock 300 199 10 redstone_block', 'setblock 300 200 10 powered_rail[shape=east_west,powered=true]']);
 assert.strictEqual(setSpeed(100), 'gamerule max_minecart_speed 100');
+// forceload refuses more than 256 chunks in one command, and a 5 km lane is more
+const spans = railLane({x1: 300, x2: 5300, y: 200, z: 40}).filter((c) => c.startsWith('forceload add')).map((c) => c.split(' ').map(Number));
+assert.ok(spans.length > 1 && spans.every((s) => Math.floor(s[4] / 16) - Math.floor(s[2] / 16) + 1 <= 256));
+assert.strictEqual(spans[0][2], 300);
+assert.strictEqual(spans.at(-1)[4], 5300);
 // Limits of the console
 assert.ok(batches(Array(130).fill('x')).every((b) => b.length <= 64));
 assert.strictEqual(batches(Array(130).fill('x')).flat().length, 130);
@@ -75,7 +81,7 @@ Expected: FAIL, "Cannot find module './rig'".
 
 - [ ] **Step 3: Implement `rig.js`** with the interfaces above.
 
-`railLane` forceloads the lane, lays stone at `y - 1` and rail at `y`. `powerEvery` puts a redstone block under a powered rail at `x1`, `x1 + spacing`, and so on, redstone block first, so the rail is powered when placed. `iceLane(lane, width)`: width 2 lays blue ice at `z` and `z + 1` at `y - 1` with stone-brick walls two high at `z - 1` and `z + 2`; width 1 lays one column at `z`, with air gaps at `z - 1` and `z + 1` and walls at `z - 2` and `z + 2`. `launch` first kills the tag, then summons a minecart at `x1 + 1` with `Tags`, `Motion:[1.0,0.0,0.0]` and an armour stand passenger, because an occupied cart brakes less than an empty one. `summarize` takes speed from pairs of samples at least 20 ticks apart: `top` is the highest, `sustained` the median over the last third. `tps` comes from ticks against `wall`. A null sample before `reachedEnd` sets `lost`. `y` more than 1.5 or `z` more than 1 from the lane sets `derailed`.
+`railLane` forceloads the lane in spans of at most 256 chunks, then lays stone at `y - 1` and rail at `y`. `powerEvery` puts a redstone block under a powered rail at `x1`, `x1 + spacing`, and so on, redstone block first, so the rail is powered when placed. `iceLane(lane, width)`: width 2 lays blue ice at `z` and `z + 1` at `y - 1` with stone-brick walls two high at `z - 1` and `z + 2`; width 1 lays one column at `z`, with air gaps at `z - 1` and `z + 1` and walls at `z - 2` and `z + 2`. `launch` first kills the tag, then summons a minecart at `x1 + 1` with `Tags`, `Motion:[1.0,0.0,0.0]` and an armour stand passenger, because an occupied cart brakes less than an empty one. `summarize` takes speed from pairs of samples at least 20 ticks apart: `top` is the highest, `sustained` the median over the last third. `tps` comes from ticks against `wall`. A null sample before `reachedEnd` sets `lost`. `y` more than 1.5 or `z` more than 1 from the lane sets `derailed`.
 
 - [ ] **Step 4: Run it and see it pass**
 
@@ -97,7 +103,7 @@ git commit --no-gpg-sign -m "feat(railspeed): rig commands and run analysis for 
 
 **Interfaces:**
 - Consumes: everything from Task 1.
-- Produces: `sweep({call, out, now, sleep, done = new Set(), speeds = SPEEDS, spacings = SPACINGS}) -> Promise<void>`, where `call(commands) -> Promise<string[]>`, and `track({call, player, ms, out, now, sleep}) -> Promise<summary>`. CLI: `node run.js sweep [--speed n --spacing n]`, `node run.js track <player> [seconds]`, `node run.js rig <rail|ice2|ice1> <speed> <spacing>`.
+- Produces: `sweep({call, out, now, sleep, done = new Set(), speeds = SPEEDS, spacings = SPACINGS}) -> Promise<void>`, where `call(commands) -> Promise<string[]>`, and `track({call, player, ms, out, now, sleep}) -> Promise<summary>`. CLI: `node run.js sweep [--speed n --spacing n]`, `node run.js track <player> [seconds]`, `node run.js rig rail <speed> <spacing>`, `node run.js rig ice2`, `node run.js rig ice1`.
 
 - [ ] **Step 1: Write the failing tests** in `run.test.js` with a fake `call` that records commands and answers samples:
 
@@ -127,7 +133,9 @@ Expected: FAIL, "Cannot find module './run'".
 
 - [ ] **Step 3: Implement `run.js`**
 
-`call` posts to the console as `tools/mcbots-placetest/placetest.js` does. Sampling sends `time query gametime` and `data get entity @e[tag=rs,limit=1] Pos` in one call, every 500 ms. A run ends at `reachedEnd`, derail, lost, or after 150 s. Results append to `~/.local/state/mcbots/railspeed.jsonl`, and the CLI loads `done` from it. `sweep` uses `try`/`finally` for the rule and `clearLane`. It only re-lays rail when the spacing changes.
+`call` posts to the console as `tools/mcbots-placetest/placetest.js` does. Sampling sends `time query gametime` and `data get entity @e[tag=rs,limit=1] Pos` in one call, every 500 ms. A run ends at `reachedEnd`, derail, lost, or after 150 s. A timeout is still a valid row: at 8 m/s a cart covers only 1200 m in that time. Results append to `~/.local/state/mcbots/railspeed.jsonl`, and the CLI loads `done` from it. `sweep` uses `try`/`finally` for the rule and `clearLane`. It only re-lays rail when the spacing changes.
+
+After `forceload add`, wait until `execute if loaded` passes at both lane ends before the first `fill`, because `fill` refuses unloaded chunks. The CLI's `sleep` rejects after SIGINT, so Ctrl-C takes the same `finally` path as a network error; if the restore call fails too, print the commands to run by hand. `rig` frees its forced chunks once the lane is built, so a rider has to load them as on a real road. The sweep keeps them forced, because an armour stand loads nothing.
 
 - [ ] **Step 4: Run the tests**
 
@@ -186,7 +194,7 @@ git commit --no-gpg-sign -m "docs(highway): measured rail speeds in the sandbox"
 
 This is a live test with a real server and no fake can stand in for it, so it has no unit test. It is a throwaway proof in the style of `placetest.js`.
 
-- [ ] **Step 1: Write `ride.js`.** It connects `bot50` to the sandbox (host `sandbox.bots`), lays a 2 km lane at `z 30` with the best setting from Task 3, teleports the bot beside the start over the console, summons a cart on the rail, and calls `bot.mount(cart)`. Once on `mount` it calls `bot.moveVehicle(0, 1)` and logs `bot.vehicle.position` and `bot.entity.position` every 500 ms. At the lane's end it calls `bot.dismount()`, then prints one JSON line: `{mounted, moved, top, followed, dismounted, kicked, stationaryStart}`. `stationaryStart` tests whether the bot's input alone starts a cart that stands on a powered rail. Cleanup in `finally`.
+- [ ] **Step 1: Write `ride.js`.** It connects `bot50` with the same `createBot` options as `placetest.js` (`fakeHost: 'sandbox.bots'`), lays a 2 km lane at `z 30` with the best setting from Task 3, teleports the bot beside the start over the console, summons a cart on the rail, and calls `bot.mount(cart)`. Once on `mount` it calls `bot.moveVehicle(0, 1)` and logs `bot.vehicle.position` and `bot.entity.position` every 500 ms. At the lane's end it calls `bot.dismount()`, then prints one JSON line: `{mounted, moved, top, followed, dismounted, kicked, stationaryStart}`. `stationaryStart` tests whether the bot's input alone starts a cart that stands on a powered rail. Cleanup in `finally`.
 
 - [ ] **Step 2: Run it**
 
@@ -213,12 +221,12 @@ git commit --no-gpg-sign -m "test(railspeed): a bot boards, rides and leaves a c
 - [ ] **Step 1: Build the ride lanes**
 
 Run: `node tools/mcbots-railspeed/run.js rig rail <best setting> <best spacing>` and `rig ice2`, `rig ice1`. 5 km each at `y 200`, `z 40`, `z 50` and `z 60`, from x 300.
-Expected: `execute if block` checks at the far end of each lane pass.
+Expected: `execute if block` checks at the far end of each lane pass while the chunks are still forced, and `forceload query` lists none afterwards. The chunks stay generated.
 
 - [ ] **Step 2: Give the owner the exact steps**
 
 Numbered, with host and time: on Velocity `/server sandbox`, then the coordinates, the gear (given over the sandbox console), and which lane to ride first. While the owner rides, run `node run.js track <player>` on the laptop for each lane.
-Expected: per lane a row with `top`, `sustained`, and the owner's verdict: kicks, stops at chunk borders, whether it is rideable.
+Expected: per lane a row with `top`, `sustained`, and the owner's verdict: kicks, stops at chunk borders, whether it is rideable. If a rail ride fails, lower the rule to the next setting in the table and ride again. The rule applies at once; only a different spacing needs `rig rail` again.
 
 - [ ] **Step 3: Apply the winner rule, and hand over the table**
 
