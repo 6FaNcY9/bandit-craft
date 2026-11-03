@@ -9,7 +9,17 @@ const {Vec3} = require('vec3');
 // wires them to a bot like graves.js.
 // The hall: rows of cells at x -29 and -18, floors y 63 and 66, z -127..-96 (scanned over RCON 2026-10-24).
 const HALL = {x1: -32, y1: 60, z1: -132, x2: -14, y2: 70, z2: -88};
-const SOLD_OUT_MS = 10 * 60 * 1000; // villagers restock at their workstation up to twice a day (a day is 20 min)
+const SOLD_OUT_MS = 10 * 60 * 1000; // no clock from the server, or out of reach: look again after this
+// When a sold-out villager is worth a walk (64 fletchers measured over RCON, 2026-11-03): all of them refill within a
+// second at day tick 2008-2028; inside work hours, up to 9000, one refills again 1200-2400 ticks after it was emptied
+// (at most twice a day); from 9000 on nothing happens until the next morning.
+const REFILL_TICK = 2040, WORK_END = 9000, WORK_AGAIN_TICKS = 2400, TICK_MS = 50;
+const soldOutUntil = (timeOfDay, now) => {
+  if (!Number.isFinite(timeOfDay)) return now + SOLD_OUT_MS;
+  const tick = ((timeOfDay % 24000) + 24000) % 24000;
+  if (tick >= REFILL_TICK && tick < WORK_END) return now + WORK_AGAIN_TICKS * TICK_MS;
+  return now + ((REFILL_TICK - tick + 24000) % 24000) * TICK_MS;
+};
 const WAIT_MS = 60 * 1000; // all sold out: look again after this
 // Both halves of a double chest open the whole chest: the first and, when it is full, the one to its right.
 const STORE = [{x: -25, y: 69, z: -95}, {x: -27, y: 69, z: -95}];
@@ -75,9 +85,9 @@ function nextStickChest(from, empty, now, chests = STICK_CHESTS) {
 function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit}) {
   async function trade(r, job) {
     const {bot} = r;
-    // Who buys no sticks at all (never) and who is sold out (until). On the job: the runner calls the job again
-    // after a fight, and that must not visit every villager again.
-    const memo = (job.tradeMemo ||= new Map());
+    // Who buys no sticks at all (never) and who is sold out (until). On the bot: a fight calls the job again and the next
+    // day's job starts anew, and neither must visit every villager again.
+    const memo = (r.tradeMemo ||= new Map());
     const empty = (job.emptyChests ||= new Map());
     // Another hall (Misa's, spec 2026-10-29) comes in the job's arguments: its box, store chests and, unless listed,
     // every other chest or barrel in the box as stick chests. Without them it is the owner's hall.
@@ -118,9 +128,9 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
       job.t.doing = 'bringing loot to storage';
       await deposit(r, job, r.supplyChest);
     };
-    const wait = async (doing) => {
+    const wait = async (doing, ms = WAIT_MS) => {
       job.t.doing = doing;
-      for (let t = 0; t < WAIT_MS; t += 1000) { guard(job); await sleep(1000); }
+      for (let t = 0; t < ms; t += 1000) { guard(job); await sleep(1000); }
     };
     // One pass: refill sticks, or bank, or one villager. A failed walk (no path through the protected town, a
     // chest out of reach) is tried again after a pause; three in a row at the same place end the job (a long walk
@@ -173,7 +183,11 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
           await goNear(r, job, (hall.x1 + hall.x2) / 2, job.args.hall ? hall.y1 + 3 : 63, (hall.z1 + hall.z2) / 2, 6, {doing: 'walking to the trading hall'});
           return;
         }
-        await wait('every villager is sold out, waiting for the restock');
+        // Exactly until the first one is due: no minute lost, no walk for nothing.
+        const next = Math.min(...[...memo.values()].map((m) => m.until ?? Infinity));
+        const ms = Number.isFinite(next) ? Math.max(1000, next - Date.now()) : WAIT_MS;
+        r.emit('info', `trade: every villager is sold out, next restock in ${Math.round(ms / 1000)} s`);
+        await wait('every villager is sold out, waiting for the restock', ms);
         return;
       }
       const key = v.uuid ?? v.id;
@@ -198,7 +212,7 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
         if (!offers.length) {
           // A fletcher whose stick offer is used up still lists it (disabled); no stick offer at all: never.
           const buys = (win.trades || []).some((t) => t.inputItem1?.name === 'stick');
-          memo.set(key, buys ? {until: Date.now() + SOLD_OUT_MS} : {never: true});
+          memo.set(key, buys ? {until: soldOutUntil(bot.time?.timeOfDay, Date.now())} : {never: true});
           return;
         }
         job.t.doing = 'trading sticks for emeralds';
@@ -221,7 +235,7 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
         job.t.done = emeralds;
         job.progress = `${emeralds} emeralds`;
         // Sold out, or the sticks ran out first (then it is visited again after crafting).
-        if (!stickOffers(win.trades).length) memo.set(key, {until: Date.now() + SOLD_OUT_MS});
+        if (!stickOffers(win.trades).length) memo.set(key, {until: soldOutUntil(bot.time?.timeOfDay, Date.now())});
       } finally {
         win.close();
       }
@@ -246,4 +260,4 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
   return {trade};
 }
 
-module.exports = {HALL, STORE, STICK_CHESTS, nextStickChest, stickOffers, tradePlan, nextVillager, inBox, makeTrade};
+module.exports = {HALL, STORE, STICK_CHESTS, nextStickChest, stickOffers, tradePlan, nextVillager, soldOutUntil, inBox, makeTrade};

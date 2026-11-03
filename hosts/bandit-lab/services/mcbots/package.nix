@@ -36,6 +36,11 @@ buildNpmPackage {
         return
       }
       const block = stateMovements.getScaffoldingItem()"
+    # The path aimed at the middle of the door's panel: a bot walked into the open panel and stood there (sandbox test
+    # 2026-11-03). A door or gate is walked through in the middle of its cell, like any other free block.
+    substituteInPlace node_modules/mineflayer-pathfinder/index.js --replace-fail \
+      "if (!block || block.shapes.length === 0) return null" \
+      "if (!block || block.shapes.length === 0 || /_door\$|_fence_gate\$/.test(block.name)) return null"
   '';
   meta.mainProgram = "mcbots";
 }

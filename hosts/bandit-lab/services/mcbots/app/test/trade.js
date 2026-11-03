@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert');
-const {HALL, STORE, STICK_CHESTS, nextStickChest, stickOffers, tradePlan, nextVillager, makeTrade} = require('../trade');
+const {HALL, STORE, STICK_CHESTS, nextStickChest, stickOffers, tradePlan, nextVillager, soldOutUntil, makeTrade} = require('../trade');
 const {VALIDATE} = require('../bots');
 // ---- trade: sticks for emeralds in the trading hall ----
 const offer = (o = {}) => ({inputItem1: {name: 'stick', count: 32}, hasItem2: false, outputItem: {name: 'emerald'}, tradeDisabled: false, nbTradeUses: 0, maximumNbTradeUses: 16, realPrice: 32, ...o});
@@ -10,6 +10,12 @@ assert.deepStrictEqual(stickOffers([offer({inputItem1: {name: 'string', count: 2
 // Demand raised the price: realPrice counts, cheapest offer first, never more than the sticks allow.
 assert.deepStrictEqual(tradePlan([{index: 0, price: 40, left: 16}, {index: 2, price: 32, left: 3}], 200), [{index: 2, times: 3}, {index: 0, times: 2}]);
 assert.deepStrictEqual(tradePlan([{index: 0, price: 32, left: 16}], 31), []);
+// A sold-out villager is due again by the game's clock: in work hours soon, otherwise at the next morning's refill.
+assert.strictEqual(soldOutUntil(5000, 1000), 1000 + 2400 * 50);
+assert.strictEqual(soldOutUntil(9000, 0), (24000 - 9000 + 2040) * 50);
+assert.strictEqual(soldOutUntil(23000, 0), (24000 - 23000 + 2040) * 50);
+assert.strictEqual(soldOutUntil(2000, 0), 40 * 50, 'just before the refill');
+assert.strictEqual(soldOutUntil(undefined, 0), 10 * 60 * 1000, 'no clock');
 // The nearest due villager in the hall; the other floor weighs 8 blocks per level; known ones are passed over.
 const v = (id, x, y, z, name = 'villager') => ({id, name, position: {x, y, z}});
 const ents = [v(1, -28.5, 63, -110), v(2, -17.5, 66, -110), v(3, -28.5, 63, -100), v(4, -23, 63, -111, 'wandering_trader'), v(5, 0, 63, 0)];
