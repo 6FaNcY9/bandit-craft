@@ -1,6 +1,7 @@
 # Highway bots: design
 
-Status: draft for the owner's approval, 2026-11-03. Source: the owner's chat of 2026-11-03.
+Status: approved by the owner in chat, 2026-11-03. Suppliers and the gold farm were added in the same answer and are
+written here as understood. Source: the owner's chat of 2026-11-03.
 
 ## Intent
 
@@ -32,6 +33,7 @@ and that every finished metre is as fast as it can be.
 
 - A bot breaks anything a player built. Bots know no player builds today, so this needs an explicit check.
 - A bot takes anything from MidariBread's area or from `GUEST_BOTS` chests.
+- MidariBread comes online and `MisaBot` is busy with the road, or loses `MisaBot`'s own things to the depot.
 - The road starves the server: low TPS, a full disk, or backups that no longer fit.
 - Cheating the material: no `/give`, `/fill` or `/tp` on the main server for building. The existing rescue of stranded
   bots stays as it is.
@@ -44,6 +46,9 @@ and that every finished metre is as fast as it can be.
 - Overworld first.
 - The border stays at its current place, and the job keeps growing even if it never arrives.
 - Four bots build it alone and obtain all materials. Every farm counts as a source.
+- Two suppliers help the builders: `MisaBot` when MidariBread is not there, and `EM_Trader`.
+- A bot at the gold farm again, but last of all, because the owner says the farm is full.
+- The west road may replace the one stair block at `-49 1 0`.
 
 The owner also accepted these as proposed in chat on 2026-11-03: `y 0` taken literally (a tunnel under all buildings),
 the surface decided by a sandbox measurement, a raised `max_minecart_speed` applying to every minecart in the world, the
@@ -152,8 +157,8 @@ torch in a one-block wall niche, or whatever stage 1 shows to be cheaper.
 
 A small chamber at `0 0 0` where the four tunnels start, and a walkable stair up to the surface (three air cells per
 step: the pathfinder needs them). The stair's top is the first free column near the origin with no player blocks. The
-chamber holds a chest of minecarts and a crafting table. It is the only thing the bots build inside the protected box,
-and the protected-area exception for this job applies only at `y <= 6` plus that stair column.
+chamber holds a crafting table, a chest of minecarts and the depot's chests. It is the only thing the bots build inside the
+protected box, and the protected-area exception for this job applies only at `y <= 6` plus that stair column.
 
 ### The job
 
@@ -170,19 +175,34 @@ schematic or a direct loop is the builder's call, by what the sandbox shows to b
 
 ### Supply
 
-No depot in the first version: each bot fetches for itself.
+A depot in the origin chamber, kept full by two suppliers. A builder takes its load there; with the depot empty it fetches
+for itself from the farms, so no road ever depends on a supplier being available.
 
 - A load is about 1,920 rails: 720 iron, 120 sticks, some powered rails and torches, spare pickaxes, food. It covers
   about an hour's work.
 - Sources are a fixed list of the owner's farms and stores (table above, as Nix config like `TRADE_HALLS`), counted by
   the existing `stock` job. Bots take only what the road needs. Everything else stays where it is.
 - With a farm empty, the bot goes to the next one, and with all empty, it waits and reports, or mines (`get`) what can be
-  mined. Gold has no farm: only 759 ingots and 846 powered rails exist, so gold may set the pace. Stage 1's numbers decide
-  how much this matters; mining gold ore through `get` is the fallback.
+  mined. Gold is scarce: 759 ingots and 846 powered rails in containers, so it may set the pace. Stage 1's numbers decide
+  how much this matters; mining gold ore through `get` is the fallback until the gold farm stage.
 - Bots ride their own road back and out. Walking stops working after about 10 km (an hour each way). Riding is new
   code and must be proven in stage 1. Shulker boxes (74 in stock) become worth adding beyond about 100 km one way.
 - Pickaxes: best available first, iron made as needed. Deepslate costs about one iron pickaxe per 125 m.
 - Waste rock is used for lining, and the rest is thrown away; dropped items vanish after five minutes.
+
+### Suppliers
+
+A new job type, `highway-supply`: fetch from the farm list, craft rails and powered rails, and fill the depot up to a target
+of a few loads per road. No trips along the road in the first version: a builder's ride back stays short for a long way
+(at 72 m/s, 40 km is about 10 minutes). Delivering to the road's end is the next step once rides take longer than that.
+
+- `MisaBot` works only while MidariBread is offline. When MidariBread comes online it stops at once, whatever it carries,
+  and its orders win as always. It takes only road material from the owner's farm list and hands in only that: its own
+  inventory, `kiste` and `behalte` stay as they are. MidariBread's guide says so in one line.
+- `EM_Trader` works outside its trade window (`TRADE_SCHEDULE`, today 18:00 for 60 minutes) and is back at the hall in time.
+  My reading: MidariBread being online does not stop it, unless MidariBread gives it an order.
+- Both are `GUEST_BOTS` and stay so: the keeper and the board still leave them alone, and this job is the one exception.
+  Both already play on the main server, so `bot19` plays the supplier in the sandbox stages.
 
 ### Stops
 
@@ -203,7 +223,8 @@ The road stops, the bot goes home if it can, and the owner gets a phone notifica
 - It cannot continue straight, three tries in a row at the same place.
 - A warden, or sculk shriekers near the road: never fight, retreat through the road and retry after 5 minutes, then stop.
 
-The one exception decided up front is the west stair, see "Open".
+The one exception decided up front is the west stair: the road replaces the block at `-49 1 0` and lines its cells there.
+The stair is two wide, so its other half (z -1) stays walkable.
 
 Deaths are ordinary: respawn, fetch the grave (`grave`), resume.
 
@@ -236,12 +257,13 @@ Each stage ends with a check, and the next starts only when it passes.
 4. **Main server, one worker.** Prerequisites: the combat bug fixed, the live border read, the game rule set. Move
    `mcbots-worker-2` with `mainServer = true`. Check: the owner rides the first road. Velocity restarts only if BotGate
    changes; ship when nobody plays.
-5. **Main server, all four.** Move `mcbots-worker-4`. Then it runs by itself.
-
-## Open
-
-The west road, on the owner's answer: my proposal is to replace the one stair block at `-49 1 0` and line the road there.
-The stair is two wide, so its other half (z -1) stays walkable. The road stays straight and at `y 0`.
+5. **Main server, all four.** Move `mcbots-worker-4`. Check: all four grow for a week within the guards.
+6. **Suppliers, main server.** `EM_Trader` first, then `MisaBot`. Tested beforehand with `bot19` in the sandbox. Check: the
+   depot fills, the trade window is kept, and `MisaBot` stops within seconds of MidariBread coming online.
+7. **Gold farm, last.** A bot back at the owner's Nether-roof gold farm at `167 234 603`, where `bot4` and `bot10` stood
+   until they were retired on 2026-10-12. Bots cannot cross dimensions today, so this waits for the Nether work in MisaBot
+   v2 phase 2. To check first: the owner remembers the farm as full, but the copy of 2026-10-31 shows only 27 gold nuggets
+   and 5 ingots in containers near it, and 224 ingots near -48, 176. Its chests may be somewhere the scan did not link to it.
 
 ## Left to the builder
 
