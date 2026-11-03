@@ -49,6 +49,8 @@ Non-goals: editing crews/plan/projects, the server panel (restart, whitelist), B
 
 Chest GUIs are 9 columns wide. `[x]` = item, lore in the lines below. Conditions decide which item sits in a
 slot (DeluxeMenus pattern), so the icon is the state.
+CommandPanels 4.2.4 decides that only when the panel opens (`PanelFactory`); `update-interval` refreshes the text of the item
+already shown (`InventoryPanelUpdater`), so a state change needs the panel opened again.
 
 ### 1. `/bots` — Übersicht (6 rows)
 

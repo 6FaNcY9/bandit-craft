@@ -121,6 +121,8 @@ Spec: `docs/specs/2026-11-02-ingame-bots.md` (its Findings hold the verified con
   working, problems, the first keeper quota under its target, day or night, sidebar switch, `Alle stopp`. Second row: one item
   per bot (bot1, bot2, bot3, bot19, bot20, bot21, MisaBot, EM_Trader). The icon is the state: head (working, name aqua; idle,
   name grey), barrier (an error in the last 5 minutes), red bed (night shelter), skeleton skull (dead), grey dye (offline).
+  CommandPanels picks a slot's item when the panel opens and refreshes only that item's text, so the lore is live and a new
+  icon needs the panel opened again.
   The lore shows role, job with progress, runtime and activity, last error, health, food, free slots, held tool, position
   (`update-interval: 20`). A click opens `botmenu.yml` (Komm, Folge, Wache, Gib, Status, Stopp, Holz 32, Stein 32,
   Eisen 16, Kohle 32, Zurück). Limit: `/botmenu` opened directly has no bot selected.
