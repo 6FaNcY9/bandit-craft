@@ -123,7 +123,14 @@ const VALIDATE = {
   chop: (a) => ({count: num(a.count ?? 1, 1, 4096, 'count')}),
   // `only` (optional): put just that kind into the chest, even what a normal
   // deposit keeps (coal, torches); used by the keeper.
+  // `own` (lagern): the bot's own chest from its prefs, with its own keep list.
   deposit: (a) => {
+    if (a.own) {
+      if (a.keep === undefined) return {own: true};
+      if (!a.keep || typeof a.keep !== 'object' || Array.isArray(a.keep)) throw new Error('keep must be an object like {stick: 64}');
+      for (const k of Object.keys(a.keep)) if (!/^[a-z_]{1,48}$/.test(k)) throw new Error(`keep: ${k} is not an item name`);
+      return {own: true, keep: Object.fromEntries(Object.entries(a.keep).map(([k, n]) => [k, num(n, 0, 4096, k)]))};
+    }
     if (a.only !== undefined && !/^[a-z_]{1,48}$/.test(a.only)) throw new Error('only must be an item name like torch, or logs');
     return {...xyz(a), ...(a.only ? {only: a.only} : {})};
   },
@@ -426,9 +433,8 @@ class BotRunner {
         command = this.builderOrder(command, player, name);
         if (command.unknown) { this.say(owner.HELP); this.demoLog?.outcome(id, 'unknown', owner.HELP); return; }
         if (command.help) { this.say(owner.HELP2); this.demoLog?.outcome(id, 'finished', owner.HELP2); return; }
-        if (command.chest || command.keep || command.args?.own || command.type === 'trade') throw new Error('noch nicht'); // Tasks 5-6
         const now = command.now;
-        if (now?.args?.own || now?.type === 'trade') throw new Error('noch nicht');
+        if (command.type === 'trade' || now?.type === 'trade') throw new Error('noch nicht'); // Task 6
         const job = command.type ? command : now;
         let wait = 0, queued = null;
         if (job) {
@@ -460,6 +466,17 @@ class BotRunner {
         } else if (command.verbose !== undefined) {
           this.prefs.verbose = command.verbose; savePrefs(this.prefsFile, this.name, {verbose: command.verbose});
           queued = command.verbose ? 'laut' : 'leise';
+        } else if (command.chest) {
+          const c = this.ownChest(bot, player, command.chest);
+          this.prefs.chest = c; savePrefs(this.prefsFile, this.name, {chest: c});
+          queued = `Kiste: ${c.x} ${c.y} ${c.z}`;
+        } else if (command.keep) {
+          const {item, count} = command.keep;
+          if (!bot.registry.itemsByName[item]) throw new Error(`kenne ${item} nicht`);
+          const keep = {...this.prefs.keep, [item]: count};
+          if (!count) delete keep[item];
+          this.prefs.keep = keep; savePrefs(this.prefsFile, this.name, {keep});
+          queued = count ? `behalte ${count} ${item}` : `behalte ${item} nicht mehr`;
         } else if (command.role) { owner.saveRole(this.rolesFile, this.name, command.role); this.role = command.role; }
         const s = command.status && this.snapshot();
         const statusLine = s && `Leben ${s.health}, Essen ${s.food}, ${s.job ? (this.current ? chatLabel(this.current) : s.job.label || '').slice(0, 24) + (s.job.total > 0 ? ` ${Math.round(100 * s.job.done / s.job.total)}%` : '') : 'frei'}, Liste ${this.queue.length}, Inventar ${Math.round(100 * (36 - (s.freeSlots ?? 36)) / 36)}%, Kiste ${this.prefs.chest ? 'ja' : 'nein'}`;
@@ -473,6 +490,22 @@ class BotRunner {
         try { if (id) this.demoLog?.outcome(id, 'refused', e.message); } catch (err) { this.log(this.name, `demonstration: ${err.message}`); }
       }
     });
+  }
+
+  // The block for `kiste`: the one the player looks at, or the one at x y z. Throws the German reason.
+  ownChest(bot, player, spot) {
+    const box = /^(chest|trapped_chest|barrel)$/;
+    if (spot === 'look') {
+      if (!player.entity) throw new Error('ich sehe dich nicht');
+      const b = bot.blockAtEntityCursor(player.entity);
+      if (!b || !box.test(b.name)) throw new Error('schau auf eine Kiste');
+      const p = b.position;
+      return {x: p.x, y: p.y, z: p.z};
+    }
+    const b = bot.blockAt(new (require('vec3').Vec3)(spot.x, spot.y, spot.z));
+    if (!b) throw new Error(`zu weit weg: ${spot.x} ${spot.y} ${spot.z}`);
+    if (!box.test(b.name)) throw new Error(`keine Kiste bei ${spot.x} ${spot.y} ${spot.z}`);
+    return {x: spot.x, y: spot.y, z: spot.z};
   }
 
   // Misa's words (misa.js): "ecke" notes the block the player stands on, "abbau" and "bau" become a clear or schematic
@@ -1779,8 +1812,8 @@ async function replant(r, pos, logName) {
 
 // Report a chest's contents, with its coordinates, to the shared picture (the keeper and the plan plan from the
 // observations of their own chest only).
-function noteStock(r, job, chest) {
-  const {x, y, z} = job.args;
+function noteStock(r, job, chest, pos = job.args) {
+  const {x, y, z} = pos;
   const items = {};
   for (const it of chest.containerItems()) items[it.name] = (items[it.name] || 0) + it.count;
   r.world?.noteStock(r.name, items, Number.isInteger(chest.inventoryStart) ? chest.inventoryStart - chest.containerItems().length : null, {x, y, z}); // the container's slots minus the stacks in it
@@ -1853,7 +1886,7 @@ function indexChest(r, block, partner, win) {
 }
 
 // Where a job may empty the inventory: a shift's own chest, else the supply chest.
-const chestOf = (r, job) => (job.type === 'shift' ? {x: job.args.x, y: job.args.y, z: job.args.z} : r.supplyChest);
+const chestOf = (r, job) => (job.type === 'shift' ? {x: job.args.x, y: job.args.y, z: job.args.z} : r.prefs?.chest || r.supplyChest);
 const edible = (bot, it) => bot.registry.foodsByName[it.name] && !AVOID_FOOD.has(it.name);
 const canHarvest = (bot, id) => {
   const tools = bot.registry.blocks[id]?.harvestTools;
@@ -2016,7 +2049,7 @@ async function tossJunk(r, job) {
   const keep = PILLAR_BLOCKS.find((n) => held.includes(n));
   let kept = false;
   for (const it of bot.inventory.items()) {
-    if (!JUNK.has(it.name) || jobWants(job, it.name)) continue;
+    if (!JUNK.has(it.name) || jobWants(job, it.name) || r.prefs?.keep?.[it.name]) continue;
     if (it.name === keep && !kept) { kept = true; continue; }
     await bot.tossStack(it).catch(() => {});
     guard(job);
@@ -2143,6 +2176,16 @@ async function upkeep(r, job, ids) {
     const need = ids.find((id) => !canHarvest(bot, id));
     if (need !== undefined) await replacePickaxe(r, job, need);
     await care(r, job);
+    if (job.type !== 'shift' && r.prefs?.chest) {
+      // Its own chest: nothing is thrown away, and the walk back keeps the job where it was.
+      if (bot.inventory.emptySlotCount() < 4) {
+        const spot = bot.entity.position.floored();
+        await JOBS.deposit(r, child(job, {type: 'deposit', args: {own: true}}));
+        await goNear(r, job, spot.x, spot.y, spot.z, 3, {doing: 'returning to the job area'}).catch((e) => { guard(job); r.emit('info', `no way back to the job area: ${e.message.slice(0, 80)}`); });
+        if (bot.inventory.emptySlotCount() < 4) throw new Error('Inventar voll mit behaltenen Sachen');
+      }
+      return;
+    }
     if (bot.inventory.emptySlotCount() < 4 && !jobWants(job, 'cobblestone')) await tossJunk(r, job);
     if (bot.inventory.emptySlotCount() < 2) {
       const chest = chestOf(r, job);
@@ -3240,9 +3283,12 @@ const JOBS = {
 
   async deposit(r, job) {
     const {bot} = r;
-    const {x, y, z} = job.args;
-    await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, job.args)} to deposit`});
-    job.t.doing = `depositing at ${place(r, job.args)}`;
+    const own = !!job.args.own;
+    if (own && !r.prefs?.chest) throw new Error('keine Kiste zugewiesen');
+    const target = own ? r.prefs.chest : job.args; // not written into job.args: the job may be shown or resumed
+    const {x, y, z} = target;
+    await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, target)} to deposit`});
+    job.t.doing = `depositing at ${place(r, target)}`;
     const Vec3 = require('vec3').Vec3;
     const block = bot.blockAt(new Vec3(x, y, z));
     if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${x} ${y} ${z} (found ${block?.name})`);
@@ -3251,10 +3297,11 @@ const JOBS = {
     // What a normal deposit files away; `only` (the keeper's coal and torches) puts just that kind into the chest.
     // `keep` ({name: n}): that many of a kind stay with the bot (the wheat farm's 64 seeds to replant from).
     const keepBack = (items) => {
-      const spare = {...TOOL_STOCK, ...job.args.keep};
+      const spare = {...TOOL_STOCK, ...r.prefs?.keep, ...job.args.keep};
       return items.map((it) => { const k = Math.min(spare[it.name] || 0, it.count); spare[it.name] = (spare[it.name] || 0) - k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
     };
-    const junk = () => keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name))));
+    // The own chest takes sticks, coal and the rest too (the keep list decides); armour stays on the bot.
+    const junk = () => keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || (own ? /_(helmet|chestplate|leggings|boots)$/ : KEEP_RE).test(it.name) || isFood(it.name))));
     const eligible = () => (only ? keepBack(bot.inventory.items().filter((it) => only(it.name))) : junk());
     let moved = 0;
     const byName = {};
@@ -3278,7 +3325,7 @@ const JOBS = {
     const fullError = () => new Error(`chest full or deposit failed after ${moved} items: ${job.lastFull}`);
     // Storage roles: at the base chest, junk goes to the storage-room chests (see storage.js). An `only` deposit
     // there too: a base chest full of junk must still take the coal (Codex R6-4).
-    const atBase = storage.sameXYZ(job.args, planConfig.BASE.chest);
+    const atBase = !own && storage.sameXYZ(job.args, planConfig.BASE.chest);
     const rooms = atBase
       ? planConfig.BASE.roomChests.filter((c) => bot.blockAt(new Vec3(c.x, c.y, c.z))?.name === 'chest') : [];
     // The storage hall (storage-layout.js): its chests that exist, else the old behaviour.
@@ -3287,9 +3334,37 @@ const JOBS = {
     let chest = await openChest(r, job, block);
     try {
       if (!rooms.length && !hall.length) {
-        if ((await fill(chest, eligible())).length) throw fullError();
-        if (moved) r.emit('deposit', `deposited ${depositList(byName)} at ${place(r, job.args)}`);
-        noteStock(r, job, chest);
+        let rest = await fill(chest, eligible());
+        if (rest.length && !own) throw fullError();
+        noteStock(r, job, chest, target);
+        // A double chest's other half is the same inventory, so every container near the own chest is tried, nearest first.
+        if (rest.length) {
+          chest.close();
+          chest = null;
+          const near = [];
+          for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) {
+            const c = {x: x + dx, y: y + dy, z: z + dz}, b = bot.blockAt(new Vec3(c.x, c.y, c.z));
+            if ((dx || dy || dz) && /^(chest|trapped_chest|barrel)$/.test(b?.name)) near.push({c, b, d: dx * dx + dy * dy + dz * dz});
+          }
+          for (const {c, b} of near.sort((p, q) => p.d - q.d)) {
+            if (!rest.length) break;
+            guard(job);
+            try {
+              await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: `walking to the next chest at ${at(c)}`});
+              chest = await openChest(r, job, b);
+              rest = await fill(chest, eligible());
+              noteStock(r, job, chest, c);
+            } catch (e) {
+              guard(job);
+              job.lastFull = e.message;
+            } finally {
+              chest?.close();
+              chest = null;
+            }
+          }
+        }
+        if (moved) r.emit('deposit', `deposited ${depositList(byName)} at ${place(r, target)}`);
+        if (rest.length) throw new Error('Kiste voll');
         return;
       }
       if (only) {
@@ -3881,4 +3956,4 @@ const JOBS = {
   },
 };
 
-module.exports = {wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

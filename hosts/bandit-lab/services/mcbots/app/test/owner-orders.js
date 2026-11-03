@@ -152,11 +152,41 @@
     runner.current = {id: 1, type: 'mine', args: {block: 'deepslate_diamond_ore', count: 4096}};
     bot.emit('message', msg('status', true), 'chat', uuid);
     assert.ok(whispers.at(-1).text.length <= 100); assert.match(whispers.at(-1).text, /^ok: Leben 20, Essen 18, hol 4096 deepslate_diamo 25%, Liste 0, Inventar 100%, Kiste nein$/);
-    // placeholders: nothing is queued and nothing unbounded starts
-    for (const s of ['kiste', 'behalte 64 stick', 'lagern', 'handel sticks', 'jetzt handel sticks']) {
+    // trade is still a placeholder (Task 6): nothing is queued and nothing unbounded starts
+    for (const s of ['handel sticks', 'jetzt handel sticks']) {
       bot.emit('message', msg(s, true), 'chat', uuid);
       assert.equal(whispers.at(-1).text, 'geht nicht: noch nicht'); assert.equal(runner.queue.length, 0);
     }
+    // own chest, keep list, lagern
+    const {loadPrefs} = require('../prefs');
+    const say = (s) => { bot.emit('message', msg(s, true), 'chat', uuid); return whispers.at(-1).text; };
+    bot.registry = {itemsByName: {stick: {}, coal: {}}};
+    const chestAt = {x: 1, y: 2, z: 3};
+    bot.blockAtEntityCursor = () => ({name: 'barrel', position: chestAt});
+    assert.equal(say('kiste'), 'ok: Kiste: 1 2 3'); assert.deepEqual(runner.prefs.chest, chestAt); assert.deepEqual(loadPrefs(runner.prefsFile, 'bot1').chest, chestAt);
+    bot.blockAtEntityCursor = () => ({name: 'stone', position: chestAt});
+    assert.equal(say('kiste'), 'geht nicht: schau auf eine Kiste');
+    bot.blockAtEntityCursor = () => null;
+    assert.equal(say('kiste'), 'geht nicht: schau auf eine Kiste');
+    const seen = bot.players.fancy8869.entity; bot.players.fancy8869.entity = null;
+    assert.equal(say('kiste'), 'geht nicht: ich sehe dich nicht'); bot.players.fancy8869.entity = seen;
+    bot.blockAt = () => null;
+    assert.equal(say('kiste 5 6 7'), 'geht nicht: zu weit weg: 5 6 7');
+    bot.blockAt = () => ({name: 'stone'});
+    assert.equal(say('kiste 5 6 7'), 'geht nicht: keine Kiste bei 5 6 7');
+    assert.deepEqual(runner.prefs.chest, chestAt, 'a refused order keeps the chest');
+    bot.blockAt = () => ({name: 'trapped_chest', position: {x: 5, y: 6, z: 7}});
+    assert.equal(say('kiste 5 6 7'), 'ok: Kiste: 5 6 7'); assert.deepEqual(loadPrefs(runner.prefsFile, 'bot1').chest, {x: 5, y: 6, z: 7});
+    assert.equal(say('behalte 64 stick'), 'ok: behalte 64 stick'); assert.deepEqual(loadPrefs(runner.prefsFile, 'bot1').keep, {stick: 64});
+    assert.equal(say('behalte 8 coal'), 'ok: behalte 8 coal'); assert.deepEqual(runner.prefs.keep, {stick: 64, coal: 8});
+    assert.equal(say('behalte 8 kohle'), 'geht nicht: kenne kohle nicht'); assert.deepEqual(runner.prefs.keep, {stick: 64, coal: 8});
+    assert.equal(say('behalte nichts stick'), 'ok: behalte stick nicht mehr'); assert.deepEqual(loadPrefs(runner.prefsFile, 'bot1').keep, {coal: 8});
+    runner.queue = []; runner.current = null;
+    bot.emit('message', msg('lagern', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1), ['deposit', {own: true}, {}]);
+    bot.emit('message', msg('jetzt lagern', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1).slice(0, 2), ['deposit', {own: true}]);
+    runner.queue = []; runner.current = null;
     // placement against open-ended and non-chat jobs
     const run = (j) => { runner.current = {status: 'running', args: {}, ...j}; };
     runner.queue = []; run({id: 90, type: 'follow'}); runner.chatJobs.add(90);
