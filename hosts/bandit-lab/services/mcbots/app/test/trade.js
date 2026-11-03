@@ -96,5 +96,89 @@ async function run(chestSticks, start = {}) {
   });
   await assert.rejects(trade({bot, supplyChest: {x: -271, y: 66, z: -214}, emit: () => {}}, {args: {}, t: {}}), /No path/);
   assert.deepStrictEqual([tries, pauses], [3, 60]);
+  // ---- chat trades with a stop condition: handel sticks [time|target] ----
+  // One fletcher paying `pay` emeralds for each stick; chests maps "x,y,z" to the sticks in it.
+  const rig = ({args = {}, inv = {}, chests = {}, pay = 1, uses = 100, job: more = {}, prefs, slots = 30, ensure, sleep, supply} = {}) => {
+    const stock = {...inv}, calls = [], pauses = [], tradeCalls = [], opened = [];
+    const fletcher = {...v(1, -28.5, 63, -110), uuid: 'f'};
+    const trades = [offer({inputItem1: {name: 'stick', count: 1}, realPrice: 1, outputItem: {name: 'emerald', count: pay}, maximumNbTradeUses: uses})];
+    const job = {args, t: {}, cancelled: false, ...more};
+    const bot = {
+      entity: {position: {x: -23, y: 63, z: -110}}, entities: {1: fletcher},
+      inventory: {items: () => Object.entries(stock).filter(([, n]) => n > 0).map(([name, count]) => ({name, count})), emptySlotCount: () => slots},
+      async openVillager(e) { opened.push(e.uuid); return {trades, close() {}}; },
+      async trade(win, index, times) { tradeCalls.push(times); stock.stick -= times; stock.emerald = (stock.emerald || 0) + times * pay; win.trades[index].nbTradeUses += times; },
+    };
+    const {trade} = makeTrade({
+      goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      sleep: sleep || (async () => { pauses.push(1); job.cancelled = true; }),
+      count: (b, name) => stock[name] || 0,
+      ensureItem: ensure || (async (r, j, name, want) => {
+        if (name !== 'emerald_block') throw new Error('unexpected ensureItem');
+        const n = want - (stock.emerald_block || 0); stock.emerald -= n * 9; stock.emerald_block = (stock.emerald_block || 0) + n;
+      }),
+      withdraw: async (r, j, item, n, from) => {
+        const key = `${from.x},${from.y},${from.z}`;
+        calls.push(`withdraw ${key}`);
+        if (calls.length > 30) job.cancelled = true; // a chest retried for ever fails the test instead of hanging it
+        if (!chests[key]) throw new Error('no stick in the chest');
+        stock.stick = (stock.stick || 0) + chests[key]; chests[key] = 0;
+      },
+      deposit: async (r, j, store, only) => {
+        calls.push(`deposit ${only || JSON.stringify(store)} ${store.own ? 'own' : store.x}`);
+        if (only) stock[only] = 0; else job.cancelled = true; // the loot walk ends the run
+      },
+    });
+    const r = {bot, emit: () => {}, supplyChest: supply, prefs};
+    return {run: () => trade(r, job), job, stock, calls, pauses, tradeCalls, opened};
+  };
+  const hallChest = '-22,63,-111';
+  // A target ends the job and stores the loose emeralds too; the count is on the job.
+  let k = rig({args: {item: 'stick', target: 3}, inv: {stick: 100}});
+  await k.run();
+  assert.deepStrictEqual([k.job.progress, k.job.t.done, k.job.t.total, k.job.t.open, k.job.emeralds], ['Smaragde: 3', 3, 3, false, 3]);
+  assert.deepStrictEqual(k.tradeCalls, [3], 'no overshoot: the 100 sticks would have paid 100 emeralds');
+  assert.deepStrictEqual([k.stock.stick, k.stock.emerald], [97, 0]);
+  assert.deepStrictEqual(k.calls, ['deposit emerald -25'], 'the 3 loose emeralds go to the chest at the end');
+  // An offer paying 2 per trade: 3 are needed, so 2 trades (4 emeralds) is the least that reaches it.
+  k = rig({args: {item: 'stick', target: 3}, inv: {stick: 100}, pay: 2});
+  await k.run(); assert.deepStrictEqual([k.tradeCalls, k.job.progress], [[2], 'Smaragde: 4']);
+  // A resumed job counts what it had: 2 done, one more. pump resets job.t, so the count lives on the job.
+  k = rig({args: {item: 'stick', target: 3}, inv: {stick: 100, emerald: 2}, job: {emeralds: 2}});
+  await k.run(); assert.deepStrictEqual([k.tradeCalls, k.job.progress, k.job.t.done], [[1], 'Smaragde: 3', 3]);
+  // The time limit stays through a resume: a deadline in the past ends the job at once, with a fresh job.t.
+  k = rig({args: {item: 'stick', minutes: 5}, inv: {stick: 100}, job: {tradeUntil: Date.now() - 1, emeralds: 4}});
+  await k.run(); assert.deepStrictEqual([k.opened, k.job.progress, k.job.t.open], [[], 'Smaragde: 4', false]);
+  // minutes: runs, then ends after the limit even with villagers sold out (the wait is where it is noticed)
+  k = rig({args: {item: 'stick', minutes: 0.001}, inv: {stick: 64}, uses: 3, sleep: () => new Promise((res) => setTimeout(res, 30)), ensure: async (r, j, name) => { if (name === 'stick') k.stock.stick = 64; }});
+  await k.run(); assert.ok(k.job.tradeUntil > 0); assert.deepStrictEqual([k.job.progress, k.stock.emerald], ['Smaragde: 3', 0]);
+  // Time up before any trade: the count is 0 and says so.
+  k = rig({args: {item: 'stick', minutes: 1}, job: {tradeUntil: 1}});
+  await k.run(); assert.strictEqual(k.job.progress, 'Smaragde: 0');
+  // The hall's trades without an item (hub or schedule) keep running until stopped; the count is German now.
+  k = rig({args: {}, inv: {stick: 100}});
+  await assert.rejects(k.run(), /stopped/); assert.deepStrictEqual([k.job.progress, k.job.t.open], ['Smaragde: 100', true]);
+  // No sticks anywhere and no logs: a chat trade stops at once (no 3 x 30 s of retries) and says what it got.
+  const noSticks = async () => { throw new Error('need 8 more planks and have no logs (chop first)'); };
+  k = rig({args: {item: 'stick', target: 50}, inv: {emerald: 4}, job: {emeralds: 4}, ensure: noSticks});
+  await assert.rejects(k.run(), /^Error: keine Sticks, Smaragde: 4$/); assert.deepStrictEqual(k.pauses, []);
+  // ... but ensureItem may fetch logs and craft: then it trades on.
+  let crafted = 0;
+  k = rig({args: {item: 'stick', target: 2}, ensure: async (r, j, name) => { if (name === 'stick') { crafted++; k.stock.stick = 64; } }});
+  await k.run(); assert.deepStrictEqual([crafted, k.job.progress], [1, 'Smaragde: 2']);
+  // A scheduled trade still waits for a refill.
+  k = rig({args: {}, ensure: noSticks});
+  await assert.rejects(k.run(), /stopped/); assert.strictEqual(k.job.t.doing, 'the stick chests are empty, waiting for a refill');
+  // sticksFirst: the own chest before the hall's; when it is empty it is passed over like the others.
+  const own = {x: 5, y: 6, z: 7};
+  k = rig({args: {item: 'stick', target: 1, sticksFirst: own, stores: [own]}, chests: {[hallChest]: 100}});
+  await k.run(); assert.deepStrictEqual(k.calls.slice(0, 2), ['withdraw 5,6,7', `withdraw ${hallChest}`]);
+  assert.strictEqual(k.calls.filter((c) => c === 'withdraw 5,6,7').length, 1, 'an empty own chest is not tried again');
+  k = rig({args: {item: 'stick', target: 1, sticksFirst: own, stores: [own]}, chests: {'5,6,7': 100, [hallChest]: 100}});
+  await k.run(); assert.deepStrictEqual(k.calls.filter((c) => c.startsWith('withdraw')), ['withdraw 5,6,7']);
+  // With an own chest, loot goes there (no supply chest needed) and the sticks stay.
+  k = rig({args: {item: 'stick', target: 5}, chests: {[hallChest]: 100}, slots: 3, prefs: {chest: own}});
+  await assert.rejects(k.run(), /stopped/);
+  assert.deepStrictEqual(k.calls.filter((c) => c.startsWith('deposit')), ['deposit {"own":true,"keep":{"stick":2304}} own']);
   console.log('trade ok');
 })();

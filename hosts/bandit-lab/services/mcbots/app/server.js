@@ -123,7 +123,7 @@ const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<scrip
 const CSP = csp(page), LEGACY_CSP = csp(legacy); // each page allows its own bodies only
 // Remote workers register themselves in `runners` (see hub.js), so the
 // dashboard, /api/state and /api/debug list them next to the lab's bots.
-const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, guests: cfg.guestBots, events, settings}) : null;
+const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, guests: cfg.guestBots, events, settings, tradeHalls: cfg.tradeHalls}) : null;
 const workerServer = hub ? createWorkerServer(hub) : null;
 
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
@@ -204,7 +204,7 @@ function applyPlaces() {
   supplyChest = s ? {x: s.x, y: s.y, z: s.z} : cfg.supplyChest;
   const w = places.zone('wheat')?.box;
   const wheatField = w ? {x1: w.x1, z1: w.z1, x2: w.x2, z2: w.z2} : null; // hungry bots get bread there (bots.js wheatFood)
-  for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField});
+  for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField, tradeHalls: cfg.tradeHalls});
   if (hub) { Object.assign(hub, {supplyChest, wheatField}); hub.broadcastPolicy(); }
   if (keeper) {
     keeper.chest = supplyChest;

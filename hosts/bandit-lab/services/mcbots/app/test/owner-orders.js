@@ -152,11 +152,30 @@
     runner.current = {id: 1, type: 'mine', args: {block: 'deepslate_diamond_ore', count: 4096}};
     bot.emit('message', msg('status', true), 'chat', uuid);
     assert.ok(whispers.at(-1).text.length <= 100); assert.match(whispers.at(-1).text, /^ok: Leben 20, Essen 18, hol 4096 deepslate_diamo 25%, Liste 0, Inventar 100%, Kiste nein$/);
-    // trade is still a placeholder (Task 6): nothing is queued and nothing unbounded starts
+    // handel sticks: the hall of this bot (or Misa's), refused without one or beyond the limits
+    runner.queue = []; runner.current = null;
+    const hallA = {hall: {x1: 0, y1: 60, z1: 0, x2: 9, y2: 70, z2: 5}, stores: [{x: 1, y: 61, z: 1}]};
+    const hallB = {hall: {x1: 20, y1: 60, z1: 0, x2: 29, y2: 70, z2: 5}, stores: [{x: 21, y: 61, z: 1}]};
     for (const s of ['handel sticks', 'jetzt handel sticks']) {
       bot.emit('message', msg(s, true), 'chat', uuid);
-      assert.equal(whispers.at(-1).text, 'geht nicht: noch nicht'); assert.equal(runner.queue.length, 0);
+      assert.equal(whispers.at(-1).text, 'geht nicht: keine Handelshalle'); assert.equal(runner.queue.length, 0);
     }
+    runner.tradeHalls = {misa: hallA};
+    bot.emit('message', msg('handel sticks 1h', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1).slice(0, 2), ['trade', {item: 'stick', minutes: 60, ...hallA}]);
+    runner.queue = []; runner.current = null; runner.tradeHalls = {misa: hallA, bot1: hallB};
+    bot.emit('message', msg('handel sticks 500', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1).slice(0, 2), ['trade', {item: 'stick', target: 500, ...hallB}], 'the bot\'s own hall wins over Misa\'s');
+    runner.queue = []; runner.current = null;
+    bot.emit('message', msg('jetzt handel sticks', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1).slice(0, 2), ['trade', {item: 'stick', ...hallB}]);
+    runner.queue = []; runner.current = null;
+    bot.emit('message', msg('handel sticks 5000', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, 'geht nicht: höchstens 4096 Smaragde'); assert.equal(runner.queue.length, 0);
+    bot.emit('message', msg('handel sticks 2000h', true), 'chat', uuid);
+    assert.equal(whispers.at(-1).text, 'geht nicht: höchstens 24h');
+    runner.tradeHalls = {misa: hallA};
+    runner.queue = []; runner.current = null;
     // own chest, keep list, lagern
     const {loadPrefs} = require('../prefs');
     const say = (s) => { bot.emit('message', msg(s, true), 'chat', uuid); return whispers.at(-1).text; };
@@ -181,6 +200,12 @@
     assert.equal(say('behalte 8 coal'), 'ok: behalte 8 coal'); assert.deepEqual(runner.prefs.keep, {stick: 64, coal: 8});
     assert.equal(say('behalte 8 kohle'), 'geht nicht: kenne kohle nicht'); assert.deepEqual(runner.prefs.keep, {stick: 64, coal: 8});
     assert.equal(say('behalte nichts stick'), 'ok: behalte stick nicht mehr'); assert.deepEqual(loadPrefs(runner.prefsFile, 'bot1').keep, {coal: 8});
+    runner.queue = []; runner.current = null;
+    bot.emit('message', msg('handel sticks 30m', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1).slice(0, 2), ['trade', {item: 'stick', minutes: 30, ...hallA, stores: [{x: 5, y: 6, z: 7}], sticksFirst: {x: 5, y: 6, z: 7}}]);
+    runner.queue = []; runner.current = null;
+    bot.emit('message', msg('jetzt handel sticks', true), 'chat', uuid);
+    assert.deepEqual(enqueued.at(-1)[1].sticksFirst, {x: 5, y: 6, z: 7});
     runner.queue = []; runner.current = null;
     bot.emit('message', msg('lagern', true), 'chat', uuid);
     assert.deepEqual(enqueued.at(-1), ['deposit', {own: true}, {}]);

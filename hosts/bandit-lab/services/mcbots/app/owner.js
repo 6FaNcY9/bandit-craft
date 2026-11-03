@@ -112,6 +112,9 @@ const REASONS = [
   [/is not visible and not on the map/, () => 'Spieler nicht zu finden'],
   [/^unknown block: (.+)/, (m) => `unbekannter Block: ${m[1]}`],
   [/^no torches available/, () => 'keine Fackeln'],
+  [/^inventory full: no room for the emeralds/, () => 'Inventar voll, kein Platz für Smaragde'],
+  [/^no room for the emeralds/, () => 'kein Platz für die Smaragde'],
+  [/^inventory full and no supply chest/, () => 'Inventar voll, keine Kiste'],
 ];
 function germanReason(text) {
   for (const [re, say] of REASONS) { const m = re.exec(text); if (m) return say(m); }

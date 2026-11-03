@@ -18,7 +18,7 @@
     ['no chests within 6 blocks of 1 2 3', 'keine Kiste in der Nähe'], ['no pickaxe for iron_ore and could not make or fetch one: x', 'keine Spitzhacke für iron_ore'],
     ['needs a tool that can harvest obsidian: diamond_pickaxe', 'kein Werkzeug für obsidian'], ['no free stone within 128 blocks (collected 1/4)', 'kein stone in Reichweite'],
     ['5 6 is inside a protected area', 'liegt im Schutzgebiet'], ['bob is not visible and not on the map (offline, or BlueMap unavailable)', 'Spieler nicht zu finden'],
-    ['unknown block: foo', 'unbekannter Block: foo'], ['no torches available', 'keine Fackeln'], ['kaputt', 'kaputt']]) assert.equal(germanReason(en), de, en);
+    ['inventory full: no room for the emeralds of a trade','Inventar voll, kein Platz für Smaragde'], ['no room for the emeralds: no path to 1 2 3','kein Platz für die Smaragde'], ['inventory full and no supply chest to empty it into','Inventar voll, keine Kiste'], ['unknown block: foo', 'unbekannter Block: foo'], ['no torches available', 'keine Fackeln'], ['kaputt', 'kaputt']]) assert.equal(germanReason(en), de, en);
   // FIFO sayer: in order, one per gap, 8 waiting at most
   const sent = [], fifo = makeSayer((t) => sent.push(t), {gapMs: 10, max: 5, queue: true});
   fifo('first'); for (let i = 1; i <= 10; i++) fifo(`l${i}xxxx`);
@@ -35,13 +35,13 @@
     if (noop) job.noop = true;
     if (fail) throw new Error('no path to bob');
   };
-  const mk = (chat, verbose) => {
+  const mk = (chat, verbose, type = 'fake', args = {}) => {
     const said = [];
     const r = new BotRunner('bot1', {log: () => {}, ownerUuids: [], onEvent: (b, k, t) => { if (k === 'say') said.push(t.slice(t.indexOf(': ') + 2)); }});
     r.bot = new EventEmitter(); r.online = true; r.answerTo = 'fancy8869'; r.progressEveryMs = 5; r.prefs.verbose = verbose;
     r.say = (t) => r.emit('say', `fancy8869: ${t}`); // unthrottled
     if (chat) r.chatJobs.add(r.jobSeq + 1);
-    const job = r.enqueue('fake', {});
+    const job = r.enqueue(type, args);
     return {r, said, job};
   };
   let t = mk(true, true); await sleep(200);
@@ -64,6 +64,15 @@
   assert.equal(t.said.at(-1), 'gestoppt: komm');
   t.r.chatJobs.add(51); t.r.resumeLater({id: 51, type: 'mine', args: {block: 'stone', count: 3}, interruptions: 3}, 'died');
   assert.equal(t.said.at(-1), 'Problem: hol 3 stein: zu oft unterbrochen');
+  // a trade job's lines carry its count (job.progress)
+  const realTrade = JOBS.trade;
+  JOBS.trade = async (r, job) => { job.progress = 'Smaragde: 123'; await sleep(30); };
+  t = mk(true, false, 'trade', {item: 'stick', minutes: 60}); await sleep(100);
+  assert.equal(t.said.at(-1), 'fertig: handel sticks 60min, 0 s, Smaragde: 123');
+  JOBS.trade = async (r, job) => { job.progress = 'Smaragde: 7'; r.cancel(); };
+  t = mk(true, false, 'trade', {item: 'stick', target: 9}); await sleep(100);
+  assert.equal(t.said.at(-1), 'gestoppt: handel sticks 9, Smaragde: 7');
+  JOBS.trade = realTrade;
   // through the real constructor sayer both lines arrive
   const heard = [];
   const real = new BotRunner('bot1', {log: () => {}, ownerUuids: [], onEvent: (b, k, x) => { if (k === 'say') heard.push(x); }});

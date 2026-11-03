@@ -201,6 +201,7 @@ class HubClient {
     this.runners = [];
     this.protectedAreas = []; // one array every runner holds; the hub's policy is spliced into it
     this.supplyChest = null;
+    this.tradeHalls = {};
     this.ws = null;
     this.stopped = false;
     this.backoff = BACKOFF_START;
@@ -263,7 +264,7 @@ class HubClient {
         if (!this.runners.length) {
           const opts = {protectedAreas: this.protectedAreas, supplyChest: this.supplyChest};
           this.runners = this.names.map((n) => this.makeRunner(n, opts));
-          for (const r of this.runners) r.wheatField = this.wheatField;
+          for (const r of this.runners) { r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; }
           for (const r of this.runners) r.getSettings = () => this.settings.get(r.name);
           for (const r of this.runners) r.start();
         }
@@ -323,7 +324,8 @@ class HubClient {
     this.protectedAreas.splice(0, this.protectedAreas.length, ...(Array.isArray(m.protectedAreas) ? m.protectedAreas : []));
     this.supplyChest = m.supplyChest || null;
     this.wheatField = fieldOf(m.wheatField);
-    for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; r.wheatField = this.wheatField; }
+    if (m.tradeHalls) this.tradeHalls = m.tradeHalls; // a policy frame without it keeps the halls
+    for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; }
   }
 
   // Same rules as the hub's (settings.clean): a bad value is refused, the old settings stay.

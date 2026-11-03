@@ -142,8 +142,14 @@ const VALIDATE = {
   // Sell sticks to the trading hall's villagers until stopped; the emeralds go to x,y,z (default: the supply chest).
   // Optional hall = {x1,y1,z1,x2,y2,z2} with its `stores` (emerald chests) and `sticks` (stick chests; default: every
   // other chest or barrel in the hall); without a hall it is the owner's (trade.js).
+  // Chat trades (handel sticks) add item, minutes, target and sticksFirst (the bot's own chest, tried before the hall's).
   trade: (a) => {
-    const one = a.x !== undefined ? xyz(a) : {};
+    const stop = {};
+    if (a.item !== undefined) { if (a.item !== 'stick') throw new Error('nur stick'); stop.item = 'stick'; }
+    if (a.minutes !== undefined) { if (!(a.minutes >= 1 && a.minutes <= 1440)) throw new Error('höchstens 24h'); stop.minutes = Number(a.minutes); }
+    if (a.target !== undefined) { if (!(a.target >= 1 && a.target <= 4096)) throw new Error('höchstens 4096 Smaragde'); stop.target = Math.floor(a.target); }
+    if (a.sticksFirst !== undefined) stop.sticksFirst = xyz(a.sticksFirst);
+    const one = {...(a.x !== undefined ? xyz(a) : {}), ...stop};
     if (a.hall === undefined) return one;
     const list = (v, max, what) => { if (!Array.isArray(v) || v.length > max) throw new Error(`${what} must be a list of at most ${max} x,y,z`); return v.map(xyz); };
     const p = xyz({x: a.hall?.x1, y: a.hall?.y1, z: a.hall?.z1}), q = xyz({x: a.hall?.x2, y: a.hall?.y2, z: a.hall?.z2});
@@ -434,8 +440,13 @@ class BotRunner {
         if (command.unknown) { this.say(owner.HELP); this.demoLog?.outcome(id, 'unknown', owner.HELP); return; }
         if (command.help) { this.say(owner.HELP2); this.demoLog?.outcome(id, 'finished', owner.HELP2); return; }
         const now = command.now;
-        if (command.type === 'trade' || now?.type === 'trade') throw new Error('noch nicht'); // Task 6
         const job = command.type ? command : now;
+        if (job?.type === 'trade') { // every bot trades in its own hall, else Misa's
+          const hall = this.tradeHalls?.[this.name.toLowerCase()] || this.tradeHalls?.misa;
+          if (!hall) throw new Error('keine Handelshalle');
+          const chest = this.prefs.chest;
+          job.args = {...job.args, ...hall, ...(chest ? {stores: [chest], sticksFirst: chest} : {})};
+        }
         let wait = 0, queued = null;
         if (job) {
           if (!this.online || this.dead) throw new Error(this.dead ? 'bot is dead' : 'bot is offline');
@@ -878,9 +889,10 @@ class BotRunner {
     // Pillars the job left in the open come down before the next one (its own, unchanged ones only; pillars.js).
     if (!job.cancelled && this.online) await unpillar(this, job).catch(() => {});
     const took = Math.round((Date.now() - job.startedAt) / 1000);
+    const count = job.type === 'trade' && job.progress ? `, ${job.progress}` : ''; // chat lines of a trade carry its emeralds
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
-    else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id, `${chatLabel(job)}, ${job.noop ? 'war schon erledigt' : took < 60 ? `${took} s` : `${Math.round(took / 60)} min`}`);
-    else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id, chatLabel(job));
+    else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id, `${chatLabel(job)}, ${job.noop ? 'war schon erledigt' : took < 60 ? `${took} s` : `${Math.round(took / 60)} min`}${count}`);
+    else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id, `${chatLabel(job)}${count}`);
     else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `failed: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
     this.current = null;
     this.digOnly = null;

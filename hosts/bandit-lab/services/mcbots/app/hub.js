@@ -244,7 +244,7 @@ const workerToken = (shared, label) => crypto.createHash('sha256').update(`mcbot
 class Hub {
   // workers: {label: [bot names]} - credentials of the lab's worker containers, each tied to the names it may
   // run. The shared token (laptops) may run every other remote name (R2-6).
-  constructor({world, runners, token, workers = {}, log = () => {}, protectedAreas = [], supplyChest = null, guests = [], wheatField = null, now = Date.now, events = null, settings = null}) {
+  constructor({world, runners, token, workers = {}, log = () => {}, protectedAreas = [], supplyChest = null, guests = [], wheatField = null, now = Date.now, events = null, settings = null, tradeHalls = {}}) {
     this.events = events; // EventLog of the dashboard (optional)
     this.settings = settings; // Settings store of the dashboard (optional): sent to a worker with its welcome
     if (typeof token !== 'string' || !/^[\w-]{32,128}$/.test(token)) throw new Error('worker token must be 32..128 characters of [A-Za-z0-9_-]');
@@ -261,6 +261,7 @@ class Hub {
     this.supplyChest = supplyChest;
     this.guests = new Set(guests); // another player's bots: a worker running only those gets no supply chest
     this.wheatField = wheatField; // the wheat zone's box: hungry worker bots get bread there (bots.js wheatFood)
+    this.tradeHalls = tradeHalls; // not secret: sent to workers so their bots can take a chat trade order
     this.now = now;
     this.conns = new Set();
     this.fails = [];
@@ -482,7 +483,7 @@ class Hub {
       r.snap = {...r.snap, online: false};
     }
     const settings = this.settings ? Object.fromEntries(names.map((n) => [n, this.settings.get(n)])) : {};
-    conn.ws.send(JSON.stringify({t: 'welcome', v: PROTOCOL, protectedAreas: this.protectedAreas, supplyChest: this.chestFor(conn), wheatField: this.wheatField, settings}));
+    conn.ws.send(JSON.stringify({t: 'welcome', v: PROTOCOL, protectedAreas: this.protectedAreas, supplyChest: this.chestFor(conn), wheatField: this.wheatField, tradeHalls: this.tradeHalls, settings}));
     this.log('hub', `worker ${host} connected: ${names.join(', ')}`);
     for (const n of names) this.events?.add(n, 'hub', `worker ${host} connected`);
   }
