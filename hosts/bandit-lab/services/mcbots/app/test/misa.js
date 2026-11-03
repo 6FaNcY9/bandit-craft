@@ -165,9 +165,20 @@
   snap.job = {type: 'mine'}; now = at('2026-10-26T18:30:00Z'); restarted.tick();
   assert.equal(sent.length, 3, 'her other orders are not stopped');
   snap.job = {type: 'trade'}; restarted.tick();
+  assert.equal(sent.length, 3, 'her order replaced the window: a later trade is hers');
+  // A trade running inside the window (here found after a hub restart) ends with it, once.
+  const ending = mk({misa: VALIDATE.trade(mh)});
+  now = at('2026-10-26T17:30:00Z'); ending.tick();
+  now = at('2026-10-26T18:30:00Z'); ending.tick();
   assert.deepEqual(sent.at(-1), ['stop']);
+  const stops = sent.length;
+  ending.tick();
+  assert.equal(sent.length, stops, 'a trade order given after the window is not stopped');
+  const fresh = mk({misa: VALIDATE.trade(mh)}); // a trade order by hand outside any window, as in a test
+  fresh.tick();
+  assert.equal(sent.length, stops, 'by hand: not stopped');
   const none = mk({}); snap.job = null; now = at('2026-10-26T17:30:00Z'); none.tick();
-  assert.equal(sent.length, 4, 'hall not configured: nothing runs');
+  assert.equal(sent.length, stops, 'hall not configured: nothing runs');
   console.log('misa ok');
 })();
 

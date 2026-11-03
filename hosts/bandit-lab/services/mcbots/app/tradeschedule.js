@@ -41,6 +41,7 @@ class TradeSchedule {
   constructor({runners, halls, entries, log = () => {}, now = Date.now}) {
     Object.assign(this, {runners, halls, entries, log, now});
     this.last = new Map(); // bot -> when its trade job was last given
+    this.mine = new Set(); // bots trading inside their window: only those are stopped after it, an order given outside it stays
   }
 
   // Called every few seconds: start the trade job of an idle bot inside its window, stop it outside.
@@ -51,12 +52,14 @@ class TradeSchedule {
       if (!args || !r) continue; // an unconfigured hall: nothing runs
       const s = r.snapshot();
       if (inWindow(e, t)) {
+        if (s.job?.type === 'trade') this.mine.add(e.bot); // also after a hub restart inside the window
         if (s.online && !s.dead && !s.job && !s.queue.length && t - (this.last.get(e.bot) ?? -Infinity) >= RETRY_MS) {
           this.last.set(e.bot, t);
+          this.mine.add(e.bot);
           r.enqueue('trade', args);
           this.log('trade', `${e.bot}: ${e.hall} hall, trading`);
         }
-      } else if (s.job?.type === 'trade' || s.queue.some((q) => /^trade /.test(q))) {
+      } else if (this.mine.delete(e.bot) && (s.job?.type === 'trade' || s.queue.some((q) => /^trade /.test(q)))) {
         r.enqueue('stop');
         this.log('trade', `${e.bot}: window over, stopped`);
       }
