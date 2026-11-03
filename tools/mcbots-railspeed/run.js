@@ -2,7 +2,7 @@
 'use strict';
 // Measures the highway surface on the SANDBOX server, over the dashboard's console, which can never reach the real one.
 // Usage (laptop, tailnet):
-//   node run.js sweep [--speed n --spacing n]   rail at each setting, results in ~/.local/state/mcbots/railspeed.jsonl
+//   node run.js sweep [--speed a,b --spacing c,d]   rail at each setting, results in ~/.local/state/mcbots/railspeed.jsonl
 //   node run.js rig rail <speed> <spacing>      5 km ride lane at z 40 from x 300, rule set to <speed>
 //   node run.js rig ice2 | rig ice1             5 km blue ice lane at z 50 | z 60
 //   node run.js track <player> [seconds]        a player's speed, results in railspeed-track.jsonl
@@ -18,6 +18,7 @@ const RIDE_LANES = {rail: {x1: 300, x2: 5300, y: 200, z: 40}, ice2: {x1: 300, x2
 // What the console answers when a command did nothing. A lane with a gap would read as a derail at that speed.
 const REFUSED = /not loaded|Incorrect argument|Unknown|Too many|Expected|Invalid|Can't/i;
 const isForce = (c) => c.startsWith('forceload');
+const free = (lane) => railLane(lane).filter(isForce).map((c) => c.replace('forceload add', 'forceload remove'));
 
 async function send(call, commands) {
   const replies = [];
@@ -95,7 +96,6 @@ async function rig({call, sleep, kind, speed, spacing}) {
   const lane = RIDE_LANES[kind];
   if (!lane) throw new Error(`rig kind ${kind}: only rail, ice2 or ice1`);
   const {x2, y, z} = lane;
-  const free = railLane(lane).filter(isForce).map((c) => c.replace('forceload add', 'forceload remove'));
   try {
     if (kind === 'rail') {
       await send(call, [setSpeed(speed)]);
@@ -107,7 +107,7 @@ async function rig({call, sleep, kind, speed, spacing}) {
     const [reply] = await send(call, [check]);
     if (!/Test passed/.test(reply)) throw new Error(`far end did not come out: ${check}: ${reply}`);
   } finally {
-    await send(call, free);
+    await send(call, free(lane));
   }
 }
 
@@ -133,11 +133,11 @@ async function main([verb, ...args]) {
   const sleep = (ms) => new Promise((res, rej) => { if (interrupted) return rej(new Error('interrupted')); stop = rej; setTimeout(res, ms); });
   const now = () => Date.now();
   if (verb === 'sweep') {
-    const flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : Number(args[i + 1]); };
+    const flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1].split(',').map(Number); };
     const {file, write} = appender('railspeed.jsonl');
     const rows = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
     const [speed, spacing] = [flag('--speed'), flag('--spacing')];
-    await sweep({call, out: write, now, sleep, done: new Set(rows.map((r) => `${r.speed}/${r.spacing}`)), speeds: speed ? [speed] : SPEEDS, spacings: spacing ? [spacing] : SPACINGS});
+    await sweep({call, out: write, now, sleep, done: new Set(rows.map((r) => `${r.speed}/${r.spacing}`)), speeds: speed || SPEEDS, spacings: spacing || SPACINGS});
   } else if (verb === 'rig') {
     await rig({call, sleep, kind: args[0], speed: Number(args[1]), spacing: Number(args[2])});
     console.log(`lane ${args[0]} ready`);
@@ -152,4 +152,4 @@ async function main([verb, ...args]) {
 
 if (require.main === module) main(process.argv.slice(2)).catch((e) => { console.error(e.message); process.exitCode = 1; });
 
-module.exports = {sweep, track, rig};
+module.exports = {sweep, track, rig, send, lay, free, isForce, consoleCall};

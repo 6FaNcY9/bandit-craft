@@ -25,8 +25,9 @@ function forced(verb, {x1, x2, z}) {
 
 const railLane = (lane) => {
   const {x1, x2, y, z} = row(lane);
-  // The end wall: a cart flying on would land outside the forced chunks, where no kill can reach it.
-  return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z} stone`, `fill ${x1} ${y} ${z} ${x2} ${y} ${z} rail[shape=east_west]`, `fill ${x2 + 1} ${y} ${z} ${x2 + 1} ${y + 1} ${z} stone`];
+  // A wall at each end: a cart bounces off a wall and rolls back at full speed, and outside the forced chunks no kill can reach it.
+  const wall = (x) => `fill ${x} ${y} ${z} ${x} ${y + 1} ${z} stone`;
+  return [...forced('add', lane), `fill ${x1} ${y - 1} ${z} ${x2} ${y - 1} ${z} stone`, `fill ${x1} ${y} ${z} ${x2} ${y} ${z} rail[shape=east_west]`, wall(x2 + 1), wall(x1 - 1)];
 };
 
 function powerEvery({x1, x2, y, z}, spacing) {
@@ -56,7 +57,7 @@ function clearLane(lane, tag = 'rs') {
   const {x1, x2, y, z} = row(lane);
   const out = [`kill @e[tag=${tag}]`];
   const step = Math.floor(MAX_FILL / (3 * 5)); // y-1 to y+1, z-2 to z+2
-  for (let x = x1; x <= x2 + 1; x += step) out.push(`fill ${x} ${y - 1} ${z - 2} ${Math.min(x2 + 1, x + step - 1)} ${y + 1} ${z + 2} air`);
+  for (let x = x1 - 1; x <= x2 + 1; x += step) out.push(`fill ${x} ${y - 1} ${z - 2} ${Math.min(x2 + 1, x + step - 1)} ${y + 1} ${z + 2} air`);
   return [...out, ...forced('remove', lane)];
 }
 
@@ -84,7 +85,8 @@ function summarize(samples, lane) {
   for (const s of samples) {
     if (!s) { lost = true; break; }
     const onLane = Math.abs(s.y - lane.y) <= 1.5 && Math.abs(s.z - (lane.z + 0.5)) <= 1;
-    if (s.x >= lane.x2 - 1) { // it stands at the end wall by now, so this sample is no speed
+    // At the end wall by now, or already bounced off it between two samples: either way this sample is no speed.
+    if (s.x >= lane.x2 - 1 || (Number.isFinite(lane.x2) && seen.length && s.x < seen.at(-1).x - 1)) {
       reachedEnd = true;
       break;
     }

@@ -28,6 +28,8 @@ for (let i = 1; i < spans.length; i++) assert.equal(spans[i][2], spans[i - 1][4]
 
 // Each lane ends in a wall: a cart flying on would land out of the forced chunks, where no kill can reach it
 assert.ok(railLane(lane).includes('fill 2301 200 10 2301 201 10 stone'));
+// and at the start too: a cart bounces off the end wall, rolls back at full speed and would leave the forced chunks there
+assert.ok(railLane(lane).includes('fill 299 200 10 299 201 10 stone'));
 assert.ok(iceLane({x1: 300, x2: 310, y: 200, z: 50}, 2).includes('fill 311 200 48 311 201 52 stone_bricks'));
 assert.ok(iceLane({x1: 300, x2: 310, y: 200, z: 60}, 1).includes('fill 311 200 58 311 201 62 stone_bricks'));
 
@@ -57,6 +59,7 @@ assert.ok(cleared.includes('forceload remove 300 10 2300 10'));
 assert.ok(cleared.findIndex((c) => c.startsWith('forceload remove')) > cleared.findIndex((c) => c.startsWith('fill')), 'fill first: it needs loaded chunks');
 
 assert.ok(cleared.some((c) => c.startsWith('fill ') && Number(c.split(' ')[4]) === 2301), 'the end wall goes too');
+assert.ok(cleared.some((c) => c.startsWith('fill 299 ')), 'and the start wall');
 const longClear = clearLane({x1: 300, x2: 5300, y: 200, z: 40}).filter((c) => c.startsWith('fill')).map((c) => c.split(' ').map(Number));
 assert.ok(longClear.length > 1 && longClear.every((f) => (f[4] - f[1] + 1) * (f[5] - f[2] + 1) * (f[6] - f[3] + 1) <= 32768), 'fill takes at most 32768 blocks');
 
@@ -110,6 +113,20 @@ assert.equal(summarize([...run(40, 60), null], lane).lost, false);
 const stopped = [...run(40, 3), {tick: 2040, wall: 102000, x: 2300, y: 200, z: 10.5}];
 assert.equal(summarize(stopped, lane).sustained, 40);
 assert.equal(summarize(stopped, lane).reachedEnd, true);
+
+// A fast cart bounces off the end wall between two samples and rolls back: that is the end of the lane, not a stop
+const bounced = [...run(100, 15), {tick: 300, wall: 15000, x: 1500, y: 200, z: 10.5}, {tick: 320, wall: 16000, x: 1400, y: 200, z: 10.5}];
+assert.equal(summarize(bounced, lane).reachedEnd, true);
+assert.equal(summarize(bounced, lane).sustained, 100);
+assert.equal(summarize(bounced, lane).top, 100);
+
+// A cart that only stands still has not reached anything
+const halted = [...run(40, 10), {tick: 200, wall: 10000, x: 660, y: 200, z: 10.5}, {tick: 220, wall: 11000, x: 660, y: 200, z: 10.5}];
+assert.equal(summarize(halted, lane).reachedEnd, false);
+
+// Without a lane end a rider may turn around as they like: that ends nothing
+const turned = [...run(40, 5), {tick: 100, wall: 5000, x: 400, y: 200, z: 10.5}];
+assert.equal(summarize(turned, {x2: Infinity, y: 200, z: 10}).reachedEnd, false);
 
 // Nothing to measure
 assert.equal(summarize([], lane).lost, true);
