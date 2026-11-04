@@ -125,4 +125,16 @@ function makeFluids({goNear, guard, sleep, plan, withdraw, craft, at}) {
   return {fluids, emptyBucket, fillAt};
 }
 
-module.exports = {missing, aim, refills, fillable, isSource, makeFluids, BUCKET};
+// Blocks to swim straight up to air from a bot with its head under water, or 0 when that is no way out.
+function waterToAir(nameAt, max = 24) {
+  const wet = /^(water|bubble_column|seagrass|tall_seagrass|kelp|kelp_plant)$/;
+  if (!wet.test(nameAt(0)) || !wet.test(nameAt(1))) return 0;
+  for (let dy = 2; dy <= max; dy++) {
+    const n = nameAt(dy);
+    if (/air$/.test(n)) return dy;
+    if (!wet.test(n)) return 0;
+  }
+  return 0;
+}
+
+module.exports = {waterToAir, missing, aim, refills, fillable, isSource, makeFluids, BUCKET};

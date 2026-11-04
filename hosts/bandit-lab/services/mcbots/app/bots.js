@@ -1219,7 +1219,25 @@ function groundUnder(bot, x, y, z) {
   return y;
 }
 
+// Sunk in a hole under a lake the walks only try to dig up, which water forbids: bot2 and bot3 sat at -201 56 -133 for hours,
+// every farm "unsafe: water next to it", with nothing but water over them (sandbox 2026-11-04).
+async function swimUp(r, job, y) {
+  const {bot} = r, wet = () => {
+    const p = bot.entity.position.floored();
+    return fluidsJob.waterToAir((dy) => bot.blockAt(p.offset(0, dy, 0))?.name ?? 'stone');
+  };
+  if (y <= bot.entity.position.y || !wet()) return;
+  job.t.doing = `swimming up from ${at(bot.entity.position.floored())}`;
+  bot.setControlState('jump', true);
+  try {
+    for (let i = 0; i < 60 && wet(); i++) { await sleep(250); guard(job); }
+  } finally {
+    bot.setControlState('jump', false);
+  }
+}
+
 async function goNear(r, job, x, y, z, dist, opts = {}) {
+  if (r.bot?.entity && job.t) await swimUp(r, job, y);
   // A container: walk to the ground under it. Under a chest up in the air only that cell and the ones beside it
   // will do: 3 around the ground let bot1 stand a level lower next to the obsidian under -356 72 -191, 5.6 from the
   // chest where the server opens one 5.5 away, and "the container did not open within 10 s" (main server 2026-10-18).

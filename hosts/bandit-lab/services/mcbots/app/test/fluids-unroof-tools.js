@@ -2,6 +2,12 @@
 (async () => { // fluids: the sources a schematic leaves out, poured from buckets (the iron farm's 140, 2026-10-15)
   const assert = require('node:assert/strict');
   const F = require('../fluids');
+  const up = (names) => F.waterToAir((dy) => names[dy] ?? 'stone');
+  assert.strictEqual(up(['water', 'water', 'water', 'air']), 3, 'water over the head, air above: swim 3 up');
+  assert.strictEqual(up(['water', 'air']), 0, 'only the feet wet: it can walk');
+  assert.strictEqual(up(['air', 'water', 'air']), 0, 'not in the water');
+  assert.strictEqual(up(['water', 'water', 'stone']), 0, 'a roof over the water: swimming up ends nowhere');
+  assert.strictEqual(up(Array(40).fill('water')), 0, 'too deep to tell');
   const {Vec3} = require('vec3');
   const {Cancelled} = require('../bots');
   const world = () => {
