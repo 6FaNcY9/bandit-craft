@@ -838,6 +838,15 @@ module.exports = (async () => {
     assert.ok(/rail$/.test(w.name(cell(road, 302))));
     assert.ok(w.log.events.some(([kind, text]) => kind === 'info' && /cannot continue: no rail at 301 0 0/.test(text)), 'and the log says what it was');
   }
+  { // a seal that failed for a moment (flowing water, east 831 m) is tried again too
+    const w = job(roadTo(301), {}, {at: 301, args: {length: 302}});
+    const dig = w.deps.digAt;
+    let refused = 1;
+    const m = makeRoad({...w.deps, digAt: async (...a) => { if (refused-- > 0) throw new Error('unsafe: water next to it'); return dig(...a); }, restock: async () => 'ok', buildOrigin: async () => {}, ride: {takeCart: async () => true, rideOn: async () => {}, ride: async () => {}}});
+    await m.highway(w.r, w.job);
+    assert.deepStrictEqual(alerts(w), []);
+    assert.ok(/rail$/.test(w.name(cell(road, 301))));
+  }
   { // a road with an origin of its own brings its load and its start: no farm, no chamber
     let fetched = 0, dug = 0;
     const w = job({'0,0,0': 'air'}, {}, {at: 0});

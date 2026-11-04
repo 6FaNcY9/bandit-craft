@@ -381,7 +381,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         if (made?.out === 'unloaded') { await sleep(1000); continue; }
         if (made?.out) return home();
         // Built again from what stands: a place or a dig that failed for a moment must not end a road, and the log says what it was.
-        if (/^cannot continue/.test(made?.stop) && ++cellTries < TRIES) {
+        if (/^(cannot continue|unsafe)/.test(made?.stop) && ++cellTries < TRIES) {
           r.emit('info', `highway: ${made.stop}, trying that cell again`);
           await sleep(2000);
           continue;
