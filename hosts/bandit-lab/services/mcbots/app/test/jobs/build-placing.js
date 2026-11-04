@@ -41,6 +41,12 @@ module.exports = async () => {
       assert.deepStrictEqual(B.bycatch(inv, new Set(['cobblestone']), NAT), ['andesite', 'diorite', 'dirt']);
       assert.deepStrictEqual(B.bycatch([{name: 'dirt', count: 64}], new Set(['cobblestone']), NAT), [], 'one stack of dirt stays');
       assert.deepStrictEqual(B.bycatch(inv, new Set(['andesite', 'dirt']), NAT), ['diorite'], 'what the build uses stays');
+      const s = (name, count) => ({name, count});
+      const rock = /^(stone|dirt|andesite|cobblestone)$/;
+      const names = (list) => list.map((i) => `${i.name} ${i.count}`);
+      assert.deepStrictEqual(names(B.surplusRock([s('andesite', 64), s('torch', 64), s('andesite', 3)], new Set(), rock)), ['andesite 64', 'andesite 3'], 'rock the build does not use goes, the torches stay');
+      assert.deepStrictEqual(names(B.surplusRock([s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 10)], new Set(['cobblestone']), rock)), ['cobblestone 64', 'cobblestone 10'], 'four stacks of what it uses stay, more than a restock takes');
+      assert.deepStrictEqual(names(B.surplusRock([s('dirt', 64), s('dirt', 20)], new Set(), rock)), ['dirt 20'], 'one stack of dirt stays to climb');
     }
     assert.deepStrictEqual(B.finishOf(false, ['1,2,3']), {noop: false}, 'some work done, a cell left: done, the cell reported');
     assert.match(B.finishOf(true, ['1,68,3', '2,68,3']).error, /no way to any of the 2 cells to clear: 1,68,3 2,68,3/, 'nothing reached: a failure (2026-10-20)');

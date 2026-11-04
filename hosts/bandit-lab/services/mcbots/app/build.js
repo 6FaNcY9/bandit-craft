@@ -361,6 +361,20 @@ function bycatch(items, uses, natural) {
   if ((n[SCAFFOLD] || 0) <= SCAFFOLD_KEEP) delete n[SCAFFOLD];
   return Object.keys(n);
 }
+// What a digging bot throws away when its slots run out, stack by stack: rock it walked over, beyond what a restock would
+// hold of it. Three bots with up to 768 cobblestone could take no pickaxe and craft nothing, and the clearing stood (sandbox 2026-11-04).
+const USED_KEEP = 256;
+const DUG = /^(cobblestone|cobbled_deepslate|flint)$/;
+function surplusRock(items, uses, natural) {
+  const kept = {}, out = [];
+  for (const it of items) {
+    if (!natural.test(it.name) && !DUG.test(it.name)) continue;
+    const keep = it.name === SCAFFOLD ? SCAFFOLD_KEEP : uses.has(it.name) ? USED_KEEP : 0;
+    if ((kept[it.name] || 0) + it.count <= keep) kept[it.name] = (kept[it.name] || 0) + it.count;
+    else out.push(it);
+  }
+  return out;
+}
 // A support whose drop would land in a hopper is glass, which drops nothing: dirt and rails fell into the sorter's
 // hoppers and went round it into 30 of its containers (sandbox 2026-10-13).
 const GLASS = 'glass';
@@ -997,6 +1011,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           }
         }
         if (clear) {
+          if (freeSlots() < 2) for (const it of surplusRock(bot.inventory.items(), uses, natural)) { await bot.tossStack(it).catch(() => {}); guard(job); }
           const k = ckey(clear);
           if (r.world && !(await r.world.claim(r.name, k))) { skip.set(clear.k, now + 5000); continue; }
           try {
@@ -1376,5 +1391,5 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
   };
 }
 
-module.exports = {finishOf, stacksPerKind, bycatch, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
+module.exports = {finishOf, stacksPerKind, bycatch, surplusRock, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
   makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList, REPLACEABLE, CONTAINER};
