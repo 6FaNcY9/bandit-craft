@@ -145,6 +145,13 @@ module.exports = async () => {
     // graveAfterDeath: own overworld death near the base, outside protected areas, once
     const dead = {pos: new Vec3(100.7, 64.2, -50.5), dim: 'minecraft:overworld', chest: {x: 0, y: 64, z: 0}, areas: [[-80, -144, 80, 80]], jobType: 'mine', queued: []};
     assert.deepStrictEqual(G.graveAfterDeath(dead), {x: 100, y: 64, z: -51});
+    {
+      const {graveAfterDeath: g} = require('../../graves');
+      const at = (x) => ({pos: {x, y: 0, z: 0}, dim: 'overworld', chest: {x: 0, y: 66, z: 0}, areas: [], jobType: 'highway', queued: []});
+      assert.strictEqual(g(at(1139)), null, 'a road bot deep out rides back for a new load: the grave lies in rock over the road');
+      assert.deepStrictEqual(g(at(300)), {x: 300, y: 0, z: 0}, 'near the farms it fetches it');
+      assert.deepStrictEqual(g({...at(1139), jobType: 'mine'}), {x: 1139, y: 0, z: 0}, 'other jobs as before');
+    }
     for (const [why, o] of [['no chest', {chest: null}], ['nether', {dim: 'the_nether'}], ['no position', {pos: null}], ['protected', {pos: new Vec3(0, 64, 0)}],
       ['too far', {pos: new Vec3(1600, 64, 0)}], ['void', {pos: new Vec3(100, -70, 0)}], ['died on the way to a grave', {jobType: 'grave'}],
       ['already queued', {queued: [{type: 'grave', args: {x: 100, y: 64, z: -51}}]}]]) assert.strictEqual(G.graveAfterDeath({...dead, ...o}), null, why);

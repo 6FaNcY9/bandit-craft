@@ -623,9 +623,14 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         const fell = fellOff(road, bot.entity.position);
         if (fell !== null) { // not a farm walk from here: that one digs its way up through whatever lies above (a lake at 880 m, sandbox)
           const {x, y, z} = bot.entity.position.floored(), {head: to} = findHead(blockAt, road, fell), w = cell(road, to, railHeight(to));
-          await goNear(r, job, w.x, w.y, w.z, 0, {doing: `back to the road at ${to} m`}).catch((e) => {
+          await goNear(r, job, w.x, w.y, w.z, 0, {doing: `back to the road at ${to} m`}).catch(async (e) => {
             guard(job);
-            throw new Error(`off the road at ${x} ${y} ${z}: ${e.message}`);
+            r.emit('info', `highway: off the road at ${x} ${y} ${z}, walking back to its start: ${e.message.slice(0, 80)}`);
+            const land = cell(road, FIRST_RAIL - 1);
+            await walkFar(r, job, land.x, land.y, land.z, 0, {doing: 'walking back to the start of the road'}).catch((e2) => {
+              guard(job);
+              throw new Error(`off the road at ${x} ${y} ${z}: ${e2.message}`);
+            });
           });
           continue;
         }

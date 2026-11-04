@@ -54,9 +54,12 @@ function graveCandidates(entities, {x, y, z}) {
 // Where to look for the grave after a death, or null when the bot should not go: not its own overworld
 // death position, too far from the base chest, in a protected area, a grave job already queued for it, or
 // the death happened on the way to a grave (a deadly spot would otherwise be visited again and again).
+const ROAD_GRAVE_FAR = 512;
 function graveAfterDeath({pos, dim, chest, areas, jobType, queued}) {
   if (!pos || !chest || jobType === 'grave' || normDim(dim) !== 'overworld') return null;
   const [x, y, z] = [pos.x, pos.y, pos.z].map(Math.floor);
+  // bot2 walked 1139 m over land to a grave at Y 0 it could not reach, then stood above the road and the job failed (sandbox 2026-11-04).
+  if (jobType === 'highway' && Math.hypot(x - chest.x, z - chest.z) > ROAD_GRAVE_FAR) return null;
   if (![x, y, z].every(Number.isFinite) || y < -64 || y > 320 || insideAreas(areas, x, z)) return null;
   if (Math.hypot(x - chest.x, z - chest.z) > FAR || queued.some((j) => j.type === 'grave' && j.args.x === x && j.args.y === y && j.args.z === z)) return null;
   return {x, y, z};
