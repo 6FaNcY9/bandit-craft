@@ -97,6 +97,23 @@ const assert = require('node:assert');
     const welcome = await until(() => a.msgs.find((m) => m.t === 'welcome'), 'welcome');
     assert.deepStrictEqual([welcome.protectedAreas, welcome.supplyChest], [[[1, 2, 3, 4]], {x: 1, y: 2, z: 3}]);
     assert.deepStrictEqual(welcome.tradeHalls, HALLS);
+    // Zones reach the workers: only the hub had them, so a worker's bots indexed no storage chest and iron stayed unknown (main server 2026-11-04).
+    const HALL = {name: 'Hall', kind: 'storage', dim: 'overworld', x: 1, y: 61, z: 1, box: {x1: 0, y1: 61, z1: 0, x2: 2, y2: 61, z2: 2}};
+    assert.deepStrictEqual(welcome.places, []);
+    hub.places = [HALL];
+    hub.broadcastPolicy();
+    const policy = await until(() => a.msgs.find((m) => m.t === 'policy' && m.places?.length), 'policy with places');
+    assert.deepStrictEqual(policy.places, [HALL]);
+    hub.places = [];
+    const {inZone} = require('../places');
+    const zoned = new HubClient({url: 'ws://127.0.0.1:1', token: 't', names: ['botz'], hostLabel: 'z', log: () => {}, makeRunner: () => ({})});
+    assert.strictEqual(inZone('storage', 1, 61, 1), false);
+    zoned.applyPolicy({places: [HALL]});
+    assert.strictEqual(inZone('storage', 1, 61, 1), true);
+    zoned.applyPolicy({}); // a frame without places keeps them
+    assert.strictEqual(inZone('storage', 1, 61, 1), true);
+    zoned.applyPolicy({places: []});
+    assert.strictEqual(inZone('storage', 1, 61, 1), false);
     // a worker running only another player's bots gets no supply chest
     hub.guests = new Set(['bot22']);
     assert.strictEqual(hub.chestFor({bots: new Set(['bot22'])}), null);
