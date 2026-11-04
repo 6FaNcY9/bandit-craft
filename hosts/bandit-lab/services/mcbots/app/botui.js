@@ -52,6 +52,7 @@ class BotUi {
         wait = this.retryMs;
         if (r.boot !== this.boot) { // first contact skips the backlog; after a plugin restart ids start over
           this.pushed = this.boot === null;
+          if (this.boot !== null) for (const st of this.states.values()) st.open = false; // the plugin lost its tracking and will not say `closed`
           this.since = this.boot === null ? r.last : 0;
           this.boot = r.boot;
           continue;
@@ -111,11 +112,12 @@ class BotUi {
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, mapState: st.mapState});
   }
 
-  async post(viewer, st, json) {
-    const r = await this.call('/show', {player: viewer, dialog: json});
-    if (r.ok) { st.open = true; st.lastJson = json; return; }
+  // refresh: the plugin itself refuses (feedback "closed") when the player closed the dialog while this was on the wire.
+  async post(viewer, st, json, refresh = false) {
+    const r = await this.call('/show', {player: viewer, dialog: json, ...(refresh ? {refresh: true} : {})});
+    if (r.ok) { st.lastJson = json; return; }
     st.open = false;
-    this.log(`botui ${viewer}: ${r.feedback}`);
+    if (!(refresh && r.feedback === 'closed')) this.log(`botui ${viewer}: ${r.feedback}`);
   }
 
   async show(viewer, st) {
@@ -128,17 +130,35 @@ class BotUi {
     if (this.ticking) return;
     this.ticking = true;
     try {
-      for (const [viewer, st] of this.states) {
+      for (const [viewer, st] of [...this.states]) {
         if (!st.open || st.lastJson === null || !this.screens.REFRESHING.has(st.screen.name)) continue; // null: a show is in flight
         if (this.now() - st.lastClick > this.idleLimitMs) { st.open = false; continue; }
-        const [screen, before] = [st.screen, st.lastJson];
-        const json = JSON.stringify(await this.render(viewer, st));
-        // closed or navigated while rendering: a stale refresh must not pop up or overwrite
-        if (json === st.lastJson || !st.open || st.screen !== screen || st.lastJson !== before) continue;
-        await this.post(viewer, st, json);
+        try {
+          const [screen, before] = [st.screen, st.lastJson];
+          const json = JSON.stringify(await this.render(viewer, st));
+          // closed, quit or navigated while rendering: a stale refresh must not pop up or overwrite
+          if (json === st.lastJson || !st.open || this.states.get(viewer) !== st || st.screen !== screen || st.lastJson !== before) continue;
+          await this.post(viewer, st, json, true);
+        } catch (e) { // one viewer or an outage must not stop the others; one log line per outage
+          if (!this.down) { this.log(`botui refresh ${viewer}: ${e.message}`); this.down = true; }
+        }
       }
     } finally { this.ticking = false; }
   }
 }
 
-module.exports = {BotUi, ACTIONS};
+// Rights of a viewer (cfg.viewerBots): the bots a request names must all be theirs.
+function allowedBots(viewerBots, viewer, bots) {
+  const allowed = viewerBots[viewer];
+  if (!allowed || !Array.isArray(bots) || (allowed !== '*' && bots.some((n) => !allowed.includes(n)))) throw new Error('nicht dein Bot');
+  return bots;
+}
+
+// What a viewer's "stop all" reaches: 'all' for a full viewer, else their existing bots (an empty list means nothing to stop).
+function stopTargets(viewerBots, viewer, known) {
+  const allowed = viewerBots[viewer];
+  if (!allowed) throw new Error('nicht dein Bot');
+  return allowed === '*' ? 'all' : allowed.filter((n) => known.includes(n));
+}
+
+module.exports = {BotUi, ACTIONS, allowedBots, stopTargets};

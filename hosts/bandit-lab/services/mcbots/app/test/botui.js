@@ -2,7 +2,7 @@
 // BotUi hub side: polling, per-viewer state, refresh and close rules against a loopback fake of the Paper plugin.
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const {BotUi} = require('../botui');
+const {BotUi, allowedBots, stopTargets} = require('../botui');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(f, what) {
@@ -27,7 +27,8 @@ async function fake() {
         const last = f.events.length ? f.events[f.events.length - 1].id : 0;
         return res.end(JSON.stringify({boot: f.boot, last, events: evs()}));
       }
-      res.end(JSON.stringify(u.pathname === '/show' ? f.show : {ok: true}));
+      if (u.pathname === '/show' && f.showDelay) await sleep(f.showDelay);
+      res.end(JSON.stringify(u.pathname === '/show' ? (f.refuseRefresh && f.calls.at(-1).body.refresh ? {ok: false, feedback: 'closed'} : f.show) : {ok: true}));
     });
   });
   await new Promise((r) => f.server.listen(0, '127.0.0.1', r));
@@ -176,10 +177,16 @@ async function fake() {
     await until(() => f.of('/viewers').length === 1, 'viewers');
     f.add('open', 'Fancy'); f.add('open', 'Fancy'); f.add('open', 'Fancy');
     await until(() => f.of('/events').some((c) => c.query.includes('since=3')), 'caught up');
+    await ui.handle({type: 'open', player: 'Fancy'});
+    assert.equal(ui.state('Fancy').open, true);
     f.boot = 'b2'; f.events = [];
     await until(() => f.of('/viewers').length === 2, 'viewers again');
+    assert.equal(ui.state('Fancy').open, false, 'the plugin lost its tracking, no refresh until a new open');
+    const after = f.of('/events').length;
+    await until(() => f.of('/events').slice(after - 1).some((c) => c.query.startsWith('?since=0&')), 'since reset to 0');
+    const shows = f.of('/show').length;
     f.add('open', 'Fancy');
-    await until(() => f.of('/events').some((c) => c.query.includes('since=0') || c.query.includes('since=1')), 'since reset');
+    await until(() => f.of('/show').length === shows + 1 && ui.state('Fancy').open, 'new open re-shows');
     end();
   }
   { // connection refused: one log line per outage, resumes by itself
@@ -208,6 +215,66 @@ async function fake() {
     assert.ok(f.of('/events').length > n, 'still polling');
     assert.match(ui.state('Fancy').flash.text, /kaputt/);
     end();
+  }
+  { // refresh shows carry refresh:true, open and click shows do not; a "closed" answer closes quietly
+    logs.length = 0;
+    const {f, ui, end} = await mk();
+    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'lage'}});
+    stub.body = 'nine'; await ui.tick();
+    assert.deepEqual(f.of('/show').map((c) => c.body.refresh), [undefined, undefined, true]);
+    f.refuseRefresh = true; stub.body = 'ten'; await ui.tick();
+    assert.equal(ui.state('Fancy').open, false);
+    assert.equal(logs.length, 0, logs.join('|'));
+    stub.body = 'one';
+    end();
+  }
+  { // closed arriving while the refresh /show is on the wire: the answer must not re-arm refresh
+    const {f, ui, end} = await mk();
+    await ui.handle({type: 'open', player: 'Fancy'});
+    f.showDelay = 80; stub.body = 'eleven';
+    const tick = ui.tick();
+    await sleep(30);
+    await ui.handle({type: 'closed', player: 'Fancy'});
+    await tick;
+    assert.equal(ui.state('Fancy').open, false);
+    f.showDelay = 0; stub.body = 'twelve';
+    await ui.tick();
+    assert.equal(f.of('/show').length, 2);
+    stub.body = 'one';
+    end();
+  }
+  { // quit while a tick renders: nothing is posted for the orphan
+    const {f, ui, end} = await mk();
+    await ui.handle({type: 'open', player: 'Fancy'});
+    stub.body = 'thirteen';
+    const slow = stub.render;
+    stub.render = function (...a) { const r = slow.apply(this, a); ui.handle({type: 'quit', player: 'Fancy'}); return r; };
+    await ui.tick();
+    stub.render = slow; stub.body = 'one';
+    assert.equal(f.of('/show').length, 1);
+    end();
+  }
+  { // a failing refresh logs once per outage and does not stop the other viewers
+    logs.length = 0;
+    const {f, ui, end} = await mk();
+    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Midari'});
+    f.down = true; stub.body = 'fourteen';
+    await ui.tick(); await ui.tick();
+    assert.equal(logs.length, 1, logs.join('|'));
+    stub.body = 'one';
+    end();
+  }
+  { // rights: only the viewer's own bots; an empty stop list is not an error
+    const vb = {Fancy: '*', Midari: ['MisaBot']};
+    assert.deepEqual(allowedBots(vb, 'Fancy', ['bot1', 'x']), ['bot1', 'x']);
+    assert.deepEqual(allowedBots(vb, 'Midari', ['MisaBot']), ['MisaBot']);
+    for (const [v, b] of [['Midari', ['bot1']], ['Midari', ['MisaBot', 'bot1']], ['Midari', 'all'], ['Stranger', ['bot1']], ['Fancy', 'all']]) assert.throws(() => allowedBots(vb, v, b), /nicht dein Bot/);
+    assert.equal(stopTargets(vb, 'Fancy', ['bot1']), 'all');
+    assert.deepEqual(stopTargets(vb, 'Midari', ['bot1', 'MisaBot']), ['MisaBot']);
+    assert.deepEqual(stopTargets(vb, 'Midari', ['bot1']), []);
+    assert.throws(() => stopTargets(vb, 'Stranger', []), /nicht dein Bot/);
   }
   console.log('botui ok');
 })().catch((e) => { console.error(e); process.exit(1); });

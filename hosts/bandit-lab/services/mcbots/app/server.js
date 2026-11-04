@@ -240,18 +240,14 @@ const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole
 if (ingame) ingame.start();
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
 // A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
-const botui = cfg.botuiUrl ? new (require('./botui').BotUi)({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
+const {BotUi, allowedBots, stopTargets} = require('./botui');
+const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
   api: {
     snapshots: () => [...runners.values()].map((r) => r.snapshot()),
-    submit: (viewer, {bots, type, args, replace}) => {
-      const allowed = cfg.viewerBots[viewer];
-      if (!allowed || !Array.isArray(bots) || (allowed !== '*' && bots.some((n) => !allowed.includes(n)))) throw new Error('nicht dein Bot');
-      return submitJob({bots, type, args, replace, agent: false});
-    },
+    submit: (viewer, {bots, type, args, replace}) => submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false}),
     stopAll: (viewer) => {
-      const allowed = cfg.viewerBots[viewer];
-      if (!allowed) throw new Error('nicht dein Bot');
-      return submitJob({bots: allowed === '*' ? 'all' : allowed.filter((n) => runners.has(n)), type: 'stop', agent: false});
+      const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);
+      return bots.length ? submitJob({bots, type: 'stop', agent: false}) : {ok: true, keeperOff: false, unreached: []};
     },
     get keeper() { return keeper; },
     get plan() { return plan; },

@@ -80,6 +80,17 @@ function sampleDialog(size) {
   await c.look(90, 10);
   await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
 
+  // a refresh show never re-opens a closed dialog; a plain show does and re-arms; a refresh show while tracked works
+  const shown = c.dialogs.length;
+  assert.deepEqual(await (await post('/show', {player: 'Viewer', dialog: big, refresh: true})).json(), {ok: false, feedback: 'closed'});
+  await sleep(500);
+  assert.equal(c.dialogs.length, shown);
+  assert.equal((await (await post('/show', {player: 'Viewer', dialog: big})).json()).ok, true);
+  assert.equal((await (await post('/show', {player: 'Viewer', dialog: big, refresh: true})).json()).ok, true);
+  await waitFor(() => c.dialogs.length === shown + 2);
+  await c.look(45, 10);
+  await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+
   // gaze: a chest three blocks to the east, looked at from the side
   const [px, py, pz] = ev0.pos;
   const chest = [px + 3, py, pz];

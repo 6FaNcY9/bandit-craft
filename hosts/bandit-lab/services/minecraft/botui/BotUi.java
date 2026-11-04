@@ -220,6 +220,12 @@ public class BotUi extends JavaPlugin implements Listener {
     JSONObject res = sync(() -> {
       Player p = Bukkit.getPlayerExact(name);
       if (p == null) return null;
+      if (Boolean.TRUE.equals(b.get("refresh")) && !open.contains(p.getUniqueId())) { // a hub refresh must never re-open a closed dialog
+        JSONObject closed = new JSONObject();
+        closed.put("ok", false);
+        closed.put("feedback", "closed");
+        return closed;
+      }
       List<String> feedback = new ArrayList<>();
       CommandSender s = Bukkit.createCommandSender(c -> feedback.add(PlainTextComponentSerializer.plainText().serialize(c)));
       boolean ran;
