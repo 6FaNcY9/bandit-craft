@@ -97,7 +97,7 @@ const ACTIONS = {
     ui.flash(st, 'Alle gestoppt' + (r?.keeperOff ? ', Daueraufträge aus' : ''), true);
   },
   quick: (st, data, ui, viewer) => {
-    const bot = oneBot(ui, viewer, data), label = QUICK_LABEL[data.job];
+    const bot = oneBot(ui, viewer, data), label = Object.hasOwn(QUICK_LABEL, data.job) && QUICK_LABEL[data.job];
     if (!label) throw new Error('unbekannter Auftrag');
     if (!jobs.mayOrder(ui.viewerBots[viewer], data.job)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
     let args = {};
