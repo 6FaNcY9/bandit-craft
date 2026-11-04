@@ -200,10 +200,27 @@ console in the shape the road will have, a 2-high tunnel with walls and a roof, 
   and a hit does 10, and it breaks above 40.
 - **Building.** Placed in road order by a bot in survival, rails take the right shapes through a dip, east and north. A powered rail with
   a redstone torch in a niche dug into the wall beside it is powered. Those two directions only: the other two are the same by symmetry.
-- **After a login** a bot stands at the world's spawn, not where it left (once, `bot50` on the sandbox).
+- **After a login** a bot stands where it left. It stood at the world's spawn only after dying: see the last line.
 
-Not explained: in 2 of 5 runs of `start.js` the bot still had no chunk at its own feet 20 s after a teleport. The next run, with a
-diagnosis added, did not show it. A job has to treat this as "not loaded yet" and report it if it lasts.
+`spikes/ends.js <flat cells>`, the same day: the road's two ends as the job builds them, numbered from the origin, 2 km, rule 200. Each
+result is from one run.
+
+- **The origin's end.** Curb at `k 3`, one block high with air above up to `y 2`; landing at `k 4`; first rail at `k 5`; first dip at `k 8`;
+  first booster at `k 12`. Riding in, the cart stands in the landing at `k 4.5`, unhurt, and does not climb the curb. A cart on `k 5`
+  starts by input alone and crosses the dip before its first booster, 3.8 s to the first 3 blocks. A bot walks over the curb into the
+  chamber with the pathfinder, with `physicsfix` loaded; the real bots load it.
+- **A dip close to the end.** With 3 flat rails between the last dip and the rail's end, at both ends, the cart stops the same. The
+  rule's 202 m/s was reached on the way. Fewer than 3 were not tried.
+- **Torches instead of redstone blocks.** 48 boosters on the road's own slots, `k % 16` of 0, 4 or 12, so in 256 cells, each powered by a
+  redstone torch in a wall niche: 87 m/s at the ramp's end, within the 81 to 89 above. 2 km takes 26 s out and 22 s back.
+- **Quitting in a cart.** The bot quit at `k 815` at speed. For the 11 s it was gone the console could not find the cart. After the login
+  the bot was riding again, `bot.vehicle` was set, and the cart had gone on to the road's end at `k 1997`. No cart stayed behind.
+- **Meeting a cart left on the rail.** From 152 m/s the rider dropped to about 2 m/s within a few blocks, pushed the other cart on at
+  that speed for 140 blocks, and stood at `k 1141`, unhurt. A cart left behind ends a ride mid-road and does no worse.
+
+Teleporting a bot in survival to `y 200` before the lane exists kills it by the fall, and it respawns at the world's spawn. `ends.js` showed
+this with a death message. `start.js` has the same order, which very likely explains its 2 failed runs of 5, the bot having no chunk at
+the place it was sent to. It was not re-run to confirm.
 
 ## Material
 

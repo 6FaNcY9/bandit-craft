@@ -14,7 +14,7 @@ const FIRST_RAIL = 5; // behind the chamber: curb at 3, landing at 4
 const RAMP_BOOSTERS = 48; // measured: reaches 81 to 89 m/s, and the dips take over from there
 const RAMP_CELLS = 256; // what 48 of isBoosterSlot's take
 const BORDER_K = 29999984;
-const FLAT_BEFORE_END = 3; // rails between the last dip and the rail's end (runbook, "A builder's whole trip")
+const FLAT_BEFORE_END = 3; // rails between the last dip and the rail's end: measured, fewer not tried (runbook)
 
 function cell({dir, origin}, k, h = 0, side = 0) {
   const d = DIRS[dir];

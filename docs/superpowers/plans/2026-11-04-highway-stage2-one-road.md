@@ -151,7 +151,7 @@ assert.strictEqual(inspect(world({'20,0,0': null}), east, 16, 32).stop.why, 'unl
 
 - [ ] **Step 2: Run it.** Expected: FAIL, `kindOf` is not a function.
 
-- [ ] **Step 3: Implement.** Extend `NATURAL` from `bots.js` rather than copying it: move the regex to `road.js` and import it back. Everything not named counts as `player`, as the spec says. A player's plain rail or planks look like a mineshaft's, the spec's known limit. The east road's mineshafts at 400, 1500 and 1600 lie on the 2 km test. `unloaded` is not a stop for the owner: the job waits and reads again, and reports only if it lasts, because a bot was seen with no chunk 20 s after a teleport (runbook).
+- [ ] **Step 3: Implement.** Extend `NATURAL` from `bots.js` rather than copying it: move the regex to `road.js` and import it back. Everything not named counts as `player`, as the spec says. A player's plain rail or planks look like a mineshaft's, the spec's known limit. The east road's mineshafts at 400, 1500 and 1600 lie on the 2 km test. `unloaded` is not a stop for the owner: the job waits and reads again, and reports only if it lasts.
 
 - [ ] **Step 4: Run it.** Expected: PASS.
 
@@ -169,7 +169,8 @@ assert.strictEqual(inspect(world({'20,0,0': null}), east, 16, 32).stop.why, 'unl
 **Interfaces:**
 - Produces: `makeRide({guard, sleep}) -> {ride, leave, takeCart}`
   - `ride(r, job, railPos, {limitMs}) -> Vec3`: puts the cart from the inventory on `railPos`, boards from where the bot stands, starts by input, waits for 2 s without a `move_minecart` packet after the first one, gets off, takes the cart back, and returns where the bot is. Throws `cart did not start` when no packet comes in 20 s.
-  - `leave(r)`: `player_input` with `shift`, then none, then clears `bot.vehicle`, which mineflayer leaves set. The same call gets a bot off that logged in riding (Task 1, step 3).
+  - `rideOn(r, job, {limitMs}) -> Vec3`: the part of `ride` from the waiting on: for a bot that logged in riding, which rides on by itself (runbook, "Quitting in a cart").
+  - `leave(r)`: `player_input` with `shift`, then none, then clears `bot.vehicle`, which mineflayer leaves set.
   - `takeCart(r, job)`: iron or better pickaxe in hand, `bot.attack` every 900 ms, at most 8 times. By hand it heals faster than a bot hits.
 
 - [ ] **Step 1: Write the failing test**, with a fake bot whose `_client` is an `EventEmitter`:
@@ -290,6 +291,7 @@ A shift can end for several reasons: no rails, no lining, the last pickaxe, or t
 // 'a new road': no rail at FIRST_RAIL, the bot builds from there.
 // 'rides out to the real end': rail exists, the bot at the origin rides, then finds the end by reading blocks, whatever frontier said.
 // 'resumes a half-built cell': floor laid, no rail, at the frontier: no second rail, no gap.
+// 'a bot that logs in riding rides on': rideOn until it stands, then the usual: at the head it works, mid-road it walks.
 // 'stranded mid-road walks to the nearer end': at k 1000 of a road ending at 1500: takes its cart back, walks to the head and works; at k 200: walks to the origin.
 // 'a player block stops the road': alert 'highway: ...' once, the job ends, the frontier stays, nothing dug.
 // 'keeps the frontier': job.args.frontier follows the head after each segment.
@@ -305,7 +307,7 @@ assert.throws(() => VALIDATE.highway({dir: 'up'}), /dir must be/);
 
 - [ ] **Step 2: Run it.** Expected: FAIL.
 
-- [ ] **Step 3: Implement.** Segments of 16 cells, one dip each. `inspect` before each, from `k` 8 on, because chamber and stair are the bot's own. `job.progress = "east: 1234 m, 0.4 m/s"`, which `/bots` and the dashboard show as they are. Per Task 1 step 3, a bot that logs in riding gets off first.
+- [ ] **Step 3: Implement.** Segments of 16 cells, one dip each. `inspect` before each, from `k` 8 on, because chamber and stair are the bot's own. `job.progress = "east: 1234 m, 0.4 m/s"`, which `/bots` and the dashboard show as they are.
 
 - [ ] **Step 4: Run it, then the whole suite.** `node test/roadjob.js`, `node test.js`. Expected: PASS, then `ok`.
 
@@ -415,7 +417,7 @@ Expected: the job resumes by itself at the head.
 Expected: the same.
 
 - [ ] **Step 8: A restart during a ride.** During a trip home, the owner runs `sudo systemctl restart docker-mcbots-worker-2` on `bandit-lab`.
-Expected: Review Focus 4 live: the bot gets off, takes its cart, walks to the nearer end, carries on.
+Expected: the bot logs in riding and rides on to the end, as Task 1 measured. If a cart stood mid-road instead, Review Focus 4 live: the bot gets off, takes its cart, walks to the nearer end, carries on.
 
 - [ ] **Step 9: Check the road.** `snapshot` again, then `diff` against step 1, and `checkCell` on every cell.
 Expected: no cell with a problem, dead straight, and every changed cell was natural or generated before and is in the road's own list now.
