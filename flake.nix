@@ -37,6 +37,7 @@
     checks.${system} = {
       mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
       restart-warn-test = import ./ci/restart-warn-test.nix {inherit pkgs;};
+      botui = import ./hosts/bandit-lab/services/minecraft/botui {inherit pkgs;};
       inherit (self.packages.${system}) mcbots pc-admin;
     };
 
