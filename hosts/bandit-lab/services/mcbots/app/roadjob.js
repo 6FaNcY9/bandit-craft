@@ -5,6 +5,7 @@ const {refFace} = require('./seal');
 const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
+const WALK_WAIT_MS = 5000;
 const FALLS = 16; // gravel coming down the column above a cell; more than this is no cell to build
 const STACKS = 4; // rock kept for lining: a cave in the first 400 blocks has about 100 open cells
 const NO_DIG = ['keep', 'player', 'danger'];
@@ -208,6 +209,20 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     await sleep(50);
     return read(cell(road, k)).name === 'rail';
   }
+
+  // A walk across the land stalls now and then on open ground (no progress for 30 s at -178 -108, sandbox 2026-11-04): that must not end a road.
+  const walkFar = async (r, job, ...rest) => {
+    for (let tries = 1; ; tries++) {
+      try {
+        return await goNear(r, job, ...rest);
+      } catch (e) {
+        guard(job);
+        if (tries >= TRIES || !/^could not reach/.test(e.message)) throw e;
+        r.emit('info', `highway: ${e.message}, walking on`);
+        await sleep(WALK_WAIT_MS);
+      }
+    }
+  };
 
   const backToHead = async (r, job, road, head) => {
     const s = cell(road, head, railHeight(head));
@@ -518,7 +533,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const blockAt = (a, b, c) => bot.blockAt(new Vec3(a, b, c));
     let state = readOrigin(blockAt, plan);
     if (state.done) return 'ok';
-    if (state.unloaded) await goNear(r, job, x + 30, y + 64, z - 5, 32, {doing: 'walking to the origin'});
+    if (state.unloaded) await walkFar(r, job, x + 30, y + 64, z - 5, 32, {doing: 'walking to the origin'});
     for (let tries = 0; (state = readOrigin(blockAt, plan)).unloaded; tries++) {
       if (tries > CHUNK_TRIES) throw new Error('the chunks at the origin did not load');
       await sleep(1000);
@@ -600,7 +615,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
             guard(job);
           }
           const land = cell(road, FIRST_RAIL - 1), first = findHead(blockAt, road, FIRST_RAIL);
-          if (onRoad(road, bot.entity.position)?.k !== FIRST_RAIL - 1) await goNear(r, job, land.x, land.y, land.z, 0, {doing: 'walking to the road'});
+          if (onRoad(road, bot.entity.position)?.k !== FIRST_RAIL - 1) await walkFar(r, job, land.x, land.y, land.z, 0, {doing: 'walking to the road'});
           if (first.head < FIRST_RAIL && !first.open) {
             if ((await shift(r, job, road, FIRST_RAIL - 1, end)) !== 'again' && !bot.vehicle && job.args.frontier >= end) return;
             continue;

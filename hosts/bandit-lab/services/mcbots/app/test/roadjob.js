@@ -847,6 +847,21 @@ module.exports = (async () => {
     assert.deepStrictEqual(alerts(w), []);
     assert.ok(/rail$/.test(w.name(cell(road, 301))));
   }
+  { // a long walk that stalls on open ground (no progress at -178 -108, sandbox) goes on, it does not end a road
+    const w = job(roadTo(301), {}, {at: 301, args: {length: 302}});
+    w.bot.entity.position = new Vec3(-500, 70, -500);
+    let stalls = 2;
+    const m = makeRoad({...w.deps, goNear: async (...a) => { if (stalls-- > 0) throw new Error('could not reach 4 0 0: no progress for 30 s'); return w.deps.goNear(...a); }, restock: async () => 'ok', buildOrigin: async () => {}, ride: fakeRide(w)});
+    await m.highway(w.r, w.job);
+    assert.ok(/rail$/.test(w.name(cell(road, 301))));
+    assert.strictEqual(w.log.events.filter(([, text]) => /walking on/.test(text)).length, 2);
+    let always = 0;
+    const v = job(roadTo(301), {}, {at: 301, args: {length: 302}});
+    v.bot.entity.position = new Vec3(-500, 70, -500);
+    const n = makeRoad({...v.deps, goNear: async () => { always++; throw new Error('could not reach 4 0 0: no path'); }, restock: async () => 'ok', buildOrigin: async () => {}, ride: fakeRide(v)});
+    await assert.rejects(n.highway(v.r, v.job), /could not reach/, 'one that never gets there still says so');
+    assert.strictEqual(always, 3);
+  }
   { // a road with an origin of its own brings its load and its start: no farm, no chamber
     let fetched = 0, dug = 0;
     const w = job({'0,0,0': 'air'}, {}, {at: 0});
