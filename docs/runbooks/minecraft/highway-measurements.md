@@ -77,14 +77,33 @@ Limits of this result:
   that stops on a dip stretch cannot start again without boosters, so riders need booster stations along the road.
 - The game rule then sets the speed, which keeps it at what a client can follow.
 
+## A bot rides the lanes with chunks not forced
+
+The sweep forced its chunks, so it could not show what a player's chunk loading does. A bot is a real player to the server,
+so `bot50` rode the 5 km ride lanes on generated chunks, sandbox view distance 8. Each ride includes about 10 s of the bot
+starting the cart by input.
+
+| Lane | Setting | Top m/s | Ride | Lowest TPS | Spots under half the top speed |
+| --- | --- | --- | --- | --- | --- |
+| Boosters every 4 | 200 | 201 | 44 s | 17.9 | none |
+| Dips every 16 | 200 | 203 | 44 s | 18.1 | none |
+| Dips every 16 | 400 | 270 | 42 s | 18.2 | one, 134 m/s |
+| Dips every 16 | 1000 | 340 | 41 s | 17.8 | nine, 117 to 170 m/s |
+
+No kick, no derail. **Setting 1000 saves 3 s over setting 200 on 5 km**: above about 200 m/s the cart keeps catching up with
+the chunks, even though it reached 963 m/s with them forced. A rider's real limit here is chunk loading, not the rail. The
+main server's view distance of 10 asks for more chunks than this, and new terrain is slower than generated terrain.
+
+Samples were a few ticks apart, so a single speed reading can be 15 % off. The ride times are the firm numbers.
+
 ## Against other ways of travelling
 
 From `minecraft.wiki/w/Transportation` unless marked as measured. The 26.2 changelog names no change to these.
 
 | Method | m/s | Why it is or is not a road |
 | --- | --- | --- |
-| Rail with dips | 963 measured | the fastest found, and the rule can cap it |
-| Flat rail | 230 measured, 400 calculated | needs gold along the whole road |
+| Rail with dips | 963 measured, 200 for a rider | the fastest found, and the rule can cap it |
+| Flat rail | 230 measured, 400 calculated, 200 for a rider | needs gold along the whole road |
 | Riptide III trident | about 375 at the launch | only in rain or water, in single bursts |
 | Water, soul soil, Dolphin's Grace, Speed II, full enchantments | 147 | needs dolphins and potions the whole way |
 | Boat on blue ice | 72.73, code matches the wiki, not yet ridden | 1,000 to 2,000 blue ice per km |
@@ -97,9 +116,10 @@ From `minecraft.wiki/w/Transportation` unless marked as measured. The 26.2 chang
   view distance 10. Crossing one chunk then needs up to 21 new ones, so past about 57 m/s the client cannot be sent all of
   them and past about 76 m/s the server cannot load them all, closest first. A cart reaching a chunk that is not ticking
   waits for it. Nothing here measured this: the sweep's chunks were forced. The ride lanes free theirs on purpose.
-- **Boats** are simulated by the client. The server rejects vehicle moves of more than 10 blocks in a tick, far above a
-  boat's 3.6. A bot cannot drive a boat, because mineflayer has no boat physics (read from its code, not tried).
-- **Minecarts** are simulated by the server, and a rider cannot be flagged for moving too quickly by their own input.
+- **Boats** are simulated by the client. 26.2's `handleMoveVehicle` sends a boat back when it moves more than 10 blocks
+  beyond its speed in one packet, far above a boat's 3.6 per tick, and that is no kick. A bot cannot drive a boat, because
+  mineflayer has no boat physics (read from its code, not tried).
+- **Minecarts** are simulated by the server, and `handleMovePlayer` skips its movement checks for a passenger.
 
 ## A bot on a cart
 
