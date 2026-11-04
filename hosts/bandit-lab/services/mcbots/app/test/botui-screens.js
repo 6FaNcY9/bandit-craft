@@ -145,6 +145,12 @@ console.log('botui-screens ok');
   assert.deepEqual(m.actions.filter((a) => a.action.payload?.a === 'trader_del').map((a) => a.action.payload.bot), ['MisaBot']);
   assert.ok(m.actions.some((a) => a.action.payload?.a === 'sidebar'));
   assert.ok(!render({name: 'ziele'}, view({keeper, traders: [], traderChests})).actions.some((a) => a.action.payload?.a === 'plan'), 'no plan configured: no plan toggle');
+  { // borrowed by the plan: the configured numbers, a note; initial never above end
+    const b = render({name: 'ziele'}, view({keeper: {state: () => ({available: true, enabled: true, borrowed: true, quotas: [{item: 'planonly', want: 5, have: 0}], configured: [{item: 'logs', want: 64, have: 1}, {item: 'big', want: 9999, have: 1}]})}, traders: []}));
+    assert.deepEqual(b.inputs.map((i) => [i.key, i.end, i.initial]), [['want_logs', 256, 64], ['want_big', 4096, 4096]]);
+    assert.match(JSON.stringify(b.body), /Der Plan nutzt/);
+    assert.doesNotMatch(JSON.stringify(render({name: 'ziele'}, v).body), /Der Plan nutzt/);
+  }
   // the chest context offers Handelskiste buttons only for traders the viewer may command
   const gaze = {x: 7, y: 8, z: 9, block: 'chest'};
   const hk = (o) => render({name: 'auftrag'}, view({ctx: {gaze}, traders: ['MisaBot', 'EM_Trader'], ...o})).actions.filter((a) => a.action?.payload?.a === 'trader_add').map((a) => [a.action.payload.bot, a.action.payload.kind]);

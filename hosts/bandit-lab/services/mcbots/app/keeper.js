@@ -290,6 +290,8 @@ class Keeper {
       site: this.site,
       stockAgeS: stock ? Math.round((t - stock.t) / 1000) : null,
       stockBy: stock?.by || null,
+      borrowed: this.quotas !== this.configured, // the plan runs its own quotas meanwhile
+      configured: this.configured.map(([item, want]) => ({item, want, have: stock ? have(stock.items, item) : null})),
       quotas: this.quotas.map(([item, want]) => {
         const w = this.work.get(item);
         return {item, want, have: stock ? have(stock.items, item) : null, bot: w?.bot || null, fetching: w?.n || 0, note: w ? '' : this.notes.get(item) || ''};

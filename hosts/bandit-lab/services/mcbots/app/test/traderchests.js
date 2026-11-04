@@ -40,6 +40,11 @@ const {VALIDATE} = require('../bots');
   const h3 = {}, t3 = new TraderChests({file: null, halls: h3});
   t3.add('EM_Trader', 'stores', {x: 3, y: 4, z: 5});
   assert.deepEqual(h3.em_trader, {x: 3, y: 4, z: 5}); assert.doesNotThrow(() => VALIDATE.trade(h3.em_trader));
+  // sticks on the built-in hall survive validation (the live config is {"misa":{}})
+  const h5 = {misa: {}}, t5 = new TraderChests({file: null, halls: h5});
+  t5.add('EM_Trader', 'sticks', {x: 3, y: 4, z: 5});
+  assert.deepEqual(VALIDATE.trade(h5.em_trader).sticks, [{x: 3, y: 4, z: 5}]);
+  assert.throws(() => VALIDATE.trade({sticks: 'no'}), /sticks/);
   // a corrupt file logs and starts empty
   fs.writeFileSync(file, '{nope');
   const msgs = [], h4 = {misa: {}}, t4 = new TraderChests({file, halls: h4, log: (m) => msgs.push(m)});

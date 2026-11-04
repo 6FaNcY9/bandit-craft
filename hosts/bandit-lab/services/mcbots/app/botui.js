@@ -121,12 +121,13 @@ const ACTIONS = {
   saveziele: (st, data, ui, viewer) => {
     ownerOnly(ui, viewer);
     st.screen = {name: 'ziele'};
-    let n = 0;
-    for (const [key, v] of Object.entries(data)) {
-      if (!key.startsWith('want_')) continue;
-      ui.api.keeper.setWant(key.slice(5), Math.round(Number(v)));
-      n++;
-    }
+    if (!ui.api.keeper) return ui.flash(st, 'Keine Daueraufträge eingerichtet');
+    const known = new Set((ui.api.keeper.state().configured || ui.api.keeper.state().quotas).map((q) => q.item));
+    const wants = Object.entries(data).filter(([key]) => key.startsWith('want_')).map(([key, v]) => [key.slice(5), Math.round(Number(v))]);
+    // all or nothing: a bad entry must not leave the earlier ones saved
+    for (const [item, n] of wants) if (!known.has(item) || !(n >= 0 && n <= 4096)) throw new Error(`ungültiges Ziel: ${item}`);
+    for (const [item, n] of wants) ui.api.keeper.setWant(item, n);
+    const n = wants.length;
     ui.flash(st, n ? 'Ziele gespeichert' : 'Nichts zu speichern', !!n);
   },
   // The chest is the one the player is looking at: coordinates are never taken from the click.
@@ -134,6 +135,7 @@ const ACTIONS = {
     const bot = traderOf(ui, viewer, data), g = st.ctx.gaze;
     st.screen = {name: 'auftrag'};
     if (!KIND[data.kind]) throw new Error('unbekannte Kiste');
+    if (jobs.dimOf(st.ctx.dim) !== 'overworld') return ui.flash(st, 'Nur in der Oberwelt');
     if (!g || !jobs.isChest(g.block)) return ui.flash(st, 'Du schaust keine Kiste an');
     ui.api.traderChests.add(bot, data.kind, {x: g.x, y: g.y, z: g.z});
     ui.flash(st, `${bot}: ${KIND[data.kind]} ${g.x} ${g.y} ${g.z}`, true);

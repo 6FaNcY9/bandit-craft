@@ -382,6 +382,10 @@ const assert = require('node:assert');
       await until(() => stub.protectedAreas.length === 2, 'the hub broadcast reaches the connected worker');
       hub.protectedAreas.pop(); hub.broadcastPolicy();
       await until(() => stub.protectedAreas.length === 1, 'and the removal too');
+      hub.tradeHalls.em_trader = {x: 1, y: 2, z: 3}; hub.sendTradeHalls(); // trader chests set in game reach connected workers as a policy frame
+      await until(() => stub.tradeHalls.em_trader?.x === 1, 'sendTradeHalls reaches the worker and its runner');
+      delete hub.tradeHalls.em_trader; hub.sendTradeHalls();
+      await until(() => !stub.tradeHalls.em_trader, 'and a removed hall too');
     }
     // kept jobs: the worker reports its own list, the hub keeps it; Stop empties it at once
     stub.current = {type: 'shift', args: {block: 'logs', x: 1, y: 64, z: 1}};

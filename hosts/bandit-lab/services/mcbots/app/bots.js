@@ -150,8 +150,9 @@ const VALIDATE = {
     if (a.target !== undefined) { if (!(a.target >= 1 && a.target <= 4096)) throw new Error('höchstens 4096 Smaragde'); stop.target = Math.floor(a.target); }
     if (a.sticksFirst !== undefined) stop.sticksFirst = xyz(a.sticksFirst);
     const one = {...(a.x !== undefined ? xyz(a) : {}), ...stop};
-    if (a.hall === undefined) return one;
     const list = (v, max, what) => { if (!Array.isArray(v) || v.length > max) throw new Error(`${what} must be a list of at most ${max} x,y,z`); return v.map(xyz); };
+    // The built-in hall (no box) takes stick chests too: trade.js honours job.args.sticks (trader chests set in game).
+    if (a.hall === undefined) return a.sticks !== undefined ? {...one, sticks: list(a.sticks, 128, 'sticks')} : one;
     const p = xyz({x: a.hall?.x1, y: a.hall?.y1, z: a.hall?.z1}), q = xyz({x: a.hall?.x2, y: a.hall?.y2, z: a.hall?.z2});
     const hall = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
     if (hall.x2 - hall.x1 > 99 || hall.z2 - hall.z1 > 99 || hall.y2 - hall.y1 > 39) throw new Error('a trading hall is at most 100 x 100 blocks and 40 high');

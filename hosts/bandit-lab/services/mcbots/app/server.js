@@ -255,8 +255,8 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     get keeper() { return keeper; },
     get plan() { return plan; },
     traderChests,
-    // Bots that trade: scheduled ones and those with a hall of their own.
-    traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
+    // Bots that trade: scheduled ones, guests (they get their first chest here) and those with a hall of their own.
+    traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...cfg.guestBots, ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
     places: () => places.list,
     schematics: async () => (await listSchematics()).filter((x) => !x.error).map((x) => x.file),
     sidebar: (viewer, on) => mainConsole?.([on ? `team join mcbots ${viewer}` : `team leave ${viewer}`]),

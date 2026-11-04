@@ -224,10 +224,13 @@ function ziele(view) {
     const toggle = (label, enabled, a) => button(txt(`${label}: ${enabled ? 'an' : 'aus'}`, enabled ? 'green' : 'gray'), a, {on: enabled ? 0 : 1}, lines([[enabled ? 'Klick schaltet aus' : 'Klick schaltet ein']]));
     if (k?.available) actions.push(toggle('Daueraufträge', k.enabled, 'keeper'));
     if (view.plan) actions.push(toggle('Plan', !!view.plan.enabled, 'plan'));
-    for (const q of k?.quotas || []) {
-      inputs.push(slider('want_' + q.item, `${safe(q.item, 24)}${q.have !== null ? ' (da: ' + q.have + ')' : ''}`, 0, Math.min(4096, Math.max(64, q.want * 4)), 1, q.want));
+    // Always the configured quotas: while the plan borrows the keeper, state().quotas are the plan's.
+    for (const q of k?.configured || k?.quotas || []) {
+      const end = Math.min(4096, Math.max(64, q.want * 4));
+      inputs.push(slider('want_' + q.item, `${safe(q.item, 24)}${q.have !== null ? ' (da: ' + q.have + ')' : ''}`, 0, end, 1, Math.min(end, q.want)));
     }
     if (inputs.length) body.push(line(txt('Ziele pro Rohstoff in der Vorratskiste', 'white')));
+    if (k?.borrowed) body.push(line(txt('Der Plan nutzt die Daueraufträge gerade; neue Zahlen gelten danach.', 'yellow')));
   }
   actions.push(button(txt('Seitenleiste an'), 'sidebar', {on: 1}), button(txt('Seitenleiste aus'), 'sidebar', {on: 0}));
   for (const t of traders(view)) {

@@ -6,7 +6,7 @@ const {BotUi, allowedBots, stopTargets} = require('../botui');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(f, what) {
-  for (let i = 0; i < 300; i++) { if (f()) return; await sleep(10); }
+  for (const end = Date.now() + 8000; Date.now() < end; await sleep(10)) if (f()) return; // wall clock: the suite blocks the loop while other parts run
   throw new Error('timeout: ' + what);
 }
 
@@ -195,7 +195,8 @@ async function fake() {
     ui.start();
     await until(() => f.of('/viewers').length, 'up');
     f.down = true;
-    await sleep(200);
+    await until(() => logs.some((l) => /botui/i.test(l)), 'outage logged');
+    await sleep(150); // more retries must not add lines
     assert.equal(logs.filter((l) => /botui/i.test(l)).length, 1, logs.join('|'));
     f.down = false;
     f.add('open', 'Fancy');
@@ -346,7 +347,7 @@ async function fake() {
     calls.length = 0;
     await click('Fancy', {a: 'saveziele', want_logs: 99.6});
     assert.deepEqual(calls, [['want', 'logs', 100]]); assert.match(ui.state('Fancy').flash.text, /gespeichert/);
-    await click('Fancy', {a: 'saveziele', want_gold: 5}); assert.match(ui.state('Fancy').flash.text, /unknown quota item/);
+    await click('Fancy', {a: 'saveziele', want_gold: 5}); assert.match(ui.state('Fancy').flash.text, /ungültiges Ziel: gold/);
     calls.length = 0;
     for (const a of ['keeper', 'plan', 'saveziele']) { await click('Midari', {a, on: 1, want_logs: 5}); assert.match(ui.state('Midari').flash.text, /Besitzer/); }
     await click('Midari', {a: 'sidebar', on: 1}); assert.deepEqual(calls, [['sidebar', 'Midari', true]]);
@@ -363,6 +364,16 @@ async function fake() {
     await click('Midari', {a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 7, y: 8, z: 9});
     assert.deepEqual(chests.at(-1), ['remove', 'MisaBot', 'sticks', {x: 7, y: 8, z: 9}]); assert.equal(ui.state('Midari').screen.name, 'ziele');
     await click('Midari', {a: 'trader_del', bot: 'bot1', kind: 'sticks', x: 1, y: 1, z: 1}); assert.equal(chests.length, 2);
+    // saveziele is all or nothing, refuses out-of-range numbers, and says so without a keeper
+    calls.length = 0;
+    await click('Fancy', {a: 'saveziele', want_logs: 5, want_planonly: 5}); assert.match(ui.state('Fancy').flash.text, /ungültiges Ziel: planonly/); assert.deepEqual(calls, []);
+    await click('Fancy', {a: 'saveziele', want_logs: 5000}); assert.match(ui.state('Fancy').flash.text, /ungültiges Ziel: logs/); assert.deepEqual(calls, []);
+    const keep = api.keeper; api.keeper = null;
+    await click('Fancy', {a: 'saveziele', want_logs: 5}); assert.match(ui.state('Fancy').flash.text, /Keine Daueraufträge/);
+    api.keeper = keep;
+    // the Nether is not the overworld: refused, nothing saved
+    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'sticks'}, {gaze, dim: 'the_nether'}); assert.match(ui.state('Midari').flash.text, /Nur in der Oberwelt/);
+    assert.equal(chests.length, 2);
     // a Ziele screen is never refreshed under the player's hand
     const shown = f.of('/show').length;
     t += 10; await ui.tick();
