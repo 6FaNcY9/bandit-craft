@@ -1,7 +1,7 @@
 'use strict';
 // Pure builders for the in-game dialogs (Minecraft dialog JSON, multi_action). No I/O and no clock: the same view must
 // build the same JSON, because BotUi re-sends a refreshing screen only when its JSON changed.
-const {ago, DIMENSION, botState} = require('./ingame');
+const {ago, DIMENSION, failing, botState} = require('./ingame');
 
 // Anything from a snapshot or an error goes through here: no colour codes or control characters, bounded length.
 const safe = (text, max = 60) => {
@@ -9,15 +9,19 @@ const safe = (text, max = 60) => {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 };
 
-// Bot error text -> the cause in plain German; unknown text stays as it is (the caller shortens it).
+// Bot error text -> the cause in plain German. Real texts carry a job prefix ("shift: no free stone ..."), so nothing
+// is anchored; unknown text stays as it is (the caller shortens it).
 function explain(error) {
   const e = String(error ?? '');
   let m;
   if (/inventory still full/.test(e)) return 'Kiste voll';
-  if ((m = /^no free (\w+) within \d+ blocks/.exec(e))) return `nichts zu finden: ${m[1]} in Reichweite`;
-  if (/^could not reach/.test(e)) return 'kein Weg dorthin';
-  if ((m = /^unsafe: (.*)/.exec(e))) return /water/.test(m[1]) ? 'Wasser daneben, zu gefährlich' : /lava/.test(m[1]) ? 'Lava daneben, zu gefährlich' : e;
-  if ((m = /^need (\d+) more (\w+)/.exec(e))) return `${m[1]} ${m[2]} fehlen`;
+  if ((m = /no free (\w+) within \d+ blocks/.exec(e))) return `nichts zu finden: ${m[1]} in Reichweite`;
+  if (/could not reach/.test(e)) return 'kein Weg dorthin';
+  if ((m = /unsafe: (water|lava)/.exec(e))) return m[1] === 'water' ? 'Wasser daneben, zu gefährlich' : 'Lava daneben, zu gefährlich';
+  if ((m = /need (\d+) more (\w+)/.exec(e))) return `${m[1]} ${m[2]} fehlen`;
+  if ((m = /need (\d+) (\w+), have (\d+)/.exec(e))) return `${m[1]} ${m[2]} nötig, nur ${m[3]} da`;
+  if (/is not visible and not on the map/.test(e)) return 'nicht sichtbar (offline oder keine Karte)';
+  if (/the stick chests are empty/.test(e)) return 'Stick-Kisten leer, wartet';
   return e;
 }
 
@@ -110,7 +114,7 @@ function bot(view, name) {
     if (s.inventory?.length) body.push(line(txt('Inventar: ', 'gray'), txt(safe(s.inventory.slice(0, 8).join(', '), 150))));
     if (s.pos) body.push(line(txt(`Position ${s.pos.join(' ')} ${DIMENSION[s.dimension] || ''}`.trim(), 'gray')));
   }
-  if (typeof s.lastErrorAgoS === 'number' && s.lastErrorAgoS < 300 && s.lastError) body.push(line(txt(safe(explain(s.lastError), 80), 'red')));
+  if (failing(s) && s.lastError) body.push(line(txt(safe(explain(s.lastError), 80), 'red')));
   body.push(...flashLine(view.flash));
   const actions = [button(txt('Stopp', 'red'), 'stop', {bot: s.name}), button(txt('Auftrag für ' + n, 'aqua'), 'new', {bot: s.name}),
     ...QUICK.map(([job, label]) => button(txt(label), 'quick', {bot: s.name, job}))];

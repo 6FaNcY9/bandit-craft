@@ -324,7 +324,7 @@ async function fake() {
     await click('Midari', {a: 'stop', bot: 'MisaBot'});
     assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'stop', args: {}}]);
     // the flash is gone from the next render once it has expired
-    t += 9000;
+    t += 31000;
     await click('Fancy', {a: 'lage'});
     assert.doesNotMatch(JSON.stringify(last().body), /gestoppt/);
     end();

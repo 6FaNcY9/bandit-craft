@@ -145,4 +145,4 @@ class Ingame {
   }
 }
 
-module.exports = {word, ago, DIMENSION, botState, botFields, summary, sidebarLines, parseInbox, Ingame};
+module.exports = {word, ago, DIMENSION, failing, botState, botFields, summary, sidebarLines, parseInbox, Ingame};

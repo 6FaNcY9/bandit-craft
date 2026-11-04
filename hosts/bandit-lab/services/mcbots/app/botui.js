@@ -2,11 +2,11 @@
 // Hub side of the in-game bot UI: polls the Paper plugin (BotUi) for player events, keeps one state per viewer and
 // shows or refreshes their dialog. Identity is only ever the plugin's Bukkit player name, never a payload field, and
 // a dialog the player closed is never shown again: only a new open or click event may open one.
-const FLASH_MS = 8000;
+const FLASH_MS = 30000;
 
 // One handler per click `data.a`; later tasks add theirs here. (st, data, ui, viewer) -> void, may be async, may throw.
 // Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
-const QUICK_LABEL = {deposit: 'Einlagern', rearm: 'Ausrüsten', homebed: 'Heim', graves: 'Gräber holen'};
+const QUICK_LABEL = Object.fromEntries(require('./botui-screens').QUICK);
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
 const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichbar'); };

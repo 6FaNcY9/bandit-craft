@@ -50,6 +50,17 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.match(explain('unsafe: water next to it'), /Wasser/);
   assert.match(explain('need 3 more iron_ingot'), /3 .*iron_ingot/);
   assert.equal(explain('something new'), 'something new');
+  // real strings, bare and with a job prefix
+  for (const [raw, re] of [
+    ['inventory still full after depositing (chest full?)', /^Kiste voll$/],
+    ['no free stone within 64 blocks (collected 0/8; seen 1024, searched 3 more spots)', /nichts zu finden: stone in Reichweite/],
+    ['unsafe: water next to it', /^Wasser daneben/], ['unsafe: lava next to it', /^Lava daneben/],
+    ['could not reach 1 2 3: No path to the goal!', /kein Weg/], ['could not reach -294 82 -184: no path (cached, 357 s ago)', /kein Weg/],
+    ['need 3 more iron_ingot', /^3 iron_ingot fehlen/], ['need 4 raw_iron, have 1', /^4 raw_iron nötig, nur 1 da/],
+    ['MidariBread is not visible and not on the map (offline, or BlueMap unavailable)', /nicht sichtbar/],
+    ['the stick chests are empty, waiting for 30 s', /Stick-Kisten leer/],
+  ]) for (const e of [raw, 'shift: ' + raw, 'goto: ' + raw]) assert.match(explain(e), re, e);
+  assert.equal(explain('goto: something new'), 'goto: something new');
 }
 { // Bedarf
   const keeper = (quotas) => ({state: () => ({available: true, quotas})});
@@ -110,4 +121,10 @@ assert.deepEqual([...REFRESHING], ['lage', 'bot']);
 assert.equal(render({name: 'stopall'}, view()).exit_action.action.payload.a, 'lage');
 assert.equal(text(render({name: 'nonsense'}, view({snaps: []})).title), 'Kommandostand');
 assert.equal(safe('a§cb\u0007c\n d', 99), 'a b c d'.replace('a b', 'ab')); // colour code stripped, control chars become spaces
+{ // an error older than 5 min is neither a problem nor shown on the Bot screen
+  const old = work('bot1', {lastError: 'need 3 more iron_ingot', lastErrorAgoS: 400});
+  assert.doesNotMatch(body(lage(view({snaps: [old]}))).join('\n'), /fehlen/); assert.doesNotMatch(body(bot(view({snaps: [old]}), 'bot1')).join('\n'), /fehlen/);
+  const fresh = {...old, lastErrorAgoS: 200};
+  assert.match(body(lage(view({snaps: [fresh]}))).join('\n'), /fehlen/); assert.match(body(bot(view({snaps: [fresh]}), 'bot1')).join('\n'), /fehlen/);
+}
 console.log('botui-screens ok');
