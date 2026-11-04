@@ -514,15 +514,15 @@ module.exports = (async () => {
     const full = {rail: 960, stick: 128, iron_pickaxe: 8, powered_rail: 96, redstone_torch: 96, minecart: 1, bread: 32, cobblestone: 128, iron_sword: 1};
     const setup = (items, {get, near = () => [], count = async () => {}, now, walk} = {}) => {
       const w = world({}, {items}), asked = [];
-      w.job.args = {dir: 'east'};
+      w.job.args = {dir: 'east', frontier: 5000};
       const deps = {...w.deps, ...(walk ? {goNear: walk(w.deps.goNear)} : {}), farms, now, chestsNear: near, countChest: count, ensureGear: async () => { w.log.geared = true; }, gearWanted: () => 0, tossJunk: async () => { w.log.junk = true; },
         get: async (r, j, item, n) => { VALIDATE.get({item, count: n}); asked.push([item, n, Math.floor(w.bot.entity.position.x)]); w.log.seen = r.farmChests; if (get) await get(item, n, w); const it = w.inv.find((i) => i.name === item); if (it) it.count += n; else w.inv.push({name: item, count: n}); }};
       return {w, asked, m: makeRoad(deps)};
     };
     { // fetches only what is short, and rails need no list of their own: get plans chests and crafts
-      const {w, asked, m} = setup({...full, rail: 936});
+      const {w, asked, m} = setup({...full, rail: 704});
       assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
-      assert.deepStrictEqual(asked, [['rail', 24, 10]]);
+      assert.deepStrictEqual(asked, [['rail', 256, 10]]);
       assert.strictEqual(w.log.geared, true);
       assert.ok(w.log.seen instanceof Map, 'get looks at the farms only');
       assert.strictEqual(w.r.farmChests, null, 'and everyone else at what they always did');
@@ -539,40 +539,46 @@ module.exports = (async () => {
       await m.restock(w.r, w.job, road);
       assert.strictEqual(calls, 2, 'once at each of the two farms');
     }
+    { // nothing that matters is low, so nobody walks off for a block of cobblestone: a bot back at the origin after a restart stays
+      const {w, asked, m} = setup({...full, rail: 720, stick: 40, cobblestone: 1, iron_sword: 0, sand: 1});
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
+      assert.deepStrictEqual(asked, []);
+      assert.strictEqual(w.log.junk, undefined, 'and throws nothing away');
+    }
     { // one round: each farm once, with everything it has at one stop, however the load is ordered
       const round = [{x: 10, y: 0, z: 0, items: ['rail', 'bread']}, {x: 500, y: 0, z: 0, items: ['stick', 'rail']}];
-      const w = world({}, {items: {...full, rail: 936, stick: 0, bread: 0}});
-      w.job.args = {dir: 'east'};
+      const w = world({}, {items: {...full, rail: 704, stick: 0, bread: 0}});
+      w.job.args = {dir: 'east', frontier: 5000};
       const asked = [], stops = [];
       const m = makeRoad({...w.deps, farms: round, chestsNear: () => [], countChest: async () => {}, ensureGear: async () => {}, gearWanted: () => 0, tossJunk: async () => {},
         goNear: async (r, j, x) => { stops.push(x); w.bot.entity.position.x = x; },
         get: async (r, j, item, n) => { asked.push([item, n, w.bot.entity.position.x]); w.inv.find((i) => i.name === item).count += n; }});
       await m.restock(w.r, w.job, road);
       assert.deepStrictEqual(stops, [10, 500]);
-      assert.deepStrictEqual(asked, [['rail', 24, 10], ['bread', 32, 10], ['stick', 128, 500]]);
+      assert.deepStrictEqual(asked, [['rail', 256, 10], ['bread', 32, 10], ['stick', 128, 500]]);
     }
     { // a walk that fails is tried once more at once, then the farm is left out
       let tries = 0;
-      const {w, asked, m} = setup({...full, rail: 936}, {walk: (go) => async (r, j, x, ...rest) => { if (x === 10 && tries++ === 0) throw new Error('no progress for 30 s'); return go(r, j, x, ...rest); }});
+      const {w, asked, m} = setup({...full, rail: 704}, {walk: (go) => async (r, j, x, ...rest) => { if (x === 10 && tries++ === 0) throw new Error('no progress for 30 s'); return go(r, j, x, ...rest); }});
       await m.restock(w.r, w.job, road);
-      assert.deepStrictEqual(asked, [['rail', 24, 10]]);
+      assert.deepStrictEqual(asked, [['rail', 256, 10]]);
       assert.strictEqual(tries, 2);
     }
     { // what walking picked up leaves the bags at every stop, or the rails have no room; what it may be worth stays
-      const {w, m} = setup({...full, rail: 936, sand: 3, birch_log: 2, egg: 1, wildflowers: 1, diamond: 2});
+      const {w, m} = setup({...full, rail: 704, sand: 3, birch_log: 2, egg: 1, wildflowers: 1, diamond: 2});
       await m.restock(w.r, w.job, road);
       const left = (n) => w.inv.find((i) => i.name === n)?.count;
       assert.deepStrictEqual([left('sand'), left('birch_log'), left('egg'), left('wildflowers'), left('diamond')], [0, 0, 0, 0, 2]);
     }
     { // next farm when one is empty
-      const {w, asked, m} = setup({...full, rail: 936}, {get: async (item, n, v) => { if (v.bot.entity.position.x < 100) throw new Error('no way to get iron_ingot'); }});
+      const {w, asked, m} = setup({...full, rail: 704}, {get: async (item, n, v) => { if (v.bot.entity.position.x < 100) throw new Error('no way to get iron_ingot'); }});
       assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
-      assert.deepStrictEqual(asked, [['rail', 24, 10], ['rail', 24, 500]]);
+      assert.deepStrictEqual(asked, [['rail', 256, 10], ['rail', 256, 500]]);
     }
     { // what one farm had counts: the next is asked for the rest
-      const {w, asked, m} = setup({...full, rail: 936}, {get: async (item, n, v) => { const it = v.inv.find((i) => i.name === 'rail'); it.count += 10; throw new Error('out'); }});
+      const {w, asked, m} = setup({...full, rail: 704}, {get: async (item, n, v) => { const it = v.inv.find((i) => i.name === 'rail'); it.count += 10; throw new Error('out'); }});
       await m.restock(w.r, w.job, road);
-      assert.deepStrictEqual(asked, [['rail', 24, 10], ['rail', 14, 500]]);
+      assert.deepStrictEqual(asked, [['rail', 256, 10], ['rail', 246, 500]]);
     }
     { // all empty waits and says so, once
       const {w, m} = setup({...full, rail: 20}, {get: async () => { throw new Error('no way'); }});
@@ -590,7 +596,7 @@ module.exports = (async () => {
     { // a farm's chests are read once a trip, one that will not open is passed over, and one on another floor is left alone
       const read = [];
       const near = () => [{y: 0, n: 'a'}, {y: 3, n: 'b'}, {y: 4, n: 'upstairs'}, {y: -4, n: 'cellar'}];
-      const {w, m} = setup({...full, rail: 936, bread: 1}, {near, count: async (r, j, p) => { read.push(p.n); if (p.n === 'a') throw new Error('covered'); }});
+      const {w, m} = setup({...full, rail: 704, bread: 1}, {near, count: async (r, j, p) => { read.push(p.n); if (p.n === 'a') throw new Error('covered'); }});
       await m.restock(w.r, w.job, road);
       assert.deepStrictEqual(read, ['a', 'b']);
     }
@@ -598,13 +604,13 @@ module.exports = (async () => {
       let t = 0;
       const read = [];
       const near = () => [{y: 0, n: 'a'}, {y: 0, n: 'b'}, {y: 0, n: 'c'}];
-      const {w, asked, m} = setup({...full, rail: 936}, {near, now: () => t, count: async (r, j, p) => { read.push(p.n); t += 70000; }});
+      const {w, asked, m} = setup({...full, rail: 704}, {near, now: () => t, count: async (r, j, p) => { read.push(p.n); t += 70000; }});
       await m.restock(w.r, w.job, road);
       assert.deepStrictEqual(read, ['a', 'b']);
-      assert.deepStrictEqual(asked, [['rail', 24, 10]]);
+      assert.deepStrictEqual(asked, [['rail', 256, 10]]);
     }
     { // a Stop goes through a farm that fails
-      const {w, m} = setup({...full, rail: 936}, {get: async (item, n, v) => { w.job.cancelled = true; throw new Error('stopped'); }});
+      const {w, m} = setup({...full, rail: 704}, {get: async (item, n, v) => { w.job.cancelled = true; throw new Error('stopped'); }});
       await assert.rejects(m.restock(w.r, w.job, road), /stopped/);
       assert.strictEqual(w.r.farmChests, null);
     }
@@ -648,6 +654,29 @@ module.exports = (async () => {
       assert.strictEqual(await w.buildOrigin(w.r, w.job, road), 'ok');
       assert.strictEqual(w.name(f), 'cobbled_deepslate');
       assert.deepStrictEqual(s.air.map(w.name), ['air', 'air', 'air']);
+    }
+    { // gravel lands a moment after the dig has seen air, and the walk onto the step finds no way: it is dug again, and the walk tried again
+      const target = plan.stair[5].air[0];
+      let fell = 0, slept = 0;
+      const w = world(sky, {items: load2});
+      const go = w.deps.goNear;
+      const m = makeRoad({...w.deps, sleep: async () => { slept++; }, goNear: async (r, j, x, y, z, ...rest) => {
+        if (x === target.x && y === target.y && z === target.z && fell++ === 0) { w.blocks.set(key(target), 'gravel'); throw new Error('could not reach: Took to long to decide path to goal!'); }
+        return go(r, j, x, y, z, ...rest);
+      }});
+      assert.strictEqual(await m.buildOrigin(w.r, w.job, road), 'ok');
+      assert.strictEqual(w.name(target), 'air');
+      assert.ok(fell >= 2 && slept >= 1, 'walked again after it settled');
+    }
+    { // a step that stays out of reach still ends the job with the reason
+      const target = plan.stair[5].air[0];
+      const w = world(sky, {items: load2});
+      const go = w.deps.goNear;
+      const m = makeRoad({...w.deps, sleep: async () => {}, goNear: async (r, j, x, y, z, ...rest) => {
+        if (x === target.x && y === target.y && z === target.z) throw new Error('could not reach: no path');
+        return go(r, j, x, y, z, ...rest);
+      }});
+      await assert.rejects(m.buildOrigin(w.r, w.job, road), /could not reach/);
     }
     { // a curb a cave took away is set again, and gravel that comes down is dug again
       const curb = plan.curbs[0], above = {...plan.stair[1].air[2], y: plan.stair[1].air[2].y + 1};

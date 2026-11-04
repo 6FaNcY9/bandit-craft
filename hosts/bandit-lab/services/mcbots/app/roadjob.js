@@ -26,6 +26,7 @@ const FARMS_MS = 300000; // farms fill slowly, and each try is a walk
 const FEW_RAILS = 64; // not worth a trip
 const GET_MOST = 256; // VALIDATE.get
 const SLOTS = 36;
+const TRIP_FOR = ['rail', 'iron_pickaxe', 'powered_rail', 'redstone_torch', 'minecart', 'bread']; // sticks and the table are spent making these, cobblestone comes out of the rock
 const FARM_LEVELS = 3; // climbing to a chest upstairs sent a bot across the spawn for half an hour (sandbox, 2026-11-04); every load item lies within this
 const READ_MS = 120000;
 const STRAY = /_log$|_stem$|_leaves$|_sapling$|^egg$/; // with NATURAL, what walking picks up
@@ -376,10 +377,11 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
   // trip read, so what is not on the list cannot become a source. With too little to start a shift it waits and says so, once.
   async function fetchLoad(r, job, road) {
     const {bot} = r;
-    await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
-    await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
+    if (!TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok'; // back at the origin after a restart, with most of a load
+    await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
+    await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot
     const walkTo = (farm, items) => goNear(r, job, farm.x, farm.y, farm.z, 8, {doing: `walking to the farm at ${farm.x} ${farm.z} for ${items[0]}`});
     r.farmChests = (job.t.farmChests ||= new Map());
     try {
@@ -478,8 +480,17 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         // Through a cave a floor has nothing beside it: line holds it with a block in the stair, which the second dig takes away.
         const lined = await line(r, job, {air: s.air, solid: [s.floor]});
         if (lined) throw new Error(lined.out ? 'no lining left for the origin' : `the stair's floor cannot be set at ${s.floor.x} ${s.floor.y} ${s.floor.z}`);
-        await dig(r, job, [...s.air].reverse());
-        await walk(s.air[0], `digging the stair down, step ${i}`);
+        for (let tries = 0; ; tries++) {
+          await dig(r, job, [...s.air].reverse());
+          try {
+            await walk(s.air[0], `digging the stair down, step ${i}`);
+            break;
+          } catch (e) { // gravel lands a moment after the dig saw air, and then no path leads onto the step (sandbox, 2026-11-04)
+            guard(job);
+            if (tries >= TRIES) throw e;
+            await sleep(1000);
+          }
+        }
       }
       const door = plan.stair[0].air[0], away = (c) => Math.hypot(c.x - door.x, c.z - door.z);
       await dig(r, job, [...plan.room].sort((a, b) => away(a) - away(b)));

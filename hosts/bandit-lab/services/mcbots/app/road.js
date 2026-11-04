@@ -173,11 +173,14 @@ const barred = (b) => ['player', 'keep', 'danger', 'fluid'].includes(kindOf(b.na
 // to the sky, read from above, so a cave under the surface is not taken for the surface.
 function readOrigin(blockAt, plan) {
   const read = (c) => blockAt(c.x, c.y, c.z);
-  let top = plan.stair.length;
+  // From the sky down: over open ground a step needs no floor, but once one has been stood on the next must have its own, or a cave passes for a dug stair.
+  let top = plan.stair.length, ground = false;
   for (; top > 0; top--) {
-    const blocks = plan.stair[top - 1].air.map(read);
-    if (blocks.some((b) => !b)) return {unloaded: true};
+    const blocks = plan.stair[top - 1].air.map(read), floor = read(plan.stair[top - 1].floor);
+    if (blocks.some((b) => !b) || !floor) return {unloaded: true};
     if (!blocks.every(isClear)) break;
+    if (!isOpen(floor)) ground = true;
+    else if (ground) break;
   }
   let done = top === 0;
   for (const c of [...plan.stair.slice(0, top).flatMap((s) => s.air), ...plan.room]) {
@@ -221,11 +224,12 @@ const FARMS = [
 ];
 // 8 pickaxes do about 1 km of deepslate, so more rails would not get laid. The cobblestone is for a cave right after the start. Sticks first:
 // a farm of iron has none, and rails and tools take them. A first trip also carries the origin's ramp.
-// 32 of 36 slots, 34 on a first trip: the old ramp needs 2 more when the bot comes back to pick it up. The table before the rails: a farm of iron has none to craft them at.
+// 32 of 36 slots, on a first trip with its two ramps too: the old ramp needs 2 more when the bot comes back to pick it up, and a chest gives nothing to full bags (sandbox, 2026-11-04).
+// The table before the rails: a farm of iron has none to craft them at.
 const LOAD = {stick: 128, crafting_table: 1, rail: 960, iron_pickaxe: 8, powered_rail: 48, redstone_torch: 48, minecart: 1, bread: 32, cobblestone: 64, iron_sword: 1};
 function loadFor(frontier, ingots = 0) {
-  const ramp = !frontier || frontier <= FIRST_RAIL + RAMP_CELLS ? 2 * LOAD.powered_rail : LOAD.powered_rail;
-  return {...LOAD, powered_rail: ramp, redstone_torch: ramp, ...(ingots ? {iron_ingot: ingots} : {})};
+  const first = !frontier || frontier <= FIRST_RAIL + RAMP_CELLS, ramp = first ? 2 * LOAD.powered_rail : LOAD.powered_rail;
+  return {...LOAD, rail: first ? LOAD.rail - 128 : LOAD.rail, powered_rail: ramp, redstone_torch: ramp, ...(ingots ? {iron_ingot: ingots} : {})};
 }
 
 module.exports = {FARMS, loadFor, originPlan, readOrigin, mayBuildAt, isClear, findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};

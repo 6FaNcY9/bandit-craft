@@ -219,8 +219,8 @@ assert.strictEqual(kindOf('vine'), 'natural');
   assert.ok(keys.includes('crafting_table') && keys.indexOf('crafting_table') < keys.indexOf('rail'), 'a table before the rails');
   for (const item of keys) assert.ok(farms.some((f) => f.items.includes(item)), `${item} has a farm`);
   const one = new Set(['iron_pickaxe', 'iron_sword', 'minecart']), slots = (l) => Object.entries(l).reduce((n, [item, c]) => n + (one.has(item) ? c : Math.ceil(c / 64)), 0);
-  assert.ok(slots(load(undefined)) <= 34, `a first load leaves room for what walking picks up: ${slots(load(undefined))}`);
-  assert.ok(slots(load(5000)) <= 34, 'and a later one for the old ramp');
+  assert.ok(slots(load(undefined)) <= 32, `a first load leaves room for what walking picks up, and a chest gives nothing to full bags: ${slots(load(undefined))}`);
+  assert.ok(slots(load(5000)) <= 32, 'and a later one for the old ramp');
   const at = (item) => farms.findIndex((f) => f.items.includes(item));
   assert.ok(at('stick') < farms.findIndex((f) => f.x === -307) && at('crafting_table') < farms.findIndex((f) => f.x === -307), 'the round brings sticks and a table to the iron');
 }
@@ -229,4 +229,14 @@ assert.strictEqual(kindOf('vine'), 'natural');
   const {FARMS: farms} = require('../road');
   assert.ok(!farms.some((f) => f.x === 23 && f.z === 55));
   assert.deepStrictEqual(farms.filter((f) => f.items.includes('bread')).map((f) => f.x), [-263]);
+}
+
+{ // a stair through a cave: air is not a step until it has a floor, or a restart walks past steps that were never built
+  const {originPlan: plan_, readOrigin: read_} = require('../road');
+  const plan = plan_({x: 0, y: 0, z: 0});
+  const solid = {name: 'stone', boundingBox: 'block'}, air = {name: 'air', boundingBox: 'empty'};
+  const open = new Set(), key = (c) => `${c.x},${c.y},${c.z}`;
+  plan.stair.forEach((s, i) => { if (i >= 50) s.air.forEach((c) => open.add(key(c))); if (i >= 64 || (i >= 50 && i <= 53)) open.add(key(s.floor)); });
+  const at = (x, y, z) => (open.has(key({x, y, z})) ? air : solid);
+  assert.strictEqual(read_(at, plan).top, 54, 'dug down to step 54, and the cave below it has no floors yet');
 }
