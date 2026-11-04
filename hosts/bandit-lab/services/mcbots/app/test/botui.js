@@ -195,9 +195,9 @@ async function fake() {
     ui.start();
     await until(() => f.of('/viewers').length, 'up');
     f.down = true;
-    await until(() => logs.some((l) => /botui/i.test(l)), 'outage logged');
+    await until(() => logs.some((l) => /plugin unreachable/.test(l)), 'outage logged');
     await sleep(150); // more retries must not add lines
-    assert.equal(logs.filter((l) => /botui/i.test(l)).length, 1, logs.join('|'));
+    assert.equal(logs.filter((l) => /plugin unreachable/.test(l)).length, 1, logs.join('|')); // the previous block's stop can still log its aborted show
     f.down = false;
     f.add('open', 'Fancy');
     await until(() => f.of('/show').length, 'resumed');
