@@ -90,7 +90,7 @@ setInterval(() => {
   const open = world.openNeeds();
   for (const [name, runner] of runners) {
     const s = runner.snapshot();
-    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !cfg.guestBots.includes(name) && open.some((n) => n.bot !== name)) {
+    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !cfg.guestBots.includes(name) && !cfg.mainBots.includes(name) && open.some((n) => n.bot !== name)) {
       try { runner.enqueue('help', {}); } catch {}
     }
   }
@@ -103,7 +103,7 @@ const slayer = new Slayer({url: cfg.slayerUrl, cmd: cfg.slayerStatusCmd, decisio
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
 const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
-const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: cfg.guestBots}) : null;
+const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
 const agentStatuses = new Map(); // agent -> its last POST /api/agentstatus (goal, workers, role, t)
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
 const demoLog = require('./owner').makeDemoLog(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'demonstrations.jsonl') : null);
@@ -130,7 +130,7 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots]}) : null;
+const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots]}) : null;
 // Scheduled trading (TRADE_SCHEDULE): a guest's trader works its hall in set time windows; nothing without a configured hall.
 // Chests set in game replace the configured ones of that bot; cfg.tradeHalls is edited in place, so runners and the schedule follow.
 const traderChests = new TraderChests({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'trader-chests.json') : null, halls: cfg.tradeHalls, log: (m) => log('trade', m), onChange: () => hub?.sendTradeHalls()});
@@ -216,11 +216,12 @@ const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole
 if (ingame) ingame.start();
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
 // A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
-const {BotUi, allowedBots, stopTargets, markersOf} = require('./botui');
+const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui');
+const placedBots = () => placeBots([...runners.values()].map((r) => r.snapshot()), {vhost: process.env.MC_VHOST, guests: cfg.guestBots, mainBots: cfg.mainBots});
 const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
   api: {
-    snapshots: () => [...runners.values()].map((r) => r.snapshot()),
-    markers: (viewer) => markersOf([...runners.values()].map((r) => r.snapshot()), cfg.viewerBots[viewer] || []),
+    snapshots: placedBots,
+    markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
     submit: (viewer, {bots, type, args, replace}) => {
       const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false});
       for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
@@ -903,9 +904,10 @@ const keeperTick = setInterval(() => {
     log('keeper', `error: ${e.message}`);
   }
 }, 5000);
-// MC_VHOST (the bots play in the sandbox): keep the real server, which the Server panel's RCON reaches, bot-free.
+// MC_VHOST (the bots play in the sandbox): keep the real server, which the Server panel's RCON reaches, free of all but its own bots, and those out of the sandbox.
 const evictTick = admin && process.env.MC_VHOST ? setInterval(() => {
   admin.evictBots().then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} off the real server to the sandbox`), () => {});
+  if (sandboxConsole) admin.returnBots(sandboxConsole).then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} from the sandbox back to the real server`), () => {});
 }, 30000) : null;
 
 // Alerts for the lead agent (alerts.js), from what a local bot in the overworld sees.

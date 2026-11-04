@@ -178,6 +178,42 @@ console.log('botui-screens ok');
   assert.deepEqual(markersOf(all, ['MisaBot']), [{x: 1, z: 2, dim: 'the_nether', kind: 'work', label: 'MisaBot'}]);
   assert.deepEqual(markersOf(all, '*').map((k) => [k.label, k.kind]), [['bot1', 'work'], ['MisaBot', 'work'], ['EM', 'idle'], ['dead1', 'bad']]);
 }
+{ // helpers in the sandbox work in another world than the viewer's: marked, counted apart, listed last, off the map
+  const {ziele} = require('../botui-screens');
+  const {markersOf, placeBots} = require('../botui');
+  const sb = (n, over) => ({...idle(n), sandbox: true, ...over});
+  const snaps = [sb('bot1', {isDay: false}), work('bot19'), sb('bot2')];
+  const d = lage(view({snaps}));
+  assert.equal(body(d)[0], '1 Bots · 1 arbeiten · 0 frei · 2 in der Sandbox · Tag', 'day and night come from the viewer\'s world');
+  assert.deepEqual(botButtons(d).map((b) => b.action.payload.bot), ['bot19', 'bot1', 'bot2']);
+  assert.match(labels(d)[0], /^● bot19 +Baumfarm/);
+  assert.match(labels(d)[1], /^● bot1 +Sandbox · frei$/);
+  assert.match(text(botButtons(d)[1].tooltip), /In der Sandbox, nicht in deiner Welt/);
+  assert.doesNotMatch(text(botButtons(d)[0].tooltip), /Sandbox/);
+  assert.match(body(bot(view({snaps}), 'bot1')).join('\n'), /In der Sandbox, nicht in deiner Welt/);
+  assert.doesNotMatch(body(bot(view({snaps}), 'bot19')).join('\n'), /Sandbox/);
+  const err = sb('bot1', {lastError: 'light: no torches available', lastErrorAgoS: 10});
+  assert.match(body(lage(view({snaps: [err, work('bot19')]}))).join('\n'), /bot1 \(Sandbox\): light/);
+
+  const keeper = (have) => ({state: () => ({available: true, enabled: true, quotas: [{item: 'coal', want: 32, have}]})});
+  assert.match(body(lage(view({snaps, keeper: keeper(1)}))).join('\n'), /Bedarf \(Sandbox\): coal 1\/32/);
+  assert.match(body(lage(view({snaps, keeper: keeper(32)}))).join('\n'), /Alles auf Lager \(Sandbox\)/);
+  assert.match(body(lage(view({snaps: [work('bot19')], keeper: keeper(1)}))).join('\n'), /Bedarf: coal 1\/32/);
+  assert.equal(lage(view({snaps, keeper: keeper(32)})).body.find((b) => /Lager/.test(text(b.contents))).contents[1].color, 'green');
+  assert.match(body(ziele(view({snaps, keeper: keeper(1)}))).join('\n'), /Daueraufträge laufen in der Sandbox, nicht in deiner Welt/);
+  assert.doesNotMatch(body(ziele(view({snaps: [work('bot19')], keeper: keeper(1)}))).join('\n'), /Sandbox/);
+
+  const who = render({name: 'job', key: 'goto'}, view({snaps})).inputs.find((i) => i.key === 'who');
+  assert.deepEqual(who.options.map((o) => o.display.text), ['Erster freier Bot', 'Alle meine Bots', 'bot19', 'bot1 (Sandbox)', 'bot2 (Sandbox)']);
+
+  const karte = render({name: 'karte'}, view({snaps})).actions.filter((a) => a.action.payload?.a === 'center').map((a) => a.action.payload.bot);
+  assert.deepEqual(karte, [undefined, 'bot19'], 'no centre on a world the map does not show');
+  assert.deepEqual(markersOf(snaps, '*').map((m) => m.label), ['bot19']);
+
+  const named = [{name: 'bot1'}, {name: 'bot19'}, {name: 'MisaBot'}];
+  assert.deepEqual(placeBots(named, {vhost: 'sandbox.bots', guests: ['MisaBot'], mainBots: ['bot19']}), [{name: 'bot1', guest: false, sandbox: true}, {name: 'bot19', guest: false, sandbox: false}, {name: 'MisaBot', guest: true, sandbox: false}]);
+  assert.deepEqual(placeBots(named, {vhost: '', guests: ['MisaBot'], mainBots: []}).map((s) => s.sandbox), [false, false, false], 'without a sandbox nothing is marked');
+}
 // the plugin compares marker worlds with Bukkit's world keys
 assert.deepEqual(['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'].map(require('../world').normDim), ['overworld', 'the_nether', 'the_end']);
 console.log('botui-screens karte ok');

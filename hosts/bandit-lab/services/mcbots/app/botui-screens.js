@@ -29,6 +29,8 @@ function explain(error) {
 const COLOR = {work: 'green', idle: 'gray', error: 'red', dead: 'red', offline: 'dark_gray', sheltered: 'aqua'};
 const STATE_WORD = {work: 'arbeitet', idle: 'frei', error: 'Problem', dead: 'tot', offline: 'offline', sheltered: 'im Unterschlupf'};
 const mine = (view) => view.snaps.filter((s) => view.allowed === '*' || view.allowed.includes(s.name));
+const ELSEWHERE = 'In der Sandbox, nicht in deiner Welt';
+const inWorldFirst = (snaps) => [...snaps.filter((s) => !s.sandbox), ...snaps.filter((s) => s.sandbox)];
 const act = (a, extra = {}) => ({type: 'minecraft:custom', id: 'botui:do', payload: {a, ...extra}});
 const txt = (text, color) => ({text, ...(color ? {color} : {})});
 const line = (...pieces) => ({type: 'minecraft:plain_message', width: 400, contents: ['', ...pieces]});
@@ -50,6 +52,7 @@ function jobText(s, state) {
 
 function tooltip(s, state) {
   const out = [[`${STATE_WORD[state]}${s.job ? ': ' + jobText(s, state) : ''}`, COLOR[state]]];
+  if (s.sandbox) out.push([ELSEWHERE, 'yellow']);
   if (s.activity) out.push([s.activity]);
   if (s.queue?.length) out.push([`danach: ${s.queue.slice(0, 3).join(', ')}${s.queue.length > 3 ? ` +${s.queue.length - 3}` : ''}`]);
   if (s.online) {
@@ -64,7 +67,7 @@ function problems(snaps) {
   return snaps.filter((s) => ['error', 'dead'].includes(botState(s))).slice(0, 3).map((s) => {
     const cause = s.dead ? 'tot' : safe(explain(s.lastError), 40);
     const when = s.dead || s.lastErrorAgoS < 60 ? '' : ` (vor ${ago(s.lastErrorAgoS)})`;
-    return line(txt(`${safe(s.name, 16)}: ${cause}${s.job ? `, ${safe(s.job.label, 20)} steht` : ''}${when}`, 'red'));
+    return line(txt(`${safe(s.name, 16)}${s.sandbox ? ' (Sandbox)' : ''}: ${cause}${s.job ? `, ${safe(s.job.label, 20)} steht` : ''}${when}`, 'red'));
   });
 }
 
@@ -73,25 +76,28 @@ function flashLine(flash) {
 }
 
 function lage(view) {
-  const snaps = mine(view), states = snaps.map(botState);
-  const online = snaps.find((s) => s.online && typeof s.isDay === 'boolean');
+  const snaps = inWorldFirst(mine(view)), states = snaps.map(botState);
+  const here = snaps.filter((s) => !s.sandbox), away = snaps.length - here.length, hereStates = here.map(botState);
+  const online = here.find((s) => s.online && typeof s.isDay === 'boolean');
   let need = null;
   try {
     const k = view.owner ? view.keeper?.state() : null; // the stock of the owner's base is the owner's
     if (k?.available) {
       const short = k.quotas.filter((q) => q.have !== null && q.have < q.want);
-      need = short.length ? 'Bedarf: ' + short.slice(0, 3).map((q) => `${safe(q.item, 24)} ${q.have}/${q.want}`).join(', ') + (short.length > 3 ? ` +${short.length - 3}` : '') : 'Alles auf Lager';
+      const at = away ? ' (Sandbox)' : ''; // the keeper skips guests and MAIN_BOTS, so with helpers in the sandbox its numbers come from there
+      need = short.length ? `Bedarf${at}: ` + short.slice(0, 3).map((q) => `${safe(q.item, 24)} ${q.have}/${q.want}`).join(', ') + (short.length > 3 ? ` +${short.length - 3}` : '') : `Alles auf Lager${at}`;
     }
   } catch { /* a keeper that cannot say is no reason to lose the screen */ }
   const body = [
-    line(txt(`${snaps.length} Bots · ${states.filter((x) => x === 'work').length} arbeiten · ${states.filter((x) => x === 'idle').length} frei${online ? ' · ' + (online.isDay ? 'Tag' : 'Nacht') : ''}`, 'white')),
+    line(txt(`${here.length} Bots · ${hereStates.filter((x) => x === 'work').length} arbeiten · ${hereStates.filter((x) => x === 'idle').length} frei${away ? ` · ${away} in der Sandbox` : ''}${online ? ' · ' + (online.isDay ? 'Tag' : 'Nacht') : ''}`, 'white')),
     ...problems(snaps),
-    ...(need ? [line(txt(need, need === 'Alles auf Lager' ? 'green' : 'yellow'))] : []),
+    ...(need ? [line(txt(need, need.startsWith('Alles') ? 'green' : 'yellow'))] : []),
     ...flashLine(view.flash),
   ];
   const actions = snaps.map((s, i) => {
-    const room = Math.max(8, 28 - safe(s.name, 16).length);
-    const label = ['', txt('● ', COLOR[states[i]]), txt(safe(s.name, 16) + '  '), txt(safe(jobText(s, states[i]), room), 'gray')];
+    const tag = s.sandbox ? 'Sandbox · ' : '';
+    const room = Math.max(8, 28 - safe(s.name, 16).length - tag.length);
+    const label = ['', txt('● ', COLOR[states[i]]), txt(safe(s.name, 16) + '  '), txt(tag + safe(jobText(s, states[i]), room), 'gray')];
     return button(label, 'bot', {bot: s.name}, tooltip(s, states[i]));
   });
   const g = view.ctx?.gaze;
@@ -107,6 +113,7 @@ function bot(view, name) {
   if (!s) return dialog(safe(name, 16), [line(txt('Bot nicht gefunden', 'red')), ...flashLine(view.flash)], [], {label: 'Zur Übersicht', a: 'lage'});
   const state = botState(s), n = safe(s.name, 16);
   const body = [line(txt('● ', COLOR[state]), txt(`${STATE_WORD[state]}${s.job ? ': ' + jobText(s, state) : ''}`, 'white'))];
+  if (s.sandbox) body.push(line(txt(ELSEWHERE, 'yellow')));
   if (s.activity) body.push(line(txt(safe(s.activity, 80))));
   if (s.queue?.length) body.push(line(txt('Danach: ', 'gray'), txt(safe(s.queue.slice(0, 3).join(', '), 70) + (s.queue.length > 3 ? ` +${s.queue.length - 3}` : ''))));
   if (s.online) {
@@ -175,8 +182,8 @@ function inputsOf(job, view, sc) {
       else notes.push('Dafür ist im Dashboard noch keine Zone eingetragen');
     }
   }
-  const names = mine(view).map((s) => s.name);
-  inputs.push(select('who', 'Wer', [['frei', 'Erster freier Bot'], ['alle', 'Alle meine Bots'], ...names.map((x) => [x, x])], sc.bot && names.includes(sc.bot) ? sc.bot : 'frei'),
+  const bots = inWorldFirst(mine(view)), names = bots.map((s) => s.name);
+  inputs.push(select('who', 'Wer', [['frei', 'Erster freier Bot'], ['alle', 'Alle meine Bots'], ...bots.map((s) => [s.name, s.sandbox ? `${s.name} (Sandbox)` : s.name])], sc.bot && names.includes(sc.bot) ? sc.bot : 'frei'),
     select('when', 'Wann', [['next', 'Danach'], ['now', 'Jetzt (ersetzt die Arbeit)']], 'next'));
   return {inputs, notes};
 }
@@ -232,6 +239,7 @@ function ziele(view) {
     }
     if (inputs.length) body.push(line(txt('Ziele pro Rohstoff in der Vorratskiste', 'white')));
     if (k?.borrowed) body.push(line(txt('Der Plan nutzt die Daueraufträge gerade; neue Zahlen gelten danach.', 'yellow')));
+    if (k?.available && view.snaps.some((s) => s.sandbox)) body.push(line(txt('Daueraufträge laufen in der Sandbox, nicht in deiner Welt', 'yellow')));
   }
   actions.push(button(txt('Seitenleiste an'), 'sidebar', {on: 1}), button(txt('Seitenleiste aus'), 'sidebar', {on: 0}));
   for (const t of traders(view)) {
@@ -254,7 +262,7 @@ function karte(view) {
   const mark = (on) => (on ? 'green' : 'white');
   const actions = [...ZOOMS.map((z) => button(txt(`${z} ${z === 1 ? 'Block' : 'Blöcke'} pro Pixel`, mark(z === ms.zoom)), 'zoom', {z})),
     button(txt('Mitte: ich', mark(!ms.center)), 'center', {me: 1}),
-    ...mine(view).map((s) => button(txt(`Mitte: ${safe(s.name, 16)}`, mark(ms.center === s.name)), 'center', {bot: s.name})),
+    ...mine(view).filter((s) => !s.sandbox).map((s) => button(txt(`Mitte: ${safe(s.name, 16)}`, mark(ms.center === s.name)), 'center', {bot: s.name})),
     button(txt('Zurück'), 'lage')];
   return dialog('Bot-Karte', body, actions, CLOSE);
 }

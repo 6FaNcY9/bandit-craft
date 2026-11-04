@@ -144,19 +144,22 @@ function resolveTarget(value, ctx, places = [], guest = false) {
 
 const isFree = (s) => s.online && !s.dead && !s.job && !s.queue?.length;
 // `frei` (the first free bot), `alle` (every online bot) or one name. dim: the world of the target, when there is one.
+// The viewer plays on main, so a free pick stays in that world and, for the owner, off a guest's bots (those by name only).
+// A helper in the sandbox only by name and without a place: the same coordinates there are another spot in another world.
 function resolveBots(value, snaps, allowed, dim = null) {
   const mine = snaps.filter((s) => allowed === '*' || allowed.includes(s.name));
   const here = (s) => !dim || !s.dimension || dimOf(s.dimension) === dim;
   if (value === 'frei' || value === 'alle') {
-    const pool = mine.filter((s) => s.online && !s.dead && (value === 'alle' || isFree(s)));
+    const pool = mine.filter((s) => !s.sandbox && !(allowed === '*' && s.guest) && s.online && !s.dead && (value === 'alle' || isFree(s)));
     const near = pool.filter(here);
-    if (!near.length) throw new Error(pool.length && dim ? 'Kein freier Bot in dieser Welt' : 'Kein freier Bot');
+    if (!near.length) throw new Error(pool.length && dim ? 'Kein freier Bot in dieser Welt' : mine.some((s) => s.sandbox) ? 'Kein freier Bot in deiner Welt' : 'Kein freier Bot');
     return value === 'frei' ? [near[0].name] : near.map((s) => s.name);
   }
   if (typeof value !== 'string' || (allowed !== '*' && !allowed.includes(value))) throw new Error('nicht dein Bot');
   const s = snaps.find((x) => x.name === value);
   if (!s) throw new Error('unbekannter Bot');
   if (!here(s)) throw new Error(`${value} ist in einer anderen Welt`);
+  if (dim && s.sandbox) throw new Error(`${value} ist in der Sandbox, nicht in deiner Welt`);
   return [value];
 }
 

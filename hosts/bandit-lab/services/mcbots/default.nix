@@ -43,9 +43,12 @@
       label = "bandit-lab-worker-2";
     };
     # A fourth helper (owner 2026-10-19): a name VeloAuth has never seen (bot1-18 and bot50-59 are in its database).
+    # The first helper back on the main server, as a trial for the Kommandostand (owner 2026-11-04); in MAIN_BOTS below,
+    # so it moves on orders only.
     mcbots-worker-3 = {
       bots = "bot19";
       label = "bandit-lab-worker-3";
+      mainServer = true;
     };
     # Two more helpers (owner 2026-10-19), two to a process like worker-2; names VeloAuth has never seen.
     mcbots-worker-4 = {
@@ -63,6 +66,7 @@
     };
   };
   guestBots = "MisaBot,EM_Trader";
+  mainBots = "bot19";
   # Worker processes: each shares mcbots' network namespace, so it reaches the
   # hub on 127.0.0.1 (plain ws:// is accepted only there) and Velocity from
   # mcbots' address, which BotGate admits.
@@ -165,8 +169,9 @@ in {
             # The agent service is off (owner 2026-10-23); bot1 stays its bot, the helpers belong to the board.
             AGENT_BOTS = "bot1";
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
-            BOARD_BOTS = "bot2,bot3,bot19,bot20,bot21";
+            BOARD_BOTS = "bot2,bot3,bot20,bot21";
             GUEST_BOTS = guestBots;
+            MAIN_BOTS = mainBots; # the owner's on the real server: no keeper, board or help job, and the Kommandostand tells them from the sandbox's
             # Misa's trader (app/tradeschedule.js): EM_Trader trades in the hall "misa" daily from 18:00
             # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}]}}; the other chests in the hall hold the sticks.
             TRADE_HALLS = "{\"misa\":{}}"; # {}: the hall built into trade.js (three floors south of spawn, the 60 stick chests of its lower two floors, the emerald chest -25/-27 69 -95; owner 2026-11-03)

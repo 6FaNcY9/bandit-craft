@@ -118,6 +118,14 @@ her own position or typed coordinates: no named places and no Vorratskiste, as t
 `Bedarf` line is the owner's. Trader chests (`trader_add`) are the gazed chest in the overworld, the same reach as chat `kiste`, which
 checks only that the block is a chest.
 
+## Two worlds (added 2026-11-04, after the first deploy)
+
+The first version of this spec overlooked that the helpers play in the sandbox (owner rule 2026-10-23, `2026-10-23-bots-redesign`) while
+viewers and BotUi are on main: a gazed order sent a helper to those coordinates in the sandbox world, with nothing happening in the viewer's.
+Owner's choice, 2026-11-04: bot19 goes back to main as a trial (`MAIN_BOTS`, orders only: no keeper, board or help job), the other helpers
+stay and are marked. Free picks take only bots on main and, for the owner, none of a guest's; a named sandbox bot takes no job with a place;
+sandbox bots are off the map; `Bedarf` and `Ziele` say "Sandbox", because the keeper stays there with bot1.
+
 ## What goes away
 
 CommandPanels `/bots` and `botmenu`, the `pa data` push and inbox. Stays: the opt-in sidebar (now a button in Ziele), the chat grammar, the "fertig" line.

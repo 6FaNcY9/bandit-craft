@@ -120,6 +120,11 @@ function loadConfig(env = process.env) {
   const guestBots = list(env.GUEST_BOTS);
   const guestBad = guestBots.filter((n) => !NAME_RE.test(n) || agentBots.includes(n) || boardBots.includes(n) || planRoster.includes(n));
   if (guestBad.length) throw new Error(`GUEST_BOTS must be bot names outside AGENT_BOTS, BOARD_BOTS and PLAN_ROSTER: ${guestBad.join(', ')}`);
+  // The owner's bots on the real server while the other helpers stay in the sandbox (owner 2026-11-04): they move on
+  // orders only, so no keeper, board, plan, agent or help job; unlike a guest they use the supply chest.
+  const mainBots = list(env.MAIN_BOTS);
+  const mainBad = mainBots.filter((n) => !NAME_RE.test(n) || agentBots.includes(n) || boardBots.includes(n) || planRoster.includes(n) || guestBots.includes(n));
+  if (mainBad.length) throw new Error(`MAIN_BOTS must be bot names outside AGENT_BOTS, BOARD_BOTS, PLAN_ROSTER and GUEST_BOTS: ${mainBad.join(', ')}`);
   const slayerUrl = (env.SLAYER_URL || '').replace(/\/+$/, '');
   if (slayerUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(slayerUrl)) throw new Error('SLAYER_URL must be http://host:port');
   const slayerStatusCmd = require('./slayer').parseCmd(env.SLAYER_STATUS_CMD);
@@ -182,6 +187,7 @@ function loadConfig(env = process.env) {
     agentBots,
     boardBots,
     guestBots,
+    mainBots,
     tradeHalls,
     tradeSchedule,
     slayerUrl,

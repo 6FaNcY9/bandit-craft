@@ -25,10 +25,13 @@ const box = (p, q) => ({x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math
 const outline = (ui, viewer, b) => ui.call('/outline', {player: viewer, box: b}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
 const clearSel = async (st, ui, viewer) => { st.sel = {a: null, b: null, dim: null}; await outline(ui, viewer, null); };
 
-// What the map item shows for a viewer: only the bots they may see, only with a known place and world.
+// Where a bot plays, for the screens and orders: with the hub in sandbox mode (MC_VHOST) all but guests and MAIN_BOTS are there.
+const placeBots = (snaps, {vhost, guests, mainBots}) => snaps.map((s) => ({...s, guest: guests.includes(s.name), sandbox: !!vhost && !guests.includes(s.name) && !mainBots.includes(s.name)}));
+
+// What the map item shows for a viewer: only the bots they may see in the world it draws, only with a known place and world.
 const MARK = {work: 'work', sheltered: 'idle', idle: 'idle', error: 'bad', dead: 'bad', offline: 'off'};
 function markersOf(snaps, allowed) {
-  return snaps.filter((s) => (allowed === '*' || allowed.includes(s.name)) && Array.isArray(s.pos) && s.pos.length >= 3 && Number.isFinite(s.pos[0]) && Number.isFinite(s.pos[2]) && typeof s.dimension === 'string')
+  return snaps.filter((s) => !s.sandbox && (allowed === '*' || allowed.includes(s.name)) && Array.isArray(s.pos) && s.pos.length >= 3 && Number.isFinite(s.pos[0]) && Number.isFinite(s.pos[2]) && typeof s.dimension === 'string')
     .map((s) => ({x: s.pos[0], z: s.pos[2], dim: s.dimension, kind: MARK[botState(s)] || 'idle', label: String(s.name).slice(0, 16)}));
 }
 
@@ -347,4 +350,4 @@ function stopTargets(viewerBots, viewer, known) {
   return allowed === '*' ? 'all' : allowed.filter((n) => known.includes(n));
 }
 
-module.exports = {BotUi, ACTIONS, allowedBots, stopTargets, markersOf};
+module.exports = {BotUi, ACTIONS, allowedBots, stopTargets, markersOf, placeBots};

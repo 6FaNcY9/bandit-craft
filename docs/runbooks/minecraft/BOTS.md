@@ -157,6 +157,13 @@ The v1 chest menus (CommandPanels `/bots`, `botmenu`) and the `pa data` push and
   plugin as `BOTUI_URL=http://10.250.77.1:8101` through the socket proxy `mc-bridge-botui` (same firewall rule as RCON and the map).
 - Who: `INGAME_VIEWERS="fancy8869=*;MidariBread=MisaBot,EM_Trader"`; anyone else gets "Nicht freigeschaltet". Empty `BOTUI_URL` switches the
   whole thing off; the bots do not care.
+- Two worlds: with `MC_VHOST` on the hub, every bot but `GUEST_BOTS` and `MAIN_BOTS` plays in the sandbox, while viewers play on main.
+  `MAIN_BOTS` (bot19, owner 2026-11-04; set `mainServer` on its worker too) are the owner's on main: they move on orders only (no keeper,
+  board or help job). The screens mark the others "Sandbox" and list them last. A free pick (`Erster freier`, `Alle meine`) takes only bots
+  on main and, for the owner, none of a guest's; a named sandbox bot takes no job with a place, since those coordinates are another spot in
+  another world. They are off the map, and `Bedarf` and `Ziele` say "Sandbox", because that is where the keeper then works.
+- A bot of the real server that logged in while Paper was starting lands in the sandbox. Every 30 s the hub kicks such a bot there, and
+  Velocity's try list moves it to main (`Admin.returnBots`).
 - Shipping: the deploy itself restarts `minecraft-server-paper` (nix-minecraft restarts a server whose symlink set changed) and mcbots, which
   kicks players: run the warn script from AGENTS.md first and deploy when nobody plays. The old `bots.yml` and `botmenu.yml` are removed in
   Paper's start-pre (`extraStartPre`, before CommandPanels loads) and again by `minecraft-panels`; both lines are one-time cleanup and can go

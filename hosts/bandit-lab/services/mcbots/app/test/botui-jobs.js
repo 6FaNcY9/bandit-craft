@@ -68,6 +68,22 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: chestG, suppl
   assert.deepEqual(resolveBots('bot4', snaps, '*'), ['bot4']);
 }
 
+{ // the viewer plays on main: a free pick stays in their world and off a guest's bots; a helper in the sandbox only by name and without a place
+  const {build} = require('../botui-jobs');
+  const s = (name, over = {}) => ({name, online: true, dead: false, job: null, queue: [], dimension: 'overworld', ...over});
+  const snaps = [s('bot1', {sandbox: true}), s('MisaBot', {guest: true}), s('bot19'), s('bot2', {sandbox: true})];
+  assert.deepEqual(resolveBots('frei', snaps, '*'), ['bot19']);
+  assert.deepEqual(resolveBots('alle', snaps, '*'), ['bot19']);
+  assert.deepEqual(resolveBots('frei', snaps, ['MisaBot']), ['MisaBot'], 'a guest keeps their own bots');
+  assert.deepEqual(resolveBots('MisaBot', snaps, '*', 'overworld'), ['MisaBot'], 'the owner may still name a guest bot');
+  assert.throws(() => resolveBots('frei', [s('bot1', {sandbox: true})], '*'), /^Error: Kein freier Bot in deiner Welt$/);
+  assert.throws(() => resolveBots('bot1', snaps, '*', 'overworld'), /^Error: bot1 ist in der Sandbox, nicht in deiner Welt$/);
+  assert.deepEqual(resolveBots('bot1', snaps, '*'), ['bot1'], 'a named helper may still take a job without a place');
+  const env = {ctx: {gaze: null, pos: [1, 64, 2], dim: 'overworld'}, sel: {}, supply: null, places: [], snaps, allowed: '*', schematics: []};
+  assert.throws(() => build('goto', {where: 'pos', who: 'bot1'}, env), /bot1 ist in der Sandbox/);
+  assert.deepEqual(build('goto', {where: 'pos', who: 'frei'}, env).bots, ['bot19']);
+}
+
 { // areaJobs
   const sel = (b) => ({a: {x: 0, y: 60, z: 0, dim: 'overworld'}, b: {...b, dim: b.dim || 'overworld'}});
   assert.deepEqual(areaJobs({a: {x: 0, y: 0, z: 0}, b: null}), []);

@@ -119,6 +119,19 @@ const assert = require('node:assert');
   assert.deepStrictEqual(await g.evictBots(), [], 'guest bots play on the real server');
 })();
 
+(async () => { // returnBots: a main bot that fell back to the sandbox is kicked there (Velocity's try list is main), only while main answers
+  const {Admin} = require('../admin');
+  const sent = [];
+  const sandbox = async (cmds) => { sent.push(...cmds); return cmds.map((c) => (c === 'minecraft:list' ? 'There are 3 of a max of 12 players online: bot1, MisaBot, bot19' : '')); };
+  const up = new Admin({call: async (cmds) => cmds.map(() => 'There are 0 of a max of 12 players online:'), events: {add() {}}, guests: ['MisaBot', 'bot19']});
+  assert.deepStrictEqual(await up.returnBots(sandbox), ['MisaBot', 'bot19']);
+  assert.deepStrictEqual(sent, ['minecraft:list', 'minecraft:kick MisaBot this bot plays on the main server', 'minecraft:kick bot19 this bot plays on the main server']);
+  sent.length = 0;
+  const down = new Admin({call: async () => { throw new Error('RCON closed the connection'); }, events: {add() {}}, guests: ['MisaBot']});
+  await assert.rejects(down.returnBots(sandbox), /RCON closed/);
+  assert.deepStrictEqual(sent, [], 'with main down a kick would send it nowhere');
+})();
+
 (async () => { // ensureItem: an ingredient that cannot be crafted comes from the base chest before giving up
   const {makeCrafting} = require('../crafting');
   const items = [{name: 'cobblestone', count: 1}];
