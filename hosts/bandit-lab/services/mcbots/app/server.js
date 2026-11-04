@@ -273,7 +273,7 @@ function applyPlaces() {
   const w = places.zone('wheat')?.box;
   const wheatField = w ? {x1: w.x1, z1: w.z1, x2: w.x2, z2: w.z2} : null; // hungry bots get bread there (bots.js wheatFood)
   for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField, tradeHalls: cfg.tradeHalls});
-  if (hub) { Object.assign(hub, {supplyChest, wheatField}); hub.broadcastPolicy(); }
+  if (hub) { Object.assign(hub, {supplyChest, wheatField, places: places.list}); hub.broadcastPolicy(); }
   if (keeper) {
     keeper.chest = supplyChest;
     keeper.site = site ? {x: site.x, y: site.y, z: site.z} : cfg.keeperSite;
