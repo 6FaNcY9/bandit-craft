@@ -1573,7 +1573,7 @@ function guardDigs(runner, bot) {
   const digRefusal = (block) => {
     const p = block?.position;
     if (runner.current?.cancelled || stale) return 'Digging aborted: the job was stopped';
-    if (p && insideAreas(runner.protectedAreas, p.x, p.z, p.y)) return 'Digging aborted: protected area'; // as the pathfinder: a zone keeps its height
+    if (p && insideAreas(runner.protectedAreas, p.x, p.z, p.y) && !runner.mayBuild?.(p)) return 'Digging aborted: protected area'; // as the pathfinder: a zone keeps its height
     if (p && runner.reserved?.(p.x, p.y, p.z)) return 'Digging aborted: that block holds up the base or a shaft step';
     const live = p && bot.blockAt(p);
     if (p && (!live || live.name !== block.name || (block.stateId !== undefined && live.stateId !== block.stateId))) return 'Digging aborted: the block changed';
@@ -1586,7 +1586,7 @@ function guardDigs(runner, bot) {
   const placeRefusal = (ref, face) => {
     const p = ref?.position && face ? ref.position.plus(face) : null;
     if (runner.current?.cancelled || stale) return 'Placing aborted: the job was stopped';
-    if (p && insideAreas(runner.protectedAreas, p.x, p.z, p.y)) return 'Placing aborted: protected area';
+    if (p && insideAreas(runner.protectedAreas, p.x, p.z, p.y) && !runner.mayBuild?.(p)) return 'Placing aborted: protected area';
     // Water that waters a field (farmland within 4 blocks) is never filled: the pathfinder bridged both new water
     // holes of the wheat fields with cobblestone, and the fields dried out again (main server 2026-10-18).
     if (p && bot.blockAt(p)?.name === 'water') {
@@ -1704,7 +1704,7 @@ async function ensureTool(r, job, block, make = (rr, j, item) => crafting.ensure
   r.emit('info', `no ${kind} made: ${why.slice(0, 80)}`); // the dig goes on with what there is
 }
 
-async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
+async function digAt(r, job, pos, expect = null, {pickup = true, stay = false} = {}) {
   const {bot} = r;
   let block = bot.blockAt(pos);
   if (!block || block.name.endsWith('air')) return false;
@@ -1725,7 +1725,7 @@ async function digAt(r, job, pos, expect = null, {pickup = true} = {}) {
     // GoalLookAtBlock raycasts against collision shapes: a block without one (wheat, flowers, grass) is never seen, so
     // every walk ran to the 4 s search timeout, some 20 s a cell (sandbox wheat plot, 2026-10-20).
     const sight = block.boundingBox === 'empty' ? {} : {goal: new goals.GoalLookAtBlock(pos, bot.world, {reach: 4})};
-    await goNear(r, job, pos.x, pos.y, pos.z, 4, {...sight, doing: `walking to ${block.name} near ${at(pos)}${tally(job)}`});
+    if (!stay || !withinReach(bot, pos)) await goNear(r, job, pos.x, pos.y, pos.z, 4, {...sight, doing: `walking to ${block.name} near ${at(pos)}${tally(job)}`});
   } catch (e) {
     // No spot within 4 (the last cells of a shaft layer, seen from its stair step): the server takes a dig
     // up to its interaction range (4.5) plus a margin, so a block within DIG_REACH of the eyes is dug from
@@ -2607,7 +2607,7 @@ const dist3 = (a, p) => Math.hypot(a.x - p.x, a.y - p.y, a.z - p.z);
 // come/follow. Entity tracking only reaches the server's tracking range, so a
 // farther player is approached via BlueMap's position (same dimension only)
 // and the live entity takes over once it is visible. `stop` cancels the job.
-async function chase(r, job, follow) {
+async function chase(r, job, follow, now = Date.now) {
   const {bot} = r;
   const name = job.args.player;
   const start = Date.now();
@@ -2619,7 +2619,7 @@ async function chase(r, job, follow) {
   // gets the longer fall dropDown allows; a way still missing after 30 s ends the job with the reason.
   let noPathAt = 0;
   const mv = bot.pathfinder?.movements, wasDrop = mv?.maxDropDown;
-  const onPath = (res) => { noPathAt = res.status === 'noPath' ? noPathAt || Date.now() : 0; };
+  const onPath = (res) => { noPathAt = res.status === 'noPath' ? noPathAt || now() : 0; };
   bot.on('path_update', onPath);
   try {
     for (;;) {
@@ -2636,7 +2636,7 @@ async function chase(r, job, follow) {
         const ty = e ? e.position.y : r.world.player(name)?.y;
         const drop = Math.min(12, Math.floor((bot.health || 0) - 6) + 3);
         if (ty != null && me.y - ty > mv.maxDropDown && drop > mv.maxDropDown) { mv.maxDropDown = drop; mode = null; noPathAt = 0; }
-        else if (Date.now() - noPathAt > CHASE_NO_PATH_MS) throw new Error(`no path to ${name}`);
+        else if (now() - noPathAt > CHASE_NO_PATH_MS) throw new Error(`no path to ${name}`);
       }
       if (e) {
         // A dynamic GoalFollow never started walking with our movement
@@ -3092,7 +3092,7 @@ const seal = sealJob.makeSeal({goNear, guard, sleep, goals, withdraw: buildWithd
 
 const {level} = levelJob.makeLevel({goNear, waitCalm, guard, sleep, digAt, upkeep, NATURAL, stairRing, at});
 
-const {highway} = roadJob.makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride: makeRide({guard, sleep}), restock: async () => 'ok', buildOrigin: async () => {}});
+const {highway} = roadJob.makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride: makeRide({guard, sleep}), restock: async () => 'ok'});
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,

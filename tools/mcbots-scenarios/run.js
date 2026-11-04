@@ -9,6 +9,7 @@ const path = require('node:path');
 const {BOX, SCENARIOS, CLEAR, PLATFORM, BOT: BOT_SETUP} = require('./scenarios');
 
 const DASH = process.env.DASHBOARD || 'http://127.0.0.1:8099';
+const CONSOLE = process.env.MCBOTS_URL || DASH; // a local instance without the sandbox password uses the lab's console
 const BOT = process.env.BOT || 'bot50';
 const RESULTS = path.join(os.homedir(), '.cache/bandit-bot-test/scenario-results.jsonl');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -111,10 +112,14 @@ function chestItemCount(out, item) {
 
 async function rcon(cmds) {
   cmds.forEach(checkCommand);
-  const r = await fetch(DASH + '/api/sandbox/console', {method: 'POST', headers: {'content-type': 'application/json', origin: DASH}, body: JSON.stringify({commands: cmds})});
-  const body = await r.json().catch(() => ({}));
-  if (r.status !== 200) throw new Error(`rcon failed: ${body.error || r.status}`);
-  return body.replies.join('\n');
+  const replies = [];
+  for (let i = 0; i < cmds.length; i += 64) { // the console takes at most 64 at a time
+    const r = await fetch(CONSOLE + '/api/sandbox/console', {method: 'POST', headers: {'content-type': 'application/json', origin: CONSOLE}, body: JSON.stringify({commands: cmds.slice(i, i + 64)})});
+    const body = await r.json().catch(() => ({}));
+    if (r.status !== 200) throw new Error(`rcon failed: ${body.error || r.status}`);
+    replies.push(...body.replies);
+  }
+  return replies.join('\n');
 }
 const api = async (p, body) => (await fetch(DASH + p, body ? {method: 'POST', headers: {'content-type': 'application/json', origin: DASH}, body: JSON.stringify(body)} : undefined)).json();
 const botState = async () => (await api('/api/state')).bots.find((b) => b.name === BOT);

@@ -391,3 +391,26 @@
   assert.deepStrictEqual(unhandled, []);
   console.log('guardDigs: refused activations are handled');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// A protected box refuses a bot's digging and placing; a road's job opens its own cells in it (road.js mayBuildAt), and only while it runs.
+(async () => {
+  const assert = require('node:assert/strict');
+  const {guardDigs} = require('../bots');
+  const {Vec3} = require('vec3');
+  const stone = (p) => ({name: 'stone', position: p, stateId: 1, boundingBox: 'block'});
+  const air = (p) => ({name: 'air', position: p, stateId: 0, boundingBox: 'empty'});
+  const bot = {dig: async () => 'dug', equip: async () => {}, placeBlock: async () => 'placed', entity: {position: new Vec3(0, 6, 0)}, blockAt: (p) => (p.x === 1 ? stone(p) : air(p))};
+  const runner = {protectedAreas: [[-80, -144, 80, 80]], current: {cancelled: false}};
+  guardDigs(runner, bot);
+  const dig = (y) => bot.dig(stone(new Vec3(1, y, 0))), place = (y) => bot.placeBlock(stone(new Vec3(1, y, 0)), new Vec3(-1, 0, 0));
+  await assert.rejects(dig(6), /protected area/);
+  await assert.rejects(place(6), /protected area/);
+  runner.mayBuild = (p) => p.y <= 6;
+  assert.strictEqual(await dig(6), 'dug');
+  assert.strictEqual(await place(6), 'placed');
+  await assert.rejects(dig(7), /protected area/);
+  await assert.rejects(place(7), /protected area/);
+  runner.mayBuild = null;
+  await assert.rejects(dig(6), /protected area/);
+  console.log('protected box: the road job\'s exception ok');
+})().catch((e) => { console.error(e); process.exit(1); });

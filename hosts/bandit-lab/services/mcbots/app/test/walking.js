@@ -181,11 +181,11 @@ const assert = require('node:assert');
   await done;
   assert.strictEqual(mv.maxDropDown, 3, 'the drop is put back');
   const two = mk(70);
-  const follow = chase(two.r, {args: {player: 'Misa'}, t: {}, cancelled: false}, true).then(() => 'ok', (e) => e.message);
+  let later = 0; // not by patching Date.now: the other test parts run at the same time and read it
+  const follow = chase(two.r, {args: {player: 'Misa'}, t: {}, cancelled: false}, true, () => Date.now() + later).then(() => 'ok', (e) => e.message);
   await new Promise((res) => setTimeout(res, 100));
   two.bot.emit('path_update', {status: 'noPath', path: []});
-  const realNow = Date.now;
-  Date.now = () => realNow() + 31000;
-  try { assert.strictEqual(await follow, 'no path to Misa'); } finally { Date.now = realNow; }
+  later = 31000;
+  assert.strictEqual(await follow, 'no path to Misa');
   assert.strictEqual(two.mv.maxDropDown, 3, 'same level: no wider drop');
 })();

@@ -11,6 +11,7 @@ dashboard 127.0.0.1:8099) whose `SANDBOX_RCON_HOST` points at the sandbox (RCON 
 
 - `scenarios.js`: the table. A scenario is `{name, setup: [rcon], job: {type, args}, timeoutS, success: [conditions]}`
   (optional `stopAfterS`, `teardown`, `pre` = jobs run first, e.g. a stock job, `zones` = places set in the bot's state for the run, removed after). Conditions: near, notNear, inv, alive, finished, noError, error, chest, cells (counts blocks in a box by `execute if block` probes, `min`/`max`).
+- `MCBOTS_URL=https://bandit-lab.tail7facc9.ts.net:8445` sends only the console commands to the lab (a laptop instance has no sandbox password).
 - `run.js`: builds the lab, orders the job, polls `/api/state`, scores the final state, prints a table, exits 1 on any FAIL.
   Metrics from `/api/events`: could not reach, No path, no progress for 30 s, skipped a, no free, deaths, seconds.
 - Every run appends one JSON line to `~/.cache/bandit-bot-test/scenario-results.jsonl` (outside the repo).

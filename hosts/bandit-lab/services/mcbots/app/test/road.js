@@ -1,7 +1,7 @@
 'use strict';
 // The road's geometry and what a block means to it (road.js): pure, no bot.
 const assert = require('node:assert');
-const {cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K} = require('../road');
+const {originPlan, readOrigin, mayBuildAt, DIRS, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K} = require('../road');
 
 const O = {x: 0, y: 0, z: 0};
 const east = {dir: 'east', origin: O}, west = {dir: 'west', origin: O}, south = {dir: 'south', origin: O}, north = {dir: 'north', origin: O};
@@ -154,3 +154,57 @@ assert.deepStrictEqual(findHead(railed(40), east, FIRST_RAIL), {head: 40, open: 
 assert.deepStrictEqual(findHead(world(), east, 20), {head: FIRST_RAIL - 1, open: false}, 'a road with no rail yet: nothing within 64 back');
 assert.deepStrictEqual(findHead(world(), east, 3), {head: FIRST_RAIL - 1, open: false});
 assert.deepStrictEqual(findHead(railed(40, {'30,0,0': null}), east, 20), {head: 29, open: true}, 'the chunk ends the reading, not the road');
+
+// ---- the origin ----
+{
+  const plan = originPlan(O), key = (c) => `${c.x},${c.y},${c.z}`;
+  const room = new Set(plan.room.map(key)), curbs = new Set(plan.curbs.map(key));
+  assert.strictEqual(plan.room.filter((c) => Math.abs(c.x) <= 2 && Math.abs(c.z) <= 2 && c.y >= 0 && c.y <= 3).length, 100, 'the room');
+  // the stair has three air cells a step, and rises one a step
+  assert.deepStrictEqual(plan.stair[0].air[0], {x: 2, y: 0, z: -3}, 'it leaves the room on its north side');
+  plan.stair.forEach((s, i) => {
+    assert.deepStrictEqual(s.air, [0, 1, 2].map((h) => ({...s.air[0], y: s.air[0].y + h})));
+    assert.deepStrictEqual(s.floor, {...s.air[0], y: s.air[0].y - 1});
+    if (!i) return;
+    const a = plan.stair[i - 1].air[0], b = s.air[0];
+    assert.strictEqual(Math.abs(a.x - b.x) + Math.abs(a.z - b.z), 1, 'one over');
+    assert.ok(b.y - a.y === 0 || b.y - a.y === 1, 'one up at most');
+  });
+  // each road's first rail is at k 5, its curb at 3
+  for (const dir of Object.keys(DIRS)) {
+    const road = {dir, origin: O};
+    assert.ok(curbs.has(key(cell(road, 3))), `${dir}: curb`);
+    for (const c of [cell(road, 3, 1), cell(road, 3, 2), cell(road, 4), cell(road, 4, 1), cell(road, 4, 2)]) assert.ok(room.has(key(c)), `${dir}: open over the curb and on the landing ${key(c)}`);
+    assert.ok(!room.has(key(cell(road, 3))), `${dir}: the curb stays`);
+    assert.ok(!room.has(key(cell(road, FIRST_RAIL))), `${dir}: the rail's cell is the road's`);
+    assert.strictEqual(FIRST_RAIL, 5);
+    // no stair cell within 3 of a road beyond k 8: inspect would take it for something in the road
+    const d = DIRS[dir];
+    for (const s of plan.stair) for (const c of s.air) {
+      const k = c.x * d.dx + c.z * d.dz, side = c.x * d.sx + c.z * d.sz;
+      assert.ok(k < 8 || Math.abs(side) > 3, `${dir}: ${key(c)} k ${k} side ${side}`);
+    }
+  }
+  // what is there: from the sky down to the first step with anything in it
+  const worldOf = (sky, put = {}) => (x, y, z) => {
+    const k = `${x},${y},${z}`;
+    if (k in put) return put[k] && {name: put[k], boundingBox: /air|wildflowers/.test(put[k]) ? 'empty' : 'block'};
+    return x >= 2 + sky || y > 100 ? {name: 'air', boundingBox: 'empty'} : {name: 'deepslate', boundingBox: 'block'};
+  };
+  const read = (s, put) => readOrigin(worldOf(s, put), plan);
+  assert.strictEqual(read(10).top, 3 + 10 - 1, 'corridor of 3 and steps up to the open air');
+  assert.strictEqual(read(10).done, false);
+  assert.deepStrictEqual(read(10, {[key(plan.stair[12].air[1])]: 'wildflowers'}).stop, undefined, 'a plant is no building');
+  const inWay = key(plan.stair[5].air[1]), st = read(10, {[inWay]: 'oak_stairs'}).stop;
+  assert.deepStrictEqual([st.name, key(st.at)], ['oak_stairs', inWay]);
+  assert.strictEqual(read(10, {[key(plan.room[0])]: 'chest'}).stop.name, 'chest');
+  assert.strictEqual(read(10, {[key(plan.stair[20].air[0])]: null}).unloaded, true, 'a chunk not there is not air');
+  assert.strictEqual(read(10, {[key(plan.room[1])]: 'water'}).stop.name, 'water', 'a flooded chamber is not dug');
+  // all dug, the curbs left standing
+  const dug = {}; for (const c of plan.room) dug[key(c)] = 'air'; for (const s of plan.stair) for (const c of s.air) dug[key(c)] = 'air';
+  assert.deepStrictEqual(readOrigin(worldOf(1000, dug), plan), {top: 0, done: true});
+  // the exception to the protected box opens only its own cells
+  const may = mayBuildAt(plan, O), s30 = plan.stair[33].air[0];
+  assert.strictEqual(s30.y, 31);
+  assert.deepStrictEqual([may({x: 40, y: 6, z: 40}), may({x: 40, y: 7, z: 40}), may(s30), may(plan.stair[33].floor), may({...s30, z: s30.z - 1})], [true, false, true, true, false]);
+}

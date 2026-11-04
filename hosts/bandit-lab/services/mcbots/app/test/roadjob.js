@@ -3,7 +3,8 @@
 const assert = require('node:assert');
 const {Vec3} = require('vec3');
 const {makeRoad} = require('../roadjob');
-const {crossSection, checkCell, cell, niche, isBoosterSlot, mayEndAt, railHeight, FIRST_RAIL, RAMP_CELLS, BORDER_K} = require('../road');
+const {crossSection, checkCell, cell, niche, isBoosterSlot, mayEndAt, railHeight, originPlan, FIRST_RAIL, RAMP_CELLS, BORDER_K} = require('../road');
+const O = {x: 0, y: 0, z: 0};
 const {VALIDATE} = require('../bots');
 
 const road = {dir: 'east', origin: {x: 0, y: 0, z: 0}};
@@ -45,8 +46,9 @@ function world(put = {}, {items = {rail: 64, cobbled_deepslate: 64, iron_pickaxe
     sleep: async (ms) => { log.slept += ms; },
     waitCalm: async () => {},
     goNear: async (r, job, x, y, z) => { bot.entity.position = new Vec3(x + 0.5, y, z + 0.5); log.walks.push(x); },
-    digAt: async (r, job, pos) => {
+    digAt: async (r, job, pos, expect, opts) => {
       const n = name(pos);
+      if (!opts?.stay) log.walkedToDig = (log.walkedToDig || 0) + 1;
       log.dug.push(`${n} ${key(pos)}`);
       blocks.set(key(pos), 'air');
       const up = {x: pos.x, y: pos.y + 1, z: pos.z};
@@ -150,6 +152,7 @@ module.exports = (async () => {
     assert.strictEqual(await w.buildCell(w.r, w.job, road, 20), 'ok');
     assert.deepStrictEqual(checkCell(w.read, road, 20), []);
     assert.strictEqual(w.log.dug.filter((d) => d.startsWith('gravel')).length, 3);
+    assert.strictEqual(w.log.walkedToDig, undefined, 'from where it stands: the roof ahead cannot be seen, and looking for a spot took 19 s a block');
   }
   { // gravel without end is not a loop without end
     const w = world(roadTo(20, box(20, 20, 2, 60, 0, 0, 'gravel')));
@@ -504,6 +507,52 @@ module.exports = (async () => {
     await w.highway(w.r, w.job);
     assert.strictEqual(calls, 3);
     assert.ok(w.log.slept >= 2 * 60000);
+  }
+  // ---- the origin ----
+  {
+    const plan = originPlan(O), sky = {};
+    for (const s of plan.stair.slice(10)) for (const c of s.air) sky[key(c)] = 'air';
+    const load2 = {cobbled_deepslate: 64, iron_pickaxe: 2};
+    { // a player's block on the stair's way stops the origin and reports it, digs nothing
+      const at = plan.stair[5].air[1], w = world({...sky, [key(at)]: 'oak_stairs'}, {items: load2});
+      assert.strictEqual(await w.buildOrigin(w.r, w.job, road), 'stopped');
+      assert.deepStrictEqual(w.log.dug, []);
+      assert.match(w.log.events.find(([k]) => k === 'alert')[1], /^highway: the origin stopped: oak_stairs at 5 4 -5/);
+    }
+    { // dug from the top down, with the curbs left standing, and then it is done
+      const w = world(sky, {items: load2});
+      w.r.name = 'bot2';
+      assert.strictEqual(await w.buildOrigin(w.r, w.job, road), 'ok');
+      for (const c of [...plan.room, ...plan.stair.flatMap((s) => s.air)]) assert.strictEqual(w.name(c), 'air', key(c));
+      for (const c of plan.curbs) assert.strictEqual(w.name(c), 'deepslate', key(c));
+      const y = w.log.dug.filter((d) => /^deepslate \S+,-5$/.test(d)).map((d) => Number(d.split(' ')[1].split(',')[1]));
+      assert.ok(y[0] > y.at(-1), 'down');
+      const dug = w.log.dug.length;
+      assert.strictEqual(await w.buildOrigin(w.r, w.job, road), 'ok');
+      assert.strictEqual(w.log.dug.length, dug, 'built once');
+    }
+    { // a curb a cave took away is set again, and gravel that comes down is dug again
+      const curb = plan.curbs[0], above = {...plan.stair[1].air[2], y: plan.stair[1].air[2].y + 1};
+      const w = world({...sky, [key(curb)]: 'air', [key(above)]: 'gravel'}, {items: load2});
+      assert.strictEqual(await w.buildOrigin(w.r, w.job, road), 'ok');
+      assert.strictEqual(w.name(curb), 'cobbled_deepslate');
+      assert.strictEqual(w.name(plan.stair[1].air[2]), 'air');
+    }
+    { // a second bot finds it claimed and waits, then finds it built
+      const w = world(sky, {items: load2});
+      const put = (c) => w.blocks.set(key(c), 'air');
+      w.r.world = {claim: async () => false};
+      const m = makeRoad({...w.deps, sleep: async () => { plan.room.forEach(put); plan.stair.flatMap((s) => s.air).forEach(put); }});
+      assert.strictEqual(await m.buildOrigin(w.r, w.job, road), 'ok');
+      assert.deepStrictEqual(w.log.dug, []);
+    }
+    { // the job opens the protected box for itself and closes it again
+      const w = job(start, {}, {at: FIRST_RAIL - 1, args: {length: 6}});
+      let during;
+      const m = makeRoad({...w.deps, ride: fakeRide(w), restock: async (r) => { during = r.mayBuild; return 'ok'; }, buildOrigin: async () => {}});
+      await m.highway(w.r, w.job);
+      assert.deepStrictEqual([during({x: 9, y: 6, z: 9}), during({x: 9, y: 7, z: 9}), w.r.mayBuild], [true, false, null]);
+    }
   }
   { // the job's arguments
     assert.deepStrictEqual(VALIDATE.highway({dir: 'east'}), {dir: 'east'});

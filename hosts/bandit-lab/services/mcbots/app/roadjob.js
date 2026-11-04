@@ -2,7 +2,7 @@
 // The highway job: road.js says what a road is, cartride.js how to ride one, and this wires both to a bot, as level.js does.
 const {Vec3} = require('vec3');
 const {refFace} = require('./seal');
-const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt} = require('./road');
+const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
 const FALLS = 16; // gravel coming down the column above a cell; more than this is no cell to build
@@ -23,9 +23,11 @@ const BACK_OFF = 48;
 const RETRY_MS = 300000; // the spec's 5 minutes
 const WARDEN_RANGE = 32;
 const FARMS_MS = 60000;
+const ORIGIN_KEY = 'highway:origin';
+const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
 
-function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock, buildOrigin}) {
+function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock, buildOrigin = null}) {
   // 26.x may not answer a placing, so what it did is read from the blocks afterwards, as seal.js does.
   async function place(r, c) {
     const {bot} = r;
@@ -55,7 +57,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
         if (!free(read(c))) {
           // Gravel falls after the first block is gone, and grass or a cobweb cannot be built through.
           if (++falls > FALLS) return stop;
-          await digAt(r, job, vec(c), null, {pickup: false});
+          await digAt(r, job, vec(c), null, {pickup: false, stay: true});
           did = true;
           if (!free(read(c))) continue;
         }
@@ -90,7 +92,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
           if (res === 'out') return {out: 'lining'};
           if (res === 'noref') return stop;
         } else {
-          await digAt(r, job, vec(c), null, {pickup: false});
+          await digAt(r, job, vec(c), null, {pickup: false, stay: true});
         }
       }
     }
@@ -359,6 +361,67 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
     return 'done';
   }
 
+  // Digs every cell of a list until it stays open: gravel comes down after the block under it.
+  async function dig(r, job, cells) {
+    const read = (c) => r.bot.blockAt(vec(c));
+    for (const c of cells) {
+      for (let falls = 0; read(c) && !isClear(read(c)); falls++) {
+        if (falls > FALLS) throw new Error(`${read(c).name} keeps falling at ${c.x} ${c.y} ${c.z}`);
+        guard(job);
+        await digAt(r, job, vec(c), null, {pickup: false, stay: true});
+      }
+    }
+  }
+  const fill = async (r, c) => {
+    if (!isOpen(r.bot.blockAt(vec(c)))) return;
+    if ((await place(r, c)) === 'out') throw new Error('no lining left for the origin');
+  };
+
+  // From the surface down, so the bot always stands on what it dug: the stair, the room, the curbs. One bot does it, the others wait.
+  async function digOrigin(r, job, road) {
+    const {bot} = r, plan = originPlan(road.origin), {x, y, z} = road.origin;
+    const blockAt = (a, b, c) => bot.blockAt(new Vec3(a, b, c));
+    let state = readOrigin(blockAt, plan);
+    if (state.done) return 'ok';
+    if (state.unloaded) await goNear(r, job, x + 30, y + 64, z - 5, 32, {doing: 'walking to the origin'});
+    for (let tries = 0; (state = readOrigin(blockAt, plan)).unloaded; tries++) {
+      if (tries > CHUNK_TRIES) throw new Error('the chunks at the origin did not load');
+      await sleep(1000);
+    }
+    const stopped = (s) => { r.emit('alert', `highway: the origin stopped: ${s.name} at ${s.at.x} ${s.at.y} ${s.at.z}`); return 'stopped'; };
+    if (state.stop) return stopped(state.stop);
+    const claim = () => (r.world ? r.world.claim(r.name, ORIGIN_KEY) : true);
+    while (!state.done && !(await claim())) {
+      job.t.doing = 'waiting for the bot that builds the origin';
+      guard(job);
+      await sleep(CLAIM_HOLD_MS);
+      state = readOrigin(blockAt, plan);
+      if (state.stop) return stopped(state.stop);
+    }
+    if (state.done) return 'ok';
+    const hold = setInterval(() => Promise.resolve(claim()).catch(() => {}), CLAIM_HOLD_MS);
+    try {
+      const {top} = state, walk = (c, doing) => goNear(r, job, c.x, c.y, c.z, 0, {doing});
+      if (top < plan.stair.length) await goNear(r, job, plan.stair[top].air[0].x, plan.stair[top].air[0].y, plan.stair[top].air[0].z, 1, {doing: 'walking to the top of the stair'});
+      for (let i = top - 1; i >= 0; i--) {
+        const s = plan.stair[i];
+        await dig(r, job, [...s.air].reverse());
+        await fill(r, s.floor);
+        await walk(s.air[0], `digging the stair down, step ${i}`);
+      }
+      const door = plan.stair[0].air[0], away = (c) => Math.hypot(c.x - door.x, c.z - door.z);
+      await dig(r, job, [...plan.room].sort((a, b) => away(a) - away(b)));
+      for (const c of plan.curbs) {
+        const s = {x: c.x - Math.sign(c.x - x), y: c.y, z: c.z - Math.sign(c.z - z)};
+        if (isOpen(bot.blockAt(vec(c)))) { await walk(s, 'setting a curb'); await fill(r, c); }
+      }
+    } finally {
+      clearInterval(hold);
+      r.world?.release?.(r.name, ORIGIN_KEY);
+    }
+    return 'ok';
+  }
+
   // Keeps no state but a hint: it looks where it stands and reads the blocks. Riding out from the origin ends at the road's
   // real end by itself, because the rail stops one cell before the rock.
   async function highway(r, job) {
@@ -368,6 +431,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
     const blockAt = (x, y, z) => bot.blockAt(new Vec3(x, y, z));
     const saved = r.digOnly;
     r.digOnly = /$^/; // the road's cells and nothing else: a walk digs no ways of its own
+    r.mayBuild = mayBuildAt(originPlan(origin), origin);
     try {
       for (let waits = 0; ;) {
         guard(job);
@@ -378,7 +442,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
         if (k < FIRST_RAIL) {
           if ((await restock(r, job, road)) === 'waiting') { await sleep(FARMS_MS); continue; }
           guard(job);
-          await buildOrigin(r, job, road);
+          if (!job.args.origin && (await (buildOrigin || digOrigin)(r, job, road)) === 'stopped') return; // a road with an origin of its own has its own start
           guard(job);
           const land = cell(road, FIRST_RAIL - 1), first = findHead(blockAt, road, FIRST_RAIL);
           if (onRoad(road, bot.entity.position)?.k !== FIRST_RAIL - 1) await goNear(r, job, land.x, land.y, land.z, 0, {doing: 'walking to the road'});
@@ -409,10 +473,11 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
       }
     } finally {
       r.digOnly = saved;
+      r.mayBuild = null;
     }
   }
 
-  return {highway, buildCell, layBooster, removeBooster, layRamp, collectRamp};
+  return {highway, buildOrigin: digOrigin, buildCell, layBooster, removeBooster, layRamp, collectRamp};
 }
 
 module.exports = {makeRoad};

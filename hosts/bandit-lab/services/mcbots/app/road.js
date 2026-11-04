@@ -50,7 +50,7 @@ function onRoad({dir, origin}, pos) {
 }
 
 // What a job may dig as plain ground. Moved here from bots.js as it was: the jobs there use it too.
-const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|gravel|sand|red_sand|andesite|diorite|granite|tuff|calcite|dripstone_block|[a-z_]*_ore|short_grass|tall_grass|fern|large_fern|[a-z_]*_flower|dandelion|poppy|moss_block|moss_carpet|glow_lichen|cave_vines|cave_vines_plant)$/;
+const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|gravel|sand|red_sand|andesite|diorite|granite|tuff|calcite|dripstone_block|[a-z_]*_ore|short_grass|tall_grass|fern|large_fern|[a-z_]*_flower|dandelion|poppy|wildflowers|moss_block|moss_carpet|glow_lichen|cave_vines|cave_vines_plant)$/;
 const ROCK = /^(obsidian|smooth_basalt|magma_block|pointed_dripstone|infested_[a-z_]+|raw_[a-z]+_block|amethyst_block|budding_amethyst|[a-z]+_amethyst_bud|amethyst_cluster|sculk|sculk_vein|sculk_catalyst|sculk_sensor|hanging_roots|azalea|flowering_azalea|azalea_leaves|flowering_azalea_leaves|spore_blossom|big_dripleaf|big_dripleaf_stem|small_dripleaf|brown_mushroom|red_mushroom|seagrass|tall_seagrass|kelp|kelp_plant|ice|packed_ice|blue_ice)$/;
 const STRUCTURE = /^([a-z_]+_planks|[a-z_]+_fence|rail|cobweb|tuff_[a-z_]+|chiseled_tuff[a-z_]*|polished_tuff[a-z_]*|(waxed_)?((exposed|weathered|oxidized)_)?(chiseled_|cut_)?copper(_[a-z_]+)?|(waxed_)?((exposed|weathered|oxidized)_)?cut_copper[a-z_]*)$/;
 const KEEP = /^(chest|trapped_chest|barrel|hopper|spawner|trial_spawner|vault|dispenser|dropper)$/;
@@ -149,4 +149,57 @@ function findHead(blockAt, road, fromK) {
   return {head: k, open: !at(k + 1)};
 }
 
-module.exports = {findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};
+// The chamber where the four roads start, and the stair down to it: a corridor from the room's north side at x 2 to z -5, then
+// steps rising east, three air cells each because the pathfinder needs them. At z -5 they stay out of what inspect sees.
+const STAIR_STEPS = 100; // the surface near the origin is at y 60 to 64
+function originPlan(origin) {
+  const at = (x, y, z) => ({x: origin.x + x, y: origin.y + y, z: origin.z + z});
+  const room = [], curbs = [], stair = [];
+  for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) for (let y = 0; y <= 3; y++) room.push(at(x, y, z));
+  for (const dir of Object.keys(DIRS)) {
+    const road = {dir, origin};
+    curbs.push(cell(road, 3));
+    room.push(cell(road, 3, 1), cell(road, 3, 2), cell(road, 4), cell(road, 4, 1), cell(road, 4, 2));
+  }
+  const step = (x, y, z) => stair.push({air: [at(x, y, z), at(x, y + 1, z), at(x, y + 2, z)], floor: at(x, y - 1, z)});
+  for (let z = -3; z >= -5; z--) step(2, 0, z);
+  for (let i = 1; i <= STAIR_STEPS; i++) step(2 + i, i, -5);
+  return {room, curbs, stair};
+}
+
+const isClear = (b) => kindOf(b.name) === 'air' || (kindOf(b.name) === 'natural' && b.boundingBox === 'empty'); // a flower is no building
+const barred = (b) => ['player', 'keep', 'danger', 'fluid'].includes(kindOf(b.name)); // not the bots' to dig, and a flooded chamber is the owner's to hear of
+// What stands there: {unloaded}, {stop: {name, at}} for a block that is barred, or {top, done}: top is the lowest step open
+// to the sky, read from above, so a cave under the surface is not taken for the surface.
+function readOrigin(blockAt, plan) {
+  const read = (c) => blockAt(c.x, c.y, c.z);
+  let top = plan.stair.length;
+  for (; top > 0; top--) {
+    const blocks = plan.stair[top - 1].air.map(read);
+    if (blocks.some((b) => !b)) return {unloaded: true};
+    if (!blocks.every(isClear)) break;
+  }
+  let done = top === 0;
+  for (const c of [...plan.stair.slice(0, top).flatMap((s) => s.air), ...plan.room]) {
+    const b = read(c);
+    if (!b) return {unloaded: true};
+    if (barred(b)) return {stop: {name: b.name, at: c}};
+    if (!isClear(b)) done = false;
+  }
+  for (const c of plan.curbs) {
+    const b = read(c);
+    if (!b) return {unloaded: true};
+    if (barred(b)) return {stop: {name: b.name, at: c}};
+    if (isOpen(b)) done = false;
+  }
+  return {top, done};
+}
+
+// The spec's one exception to the protected box: up to 6 above the origin, and the stair.
+function mayBuildAt(plan, origin) {
+  const key = (c) => `${c.x},${c.y},${c.z}`;
+  const stair = new Set(plan.stair.flatMap((s) => [...s.air, s.floor]).map(key));
+  return (p) => p.y <= origin.y + 6 || stair.has(key(p));
+}
+
+module.exports = {originPlan, readOrigin, mayBuildAt, isClear, findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};
