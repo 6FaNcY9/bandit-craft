@@ -162,10 +162,11 @@ start, and dips lose speed below about 68 m/s, so a rider needs a ramp where it 
 
 - **Stopping costs nothing.** Every road end has its rail stop one cell before the rock. The cart runs off the rail and stands.
   The head of the road is such an end by itself, so no brake has to move with it.
-- **A ramp** is 48 boosters on every fourth flat rail, about 290 blocks. It works in both directions.
-- **Each road has two.** One stays at the origin. The other lies behind the head: the builder lays it while it builds the last
-  290 blocks of a load, rides home over it, and on coming back walks it once to pick it up, about 5 minutes a trip by estimate,
-  and leaves no gold behind.
+- **A ramp** is 48 boosters on every fourth flat rail, 256 blocks on the road (290 in the test, which also kept clear of the far end's dips). It works in both directions.
+- **Each road has two.** One stays at the origin. The other lies behind the head: when a shift ends, for whatever reason, the
+  builder walks back over the last 256 blocks laying it, rides home over it, and on coming back walks it once to pick it up,
+  about 9 minutes a trip by estimate, and leaves no gold behind. Laying it while building the last blocks of a load would save
+  about 4 of those minutes, but needs to know in advance when a shift ends. Stage 2 measures whether that is worth it.
 - **Gold:** 96 boosters a road, 384 for all four, out of 1,605 in stock. It no longer sets the pace.
 - **A rider stranded mid-road** (a restart during a ride, a grave along the way) walks to the nearer end. Rare and slow on a long
   road; emergency ramps can come later if it hurts.
@@ -204,8 +205,8 @@ schematic or a direct loop is the builder's call, by what the sandbox shows to b
 A depot in the origin chamber, kept full by two suppliers. A builder takes its load there; with the depot empty it fetches
 for itself from the farms, so no road ever depends on a supplier being available.
 
-- A load is about 1,920 rails: 720 iron, 120 sticks, some powered rails and torches, spare pickaxes, food. It covers
-  about an hour's work.
+- A load is about 1,024 rails, because the 8 pickaxes that fit beside them do about 1 km of deepslate, plus powered rails
+  and torches for a ramp, cobblestone for lining, food. It covers about an hour's work.
 - Sources are a fixed list of the owner's farms and stores (table above, as Nix config like `TRADE_HALLS`), counted by
   the existing `stock` job. Bots take only what the road needs. Everything else stays where it is.
 - With a farm empty, the bot goes to the next one, and with all empty, it waits and reports, or mines (`get`) what can be
