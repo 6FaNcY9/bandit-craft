@@ -7,9 +7,15 @@ const FLASH_MS = 30000;
 // One handler per click `data.a`; later tasks add theirs here. (st, data, ui, viewer) -> void, may be async, may throw.
 // Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
 const QUICK_LABEL = Object.fromEntries(require('./botui-screens').QUICK);
+const {explain} = require('./botui-screens');
+const jobs = require('./botui-jobs');
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
 const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichbar'); };
+
+const box = (p, q) => ({x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)});
+const outline = (ui, viewer, b) => ui.call('/outline', {player: viewer, box: b}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
+const clearSel = async (st, ui, viewer) => { st.sel = {a: null, b: null, dim: null}; await outline(ui, viewer, null); };
 
 const ACTIONS = {
   // `none` after_action keeps the dialog open on the client, so the plugin clears it; Escape closes it either way.
@@ -24,6 +30,42 @@ const ACTIONS = {
     done(ui.api.submit(viewer, {bots: [bot], type: 'stop', args: {}}));
     ui.flash(st, `${bot}: gestoppt`, true);
   },
+  new: (st, data, ui, viewer) => { st.screen = {name: 'auftrag', ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})}; },
+  job: (st, data, ui, viewer) => {
+    if (!jobs.hasJob(data.key)) throw new Error('unbekannter Auftrag');
+    st.screen = {name: 'job', key: data.key, preset: jobs.presetOf(data, jobs.JOBS[data.key]), ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})};
+  },
+  // Every field is the player's input: jobs.build validates all of it, then VALIDATE has the last word (dashboard path).
+  send: async (st, data, ui, viewer) => {
+    try {
+      const o = jobs.build(data.key, data, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(),
+        allowed: ui.viewerBots[viewer], schematics: await ui.api.schematics()});
+      done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+      ui.flash(st, (o.bots.length > 1 ? o.bots.length + ' Bots' : o.bots[0]) + ': ' + o.say, true);
+      st.screen = {name: 'lage'};
+      if (o.area) await clearSel(st, ui, viewer);
+    } catch (e) {
+      ui.flash(st, 'Geht nicht: ' + explain(e.message));
+      if (!(st.screen.name === 'job' && st.screen.key === data.key)) st.screen = {name: 'auftrag'};
+    }
+  },
+  corner: async (st, data, ui, viewer) => {
+    const g = st.ctx.gaze, dim = st.ctx.dim;
+    st.screen = {name: 'auftrag'};
+    if (data.which !== 'a' && data.which !== 'b') throw new Error('unbekannte Ecke');
+    if (!g) return ui.flash(st, 'Du schaust auf keinen Block');
+    const corner = {x: g.x, y: g.y, z: g.z, dim};
+    if (data.which === 'b' && !st.sel.a) return ui.flash(st, 'Erst Ecke A setzen');
+    if (data.which === 'b' && jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(dim)) return ui.flash(st, 'Ecken in verschiedenen Welten');
+    if (data.which === 'a') st.sel = {a: corner, b: null, dim};
+    else st.sel.b = corner;
+    await outline(ui, viewer, st.sel.b ? box(st.sel.a, st.sel.b) : box(corner, corner));
+    if (data.which === 'a') { // a dialog freezes the player: close it so they can walk to the second corner
+      ui.flash(st, `Ecke A gesetzt: ${g.x} ${g.y} ${g.z}`, true);
+      await ACTIONS.close(st, data, ui, viewer);
+    }
+  },
+  clearsel: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = {name: 'auftrag'}; },
   stopall: (st, data, ui, viewer) => { ownerOnly(ui, viewer); st.screen = {name: 'stopall'}; },
   stopall_ok: (st, data, ui, viewer) => {
     ownerOnly(ui, viewer);
@@ -122,7 +164,7 @@ class BotUi {
     if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0});
     st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
     if (e.type === 'open') {
-      st.screen = {name: 'lage'}; st.lastClick = this.now();
+      st.screen = {name: st.sel.a ? 'auftrag' : 'lage'}; st.lastClick = this.now();
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
       const act = ACTIONS[e.data?.a];
