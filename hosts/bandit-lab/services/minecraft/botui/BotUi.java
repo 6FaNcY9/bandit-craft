@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -75,6 +76,7 @@ public class BotUi extends JavaPlugin implements Listener {
   private volatile long lastPoll = 0;
   private byte[] token;
   private HttpServer http;
+  private ExecutorService pool;
 
   @Override
   public void onEnable() {
@@ -92,7 +94,14 @@ public class BotUi extends JavaPlugin implements Listener {
       return;
     }
     token = pw.getBytes(StandardCharsets.UTF_8);
-    int port = Integer.parseInt(System.getenv().getOrDefault("BOTUI_PORT", "8101"));
+    int port;
+    try {
+      port = Integer.parseInt(System.getenv().getOrDefault("BOTUI_PORT", "8101"));
+    } catch (NumberFormatException e) {
+      getLogger().severe("BOTUI_PORT is not a number, BotUi stays disabled");
+      getServer().getPluginManager().disablePlugin(this);
+      return;
+    }
     try {
       http = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
     } catch (IOException e) {
@@ -101,7 +110,8 @@ public class BotUi extends JavaPlugin implements Listener {
       return;
     }
     http.createContext("/", this::handle);
-    http.setExecutor(Executors.newFixedThreadPool(4));
+    pool = Executors.newFixedThreadPool(4);
+    http.setExecutor(pool);
     http.start();
     getServer().getPluginManager().registerEvents(this, this);
     Bukkit.getScheduler().runTaskTimer(this, this::drawOutlines, 10, 10);
@@ -110,6 +120,7 @@ public class BotUi extends JavaPlugin implements Listener {
   @Override
   public void onDisable() {
     if (http != null) http.stop(0);
+    if (pool != null) pool.shutdownNow();
   }
 
   // ---- HTTP -------------------------------------------------------------------------------
@@ -218,10 +229,12 @@ public class BotUi extends JavaPlugin implements Listener {
         ran = false;
         feedback.add(String.valueOf(e.getCause() != null ? e.getCause().getMessage() : e.getMessage()));
       }
+      // A real success prints exactly "Displayed dialog to <name>" (English server locale); anything else is a failure.
+      boolean shown = ran && feedback.size() == 1 && feedback.get(0).startsWith("Displayed dialog");
       JSONObject o = new JSONObject();
-      o.put("ok", ran);
+      o.put("ok", shown);
       o.put("feedback", String.join("\n", feedback));
-      if (ran) open.add(p.getUniqueId());
+      if (shown) open.add(p.getUniqueId());
       return o;
     });
     if (res == null) reply(x, 400, error("player not online"));
@@ -400,7 +413,11 @@ public class BotUi extends JavaPlugin implements Listener {
     if (e.getTag() != null) {
       String snbt = e.getTag().string();
       if (snbt.length() > MAX_PAYLOAD) return;
-      flatten(snbt, data);
+      try {
+        flatten(snbt, data);
+      } catch (RuntimeException ex) {
+        // malformed tail: keep what was read so far
+      }
     }
     if ("close".equals(data.get("a"))) open.remove(p.getUniqueId());
     onMain(() -> emit("click", p, data));
