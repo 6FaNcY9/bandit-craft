@@ -59,6 +59,9 @@ function makeRide({guard, sleep, now = Date.now}) {
     } finally {
       bot._client.off('move_minecart', moved);
       await leave(r);
+      // The client never learns where a cart went (move_minecart is unread, and its position decodes wrong: doubles read as
+      // floats), so it "stands" where it was boarded. It stands where the rider got off: else takeCart finds none in reach.
+      if (bot.entities[id]) bot.entities[id].position = bot.entity.position.clone();
     }
   }
 

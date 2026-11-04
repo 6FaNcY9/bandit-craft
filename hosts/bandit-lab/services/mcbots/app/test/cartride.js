@@ -58,6 +58,13 @@ function world({packets = [], other = [], empty = [], carts = 1, pickaxe = 'iron
 
 const every = (from, to, step = 200) => { const out = []; for (let at = from; at <= to; at += step) out.push(at); return out; };
 const rail = new Vec3(1, 0, 0);
+(async () => { // the client never learns where a cart went: it "is" where it was boarded, far out of reach of a rider 300 m on
+  const w = world({packets: every(300, 3000)});
+  w.client.on('move_minecart', () => { w.bot.entity.position = new Vec3(300, 0, 0); });
+  await w.ride.ride(w.r, w.job, rail, {limitMs: 60000});
+  assert.strictEqual(w.bot.attacks, 3, 'hit where it stands');
+  assert.strictEqual(w.bot.inventory.items().find((i) => i.name === 'minecart')?.count, 1, 'and back in the bag');
+})();
 const shifts = (client) => client.written.filter(([name]) => name === 'player_input').map(([, d]) => d.inputs.shift === true);
 
 module.exports = (async () => {

@@ -71,13 +71,18 @@ const LOOK_SIDE = 3, LOOK_AHEAD = 3, LOOK_LOW = -3, LOOK_HIGH = 4;
 const LINING = /^(cobbled_deepslate|cobblestone)$/; // what digging deepslate and stone yields without Silk Touch
 // A bot that died or restarted halfway through a cell left these in it, and they must not read as a player's.
 const OWN = /^(cobbled_deepslate|cobblestone|redstone_torch|powered_rail)$/;
+const HALF_BUILT = 8; // cells: a dig seals the next two, and a stop takes the rail's end back up to five to where it may end
 const OPPOSITE = {east: 'west', west: 'east', south: 'north', north: 'south'};
 const key = ({x, y, z}) => `${x},${y},${z}`;
 
 // What cells fromK..toK hold, before a bot digs them. blockAt(x, y, z) gives {name}, or null where no chunk is loaded.
 function inspect(blockAt, road, fromK, toK) {
   const named = ({x, y, z}) => blockAt(x, y, z)?.name;
-  const {air, solid} = crossSection(road, fromK), halfBuilt = new Set([...air, ...solid].map(key));
+  const halfBuilt = new Set();
+  for (let k = fromK; k < fromK + HALF_BUILT; k++) {
+    const {air, solid} = crossSection(road, k);
+    for (const c of [...air, ...solid]) halfBuilt.add(key(c));
+  }
   for (let k = fromK; k <= toK + LOOK_AHEAD; k++) {
     for (let side = -LOOK_SIDE; side <= LOOK_SIDE; side++) {
       for (let h = LOOK_LOW; h <= LOOK_HIGH; h++) {

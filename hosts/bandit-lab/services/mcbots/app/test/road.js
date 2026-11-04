@@ -97,11 +97,13 @@ assert.strictEqual(inspect(world({'20,0,3': 'sculk_shrieker'}), east, 16, 32).st
 assert.strictEqual(inspect(world({'20,0,0': null}), east, 16, 32).stop.why, 'unloaded');
 assert.strictEqual(inspect(world({'20,0,1': 'water'}), east, 16, 32).stop, null, 'a fluid is no stop');
 assert.strictEqual(inspect(world({'20,2,0': 'cave_air'}), east, 16, 32).stop, null, 'a cave is no stop');
-// A cell left half built by a death or a restart reads as the bot's own, there and nowhere else.
+// Cells left half built by a death, a restart or a stop read as the bot's own, there and nowhere else.
 assert.strictEqual(inspect(world({'16,0,1': 'cobbled_deepslate'}), east, 16, 32).stop, null, 'a wall it lined');
 assert.strictEqual(inspect(world({'16,0,0': 'cobblestone'}), east, 16, 32).stop, null, 'a block in the road for a moment');
 assert.strictEqual(inspect(world({'16,0,1': 'redstone_torch'}), east, 16, 32).stop, null, 'a booster half laid');
-assert.strictEqual(inspect(world({'17,0,1': 'cobblestone'}), east, 16, 32).stop.why, 'player', 'the next cell is not its own');
+assert.strictEqual(inspect(world({'18,0,1': 'cobblestone'}), east, 16, 32).stop, null, 'a stop took the rail back past what it lined (east, 465 m)');
+assert.strictEqual(inspect(world({'23,0,1': 'cobblestone'}), east, 16, 32).stop, null, 'as far as a stop can take it');
+assert.strictEqual(inspect(world({'24,0,1': 'cobblestone'}), east, 16, 32).stop.why, 'player', 'past that it is not its own');
 assert.strictEqual(inspect(world({'16,0,3': 'cobblestone'}), east, 16, 32).stop.why, 'player', 'nor beside it');
 assert.strictEqual(inspect(world({'16,0,1': 'torch'}), east, 16, 32).stop.why, 'player', 'nor anything else');
 // The same on another road, to show nothing is east only.
