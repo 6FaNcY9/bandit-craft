@@ -405,6 +405,11 @@ class BotRunner {
     this.trace.setError(v);
   }
 
+  // Back in the game: the kick that took it out is no problem any more.
+  kickOver() {
+    if (this.lastError.startsWith('kicked: ')) this.lastError = '';
+  }
+
   start() {
     this.schedule(0);
   }
@@ -638,6 +643,7 @@ class BotRunner {
     bot.once('spawn', () => {
       spawnedAt = Date.now();
       this.online = true;
+      this.kickOver();
       const mv = safeMovements(bot, this.protectedAreas, this);
       bot.pathfinder.setMovements(mv);
       // Armour handed over in game (dropped at the bot's feet) goes on at once: only a digging job's upkeep wore it, and

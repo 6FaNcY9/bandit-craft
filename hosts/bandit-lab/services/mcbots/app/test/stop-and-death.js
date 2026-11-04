@@ -2,6 +2,17 @@
 const APP = require('node:path').join(__dirname, '..');
 const assert = require('node:assert');
 const {BotRunner} = require('../bots');
+// ---- back in the game, a kick is over; any other error stays ----
+{
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  r.lastError = 'kicked: {"text":"You are logging in too fast"}';
+  r.kickOver();
+  assert.strictEqual(r.lastError, '');
+  assert.strictEqual(r.trace.error, null, 'so the screens stop counting it as failing');
+  r.lastError = 'mine: no free stone within 96 blocks';
+  r.kickOver();
+  assert.strictEqual(r.lastError, 'mine: no free stone within 96 blocks');
+}
 // ---- a death or disconnect keeps the job; the user's stop does not ----
 (async () => {
   const mk = () => new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
