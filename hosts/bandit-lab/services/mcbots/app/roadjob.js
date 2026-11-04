@@ -32,6 +32,7 @@ const READ_MS = 120000;
 const STRAY = /_log$|_stem$|_leaves$|_sapling$|^egg$|^raw_(iron|copper|gold)$|^coal$|^flint$|^redstone$|^lapis_lazuli$/; // with NATURAL, what walking and digging pick up
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
+const ON_FOOT = /no cart|did not start|could not board|no rail|took over/; // a cart lost or stuck costs time, not the road
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
 
 function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, tossJunk, now = Date.now, farms = FARMS, restock = null, buildOrigin = null}) {
@@ -48,7 +49,8 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     return 'placed';
   }
 
-  const free = (b) => ['air', 'fluid'].includes(kindOf(b.name));
+  // Glow lichen grows in water, where a dig is refused, and a block simply replaces it.
+  const free = (b) => ['air', 'fluid'].includes(kindOf(b.name)) || b.name === 'glow_lichen';
 
   // Floor, walls and roof first: nothing is opened before it is shut off.
   async function line(r, job, {air, solid}) {
@@ -280,7 +282,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
       await ride.ride(r, job, new Vec3(x, y, z), {limitMs: rideLimit(job.args.frontier)});
     } catch (e) {
       guard(job);
-      if (!/no cart|did not start|could not board|no rail/.test(e.message)) throw e;
+      if (!ON_FOOT.test(e.message)) throw e;
       r.emit('info', `highway: walking, ${e.message}`);
       await ride.takeCart(r, job);
       const w = cell(road, walkK, railHeight(walkK));
@@ -565,7 +567,13 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
       for (let waits = 0; ;) {
         guard(job);
         await waitCalm(r, job);
-        if (bot.vehicle) await ride.rideOn(r, job, {limitMs: rideLimit(job.args.frontier)});
+        if (bot.vehicle) {
+          await ride.rideOn(r, job, {limitMs: rideLimit(job.args.frontier)}).catch((e) => {
+            guard(job);
+            if (!ON_FOOT.test(e.message)) throw e;
+            r.emit('info', `highway: on foot from here, ${e.message}`);
+          });
+        }
         const here = onRoad(road, bot.entity.position);
         const k = here ? here.k : -1;
         if (k < FIRST_RAIL) {

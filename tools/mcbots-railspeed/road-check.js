@@ -82,6 +82,7 @@ async function snapshot(dir, length, file) {
     }
     console.log(`read to k ${to}`);
   }
+  await call(['gamemode survival bot50']); // left a spectator it can neither dig nor board a cart
   fs.writeFileSync(file, JSON.stringify({dir, length, origin: ORIGIN, cells}));
   bot.quit?.();
   console.log(`${Object.keys(cells).length} cells in ${file}`);

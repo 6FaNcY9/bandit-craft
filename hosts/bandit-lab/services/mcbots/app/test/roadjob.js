@@ -8,7 +8,7 @@ const O = {x: 0, y: 0, z: 0};
 const {VALIDATE} = require('../bots');
 
 const road = {dir: 'east', origin: {x: 0, y: 0, z: 0}};
-const EMPTY = /^(air|cave_air|water|lava|rail|powered_rail|redstone_torch|short_grass|cobweb)$/;
+const EMPTY = /^(air|cave_air|water|lava|rail|powered_rail|redstone_torch|short_grass|cobweb|glow_lichen)$/;
 const key = ({x, y, z}) => `${x},${y},${z}`;
 const isDipCell = (k) => k % 16 === 8 || k % 16 === 9;
 
@@ -131,6 +131,12 @@ module.exports = (async () => {
     const w = world(roadTo(20, {'20,0,0': 'cobbled_deepslate', '20,0,1': 'cobbled_deepslate'}));
     assert.strictEqual(await w.buildCell(w.r, w.job, road, 20), 'ok');
     assert.deepStrictEqual(checkCell(w.read, road, 20), []);
+  }
+  { // glow lichen grows in water, where a dig is refused (east, 465 m): a block goes straight onto it
+    const w = world(roadTo(20, {'20,1,-1': 'glow_lichen'}));
+    assert.strictEqual(await w.buildCell(w.r, w.job, road, 20), 'ok');
+    assert.ok(!w.log.dug.includes('glow_lichen 20,1,-1'));
+    assert.strictEqual(w.name({x: 20, y: 1, z: -1}), 'cobbled_deepslate');
   }
   { // a wall of grass or a cobweb cannot be placed against or through: dug, then lined
     const w = world(roadTo(20, {'20,0,1': 'short_grass', '20,1,-1': 'cobweb'}));
@@ -319,9 +325,9 @@ module.exports = (async () => {
   // ---- the job ----
   const load = {rail: 640, cobbled_deepslate: 64, iron_pickaxe: 8, powered_rail: 96, redstone_torch: 96, minecart: 1};
   // A trip as the world would have it: the cart runs along the rails and stands in the landing past their end.
-  const fakeRide = (w, {fail} = {}) => ({
+  const fakeRide = (w, {fail, rideOnFail} = {}) => ({
     takeCart: async () => true,
-    rideOn: async () => { w.log.rideOn = (w.log.rideOn || 0) + 1; w.bot.vehicle = null; w.bot.entity.position = new Vec3((w.log.rideOnTo ?? 0) + 0.5, 0, 0.5); return w.bot.entity.position; },
+    rideOn: async () => { if (rideOnFail) { w.bot.vehicle = null; throw new Error(rideOnFail); } w.log.rideOn = (w.log.rideOn || 0) + 1; w.bot.vehicle = null; w.bot.entity.position = new Vec3((w.log.rideOnTo ?? 0) + 0.5, 0, 0.5); return w.bot.entity.position; },
     ride: async (r, job, rail) => {
       if (fail) throw new Error(fail);
       const from = rail.x, out = from < 50;
@@ -378,6 +384,12 @@ module.exports = (async () => {
     await w.highway(w.r, w.job);
     assert.strictEqual(w.log.rideOn, 1);
     assert.deepStrictEqual(rails(w), ['rail 301,0,0'], 'at the head it works');
+  }
+  { // logged in riding a cart that never stands: off it, and on from where it is
+    const w = job(roadTo(301), {}, {at: 200, args: {length: 301}, ride: {rideOnFail: 'ride took over 126 s'}});
+    w.bot.vehicle = {id: 7};
+    await w.highway(w.r, w.job);
+    assert.deepStrictEqual(rails(w), ['rail 301,0,0']);
   }
   { // stranded mid-road walks to the head when that is nearer
     const w = job(roadTo(1501), {}, {at: 1000, args: {length: 1501, frontier: 1500}});
@@ -495,6 +507,11 @@ module.exports = (async () => {
     await assert.rejects(w.highway(w.r, w.job), /stopped/);
     assert.strictEqual(w.log.walks.at(-1), FIRST_RAIL - 1);
     assert.deepStrictEqual(alerts(w), []);
+  }
+  { // a ride that never ends (a cart left on the rail stops the next rider in a dip): on foot from there, not the end of the job
+    const w = job(roadTo(301, start), {items: {...load, rail: 20}}, {at: 301, args: {}, ride: {fail: 'ride took over 126 s'}, restock: async (r, j) => { j.cancelled = true; return 'ok'; }});
+    await assert.rejects(w.highway(w.r, w.job), /stopped/);
+    assert.strictEqual(w.log.walks.at(-1), FIRST_RAIL - 1);
   }
   { // a shrieker: no road towards it, back along the road, again after 5 minutes, then stop
     const w = job(roadTo(301, {'308,3,0': 'sculk_shrieker', ...start}), {}, {at: 301, args: {length: 400}});
