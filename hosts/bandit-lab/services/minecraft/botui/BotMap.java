@@ -137,7 +137,7 @@ final class BotMap {
 
   void stop() {
     pool.shutdownNow();
-    http.close();
+    http.shutdownNow(); // close() waits for a stalled fetch: onDisable would hang until the watchdog kills the server
   }
 
   /** Main thread: a viewer's map gets our renderer back after a restart or reload. */
@@ -380,6 +380,9 @@ final class BotMap {
       HttpResponse<byte[]> r;
       try {
         r = call.get(10, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        call.cancel(true);
+        throw e;
       } catch (TimeoutException | ExecutionException e) {
         call.cancel(true);
         throw new IOException(e);
