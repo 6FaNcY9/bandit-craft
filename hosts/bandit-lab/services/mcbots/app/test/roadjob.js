@@ -3,7 +3,7 @@
 const assert = require('node:assert');
 const {Vec3} = require('vec3');
 const {makeRoad} = require('../roadjob');
-const {crossSection, checkCell, cell, niche, isBoosterSlot, mayEndAt, railHeight, originPlan, FIRST_RAIL, RAMP_CELLS, BORDER_K} = require('../road');
+const {crossSection, checkCell, cell, niche, isBoosterSlot, mayEndAt, railHeight, originPlan, loadFor, FARMS, FIRST_RAIL, RAMP_CELLS, BORDER_K} = require('../road');
 const O = {x: 0, y: 0, z: 0};
 const {VALIDATE} = require('../bots');
 
@@ -508,6 +508,69 @@ module.exports = (async () => {
     assert.strictEqual(calls, 3);
     assert.ok(w.log.slept >= 2 * 60000);
   }
+  // ---- the load ----
+  {
+    const farms = [{x: 10, y: 0, z: 0, items: ['rail', 'bread']}, {x: 500, y: 0, z: 0, items: ['rail']}];
+    const full = {rail: 1024, stick: 128, iron_pickaxe: 8, powered_rail: 96, redstone_torch: 96, minecart: 1, bread: 32, cobblestone: 128, iron_sword: 1};
+    const setup = (items, {get, near = () => [], count = async () => {}} = {}) => {
+      const w = world({}, {items}), asked = [];
+      w.job.args = {dir: 'east'};
+      const deps = {...w.deps, farms, chestsNear: near, countChest: count, ensureGear: async () => { w.log.geared = true; }, gearWanted: () => 0,
+        get: async (r, j, item, n) => { asked.push([item, n, Math.floor(w.bot.entity.position.x)]); w.log.seen = r.farmChests; if (get) await get(item, n, w); const it = w.inv.find((i) => i.name === item); if (it) it.count += n; else w.inv.push({name: item, count: n}); }};
+      return {w, asked, m: makeRoad(deps)};
+    };
+    { // fetches only what is short, and rails need no list of their own: get plans chests and crafts
+      const {w, asked, m} = setup({...full, rail: 1000});
+      assert.strictEqual(await m.restock(w.r, w.job), 'ok');
+      assert.deepStrictEqual(asked, [['rail', 24, 10]]);
+      assert.strictEqual(w.log.geared, true);
+      assert.ok(w.log.seen instanceof Map, 'get looks at the farms only');
+      assert.strictEqual(w.r.farmChests, null, 'and everyone else at what they always did');
+    }
+    { // next farm when one is empty
+      const {w, asked, m} = setup({...full, rail: 1000}, {get: async (item, n, v) => { if (v.bot.entity.position.x < 100) throw new Error('no way to get iron_ingot'); }});
+      assert.strictEqual(await m.restock(w.r, w.job), 'ok');
+      assert.deepStrictEqual(asked, [['rail', 24, 10], ['rail', 24, 500]]);
+    }
+    { // what one farm had counts: the next is asked for the rest
+      const {w, asked, m} = setup({...full, rail: 1000}, {get: async (item, n, v) => { const it = v.inv.find((i) => i.name === 'rail'); it.count += 10; throw new Error('out'); }});
+      await m.restock(w.r, w.job);
+      assert.deepStrictEqual(asked, [['rail', 24, 10], ['rail', 14, 500]]);
+    }
+    { // all empty waits and says so, once
+      const {w, m} = setup({...full, rail: 20}, {get: async () => { throw new Error('no way'); }});
+      assert.strictEqual(await m.restock(w.r, w.job), 'waiting');
+      assert.strictEqual(await m.restock(w.r, w.job), 'waiting');
+      const said = w.log.events.filter(([k]) => k === 'alert').map(([, s]) => s);
+      assert.strictEqual(said.length, 1);
+      assert.match(said[0], /^highway: east waiting: the farms have no rail/);
+    }
+    { // a little short is no reason to stay home
+      const {w, m} = setup({...full, rail: 800}, {get: async () => { throw new Error('no way'); }});
+      assert.strictEqual(await m.restock(w.r, w.job), 'ok');
+      assert.deepStrictEqual(w.log.events.filter(([k]) => k === 'alert'), []);
+    }
+    { // a farm's chests are read once a trip, and one that will not open is passed over
+      const read = [];
+      const {w, m} = setup({...full, rail: 1000, bread: 1}, {near: () => ['a', 'b'], count: async (r, j, p) => { read.push(p); if (p === 'a') throw new Error('covered'); }});
+      await m.restock(w.r, w.job);
+      assert.deepStrictEqual(read, ['a', 'b']);
+    }
+    { // a Stop goes through a farm that fails
+      const {w, m} = setup({...full, rail: 1000}, {get: async (item, n, v) => { w.job.cancelled = true; throw new Error('stopped'); }});
+      await assert.rejects(m.restock(w.r, w.job), /stopped/);
+      assert.strictEqual(w.r.farmChests, null);
+    }
+    // a first trip carries the origin's ramp too; the second has only its own
+    assert.deepStrictEqual([loadFor(undefined).powered_rail, loadFor(100).redstone_torch, loadFor(5000).powered_rail, loadFor(5000).rail], [96, 96, 48, 1024]);
+    assert.strictEqual(loadFor(5000, 24).iron_ingot, 24, 'iron for armour');
+    assert.strictEqual(loadFor(5000).iron_ingot, undefined);
+    assert.ok(Object.keys(loadFor(5000))[0] === 'stick', 'sticks first: a farm of iron has none');
+    // the list: every farm is outside the box of what is off limits
+    for (const f of FARMS) assert.ok(!(f.x >= 112 && f.x <= 272 && f.z >= 368 && f.z <= 592), JSON.stringify(f));
+    for (const item of Object.keys(loadFor(1))) assert.ok(FARMS.some((f) => f.items.includes(item)), item);
+    assert.ok(FARMS.some((f) => f.items.includes('iron_ingot')));
+  }
   // ---- the origin ----
   {
     const plan = originPlan(O), sky = {};
@@ -548,10 +611,11 @@ module.exports = (async () => {
     }
     { // the job opens the protected box for itself and closes it again
       const w = job(start, {}, {at: FIRST_RAIL - 1, args: {length: 6}});
-      let during;
-      const m = makeRoad({...w.deps, ride: fakeRide(w), restock: async (r) => { during = r.mayBuild; return 'ok'; }, buildOrigin: async () => {}});
+      let during, atFarm;
+      const m = makeRoad({...w.deps, ride: fakeRide(w), restock: async (r) => { atFarm = [r.mayBuild, r.digOnly]; return 'ok'; }, buildOrigin: async (r) => { during = r.mayBuild; }});
       await m.highway(w.r, w.job);
       assert.deepStrictEqual([during({x: 9, y: 6, z: 9}), during({x: 9, y: 7, z: 9}), w.r.mayBuild], [true, false, null]);
+      assert.deepStrictEqual(atFarm, [null, undefined], 'off to the farms it is any other bot');
     }
   }
   { // the job's arguments

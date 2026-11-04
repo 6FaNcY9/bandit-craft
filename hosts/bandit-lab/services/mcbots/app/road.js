@@ -202,4 +202,23 @@ function mayBuildAt(plan, origin) {
   return (p) => p.y <= origin.y + 6 || stair.has(key(p));
 }
 
-module.exports = {originPlan, readOrigin, mayBuildAt, isClear, findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};
+// The owner's farms and stores a road may take from, read off a copy of the world (docs/specs/2026-11-03-highway-bots-design.md). Nothing else is a
+// source, whatever a chest holds. What a farm can make from its iron counts as what it has: get plans the crafting. Gold has no farm yet.
+const IRON = ['iron_ingot', 'rail', 'iron_pickaxe', 'iron_sword', 'minecart'];
+const FARMS = [
+  {x: -51, y: 63, z: -82, items: ['rail', 'powered_rail', 'redstone_torch', 'minecart', 'iron_ingot']}, // the workshop by the stick farm
+  {x: 23, y: 66, z: 55, items: ['rail', 'powered_rail', 'redstone_torch', 'bread', 'minecart']}, // the base at spawn
+  {x: -22, y: 64, z: -119, items: ['stick']},
+  {x: -307, y: 61, z: -167, items: IRON},
+  {x: 292, y: 130, z: 745, items: IRON},
+  {x: -263, y: 58, z: -216, items: ['cobblestone']},
+];
+// 8 pickaxes do about 1 km of deepslate, so more rails would not get laid. The cobblestone is for a cave right after the start. Sticks first:
+// a farm of iron has none, and rails and tools take them. A first trip also carries the origin's ramp.
+const LOAD = {stick: 128, rail: 1024, iron_pickaxe: 8, powered_rail: 48, redstone_torch: 48, minecart: 1, bread: 32, cobblestone: 128, iron_sword: 1};
+function loadFor(frontier, ingots = 0) {
+  const ramp = !frontier || frontier <= FIRST_RAIL + RAMP_CELLS ? 2 * LOAD.powered_rail : LOAD.powered_rail;
+  return {...LOAD, powered_rail: ramp, redstone_torch: ramp, ...(ingots ? {iron_ingot: ingots} : {})};
+}
+
+module.exports = {FARMS, loadFor, originPlan, readOrigin, mayBuildAt, isClear, findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};

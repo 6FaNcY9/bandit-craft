@@ -1899,12 +1899,14 @@ function indexChest(r, block, partner, win) {
     const a = block.position, b = partner?.position || a;
     const low = b.x < a.x || (b.x === a.x && b.z < a.z) ? b : a;
     const mine = (p) => inZone('storage', p.x, p.y, p.z) || storage.sameXYZ(p, planConfig.BASE.chest);
-    if (!r.world?.noteChest || !(mine(a) || mine(b))) return;
+    const shared = r.world?.noteChest && (mine(a) || mine(b));
+    if (!shared && !r.farmChests) return;
     const note = () => {
       const items = {};
       for (const it of win.containerItems()) items[it.name] = (items[it.name] || 0) + it.count;
       const used = win.containerItems().length;
-      r.world.noteChest(`${low.x},${low.y},${low.z}`, items, Number.isInteger(win.inventoryStart) ? win.inventoryStart - used : null);
+      if (shared) r.world.noteChest(`${low.x},${low.y},${low.z}`, items, Number.isInteger(win.inventoryStart) ? win.inventoryStart - used : null);
+      r.farmChests?.set(`${low.x},${low.y},${low.z}`, {items}); // a road's job: what it read on this trip is all it may use
     };
     note();
     win.once?.('close', note);
@@ -2878,7 +2880,7 @@ function acquireWorld(r) {
   const have = {};
   for (const i of bot.inventory.items()) have[i.name] = (have[i.name] || 0) + i.count;
   const stores = [];
-  for (const [k, c] of r.world?.chests || []) { // the storage index, as last seen
+  for (const [k, c] of r.farmChests || r.world?.chests || []) { // the storage index, as last seen
     const [x, y, z] = k.split(',').map(Number);
     const dist = Math.hypot(x - me.x, y - me.y, z - me.z);
     if (dist <= 256) stores.push({at: {x, y, z}, dist, stock: c.items || {}});
@@ -2892,8 +2894,8 @@ function acquireWorld(r) {
       const e = bot.nearestEntity((x) => x.name === name);
       return e ? e.position.distanceTo(me) : null;
     },
-    canMine: (b) => !BUILT_RE.test(b) && !PLACED_RE.test(b),
-    canKill: (m) => Object.hasOwn(huntJob.ANIMALS, m),
+    canMine: (b) => !r.farmChests && !BUILT_RE.test(b) && !PLACED_RE.test(b), // a road's job goes to the next farm instead
+    canKill: (m) => !r.farmChests && Object.hasOwn(huntJob.ANIMALS, m),
     stationNear: (name) => /^(crafting_table|furnace)$/.test(name) && !!craftingLib.nearBlock(bot, name),
     failed: new Set(r.acquireFailed.keys()),
     learned: (k) => r.world?.learned?.(k) ?? null,
@@ -3092,7 +3094,17 @@ const seal = sealJob.makeSeal({goNear, guard, sleep, goals, withdraw: buildWithd
 
 const {level} = levelJob.makeLevel({goNear, waitCalm, guard, sleep, digAt, upkeep, NATURAL, stairRing, at});
 
-const {highway} = roadJob.makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride: makeRide({guard, sleep}), restock: async () => 'ok'});
+const {highway} = roadJob.makeRoad({
+  goNear, waitCalm, guard, sleep, digAt, edible, ensureGear, ride: makeRide({guard, sleep}),
+  get: (r, job, item, count) => JOBS.get(r, child(job, {type: 'get', args: VALIDATE.get({item, count})})),
+  countChest: (r, job, p) => JOBS.stock(r, child(job, {type: 'stock', args: {x: p.x, y: p.y, z: p.z}})),
+  chestsNear: (r, {x, y, z}) => r.bot.findBlocks({point: new (require('vec3').Vec3)(x, y, z), matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b.name), maxDistance: 16, count: 48}),
+  gearWanted: (r) => {
+    const worn = ['head', 'torso', 'legs', 'feet'].map((s) => r.bot.inventory.slots[r.bot.getEquipmentDestSlot(s)]).filter(Boolean);
+    const owned = [...r.bot.inventory.items(), ...worn].map((i) => i.name);
+    return Math.max(0, gearJob.ingotsWanted(owned) - craftingLib.count(r.bot, 'iron_ingot'));
+  },
+});
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,
@@ -3985,4 +3997,4 @@ const JOBS = {
   },
 };
 
-module.exports = {upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

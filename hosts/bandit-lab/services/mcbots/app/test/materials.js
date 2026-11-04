@@ -414,3 +414,26 @@
   await assert.rejects(dig(6), /protected area/);
   console.log('protected box: the road job\'s exception ok');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// A road's job takes from the farms it read and nothing else: not a chest of the shared index, however near, and it mines nothing, so an empty farm sends it on.
+(async () => {
+  const assert = require('node:assert/strict');
+  const {acquireWorld, indexChest} = require('../bots');
+  const {Vec3} = require('vec3');
+  const bot = {entity: {position: new Vec3(0, 60, 0)}, inventory: {items: () => []}, registry: {}, nearestEntity: () => null};
+  const near = {items: {rail: 64}};
+  const r = {bot, acquireFailed: new Map(), world: {chests: new Map([['5,60,5', near]]), noteChest: () => { throw new Error('the shared index is not fed from a farm'); }}};
+  assert.deepStrictEqual(acquireWorld(r).stores.map((s) => s.at.x), [5], 'as it always was');
+  assert.strictEqual(acquireWorld(r).canMine('stone'), true);
+  r.farmChests = new Map();
+  assert.deepStrictEqual(acquireWorld(r).stores, [], 'a chest it was not sent to is no source');
+  assert.strictEqual(acquireWorld(r).canMine('stone'), false);
+  assert.strictEqual(acquireWorld(r).canKill('cow'), false);
+  const win = {containerItems: () => [{name: 'rail', count: 7}], once: (e, f) => { win.closed = f; }};
+  indexChest(r, {position: new Vec3(9, 60, 9)}, null, win);
+  assert.deepStrictEqual(acquireWorld(r).stores.map((s) => [s.at.x, s.stock.rail]), [[9, 7]]);
+  win.containerItems = () => [{name: 'rail', count: 3}];
+  win.closed();
+  assert.strictEqual(acquireWorld(r).stores[0].stock.rail, 3, 'what it took is gone');
+  console.log('highway: farm chests only ok');
+})().catch((e) => { console.error(e); process.exit(1); });

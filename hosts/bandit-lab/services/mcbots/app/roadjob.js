@@ -2,7 +2,7 @@
 // The highway job: road.js says what a road is, cartride.js how to ride one, and this wires both to a bot, as level.js does.
 const {Vec3} = require('vec3');
 const {refFace} = require('./seal');
-const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear} = require('./road');
+const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
 const FALLS = 16; // gravel coming down the column above a cell; more than this is no cell to build
@@ -22,12 +22,13 @@ const CHUNK_TRIES = 60; // a second each
 const BACK_OFF = 48;
 const RETRY_MS = 300000; // the spec's 5 minutes
 const WARDEN_RANGE = 32;
-const FARMS_MS = 60000;
+const FARMS_MS = 300000; // farms fill slowly, and each try is a walk
+const FEW_RAILS = 64; // not worth a trip
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
 
-function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock, buildOrigin = null}) {
+function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, farms = FARMS, restock = null, buildOrigin = null}) {
   // 26.x may not answer a placing, so what it did is read from the blocks afterwards, as seal.js does.
   async function place(r, c) {
     const {bot} = r;
@@ -361,6 +362,46 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
     return 'done';
   }
 
+  // What is short, from the nearest farm that lists it, then the next: get plans the chests and the crafting. It sees only the chests this
+  // trip read, so what is not on the list cannot become a source. With too little to start a shift it waits and says so, once.
+  async function fetchLoad(r, job) {
+    const {bot} = r;
+    const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
+    const want = loadFor(job.args.frontier, gearWanted(r));
+    const away = (f) => Math.hypot(f.x - bot.entity.position.x, f.z - bot.entity.position.z);
+    const read = new Set();
+    r.farmChests = (job.t.farmChests ||= new Map());
+    try {
+      for (const [item, count] of Object.entries(want)) {
+        for (const farm of farms.filter((f) => f.items.includes(item)).sort((a, b) => away(a) - away(b))) {
+          if (have(item) >= count) break;
+          try {
+            await goNear(r, job, farm.x, farm.y, farm.z, 8, {doing: `walking to the farm at ${farm.x} ${farm.z} for ${item}`});
+            if (!read.has(farm)) {
+              read.add(farm);
+              for (const p of chestsNear(r, farm)) await countChest(r, job, p).catch(() => guard(job));
+            }
+            await get(r, job, item, count - have(item));
+          } catch (e) {
+            guard(job);
+            r.emit('info', `highway: ${item} at the farm at ${farm.x} ${farm.z}: ${e.message.slice(0, 80)}`);
+          }
+        }
+      }
+      await ensureGear(r, job);
+    } finally {
+      r.farmChests = null;
+    }
+    const over = have('rail') < FEW_RAILS ? 'rails' : shiftOver(bot);
+    if (over) {
+      if (!job.t.farmsOut) r.emit('alert', `highway: ${job.args.dir} waiting: the farms have no ${{rails: 'rail', pickaxes: 'iron_pickaxe', food: 'food'}[over]}`);
+      job.t.farmsOut = true;
+      return 'waiting';
+    }
+    job.t.farmsOut = false;
+    return 'ok';
+  }
+
   // Digs every cell of a list until it stays open: gravel comes down after the block under it.
   async function dig(r, job, cells) {
     const read = (c) => r.bot.blockAt(vec(c));
@@ -430,8 +471,15 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
     const road = {dir, origin}, end = Math.min(length ?? BORDER_K, BORDER_K);
     const blockAt = (x, y, z) => bot.blockAt(new Vec3(x, y, z));
     const saved = r.digOnly;
-    r.digOnly = /$^/; // the road's cells and nothing else: a walk digs no ways of its own
-    r.mayBuild = mayBuildAt(originPlan(origin), origin);
+    const onRoad_ = /$^/, may = mayBuildAt(originPlan(origin), origin);
+    r.digOnly = onRoad_; // the road's cells and nothing else: a walk digs no ways of its own
+    r.mayBuild = may;
+    // Off to the farms a bot is any other bot: the walk may dig its way as usual, and the box is closed again.
+    const offRoad = async (fn) => {
+      r.digOnly = saved;
+      r.mayBuild = null;
+      try { return await fn(); } finally { r.digOnly = onRoad_; r.mayBuild = may; }
+    };
     try {
       for (let waits = 0; ;) {
         guard(job);
@@ -440,7 +488,10 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
         const here = onRoad(road, bot.entity.position);
         const k = here ? here.k : -1;
         if (k < FIRST_RAIL) {
-          if ((await restock(r, job, road)) === 'waiting') { await sleep(FARMS_MS); continue; }
+          if ((await offRoad(() => (restock || fetchLoad)(r, job, road))) === 'waiting') {
+            for (let left = FARMS_MS; left > 0; left -= 1000) { guard(job); await sleep(1000); }
+            continue;
+          }
           guard(job);
           if (!job.args.origin && (await (buildOrigin || digOrigin)(r, job, road)) === 'stopped') return; // a road with an origin of its own has its own start
           guard(job);
@@ -477,7 +528,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, restock,
     }
   }
 
-  return {highway, buildOrigin: digOrigin, buildCell, layBooster, removeBooster, layRamp, collectRamp};
+  return {highway, restock: fetchLoad, buildOrigin: digOrigin, buildCell, layBooster, removeBooster, layRamp, collectRamp};
 }
 
 module.exports = {makeRoad};
