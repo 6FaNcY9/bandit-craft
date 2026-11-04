@@ -21,7 +21,8 @@ const {Ingame} = require('../ingame');
   const call = async (cmds) => { calls.push(...cmds); return cmds.map(() => replies.shift() ?? ''); };
   let snaps = [snap('bot1'), snap('bot23')];
   const g = new Ingame({call, viewers: ['fancy8869', 'MidariBread'], guests: ['bot23'], snapshots: () => snaps, gapMs: 0, log: () => {}, now: () => 0});
-  const flush = () => new Promise((r) => setTimeout(r, 5));
+  // Waits for the say timers themselves: when the shared loop stalls, a fixed sleep's timer list can run before theirs.
+  const flush = async () => { do await new Promise((r) => setTimeout(r, 5)); while (g.waiting.size); };
   await g.setup();
   assert.ok(!calls.some((c) => c.startsWith('team join')) && calls.includes('scoreboard objectives setdisplay sidebar.team.aqua mcbots')); // sidebar is opt-in
   calls.length = 0; replies = ['There are 1 of a max of 16 players online: bot1']; await g.push();
