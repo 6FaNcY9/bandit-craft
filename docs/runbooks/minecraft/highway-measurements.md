@@ -1,7 +1,7 @@
 # Highway surface: measurements and physics
 
 Stage 1 of `docs/specs/2026-11-03-highway-bots-design.md`, measured on the sandbox on 2026-11-04, Paper 26.2 build 130,
-with `tools/mcbots-railspeed` (`rig.js`, `run.js`, `ride.js`). A cart with an armour stand on it rode in forced chunks,
+with `tools/mcbots-railspeed` (`rig.js`, `run.js`, `ride.js`, and the one-off scripts in `spikes/`, named at each table). A cart with an armour stand on it rode in forced chunks,
 so these numbers say what the server's physics can do, **not** what a real client can follow. The owner's ride decides.
 
 ## Where the speed comes from
@@ -18,12 +18,14 @@ Read from Mojang's 26.2 server code, `NewMinecartBehavior` and `AbstractBoat`, w
 | Boat | thrust 0.04, friction averaged over the blocks under the hull, air not counted | 0.04 / (1 − 0.989) = 72.73 m/s on blue ice, 40 m/s on ice |
 
 Each block of flat rail costs 0.003 blocks per tick, so a booster pays for itself only up to 20 blocks apart. Beyond that,
-flat rail settles at a lower speed, as the table shows.
+flat rail settles at a lower speed, as the table shows. It does not stop altogether: below about 20 m/s a cart stays on a
+booster for several ticks and gets a boost in each.
 
 ## Flat rail, 2 km lane
 
-Sustained is the median over the last third of the lane, top the highest over a second or more. TPS 19 to 20 in every
-row, no derail and no lost cart in any. A cart bounces off a wall at the lane's end and rolls back at full speed.
+Sustained is the median over the last third of the samples, top the highest over a second or more. TPS 19 to 20 in every
+row, no derail and no lost cart in any. The rows at setting 8 ran out their 150 s after about 1.2 km. A cart bounces off a
+wall at the lane's end and rolls back at full speed.
 
 | Setting | every 2 | every 4 | every 8 | every 16 | every 20 | every 25 | every 38 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -38,7 +40,7 @@ row, no derail and no lost cart in any. A cart bounces off a wall at the lane's 
 | 1000 | 207.6 (top 230) | 202 (top 225) | 174.9 (top 213) | 68.3 (top 81) | 67.6 (top 75) | 40.3 (top 43) | 21.6 (top 23) |
 
 Above 200 the 2 km lane is simply too short for the cart to get any faster. Not every setting was run at every spacing,
-because a simulator of the code predicts the rest. Where the setting decides the speed it is at most 0.7 m/s off. Where
+because a simulator of the code (`spikes/sim.js`) predicts the rest. Where the setting decides the speed it is at most 1.2 m/s off. Where
 the lane's length decides, the measured top is 1 to 5 % under the simulated speed at the lane's end, because a sample every
 half second misses the last metres.
 
@@ -56,7 +58,8 @@ The simulator gives the speed at each distance from a 20 m/s start, setting 1000
 ## Rail with dips
 
 A dip is two rails one block lower on a floor one lower, down then up, in the flat road. It costs no gold, only one more
-dug cell under each of the two rails. The cart stays on the rail through them at every speed measured.
+dug cell under each of the two rails. The cart stays on the rail through them at every speed measured. These are one-off
+runs of `spikes/dip.js <setting> <boost spacing> <boost until> <dip spacing> <km>`, and the raw rows were not kept.
 
 | Setting | Boosters at the start | Dip every | Lane | Result |
 | --- | --- | --- | --- | --- |
@@ -67,7 +70,7 @@ dug cell under each of the two rails. The cart stays on the rail through them at
 | 200 | every 2, 300 blocks | 32 | 5 km | holds 199.9 m/s from 4 km on |
 | 400 | every 4, 200 blocks (50 gold) | 8 | 2 km | reaches 400 m/s at about 1.9 km, then the lane ends |
 
-The simulator is too hopeful here: it gives 464 m/s where 298 to 363 were measured at 2 km, and 1,020 for 963 at 5 km.
+The simulator (`spikes/simdip.js`) is too hopeful here: it gives 464 m/s where 298 to 363 were measured at 2 km, and 1,020 for 963 at 5 km.
 
 Limits of this result:
 
@@ -81,7 +84,8 @@ Limits of this result:
 
 The sweep forced its chunks, so it could not show what a player's chunk loading does. A bot is a real player to the server,
 so `bot50` rode the 5 km ride lanes on generated chunks, sandbox view distance 8. Each ride includes about 10 s of the bot
-starting the cart by input.
+starting the cart by input. These are one-off runs of `spikes/ride2.js <z> <setting>`, and the raw rows were not kept. The
+bot connects with mineflayer's protocol 26.1 to the 26.2 server, which changes nothing in the server's physics.
 
 | Lane | Setting | Top m/s | Ride | Lowest TPS | Spots under half the top speed |
 | --- | --- | --- | --- | --- | --- |
@@ -90,11 +94,12 @@ starting the cart by input.
 | Dips every 16 | 400 | 270 | 42 s | 18.2 | one, 134 m/s |
 | Dips every 16 | 1000 | 340 | 41 s | 17.8 | nine, 117 to 170 m/s |
 
-No kick, no derail. **Setting 1000 saves 3 s over setting 200 on 5 km**: above about 200 m/s the cart keeps catching up with
-the chunks, even though it reached 963 m/s with them forced. A rider's real limit here is chunk loading, not the rail. The
-main server's view distance of 10 asks for more chunks than this, and new terrain is slower than generated terrain.
+No kick, no derail. **Setting 1000 saves 3 s over setting 200 on 5 km.** The likely limit is chunk loading, because the same
+lane reached 963 m/s with its chunks forced; nothing here measured the loading itself. The main server's view distance of 10
+asks for more chunks than this, and new terrain should be slower than generated terrain.
 
-Samples were a few ticks apart, so a single speed reading can be 15 % off. The ride times are the firm numbers.
+Samples were a few ticks apart, so a single speed reading can be 15 % off and the TPS column is within its noise. The ride
+times are the firm numbers.
 
 ## Against other ways of travelling
 
@@ -111,11 +116,11 @@ From `minecraft.wiki/w/Transportation` unless marked as measured. The 26.2 chang
 
 ## What can limit a real rider
 
-- **Chunks.** The server's defaults are `player-max-chunk-load-rate` 100 and `player-max-chunk-send-rate` 75 chunks per
-  second, read from the 2026-10-31 copy of `paper-global.yml`, and the repo does not override them. The main server has
-  view distance 10. Crossing one chunk then needs up to 21 new ones, so past about 57 m/s the client cannot be sent all of
-  them and past about 76 m/s the server cannot load them all, closest first. A cart reaching a chunk that is not ticking
-  waits for it. Nothing here measured this: the sweep's chunks were forced. The ride lanes free theirs on purpose.
+- **Chunks.** `player-max-chunk-load-rate` is 100 and `player-max-chunk-send-rate` 75 chunks per second, read on the lab from
+  `/srv/containers/minecraft/data/config/paper-global.yml`, the copy of 2026-10-31, and this repo does not override them. At
+  view distance 8 one chunk crossed asks for up to 17 new ones, so at 200 m/s that is about 210 a second. The bot still rode
+  at that speed without a slow spot, so these rates do not stop a cart as such: they bound how much of the surroundings
+  arrives, closest first. What a person sees at this speed is what the owner's ride has to show.
 - **Boats** are simulated by the client. 26.2's `handleMoveVehicle` sends a boat back when it moves more than 10 blocks
   beyond its speed in one packet, far above a boat's 3.6 per tick, and that is no kick. A bot cannot drive a boat, because
   mineflayer has no boat physics (read from its code, not tried).

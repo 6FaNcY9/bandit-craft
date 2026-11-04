@@ -1,6 +1,11 @@
 'use strict';
 // Unit test for the sweep and the tracker, against a fake console: node tools/mcbots-railspeed/run.test.js
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+const {spawn} = require('node:child_process');
 const {sweep, track, rig, unrig} = require('./run');
 
 // A console with a cart that runs 40 m/s, and a clock that moves when the code sleeps.
@@ -140,6 +145,9 @@ function fake({failAfter = Infinity, gone = false} = {}) {
   assert.ok(dip.sent.includes('execute if block 5300 200 70 #minecraft:rails'));
   assert.ok(dip.sent.includes('execute if block 610 199 70 rail[shape=ascending_west]'));
   assert.ok(dip.sent.some((s) => s.startsWith('summon minecart 302.5 200.1 70.5')));
+  // What the owner boards has its own tag: a sweep's kill and its sampling must never reach it
+  assert.ok(dip.sent.filter((s) => s.startsWith('summon')).every((s) => s.includes('Tags:["rslane"]')));
+  assert.ok(ice2.sent.filter((s) => s.startsWith('summon')).every((s) => s.includes('Tags:["rslane"]')));
   assert.ok(h.sent.some((s) => s.startsWith('summon minecart 302.5 200.1 40.5')));
   assert.ok(ice2.sent.some((s) => s.startsWith('summon oak_boat 301 200 51')));
   assert.ok(ice1.sent.some((s) => s.startsWith('summon oak_boat 301 200 60.5')));
@@ -152,10 +160,43 @@ function fake({failAfter = Infinity, gone = false} = {}) {
   assert.ok(gone2.sent.includes('fill 296 199 48 299 199 52 air'), 'the platform before the ice');
   assert.ok(gone2.sent.findIndex((s) => s.startsWith('forceload add')) < gone2.sent.findIndex((s) => s.startsWith('fill')));
   assert.equal(gone2.sent.at(-1), 'gamerule max_minecart_speed 8');
+  assert.ok(gone2.sent.includes('kill @e[tag=rslane]'));
+  assert.ok(!gone2.sent.includes('kill @e[tag=rs]'), 'a sweep may be at work with its own tag');
 
   // A far end that did not come out is an error, and the chunks are still freed
   const broken = fake();
   const noEnd = async (cmds) => { broken.sent.push(...cmds); return cmds.map((s) => (s.startsWith('execute if block') ? 'Test failed' : s.startsWith('execute') ? 'Test passed' : 'ok')); };
   await assert.rejects(rig({...broken.deps, call: noEnd, kind: 'ice1'}), /far end/);
   assert.ok(broken.sent.at(-1).startsWith('forceload remove'));
+
+  // Ctrl-C twice: the second must not skip the restore. Against a local console, because the signal handling lives in the CLI.
+  const seen = [];
+  let child, pressed = false;
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (d) => { body += d; });
+    req.on('end', async () => {
+      const {commands} = JSON.parse(body);
+      seen.push(...commands);
+      if (!pressed && commands.some((c) => c.startsWith('fill'))) {
+        pressed = true;
+        child.kill('SIGINT');
+        await new Promise((r) => setTimeout(r, 100));
+        child.kill('SIGINT');
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const reply = (c) => (c.startsWith('execute') ? 'Test passed' : c.startsWith('time') ? 'The game time is 1 tick(s)' : c.startsWith('data') ? 'Minecart has the following entity data: [301.5d, 200.0d, 10.5d]' : 'ok');
+      res.end(JSON.stringify({replies: commands.map(reply)}));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), 'railspeed-'));
+  child = spawn(process.execPath, [path.join(__dirname, 'run.js'), 'sweep', '--speed', '8', '--spacing', '38'], {env: {...process.env, MCBOTS_URL: `http://127.0.0.1:${server.address().port}`, XDG_STATE_HOME: state}, stdio: 'ignore'});
+  await new Promise((r) => child.once('exit', r));
+  server.close();
+  server.closeAllConnections();
+  fs.rmSync(state, {recursive: true});
+  assert.ok(pressed);
+  assert.ok(seen.includes('gamerule max_minecart_speed 8'), 'the rule goes back');
+  assert.ok(seen.some((s) => s.startsWith('forceload remove 300 10 2300 10')), 'the chunks are freed');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

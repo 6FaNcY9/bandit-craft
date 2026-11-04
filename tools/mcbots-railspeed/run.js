@@ -22,9 +22,9 @@ const RIDE_LANES = {rail: {x1: 300, x2: 5300, y: 200, z: 40}, ice2: {x1: 300, x2
 const REFUSED = /not loaded|Incorrect argument|Unknown|Too many|Expected|Invalid|Can't/i;
 // Something to stand on and something to board at a ride lane's start. Tagged, so that taking the lane away takes these too.
 function boarding({x1, y, z}, kind) {
-  if (kind === 'rail' || kind === 'dip') return [`fill ${x1} ${y - 1} ${z + 1} ${x1 + 4} ${y - 1} ${z + 2} stone`, `summon minecart ${x1 + 2.5} ${y + 0.1} ${z + 0.5} {Tags:["rs"]}`];
+  if (kind === 'rail' || kind === 'dip') return [`fill ${x1} ${y - 1} ${z + 1} ${x1 + 4} ${y - 1} ${z + 2} stone`, `summon minecart ${x1 + 2.5} ${y + 0.1} ${z + 0.5} {Tags:["rslane"]}`];
   const wide = kind === 'ice2';
-  return [`fill ${x1 - 4} ${y - 1} ${z} ${x1 - 1} ${y - 1} ${wide ? z + 1 : z} stone`, `summon oak_boat ${x1 + 1} ${y} ${wide ? z + 1 : z + 0.5} {Tags:["rs"],Rotation:[-90.0f,0.0f]}`];
+  return [`fill ${x1 - 4} ${y - 1} ${z} ${x1 - 1} ${y - 1} ${wide ? z + 1 : z} stone`, `summon oak_boat ${x1 + 1} ${y} ${wide ? z + 1 : z + 0.5} {Tags:["rslane"],Rotation:[-90.0f,0.0f]}`];
 }
 const isForce = (c) => c.startsWith('forceload');
 const free = (lane) => railLane(lane).filter(isForce).map((c) => c.replace('forceload add', 'forceload remove'));
@@ -123,7 +123,7 @@ async function unrig({call, sleep}) {
   for (const lane of Object.values(RIDE_LANES)) {
     const {x1, y, z} = lane;
     await lay(call, sleep, lane, railLane(lane).filter(isForce));
-    await send(call, [`fill ${x1 - 4} ${y - 1} ${z - 2} ${x1 - 1} ${y - 1} ${z + 2} air`, ...clearLane(lane, 'rs', 2)]);
+    await send(call, [`fill ${x1 - 4} ${y - 1} ${z - 2} ${x1 - 1} ${y - 1} ${z + 2} air`, ...clearLane(lane, 'rslane', 2)]);
   }
   await send(call, [setSpeed(WORLD_SPEED)]);
 }
@@ -146,7 +146,7 @@ function appender(name) {
 async function main([verb, ...args]) {
   const call = consoleCall(process.env.MCBOTS_URL || 'https://bandit-lab.tail7facc9.ts.net:8445'); // the dashboard: its console is the SANDBOX server's
   let interrupted = false, stop = () => {};
-  process.once('SIGINT', () => { interrupted = true; stop(new Error('interrupted')); });
+  process.on('SIGINT', () => { if (interrupted) return; interrupted = true; console.error('stopping, cleaning up the sandbox'); stop(new Error('interrupted')); }); // a second press must not skip the restore
   const sleep = (ms) => new Promise((res, rej) => { if (interrupted) return rej(new Error('interrupted')); stop = rej; setTimeout(res, ms); });
   const now = () => Date.now();
   if (verb === 'sweep') {
