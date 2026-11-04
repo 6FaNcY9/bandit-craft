@@ -29,7 +29,7 @@ const SLOTS = 36;
 const TRIP_FOR = ['rail', 'iron_pickaxe', 'powered_rail', 'redstone_torch', 'minecart', 'bread']; // sticks and the table are spent making these, cobblestone comes out of the rock
 const FARM_LEVELS = 3; // climbing to a chest upstairs sent a bot across the spawn for half an hour (sandbox, 2026-11-04); every load item lies within this
 const READ_MS = 120000;
-const STRAY = /_log$|_stem$|_leaves$|_sapling$|^egg$/; // with NATURAL, what walking picks up
+const STRAY = /_log$|_stem$|_leaves$|_sapling$|^egg$|^raw_(iron|copper|gold)$|^coal$|^flint$|^redstone$|^lapis_lazuli$/; // with NATURAL, what walking and digging pick up
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
@@ -327,10 +327,16 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const blockAt = (x, y, z) => bot.blockAt(new Vec3(x, y, z));
     const near = crossSection(road, head);
     // With no slot for the boosters they would lie on the ground and vanish, and gold has no farm: on the road they do no harm.
-    if (!shiftOver(bot) && head > ORIGIN_RAMP_END && bot.inventory.items().length <= SLOTS - 2 && bot.blockAt(vec(near.rail))) {
+    if (!shiftOver(bot) && head > ORIGIN_RAMP_END && bot.blockAt(vec(near.rail))) {
       let old = false;
       for (let k = head; k > head - SEGMENT && !old; k--) old = isBoosterSlot(k) && blockAt(...Object.values(cell(road, k)))?.name === 'powered_rail';
-      if (old) await collectRamp(r, job, road, head);
+      const roomy = () => bot.inventory.items().length <= SLOTS - 2;
+      if (old && !roomy()) {
+        await tossJunk(r, job);
+        await tossStrays(r, job, loadFor(job.args.frontier, gearWanted(r)));
+      }
+      if (old && roomy()) await collectRamp(r, job, road, head);
+      else if (old) r.emit('info', `highway: no room to take up the old ramp at ${head} m`);
     }
     let k = head;
     const home = async () => {
@@ -382,6 +388,14 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
 
   // What is short, from the nearest farm that lists it, then the next: get plans the chests and the crafting. It sees only the chests this
   // trip read, so what is not on the list cannot become a source. With too little to start a shift it waits and says so, once.
+  async function tossStrays(r, job, want) {
+    for (const it of r.bot.inventory.items()) {
+      if ((!NATURAL.test(it.name) && !STRAY.test(it.name)) || it.name in want || r.prefs?.keep?.[it.name]) continue;
+      await r.bot.tossStack(it).catch(() => {});
+      guard(job);
+    }
+  }
+
   async function fetchLoad(r, job, road) {
     const {bot} = r;
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
@@ -403,11 +417,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
           r.emit('info', `highway: the farm at ${farm.x} ${farm.z}: ${e.message.slice(0, 80)}`);
           continue;
         }
-        for (const it of bot.inventory.items()) {
-          if ((!NATURAL.test(it.name) && !STRAY.test(it.name)) || it.name in want || r.prefs?.keep?.[it.name]) continue;
-          await bot.tossStack(it).catch(() => {});
-          guard(job);
-        }
+        await tossStrays(r, job, want);
         const until = now() + READ_MS;
         for (const p of chestsNear(r, farm).filter((c) => Math.abs(c.y - farm.y) <= FARM_LEVELS)) {
           if (now() > until) break;

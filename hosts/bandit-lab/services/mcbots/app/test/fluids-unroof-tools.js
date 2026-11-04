@@ -225,6 +225,9 @@
   assert.equal(crafted.length, 3, 'not again within 2 min');
   await ensureTool(r, {t: {}}, {material: 'leaves;mineable/hoe'}, make);
   assert.equal(crafted.length, 3, 'no hoes');
+  r.toolTriedAt = {};
+  await ensureTool(r, {t: {}, type: 'highway'}, {material: 'mineable/shovel'}, make);
+  assert.equal(crafted.length, 3, 'a road bot places no table on its road: it digs on with what it carries');
   r.toolTriedAt = {}; carried = [stack('stone_shovel')];
   await ensureTool(r, {t: {}}, {material: 'mineable/shovel'}, make);
   assert.equal(crafted.length, 3, 'a stone shovel at hand: nothing to make');

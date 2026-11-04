@@ -45,6 +45,8 @@ function world(put = {}, {items = {rail: 64, cobbled_deepslate: 64, iron_pickaxe
     guard: (job) => { if (job.cancelled) throw new Error('stopped'); },
     sleep: async (ms) => { log.slept += ms; },
     waitCalm: async () => {},
+    tossJunk: async () => {},
+    gearWanted: () => 0,
     goNear: async (r, job, x, y, z) => { bot.entity.position = new Vec3(x + 0.5, y, z + 0.5); log.walks.push(x); },
     digAt: async (r, job, pos, expect, opts) => {
       const n = name(pos);
@@ -767,6 +769,17 @@ module.exports = (async () => {
     await w.highway(w.r, w.job);
     assert.strictEqual(w.log.dug.filter((d) => d.startsWith('powered_rail')).length, w.log.dug.slice(0, dug).filter((d) => d.startsWith('powered_rail')).length);
     assert.strictEqual(w.name(cell(road, 996)), 'powered_rail');
+  }
+  { // what digging gave goes first: a bag full of ore must not leave 48 boosters behind on every trip
+    const items = {...load};
+    for (const n of ['raw_iron', 'raw_copper', 'raw_gold', 'coal', 'flint', 'redstone', 'lapis_lazuli', 'gravel']) items[n] = 3;
+    for (let i = 0; i < 24; i++) items[`keep_${i}`] = 1;
+    const w = job(roadTo(1002), {items}, {at: 1000, args: {length: 1004}});
+    await w.layRamp(w.r, w.job, road, 1000);
+    await w.highway(w.r, w.job);
+    assert.notStrictEqual(w.name(cell(road, 996)), 'powered_rail');
+    assert.ok(!w.r.bot.inventory.items().some((i) => /^raw_|^coal$|^flint$/.test(i.name)));
+    assert.ok(w.r.bot.inventory.items().some((i) => i.name === 'keep_0'));
   }
   { // a road with an origin of its own brings its load and its start: no farm, no chamber
     let fetched = 0, dug = 0;

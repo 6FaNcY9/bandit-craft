@@ -1686,7 +1686,8 @@ function toolsToMake(items, kind) {
 async function ensureTool(r, job, block, make = (rr, j, item) => crafting.ensureItem(rr, child(j), item, 1)) {
   const kind = /mineable\/(pickaxe|axe|shovel)/.exec(block?.material || '')?.[1]; // also "plant;mineable/axe"
   const tried = (r.toolTriedAt ||= {});
-  if (!kind || Date.now() - (tried[kind] || 0) < 120000) return;
+  // A table placed beside a road bot stands on its road: it carries its pickaxes and digs the rest by hand.
+  if (!kind || job.type === 'highway' || Date.now() - (tried[kind] || 0) < 120000) return;
   const items = toolsToMake(r.bot.inventory.items(), kind);
   if (!items.length) return;
   tried[kind] = Date.now();
