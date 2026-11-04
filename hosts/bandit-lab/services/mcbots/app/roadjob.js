@@ -2,7 +2,7 @@
 // The highway job: road.js says what a road is, cartride.js how to ride one, and this wires both to a bot, as level.js does.
 const {Vec3} = require('vec3');
 const {refFace} = require('./seal');
-const {LINING, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits} = require('./road');
+const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
 const FALLS = 16; // gravel coming down the column above a cell; more than this is no cell to build
@@ -128,7 +128,83 @@ function makeRoad({goNear, guard, sleep, digAt}) {
     return 'ok';
   }
 
-  return {buildCell};
+  const standBeside = async (r, job, road, k, doing) => {
+    const s = cell(road, k - 1, railHeight(k - 1));
+    await goNear(r, job, s.x, s.y, s.z, 1, {doing});
+  };
+
+  // A booster for a rail, powered by a torch in a niche dug into the wall. False, and the rail stays as it is, with nothing
+  // to lay it with or anything but rock around the niche: it must not open a cave or a fluid into the road.
+  async function layBooster(r, job, road, k) {
+    const {bot} = r;
+    const read = (c) => bot.blockAt(vec(c));
+    const has = (name) => bot.inventory.items().some((i) => i.name === name);
+    if (!has('powered_rail') || !has('redstone_torch')) return false;
+    const spot = niche(road, k);
+    const around = [cell(road, k, 0, 2), cell(road, k, 1, 1), cell(road, k, -1, 1), cell(road, k - 1, 0, 1), cell(road, k + 1, 0, 1)];
+    if (around.some((c) => isOpen(read(c)))) return false;
+    await standBeside(r, job, road, k, `laying the ramp at ${k} m`);
+    guard(job);
+    await digAt(r, job, vec(spot), null, {pickup: false});
+    await bot.equip(bot.inventory.items().find((i) => i.name === 'redstone_torch'), 'hand');
+    await bot.placeBlock(read(cell(road, k, -1, 1)), new Vec3(0, 1, 0)).catch(() => {});
+    await digAt(r, job, vec(cell(road, k)), null, {pickup: false});
+    await bot.equip(bot.inventory.items().find((i) => i.name === 'powered_rail'), 'hand');
+    await bot.placeBlock(read(cell(road, k, -1)), new Vec3(0, 1, 0)).catch(() => {});
+    await sleep(50);
+    return read(cell(road, k)).name === 'powered_rail';
+  }
+
+  // Plain rail back, the torch taken, the niche shut again, so that the road is as it was. False without rock to shut it:
+  // a booster that stays until there is does less harm than a hole in the wall.
+  async function removeBooster(r, job, road, k) {
+    const {bot} = r;
+    const read = (c) => bot.blockAt(vec(c));
+    if (read(cell(road, k)).name !== 'powered_rail') return false;
+    if (!bot.inventory.items().some((i) => LINING.test(i.name))) return false;
+    await standBeside(r, job, road, k, `taking up the ramp at ${k} m`);
+    guard(job);
+    const spot = niche(road, k);
+    if (read(spot).name === 'redstone_torch') await digAt(r, job, vec(spot), null, {pickup: false});
+    await place(r, spot);
+    await digAt(r, job, vec(cell(road, k)), null, {pickup: false});
+    await bot.equip(bot.inventory.items().find((i) => i.name === 'rail'), 'hand');
+    await bot.placeBlock(read(cell(road, k, -1)), new Vec3(0, 1, 0)).catch(() => {});
+    await sleep(50);
+    return read(cell(road, k)).name === 'rail';
+  }
+
+  const backToHead = async (r, job, road, head) => {
+    const s = cell(road, head, railHeight(head));
+    await goNear(r, job, s.x, s.y, s.z, 1, {doing: `walking to the road's end, ${head} m`});
+  };
+
+  // Laid by walking back when a shift ends, whatever ended it: no count has to predict that. The nearest to the head
+  // first, so that with too few the ride home still starts on them. Returns how many stand.
+  async function layRamp(r, job, road, head) {
+    const {bot} = r;
+    let stand = 0;
+    for (let k = head; k > Math.max(head - RAMP_CELLS, FIRST_RAIL - 1) && stand < RAMP_BOOSTERS; k--) {
+      guard(job);
+      if (!isBoosterSlot(k)) continue;
+      if (bot.blockAt(vec(cell(road, k))).name === 'powered_rail' || (await layBooster(r, job, road, k))) stand++;
+    }
+    await backToHead(r, job, road, head);
+    return stand;
+  }
+
+  // The same walk on coming back. The origin's ramp is never touched: it stays for every trip. Returns how many it took.
+  async function collectRamp(r, job, road, head) {
+    let taken = 0;
+    for (let k = head; k > Math.max(head - RAMP_CELLS, FIRST_RAIL + RAMP_CELLS); k--) {
+      guard(job);
+      if (isBoosterSlot(k) && (await removeBooster(r, job, road, k))) taken++;
+    }
+    await backToHead(r, job, road, head);
+    return taken;
+  }
+
+  return {buildCell, layBooster, removeBooster, layRamp, collectRamp};
 }
 
 module.exports = {makeRoad};

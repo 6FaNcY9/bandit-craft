@@ -3,11 +3,12 @@
 const assert = require('node:assert');
 const {Vec3} = require('vec3');
 const {makeRoad} = require('../roadjob');
-const {crossSection, checkCell} = require('../road');
+const {crossSection, checkCell, cell, niche, isBoosterSlot, FIRST_RAIL, RAMP_CELLS} = require('../road');
 
 const road = {dir: 'east', origin: {x: 0, y: 0, z: 0}};
 const EMPTY = /^(air|cave_air|water|lava|rail|powered_rail|redstone_torch|short_grass|cobweb)$/;
 const key = ({x, y, z}) => `${x},${y},${z}`;
+const isDipCell = (k) => k % 16 === 8 || k % 16 === 9;
 
 // put: blocks by "x,y,z". back: cells a fluid flows back into after each placing. Digging deepslate drops the cobbled kind.
 function world(put = {}, {items = {rail: 64, cobbled_deepslate: 64, iron_pickaxe: 1}, back = []} = {}) {
@@ -47,6 +48,7 @@ function world(put = {}, {items = {rail: 64, cobbled_deepslate: 64, iron_pickaxe
       const up = {x: pos.x, y: pos.y + 1, z: pos.z};
       if (name(up) === 'gravel') { blocks.set(key(pos), 'gravel'); blocks.set(key(up), 'air'); for (let c = up, a; name(a = {...c, y: c.y + 1}) === 'gravel'; c = a) { blocks.set(key(c), 'gravel'); blocks.set(key(a), 'air'); } }
       if (n === 'deepslate') add('cobbled_deepslate');
+      if (/rail$|torch$/.test(n)) add(n);
       return true;
     },
   };
@@ -207,6 +209,78 @@ module.exports = (async () => {
     assert.strictEqual(w.bot.inventory.items().filter((i) => /cobble/.test(i.name)).length, 4);
     assert.strictEqual(w.log.tossed.length, 3, 'the two left over and the one the cell dug');
     assert.ok(w.log.looked.x < 20, 'behind it, or it walks over them again and picks them up');
+  }
+  // ---- the ramp ----
+  const kit = {rail: 64, cobbled_deepslate: 64, iron_pickaxe: 1, powered_rail: 48, redstone_torch: 48};
+  const have = (w, n) => w.inv.filter((i) => i.name === n).reduce((sum, i) => sum + i.count, 0);
+  const boosters = (w, from, to) => { let n = 0; for (let k = from; k <= to; k++) if (w.name(cell(road, k)) === 'powered_rail') n++; return n; };
+  { // a booster swaps in place
+    const w = world(roadTo(1010), {items: kit});
+    assert.strictEqual(await w.layBooster(w.r, w.job, road, 1004), true);
+    assert.strictEqual(w.name(cell(road, 1004)), 'powered_rail');
+    assert.strictEqual(w.name(niche(road, 1004)), 'redstone_torch');
+    assert.deepStrictEqual([have(w, 'powered_rail'), have(w, 'redstone_torch'), have(w, 'rail')], [47, 47, 65]);
+    assert.deepStrictEqual(checkCell(w.read, road, 1004), []);
+  }
+  for (const [what, block] of [['a cave', 'air'], ['water', 'water'], ['gravel', 'gravel']]) { // no niche into one, on any side of it
+    for (const at of ['1004,0,2', '1004,1,1', '1004,-1,1', '1003,0,1', '1005,0,1']) {
+      const w = world(roadTo(1010, {[at]: block}), {items: kit});
+      assert.strictEqual(await w.layBooster(w.r, w.job, road, 1004), false, `${what} at ${at}`);
+      assert.deepStrictEqual([w.log.dug, w.log.placed], [[], []], `${what} at ${at}`);
+    }
+  }
+  { // nothing to lay it with: no booster, and the rail stays as it is
+    const w = world(roadTo(1010), {items: {...kit, powered_rail: 0}});
+    assert.strictEqual(await w.layBooster(w.r, w.job, road, 1004), false);
+    assert.deepStrictEqual(w.log.dug, []);
+  }
+  { // a ramp is laid walking back, and the bot is back at the head
+    const w = world(roadTo(1002), {items: kit});
+    assert.strictEqual(await w.layRamp(w.r, w.job, road, 1000), 48);
+    assert.strictEqual(boosters(w, 700, 1000), 48);
+    for (let k = 1000 - RAMP_CELLS + 1; k <= 1000; k++) assert.deepStrictEqual(checkCell(w.read, road, k), [], `k ${k}`);
+    assert.ok(Math.abs(w.bot.entity.position.x - 1000.5) <= 1, 'at the head');
+  }
+  { // too few boosters: as many as it has, no failure
+    const w = world(roadTo(1002), {items: {...kit, powered_rail: 10}});
+    assert.strictEqual(await w.layRamp(w.r, w.job, road, 1000), 10);
+    assert.strictEqual(boosters(w, 900, 1000), 10, 'the nearest to the head first');
+  }
+  { // collecting leaves the road as it was
+    const w = world(roadTo(1002), {items: kit});
+    await w.layRamp(w.r, w.job, road, 1000);
+    assert.strictEqual(await w.collectRamp(w.r, w.job, road, 1000), 48);
+    assert.deepStrictEqual([have(w, 'powered_rail'), have(w, 'redstone_torch')], [48, 48]);
+    for (let k = 1000 - RAMP_CELLS + 1; k <= 1000; k++) {
+      assert.deepStrictEqual(checkCell(w.read, road, k), [], `k ${k}`);
+      assert.strictEqual(w.name(cell(road, k, isDipCell(k) ? -1 : 0)), 'rail', `k ${k}`);
+      if (isBoosterSlot(k)) assert.strictEqual(w.name(niche(road, k)), 'cobbled_deepslate', `k ${k}`);
+    }
+    assert.ok(Math.abs(w.bot.entity.position.x - 1000.5) <= 1, 'at the head');
+  }
+  { // the origin's ramp stays
+    const w = world(roadTo(302), {items: kit});
+    const slots = [];
+    for (let k = FIRST_RAIL; k <= 300; k++) if (isBoosterSlot(k)) slots.push(k);
+    for (const k of slots) { w.blocks.set(`${k},0,0`, 'powered_rail'); w.blocks.set(`${k},0,1`, 'redstone_torch'); }
+    const taken = await w.collectRamp(w.r, w.job, road, 300);
+    assert.strictEqual(taken, slots.filter((k) => k > FIRST_RAIL + RAMP_CELLS).length);
+    for (const k of slots.filter((s) => s <= FIRST_RAIL + RAMP_CELLS)) assert.strictEqual(w.name(cell(road, k)), 'powered_rail', `k ${k}`);
+    for (const k of slots.filter((s) => s > FIRST_RAIL + RAMP_CELLS)) assert.strictEqual(w.name(cell(road, k)), 'rail', `k ${k}`);
+  }
+  { // a ramp with holes: what stands is taken
+    const w = world(roadTo(1002), {items: kit});
+    await w.layRamp(w.r, w.job, road, 1000);
+    for (const k of [996, 992]) { w.blocks.set(`${k},0,0`, 'rail'); w.blocks.set(`${k},0,1`, 'cobbled_deepslate'); }
+    assert.strictEqual(await w.collectRamp(w.r, w.job, road, 1000), 46);
+  }
+  { // no rock to shut a niche again: that booster stays until there is, rather than leave a hole
+    const w = world(roadTo(1010), {items: {...kit, cobbled_deepslate: 0}});
+    w.blocks.set('1004,0,0', 'powered_rail');
+    w.blocks.set('1004,0,1', 'redstone_torch');
+    assert.strictEqual(await w.removeBooster(w.r, w.job, road, 1004), false);
+    assert.strictEqual(w.name(cell(road, 1004)), 'powered_rail');
+    assert.deepStrictEqual(w.log.dug, []);
   }
   { // a Stop goes through
     const w = world(roadTo(20));
