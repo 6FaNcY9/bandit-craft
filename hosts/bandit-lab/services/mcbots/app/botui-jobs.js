@@ -19,6 +19,9 @@ const germanName = (id) => DE[id] || String(id ?? '').replace(/_/g, ' ');
 // What the select lists offer; anything else goes in the "Oder Name" text field.
 const BLOCKS = ['stone', 'cobblestone', 'deepslate', 'dirt', 'sand', 'gravel', 'coal_ore', 'iron_ore', 'copper_ore', 'gold_ore', 'redstone_ore', 'lapis_ore', 'diamond_ore', 'emerald_ore', 'ancient_debris', 'oak_log', 'birch_log', 'spruce_log'];
 const ITEMS = ['stick', 'torch', 'coal', 'raw_iron', 'iron_ingot', 'cobblestone', 'oak_log', 'logs', 'oak_planks', 'bread', 'iron_pickaxe', 'stone_pickaxe', 'iron_sword', 'bucket', 'crafting_table', 'furnace'];
+// craft and smelt take only what their VALIDATE accepts (no results like iron_ingot, nothing uncraftable like logs).
+const CRAFTS = ['stick', 'torch', 'oak_planks', 'chest', 'crafting_table', 'furnace', 'bucket', 'iron_pickaxe', 'stone_pickaxe', 'iron_sword'];
+const SMELTS = ['raw_iron', 'raw_copper', 'raw_gold', 'cobblestone', 'sand', 'oak_log'];
 
 const NAME_RE = /^[a-z_]{1,48}$/;
 const TEXT_MAX = 200; // no legitimate payload value is longer; the text fields hold 48
@@ -79,7 +82,7 @@ function contextJobs(gaze) {
   const b = gaze.block, keys = [];
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
   if (/_log$|_wood$/.test(b)) keys.push('chop', 'shiftlogs');
-  if (/chest$|barrel/.test(b)) keys.push('deposit', 'withdraw', 'stock');
+  if (/^(trapped_)?chest$|barrel/.test(b)) keys.push('deposit', 'withdraw', 'stock');
   if (/spawner/.test(b)) keys.push('lightspawner');
   if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
   keys.push('goto', 'guard', 'tidy');
@@ -223,4 +226,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {JOBS, BLOCKS, ITEMS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

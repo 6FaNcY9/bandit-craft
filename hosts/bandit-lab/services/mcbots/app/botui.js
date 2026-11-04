@@ -40,7 +40,13 @@ const ACTIONS = {
     try {
       const o = jobs.build(data.key, data, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(),
         allowed: ui.viewerBots[viewer], schematics: await ui.api.schematics()});
-      done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+      const r = ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace});
+      done(r);
+      if (r?.skipped?.length === o.bots.length) { // nothing was queued (graves: none open)
+        ui.flash(st, o.type === 'graves' ? 'Keine offenen Gräber' : 'Nichts zu tun');
+        st.screen = {name: 'lage'};
+        return;
+      }
       ui.flash(st, (o.bots.length > 1 ? o.bots.length + ' Bots' : o.bots[0]) + ': ' + o.say, true);
       st.screen = {name: 'lage'};
       if (o.area) await clearSel(st, ui, viewer);

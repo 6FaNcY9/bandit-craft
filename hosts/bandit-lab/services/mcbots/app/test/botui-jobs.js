@@ -2,7 +2,7 @@
 // Auftrag: job catalog, gaze context, area corners, step 2 inputs and the send path (hostile payloads included).
 const assert = require('node:assert/strict');
 const {BotUi} = require('../botui');
-const {JOBS, contextJobs, areaJobs, resolveTarget, resolveBots, germanName} = require('../botui-jobs');
+const {JOBS, CRAFTS, SMELTS, ITEMS, contextJobs, areaJobs, resolveTarget, resolveBots, germanName} = require('../botui-jobs');
 const {VALIDATE} = require('../bots');
 const screens = require('../botui-screens');
 
@@ -32,6 +32,14 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: chestG, suppl
   }
   assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 64.0}, ctx), {block: 'iron_ore', count: 64});
   assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 63.9999}, ctx), {block: 'iron_ore', count: 64});
+}
+
+{ // offered items pass VALIDATE for their job; ender chests offer nothing chest-like
+  for (const i of CRAFTS) assert.doesNotThrow(() => VALIDATE.craft({item: i, count: 1}), i);
+  for (const i of SMELTS) assert.doesNotThrow(() => VALIDATE.smelt({item: i, count: 1}), i);
+  for (const i of ITEMS) assert.doesNotThrow(() => VALIDATE.get({item: i, count: 1}) && VALIDATE.withdraw({item: i, count: 1, x: 0, y: 0, z: 0}), i);
+  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'ender_chest'}), ['goto', 'guard', 'tidy']);
+  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'trapped_chest'}).slice(0, 3), ['deposit', 'withdraw', 'stock']);
 }
 
 { // resolveTarget
@@ -233,6 +241,12 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     await h2.click('Fancy', {a: 'send', key: 'help', who: 'frei', when: 'next'});
     assert.equal(h2.ui.state('Fancy').flash.text, 'Geht nicht: something unmapped');
     assert.equal(h2.ui.state('Fancy').screen.name, 'auftrag'); // a failed send never leaves a stale screen with a missing key
+  }
+  { // graves with nothing open: no success line
+    const h = harness();
+    h.ui.api.submit = () => ({ok: true, unreached: [], skipped: ['bot1']});
+    await h.click('Fancy', {a: 'send', key: 'graves', who: 'bot1', when: 'next'});
+    assert.equal(flashOf(h.last()), '✖ Keine offenen Gräber');
   }
   { // dimensions
     const h = harness();

@@ -2,7 +2,7 @@
 // Pure builders for the in-game dialogs (Minecraft dialog JSON, multi_action). No I/O and no clock: the same view must
 // build the same JSON, because BotUi re-sends a refreshing screen only when its JSON changed.
 const {ago, DIMENSION, failing, botState} = require('./ingame');
-const {JOBS, BLOCKS, ITEMS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
+const {JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
 
 // Anything from a snapshot or an error goes through here: no colour codes or control characters, bounded length.
 const safe = (text, max = 60) => {
@@ -161,7 +161,7 @@ function inputsOf(job, view, sc) {
     if (n.kind === 'count') inputs.push(slider('n', 'Anzahl', n.min, n.max, n.step, n.initial));
     else if (n.kind === 'radius') inputs.push(slider('radius', 'Radius', n.min, n.max, 1, n.initial));
     else if (n.kind === 'block' && preset.block === undefined) inputs.push(...nameSelect('block', 'Block', BLOCKS, gazed && /^[a-z_]{1,48}$/.test(gazed) ? gazed : null));
-    else if (n.kind === 'item') inputs.push(...nameSelect('item', 'Item', ITEMS, null));
+    else if (n.kind === 'item') inputs.push(...nameSelect('item', 'Item', job.type === 'craft' ? CRAFTS : job.type === 'smelt' ? SMELTS : ITEMS, null));
     else if (n.kind === 'where' && preset.x === undefined) inputs.push(...targetSelect(view, n));
     else if (n.kind === 'chest') inputs.push(...chestSelect(view));
     else if (n.kind === 'rotation') inputs.push(select('rotation', 'Drehung', [0, 90, 180, 270].map((r) => [String(r), r + '°']), '0'));
