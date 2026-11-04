@@ -4,10 +4,45 @@
 // a dialog the player closed is never shown again: only a new open or click event may open one.
 const FLASH_MS = 8000;
 
-// One handler per click `data.a`; later tasks add theirs here. (st, data, ui) -> void, may be async, may throw.
+// One handler per click `data.a`; later tasks add theirs here. (st, data, ui, viewer) -> void, may be async, may throw.
+// Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
+const QUICK_LABEL = {deposit: 'Einlagern', rearm: 'Ausrüsten', homebed: 'Heim', graves: 'Gräber holen'};
+const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
+const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
+const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichbar'); };
+
 const ACTIONS = {
-  close: (st) => { st.open = false; }, // the plugin stops tracking on its own, no `closed` follows
+  // `none` after_action keeps the dialog open on the client, so the plugin clears it; Escape closes it either way.
+  close: async (st, data, ui, viewer) => {
+    st.open = false; // the plugin stops tracking on its own, no `closed` follows
+    await ui.call('/close', {player: viewer}).catch((e) => ui.log(`botui ${viewer}: close: ${e.message}`));
+  },
   lage: (st) => { st.screen = {name: 'lage'}; },
+  bot: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
+  stop: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    done(ui.api.submit(viewer, {bots: [bot], type: 'stop', args: {}}));
+    ui.flash(st, `${bot}: gestoppt`, true);
+  },
+  stopall: (st, data, ui, viewer) => { ownerOnly(ui, viewer); st.screen = {name: 'stopall'}; },
+  stopall_ok: (st, data, ui, viewer) => {
+    ownerOnly(ui, viewer);
+    const r = ui.api.stopAll(viewer);
+    st.screen = {name: 'lage'};
+    ui.flash(st, 'Alle gestoppt' + (r?.keeperOff ? ', Daueraufträge aus' : ''), true);
+  },
+  quick: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data), label = QUICK_LABEL[data.job];
+    if (!label) throw new Error('unbekannter Auftrag');
+    let args = {};
+    if (data.job === 'deposit' || data.job === 'rearm') {
+      const c = ui.api.keeper?.state().chest;
+      if (!c) throw new Error('keine Vorratskiste eingestellt');
+      args = {x: c.x, y: c.y, z: c.z};
+    }
+    done(ui.api.submit(viewer, {bots: [bot], type: data.job, args}));
+    ui.flash(st, `${bot}: ${label} gestartet`, true);
+  },
 };
 
 class BotUi {
@@ -92,7 +127,7 @@ class BotUi {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
       const act = ACTIONS[e.data?.a];
       try {
-        if (act) await act(st, e.data, this);
+        if (act) await act(st, e.data, this, viewer);
         else this.flash(st, 'Unbekannte Aktion');
       } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
       if (!st.open) return;
@@ -108,7 +143,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    return this.screens.render(st.screen, {viewer, snaps, allowed, keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, ctx: st.ctx, sel: st.sel,
+    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, mapState: st.mapState});
   }
 

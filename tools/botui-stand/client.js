@@ -12,7 +12,7 @@ function connect(username, port = 25599) {
     c.on('error', reject);
     c.on('position', (p) => c.write('teleport_confirm', {teleportId: p.teleportId})); // else the server ignores our movement
     c.on('packet', (data, meta) => {
-      if (meta.name === 'show_dialog') dialogs.push(nbt.simplify(data.dialog));
+      if (meta.name === 'show_dialog') dialogs.push(nbt.simplify(data.dialog.data));
       else if (meta.name === 'map') maps.push(data);
       else if (meta.name === 'world_particles') counts.particles++;
     });

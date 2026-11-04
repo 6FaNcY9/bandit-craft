@@ -276,5 +276,58 @@ async function fake() {
     assert.deepEqual(stopTargets(vb, 'Midari', ['bot1']), []);
     assert.throws(() => stopTargets(vb, 'Stranger', []), /nicht dein Bot/);
   }
+  { // Schließen really clears the dialog on the plugin; a failing /close only logs
+    const {f, ui, end} = await mk();
+    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'close'}});
+    assert.deepEqual(f.of('/close').map((c) => c.body), [{player: 'Fancy'}]);
+    assert.equal(ui.state('Fancy').open, false); assert.equal(f.of('/show').length, 1);
+    f.down = true; logs.length = 0;
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'close'}});
+    assert.ok(logs.some((m) => /Fancy: close:/.test(m))); assert.equal(ui.state('Fancy').open, false);
+    end();
+  }
+  { // the real Lagebild and Bot screens: navigation, rights, stop, quick jobs, Alle stopp for the owner only
+    const submits = [], stops = [];
+    const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], keeper: {state: () => ({available: true, quotas: [], chest: {x: 1, y: 2, z: 3}})},
+      submit: (v, j) => { submits.push([v, j]); return {ok: true, unreached: []}; }, stopAll: (v) => { stops.push(v); return {ok: true, keeperOff: true}; }};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const click = (player, data) => ui.handle({type: 'click', player, data});
+    const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
+    await ui.handle({type: 'open', player: 'Fancy'});
+    assert.equal(last().actions.filter((a) => a.action.payload.a === 'bot').length, 2);
+    await click('Fancy', {a: 'bot', bot: 'bot1'});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'bot', bot: 'bot1'});
+    await click('Fancy', {a: 'stop', bot: 'bot1'});
+    assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'stop', args: {}}]);
+    assert.match(JSON.stringify(last().body), /✔|bot1: gestoppt/);
+    await click('Fancy', {a: 'quick', bot: 'bot1', job: 'deposit'});
+    assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'deposit', args: {x: 1, y: 2, z: 3}}]);
+    await click('Fancy', {a: 'quick', bot: 'bot1', job: 'homebed'});
+    assert.deepEqual(submits.at(-1)[1].args, {});
+    const n = submits.length;
+    await click('Fancy', {a: 'quick', bot: 'bot1', job: 'rm -rf'});
+    assert.equal(submits.length, n); assert.match(ui.state('Fancy').flash.text, /unbekannter Auftrag/);
+    await click('Fancy', {a: 'stopall'});
+    assert.equal(ui.state('Fancy').screen.name, 'stopall'); assert.equal(stops.length, 0); // asks first
+    await click('Fancy', {a: 'stopall_ok'});
+    assert.deepEqual(stops, ['Fancy']); assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.match(ui.state('Fancy').flash.text, /Alle gestoppt, Daueraufträge aus/);
+    // a restricted viewer: own bot only, no Alle stopp, forged clicks refused
+    await ui.handle({type: 'open', player: 'Midari'});
+    assert.ok(!JSON.stringify(last()).includes('stopall'));
+    await click('Midari', {a: 'bot', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(ui.state('Midari').screen.name, 'lage');
+    await click('Midari', {a: 'stop', bot: 'bot1'}); await click('Midari', {a: 'stopall'}); await click('Midari', {a: 'stopall_ok'});
+    assert.equal(submits.filter(([v]) => v === 'Midari').length, 0); assert.equal(stops.length, 1);
+    assert.match(ui.state('Midari').flash.text, /Besitzer/);
+    await click('Midari', {a: 'stop', bot: 'MisaBot'});
+    assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'stop', args: {}}]);
+    // the flash is gone from the next render once it has expired
+    t += 9000;
+    await click('Fancy', {a: 'lage'});
+    assert.doesNotMatch(JSON.stringify(last().body), /gestoppt/);
+    end();
+  }
   console.log('botui ok');
 })().catch((e) => { console.error(e); process.exit(1); });
