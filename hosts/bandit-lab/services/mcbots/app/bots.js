@@ -1232,18 +1232,20 @@ async function swimUp(r, job, y) {
     const p = bot.entity.position.floored();
     return fluidsJob.waterToAir((dy) => bot.blockAt(p.offset(0, dy, 0))?.name ?? 'stone');
   };
-  if (y <= bot.entity.position.y || !wet()) return;
-  job.t.doing = `swimming up from ${at(bot.entity.position.floored())}`;
+  if (y <= bot.entity.position.y) return false;
+  if (!wet()) return false;
+  if (job.t) job.t.doing = `swimming up from ${at(bot.entity.position.floored())}`;
   bot.setControlState('jump', true);
   try {
     for (let i = 0; i < 60 && wet(); i++) { await sleep(250); guard(job); }
   } finally {
     bot.setControlState('jump', false);
   }
+  return true;
 }
 
 async function goNear(r, job, x, y, z, dist, opts = {}) {
-  if (r.bot?.entity && job.t) await swimUp(r, job, y);
+  if (r.bot?.entity) await swimUp(r, job, y);
   // A container: walk to the ground under it. Under a chest up in the air only that cell and the ones beside it
   // will do: 3 around the ground let bot1 stand a level lower next to the obsidian under -356 72 -191, 5.6 from the
   // chest where the server opens one 5.5 away, and "the container did not open within 10 s" (main server 2026-10-18).
@@ -1271,6 +1273,13 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     const hand = !(r.bot.inventory?.items() || []).some((i) => /_pickaxe$/.test(i.name));
     pf.searchRadius = budget < 0 ? budget : Math.max(budget, CLIMB_BUDGET);
     let dugOut = 0, limit = null;
+    // Last way out of rock under a lake: bot2 and bot3 sat at -202 56 -134 for hours, every walk refused because the only way up
+    // lets water in (sandbox 2026-11-04). The water runs into the cave, the bot swims up with it; protected areas stay refused.
+    const digWet = (why) => {
+      r.bot.wetDig = true;
+      if (pf.movements) pf.movements.dontCreateFlow = false;
+      r.emit('alert', `trapped at ${at(r.bot.entity.position.floored())}: digging up although water comes in (${why.slice(0, 60)})`);
+    };
     try {
       for (let i = 0; i < 8 && r.bot?.entity && y - r.bot.entity.position.y > 4 && roofed(); i++) {
         const p = r.bot.entity.position;
@@ -1283,6 +1292,9 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
           // Under sand or gravel the search digs no way up at all: open the column from beside, climb again.
           guard(job);
           if (dugOut >= 3) throw e;
+          // The walk up can end at the bottom of a water shaft, where digging is forbidden: swim instead.
+          if (await swimUp(r, job, y)) { dugOut++; continue; }
+          if (!r.bot.wetDig && /water next to it/.test(e.message)) { digWet(e.message); continue; }
           if (r.digOnly === NATURAL && !limit) {
             // A farm or shaft walk digs natural ground only, a farm's only inside its box: bot3 (wheatfarm) sat in a
             // sandstone cave under its own cobblestone lid with sand all around, "No path" for an hour (main server
@@ -1290,13 +1302,23 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
             limit = {digOnly: r.digOnly, digBox: r.digBox};
             r.digOnly = r.digBox = null;
             r.emit('info', `no way up within the job's dig limits: climbing out digging anything (${at(r.bot.entity.position.floored())})`);
-          } else if (!(await unroof(r, job))) throw e;
+          } else {
+            const opened = await unroof(r, job).catch((u) => {
+              guard(job);
+              if (r.bot.wetDig || !/water next to it/.test(u.message)) throw u;
+              digWet(u.message);
+              return true;
+            });
+            if (!opened) throw e;
+          }
           dugOut++;
         }
       }
     } finally {
       pf.searchRadius = budget;
       if (limit) Object.assign(r, limit);
+      if (r.bot) r.bot.wetDig = false;
+      if (pf.movements) pf.movements.dontCreateFlow = true;
     }
   };
   if (!opts.xz) await climb(covered);
@@ -1494,7 +1516,8 @@ const FLUID = /^(water|lava|bubble_column)$/;
 function unsafeDig(bot, pos) {
   for (const d of [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) {
     const n = bot.blockAt(pos.offset(...d))?.name || '';
-    if (FLUID.test(n) || bot.blockAt(pos.offset(...d))?.getProperties?.().waterlogged) return `${n || 'waterlogged block'} next to it`;
+    // A trapped bot may let water in (bot.wetDig, see climb), never lava.
+    if (bot.wetDig ? n === 'lava' : FLUID.test(n) || bot.blockAt(pos.offset(...d))?.getProperties?.().waterlogged) return `${n || 'waterlogged block'} next to it`;
   }
   const feet = bot.entity.position.floored();
   if (pos.x === feet.x && pos.z === feet.z && pos.y < feet.y) {

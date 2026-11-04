@@ -132,6 +132,8 @@ const {BotRunner} = require('../bots');
   const fake = (blocks, feet) => ({entity: {position: new Vec3(feet[0] + 0.5, feet[1], feet[2] + 0.5)}, blockAt: (p) => ({name: blocks[`${p.x},${p.y},${p.z}`] || 'stone', boundingBox: (blocks[`${p.x},${p.y},${p.z}`] || 'stone') === 'stone' ? 'block' : 'empty'})});
   assert.strictEqual(unsafeDig(fake({}, [0, 10, 0]), new Vec3(3, 10, 0)), null, 'plain stone is fine');
   assert.match(unsafeDig(fake({'4,10,0': 'water'}, [0, 10, 0]), new Vec3(3, 10, 0)), /water next to it/);
+  assert.strictEqual(unsafeDig({...fake({'4,10,0': 'water'}, [0, 10, 0]), wetDig: true}, new Vec3(3, 10, 0)), null, 'a trapped bot may let water in');
+  assert.match(unsafeDig({...fake({'4,10,0': 'lava'}, [0, 10, 0]), wetDig: true}, new Vec3(3, 10, 0)), /lava next to it/, 'never lava');
   assert.match(unsafeDig(fake({'3,11,0': 'lava'}, [0, 10, 0]), new Vec3(3, 10, 0)), /lava/);
   assert.strictEqual(unsafeDig(fake({'0,8,0': 'air', '0,7,0': 'air'}, [0, 10, 0]), new Vec3(0, 9, 0)), null, 'a drop of 3 is fine');
   assert.match(unsafeDig(fake({'0,8,0': 'air', '0,7,0': 'air', '0,6,0': 'air', '0,5,0': 'air'}, [0, 10, 0]), new Vec3(0, 9, 0)), /drop/);
