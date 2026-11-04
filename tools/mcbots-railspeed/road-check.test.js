@@ -21,6 +21,7 @@ assert.deepStrictEqual(allStops(reader(rock()), road, 8, 50), []);
   assert.deepStrictEqual(changes(was, ok, road, 50), {changed: 3, bad: []});
   const off = {...was, '10,1,3': 'air|e|'};
   assert.match(changes(was, off, road, 50).bad[0], /10,1,3: deepslate -> air, not the road's cell/);
+  assert.deepStrictEqual(changes({'2,1,-3': 'deepslate'}, {'2,1,-3': 'air'}, road, 50), {changed: 1, bad: []}, 'the room at the origin is the road\'s too');
   const gone = {...was, '10,1,0': 'air|e|'}, built = {...was, '10,1,0': 'oak_stairs||'};
   assert.match(changes(built, gone, road, 50).bad[0], /a oak_stairs is gone/);
 }

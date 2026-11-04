@@ -6,7 +6,7 @@
 //   node road-check.js check <file>                     checkCell on every built cell
 //   node road-check.js diff <before> <after>            every changed cell must have been natural or generated, and be the road's own
 const fs = require('fs');
-const {cell, inspect, checkCell, kindOf, crossSection, niche, isBoosterSlot, FIRST_RAIL} = require('../../hosts/bandit-lab/services/mcbots/app/road');
+const {originPlan, cell, inspect, checkCell, kindOf, crossSection, niche, isBoosterSlot, FIRST_RAIL} = require('../../hosts/bandit-lab/services/mcbots/app/road');
 
 const SIDES = 3, LOW = -3, HIGH = 4, AHEAD = 3, ORIGIN = {x: 0, y: 0, z: 0};
 const key = ({x, y, z}) => `${x},${y},${z}`;
@@ -41,6 +41,8 @@ function problems(blockAt, road, from, to) {
 // What a road may change: its own cross-section, and the niche of a booster. What it may replace: anything not a player's.
 function changes(before, after, road, length) {
   const own = new Set();
+  const plan = originPlan(road.origin || {x: 0, y: 0, z: 0});
+  for (const c of [...plan.room, ...plan.curbs, ...plan.stair.flatMap((s) => [...s.air, s.floor])]) own.add(key(c));
   for (let k = FIRST_RAIL; k <= length + 1; k++) {
     const {air, solid} = crossSection(road, k);
     for (const c of [...air, ...solid]) own.add(key(c));

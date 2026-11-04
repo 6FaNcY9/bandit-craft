@@ -171,9 +171,16 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     await bot.equip(bot.inventory.items().find((i) => i.name === 'redstone_torch'), 'hand');
     await bot.placeBlock(read(cell(road, k, -1, 1)), new Vec3(0, 1, 0)).catch(() => {});
     await digAt(r, job, vec(cell(road, k)), null, {pickup: false});
-    await bot.equip(bot.inventory.items().find((i) => i.name === 'powered_rail'), 'hand');
-    await bot.placeBlock(read(cell(road, k, -1)), new Vec3(0, 1, 0)).catch(() => {});
-    await sleep(50);
+    // The rail is gone now, so whatever happens something goes back: a place that fails leaves a hole no cart gets past.
+    const put = async (item, want) => {
+      for (let tries = 0; tries < TRIES && !want.test(read(cell(road, k)).name); tries++) {
+        await bot.equip(bot.inventory.items().find((i) => i.name === item), 'hand');
+        await bot.placeBlock(read(cell(road, k, -1)), new Vec3(0, 1, 0)).catch(() => {});
+        await sleep(250);
+      }
+    };
+    await put('powered_rail', /^powered_rail$/);
+    await put('rail', /rail$/);
     return read(cell(road, k)).name === 'powered_rail';
   }
 
@@ -380,6 +387,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
     if (!TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok'; // back at the origin after a restart, with most of a load
+    await upStair(r, job, road);
     await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
     await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot
     const walkTo = (farm, items) => goNear(r, job, farm.x, farm.y, farm.z, 8, {doing: `walking to the farm at ${farm.x} ${farm.z} for ${items[0]}`});
@@ -448,6 +456,37 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     if ((await place(r, c)) === 'out') throw new Error('no lining left for the origin');
   };
 
+  async function stepOnto(r, job, s, doing) {
+    for (let tries = 0; ; tries++) {
+      await dig(r, job, [...s.air].reverse());
+      try {
+        return await goNear(r, job, s.air[0].x, s.air[0].y, s.air[0].z, 0, {doing});
+      } catch (e) { // gravel lands a moment after the dig saw air, and then no path leads onto the step (sandbox, 2026-11-04)
+        guard(job);
+        if (tries >= TRIES) throw e;
+        await sleep(1000);
+      }
+    }
+  }
+
+  // Off to the farms by hand: gravel comes down on the stair after the bot has gone, and no walk may dig in the protected box (sandbox, 2026-11-04).
+  async function upStair(r, job, road) {
+    const {bot} = r, o = road.origin, plan = originPlan(o), p = bot.entity.position, feet = p.floored();
+    const onIt = plan.stair.some((s) => s.air.some((c) => c.x === feet.x && c.y === feet.y && c.z === feet.z));
+    if (!onIt && !(Math.hypot(p.x - o.x, p.z - o.z) <= 6 && Math.abs(p.y - o.y) <= 3)) return;
+    const allowed = r.mayBuild;
+    r.mayBuild = mayBuildAt(plan, o);
+    try {
+      for (const s of plan.stair.filter((c) => c.air[0].y >= feet.y)) {
+        const floor = bot.blockAt(vec(s.floor));
+        if (!floor || isOpen(floor)) return; // past the ground: the sky needs no stair
+        await stepOnto(r, job, s, 'climbing the stair');
+      }
+    } finally {
+      r.mayBuild = allowed;
+    }
+  }
+
   // From the surface down, so the bot always stands on what it dug: the stair, the room, the curbs. One bot does it, the others wait.
   async function digOrigin(r, job, road) {
     const {bot} = r, plan = originPlan(road.origin), {x, y, z} = road.origin;
@@ -480,17 +519,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         // Through a cave a floor has nothing beside it: line holds it with a block in the stair, which the second dig takes away.
         const lined = await line(r, job, {air: s.air, solid: [s.floor]});
         if (lined) throw new Error(lined.out ? 'no lining left for the origin' : `the stair's floor cannot be set at ${s.floor.x} ${s.floor.y} ${s.floor.z}`);
-        for (let tries = 0; ; tries++) {
-          await dig(r, job, [...s.air].reverse());
-          try {
-            await walk(s.air[0], `digging the stair down, step ${i}`);
-            break;
-          } catch (e) { // gravel lands a moment after the dig saw air, and then no path leads onto the step (sandbox, 2026-11-04)
-            guard(job);
-            if (tries >= TRIES) throw e;
-            await sleep(1000);
-          }
-        }
+        await stepOnto(r, job, s, `digging the stair down, step ${i}`);
       }
       const door = plan.stair[0].air[0], away = (c) => Math.hypot(c.x - door.x, c.z - door.z);
       await dig(r, job, [...plan.room].sort((a, b) => away(a) - away(b)));
@@ -560,7 +589,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
           const {frontier} = job.args;
           const toOrigin = frontier !== undefined && k < frontier / 2;
           const to = toOrigin ? FIRST_RAIL - 1 : Math.max(frontier ?? head, head), w = cell(road, to, railHeight(to));
-          await goNear(r, job, w.x, w.y, w.z, 2, {doing: `walking along the road, ${k} m, to ${to} m`});
+          await goNear(r, job, w.x, w.y, w.z, toOrigin ? 0 : 2, {doing: `walking along the road, ${k} m, to ${to} m`}); // onto the landing itself: from within 2 of it this asks for ever
           continue;
         }
         const res = await shift(r, job, road, head, end);

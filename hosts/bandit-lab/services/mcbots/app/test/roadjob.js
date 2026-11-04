@@ -229,6 +229,21 @@ module.exports = (async () => {
     assert.deepStrictEqual([have(w, 'powered_rail'), have(w, 'redstone_torch'), have(w, 'rail')], [47, 47, 65]);
     assert.deepStrictEqual(checkCell(w.read, road, 1004), []);
   }
+  { // a booster that does not go down at once is tried again: the real road had a hole at 164 m (sandbox, 2026-11-04)
+    const w = world(roadTo(1010), {items: kit});
+    const place = w.bot.placeBlock;
+    let refused = 1;
+    w.bot.placeBlock = async (ref, face) => { if (w.bot.held?.name === 'powered_rail' && refused-- > 0) throw new Error('timeout'); return place(ref, face); };
+    assert.strictEqual(await w.layBooster(w.r, w.job, road, 1004), true);
+    assert.strictEqual(w.name(cell(road, 1004)), 'powered_rail');
+  }
+  { // and if it never does, a plain rail goes back: never a hole in the road
+    const w = world(roadTo(1010), {items: kit});
+    const place = w.bot.placeBlock;
+    w.bot.placeBlock = async (ref, face) => { if (w.bot.held?.name === 'powered_rail') throw new Error('timeout'); return place(ref, face); };
+    assert.strictEqual(await w.layBooster(w.r, w.job, road, 1004), false);
+    assert.strictEqual(w.name(cell(road, 1004)), 'rail');
+  }
   for (const [what, block] of [['a cave', 'air'], ['water', 'water'], ['gravel', 'gravel']]) { // no niche into one, on any side of it
     for (const at of ['1004,0,2', '1004,1,1', '1004,-1,1', '1003,0,1', '1005,0,1']) {
       const w = world(roadTo(1010, {[at]: block}), {items: kit});
@@ -515,6 +530,7 @@ module.exports = (async () => {
     const setup = (items, {get, near = () => [], count = async () => {}, now, walk} = {}) => {
       const w = world({}, {items}), asked = [];
       w.job.args = {dir: 'east', frontier: 5000};
+      w.bot.entity.position = new Vec3(1000, 70, 1000);
       const deps = {...w.deps, ...(walk ? {goNear: walk(w.deps.goNear)} : {}), farms, now, chestsNear: near, countChest: count, ensureGear: async () => { w.log.geared = true; }, gearWanted: () => 0, tossJunk: async () => { w.log.junk = true; },
         get: async (r, j, item, n) => { VALIDATE.get({item, count: n}); asked.push([item, n, Math.floor(w.bot.entity.position.x)]); w.log.seen = r.farmChests; if (get) await get(item, n, w); const it = w.inv.find((i) => i.name === item); if (it) it.count += n; else w.inv.push({name: item, count: n}); }};
       return {w, asked, m: makeRoad(deps)};
@@ -549,6 +565,7 @@ module.exports = (async () => {
       const round = [{x: 10, y: 0, z: 0, items: ['rail', 'bread']}, {x: 500, y: 0, z: 0, items: ['stick', 'rail']}];
       const w = world({}, {items: {...full, rail: 704, stick: 0, bread: 0}});
       w.job.args = {dir: 'east', frontier: 5000};
+      w.bot.entity.position = new Vec3(1000, 70, 1000);
       const asked = [], stops = [];
       const m = makeRoad({...w.deps, farms: round, chestsNear: () => [], countChest: async () => {}, ensureGear: async () => {}, gearWanted: () => 0, tossJunk: async () => {},
         goNear: async (r, j, x) => { stops.push(x); w.bot.entity.position.x = x; },
@@ -647,6 +664,24 @@ module.exports = (async () => {
       assert.strictEqual(await w.buildOrigin(w.r, w.job, road), 'ok');
       assert.strictEqual(w.log.dug.length, dug, 'built once');
     }
+    { // off to the farms the stair is climbed by hand: gravel has come down on it since, and no walk may dig in the box
+      const dug = {...sky};
+      for (const c of [...plan.room, ...plan.stair.slice(0, 10).flatMap((s) => s.air)]) dug[key(c)] = 'air';
+      for (const s of plan.stair.slice(10)) dug[key(s.floor)] = 'air';
+      const gravel = plan.stair[5].air[0];
+      dug[key(gravel)] = 'gravel';
+      const w = world(dug, {items: {rail: 16, iron_pickaxe: 8, bread: 32, minecart: 1, powered_rail: 48, redstone_torch: 48}});
+      w.job.args = {dir: 'east', frontier: 300};
+      w.bot.entity.position = new Vec3(4.5, 0, 0.5);
+      let during;
+      const m = makeRoad({...w.deps, farms: [], chestsNear: () => [], countChest: async () => {}, gearWanted: () => 0, tossJunk: async () => {},
+        ensureGear: async () => {}, digAt: async (r, j, p, ...rest) => { during = r.mayBuild?.({x: p.x, y: p.y, z: p.z}); return w.deps.digAt(r, j, p, ...rest); }});
+      await m.restock(w.r, w.job, road);
+      assert.strictEqual(w.name(gravel), 'air');
+      assert.strictEqual(during, true, 'the box lets it dig its stair');
+      assert.strictEqual(w.r.mayBuild, undefined, 'and only for that');
+      assert.deepStrictEqual([Math.floor(w.bot.entity.position.x), Math.floor(w.bot.entity.position.y)], [plan.stair[9].air[0].x, plan.stair[9].air[0].y], 'up to where the floors end');
+    }
     { // a stair through a cave: a floor with nothing beside it is held from above, and what held it goes again
       const s = plan.stair[5], f = s.floor, cave = {};
       for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) cave[key({x: f.x + dx, y: f.y + dy, z: f.z + dz})] = 'air';
@@ -701,6 +736,19 @@ module.exports = (async () => {
       assert.deepStrictEqual([during({x: 2, y: 6, z: 9}), during({x: 2, y: 7, z: 9}), w.r.mayBuild], [true, false, null]);
       assert.deepStrictEqual(atFarm, [null, undefined], 'off to the farms it is any other bot');
     }
+  }
+  { // home from a ride the bot stands on the first rails, within 2 of the landing: it has to step onto it, or it walks there for ever (sandbox, 2026-11-04)
+    const w = job(roadTo(300, start), {}, {at: 6, args: {frontier: 300}});
+    let calls = 0, restocked = false;
+    const m = makeRoad({...w.deps, ride: fakeRide(w), buildOrigin: async () => {},
+      restock: async () => { restocked = true; throw new Error('at the farms'); },
+      goNear: async (r, j, x, y, z, dist) => {
+        if (++calls > 20) throw new Error('walks for ever');
+        const p = w.bot.entity.position;
+        if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) > dist) { p.x = x + 0.5; p.y = y; p.z = z + 0.5; }
+      }});
+    await assert.rejects(m.highway(w.r, w.job), /at the farms/);
+    assert.ok(restocked);
   }
   { // a dig refused as unsafe ends the road the way a stop does: the owner hears why, and the bot goes home
     const w = job(roadTo(301, start), {}, {at: 301, args: {}});
