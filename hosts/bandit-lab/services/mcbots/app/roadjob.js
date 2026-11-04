@@ -2,7 +2,7 @@
 // The highway job: road.js says what a road is, cartride.js how to ride one, and this wires both to a bot, as level.js does.
 const {Vec3} = require('vec3');
 const {refFace} = require('./seal');
-const {NATURAL, LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
+const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
 const FALLS = 16; // gravel coming down the column above a cell; more than this is no cell to build
@@ -29,7 +29,9 @@ const SLOTS = 36;
 const TRIP_FOR = ['rail', 'iron_pickaxe', 'powered_rail', 'redstone_torch', 'minecart', 'bread']; // sticks and the table are spent making these, cobblestone comes out of the rock
 const FARM_LEVELS = 3; // climbing to a chest upstairs sent a bot across the spawn for half an hour (sandbox, 2026-11-04); every load item lies within this
 const READ_MS = 120000;
-const STRAY = /_log$|_stem$|_leaves$|_sapling$|^egg$|^raw_(iron|copper|gold)$|^coal$|^flint$|^redstone$|^lapis_lazuli$/; // with NATURAL, what walking and digging pick up
+// What a road bot carries besides its load and its food: what it wears or fights with, gold (no farm) and gems. A list of what to
+// throw lost against the ground: wet stretches gave clay, seeds and moss, and a load leaves only 4 slots.
+const KEEPS = /_(helmet|chestplate|leggings|boots|sword|axe|pickaxe|shovel)$|^(shield|totem_of_undying|diamond|emerald|gold_ingot)$/;
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const ON_FOOT = /no cart|did not start|could not board|no rail|took over/; // a cart lost or stuck costs time, not the road
@@ -123,9 +125,11 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
   }
 
   // What the bot digs it keeps for lining, up to a point. Thrown behind it, or it walks over the stones and picks them up again.
-  async function tossExtra(r, road, k) {
-    const {bot} = r;
-    const extra = bot.inventory.items().filter((i) => LINING.test(i.name)).slice(STACKS);
+  const isStray = (r, it, want) => !(it.name in want) && !LINING.test(it.name) && !KEEPS.test(it.name) && !edible(r.bot, it) && !r.prefs?.keep?.[it.name];
+
+  async function tossExtra(r, job, road, k) {
+    const {bot} = r, want = loadFor(job.args.frontier, gearWanted(r)), items = bot.inventory.items();
+    const extra = [...items.filter((i) => LINING.test(i.name)).slice(STACKS), ...items.filter((i) => isStray(r, i, want))];
     if (!extra.length) return;
     await bot.lookAt(vec(cell(road, Math.max(0, k - 6), 1)), true);
     for (const it of extra) await bot.tossStack(it);
@@ -148,7 +152,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     await goNear(r, job, s.x, s.y, s.z, 1, {doing: `walking to the road's end, ${k} m`});
     const done = (await line(r, job, section)) || (await open(r, job, road, section)) || (rail ? await layRail(r, job, section) : null);
     if (done) return done;
-    await tossExtra(r, road, k);
+    await tossExtra(r, job, road, k);
     return 'ok';
   }
 
@@ -392,7 +396,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
   // trip read, so what is not on the list cannot become a source. With too little to start a shift it waits and says so, once.
   async function tossStrays(r, job, want) {
     for (const it of r.bot.inventory.items()) {
-      if ((!NATURAL.test(it.name) && !STRAY.test(it.name)) || it.name in want || r.prefs?.keep?.[it.name]) continue;
+      if (!isStray(r, it, want)) continue;
       await r.bot.tossStack(it).catch(() => {});
       guard(job);
     }
@@ -402,7 +406,8 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const {bot} = r;
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
-    if (!TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok'; // back at the origin after a restart, with most of a load
+    // Back at the origin after a restart, with most of a load. With no lining at all it would ride out, build nothing and ride back for ever.
+    if (bot.inventory.items().some((i) => LINING.test(i.name)) && !TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok';
     await upStair(r, job, road);
     await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
     await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot

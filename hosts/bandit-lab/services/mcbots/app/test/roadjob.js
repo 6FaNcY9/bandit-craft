@@ -779,8 +779,9 @@ module.exports = (async () => {
   }
   { // a full inventory cannot pick the old ramp up, and gold has no farm: it stays on the road, where it does no harm
     const items = {...load};
-    for (let i = 0; i < 30; i++) items[`junk_${i}`] = 1;
+    for (let i = 0; i < 30; i++) items[`kept_${i}`] = 1;
     const w = job(roadTo(1002), {items}, {at: 1000, args: {length: 1004}});
+    w.r.prefs = {keep: Object.fromEntries(Object.keys(items).map((n) => [n, true]))};
     await w.layRamp(w.r, w.job, road, 1000);
     const dug = w.log.dug.length;
     await w.highway(w.r, w.job);
@@ -789,14 +790,33 @@ module.exports = (async () => {
   }
   { // what digging gave goes first: a bag full of ore must not leave 48 boosters behind on every trip
     const items = {...load};
-    for (const n of ['raw_iron', 'raw_copper', 'raw_gold', 'coal', 'flint', 'redstone', 'lapis_lazuli', 'gravel']) items[n] = 3;
+    for (const n of ['raw_iron', 'raw_copper', 'raw_gold', 'coal', 'flint', 'redstone', 'lapis_lazuli', 'gravel', 'clay_ball', 'wheat_seeds', 'moss_carpet']) items[n] = 3;
     for (let i = 0; i < 24; i++) items[`keep_${i}`] = 1;
     const w = job(roadTo(1002), {items}, {at: 1000, args: {length: 1004}});
+    w.r.prefs = {keep: Object.fromEntries(Array.from({length: 24}, (_, i) => [`keep_${i}`, true]))};
     await w.layRamp(w.r, w.job, road, 1000);
     await w.highway(w.r, w.job);
     assert.notStrictEqual(w.name(cell(road, 996)), 'powered_rail');
-    assert.ok(!w.r.bot.inventory.items().some((i) => /^raw_|^coal$|^flint$/.test(i.name)));
+    assert.ok(!w.r.bot.inventory.items().some((i) => /^raw_|^coal$|^flint$|^clay_ball$|^wheat_seeds$|^moss_carpet$/.test(i.name)));
     assert.ok(w.r.bot.inventory.items().some((i) => i.name === 'keep_0'));
+  }
+  { // what digging gives goes at once, so that the load, the cart and the old ramp always find a slot; what it wears, eats or fights with stays
+    const w = job(roadTo(20), {items: {...load, clay_ball: 2, iron_helmet: 1, shield: 1, diamond: 1, bread: 3, gold_ingot: 1}}, {at: 19, args: {length: 21}});
+    await w.highway(w.r, w.job);
+    const bag = w.r.bot.inventory.items().map((i) => i.name);
+    assert.ok(!bag.includes('clay_ball'), 'thrown behind it while building');
+    for (const n of ['iron_helmet', 'shield', 'diamond', 'bread', 'gold_ingot', 'rail', 'cobbled_deepslate']) assert.ok(bag.includes(n), n);
+  }
+  { // out of lining at home: a trip for it, or the bot rides out, cannot build and rides back for ever
+    let fetched = 0;
+    const bare = {...load}; delete bare.cobbled_deepslate;
+    const round = [{x: -300, y: 60, z: -160, items: ['cobblestone']}];
+    const w0 = job(roadTo(301), {items: {...bare, stick: 128, crafting_table: 1, bread: 32, iron_sword: 1, rail: 960, powered_rail: 48, redstone_torch: 48}}, {at: 301, args: {}});
+    const m = makeRoad({...w0.deps, farms: round, chestsNear: () => [], countChest: async () => {}, ensureGear: async () => {}, get: async () => { fetched++; }, buildOrigin: async () => {}, ride: {takeCart: async () => true, rideOn: async () => {}, ride: async () => {}}});
+    w0.job.args = {dir: 'east', frontier: 5000};
+    w0.bot.entity.position = new Vec3(1000, 70, 1000);
+    await m.restock(w0.r, w0.job, road).catch(() => {});
+    assert.ok(fetched > 0, 'went to the farm for cobblestone');
   }
   { // a road with an origin of its own brings its load and its start: no farm, no chamber
     let fetched = 0, dug = 0;
