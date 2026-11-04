@@ -145,13 +145,30 @@ at all. A tie goes to the cheaper material. The owner gets the table and the cho
 The rest of this design assumes rail, which I expect to win on materials and possibly on speed. **If blue ice wins, the
 job stays the same, but it needs a Silk Touch source and iceberg mining: this design then goes back to the owner.**
 
+**Decision, 2026-11-04: rail with dips, `max_minecart_speed` 200.** Numbers in
+`docs/runbooks/minecraft/highway-measurements.md`. The owner chose bots as the test riders instead of riding themselves, so a
+bot's ride counts as the real client's in the rule above.
+
+- Rule 400 and 1000 ride without a kick, derail or stop too, but save only 1 to 3 s on 5 km over 200, and at 400 the rider
+  is often past the chunks it has received. So 200 is the highest rule that pays, not the highest that holds. At 200 the
+  rider is already at the edge of the world it has received, which does not trouble a bot.
+- Blue ice loses at 72 m/s against 200. Rail needs no Silk Touch source, so this design stays with the owner's approval as it is.
+- Dips win over boosters on gold: the same ride time, with 75 boosters per start against 250 gold per km along the road.
+- The rule costs no building and can change at any time, so a person who finds 200 too fast can lower it with one command.
+  The world keeps up fully at 100, and at 200 only about 30 % of the nearest chunks are there. The road stays the same.
+
+Open for the plan of stage 2: a cart standing on a dip stretch cannot start, and dips lose speed below about 68 m/s. So
+every place a rider boards, including the moving road head, needs enough boosters behind it, and which way those face has to
+work for riding back.
+
 ### Cross-section
 
 Rail: one wide, two high. Rail at `y 0`, solid floor at `y -1`, solid roof at `y 2`, solid walls at both sides. Natural
 rock counts as solid (`anySolid`); anything else solid is left alone only if natural (see "Stops"). Where a side, floor or
 roof is air, a fluid or a falling block, the bot lines it with deepslate from its own digging. Mobs cannot spawn in a rail
-cell, so the road needs no light and no second lane. Powered rails are spaced as measured, each powered by a redstone
-torch in a one-block wall niche, or whatever stage 1 shows to be cheaper.
+cell, so the road needs no light and no second lane. Every 16 blocks two rails sit one lower, on a floor at `y -2`, sloping
+down and up again: this dip is what keeps the speed. Boosters stand only at starts, 75 on every fourth block over 300 blocks,
+each powered by a redstone torch in a one-block wall niche, or whatever stage 2 shows to be cheaper.
 
 ### Origin
 
@@ -250,7 +267,7 @@ Each stage ends with a check, and the next starts only when it passes.
 1. **Measure** in the sandbox: the table above, plus a bot boarding and riding a cart. The test runs are built with the
    sandbox console (`fill`), so they use no stock, in a corner away from the board's work; no sandbox reset is needed.
    Stages 2 and 3 use real stock: 8 km costs about 3,000 of the copy's 187,000 iron. Check: the owner has the numbers
-   and has ridden the best two.
+   and bots have ridden all four lanes, the owner's choice over riding them personally. Done 2026-11-04.
 2. **One road, sandbox.** `bot2` builds east from the chamber for 2 km on the copied world. Check: straight, right
    cross-section, restock from farms, a death, a hub restart and a deploy all survived; no non-natural block touched.
 3. **Four roads, sandbox.** All four for 2 km. Check: TPS and disk use within guards, the z -1303 rule works.

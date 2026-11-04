@@ -1,8 +1,10 @@
 # Highway surface: measurements and physics
 
 Stage 1 of `docs/specs/2026-11-03-highway-bots-design.md`, measured on the sandbox on 2026-11-04, Paper 26.2 build 130,
-with `tools/mcbots-railspeed` (`rig.js`, `run.js`, `ride.js`, and the one-off scripts in `spikes/`, named at each table). A cart with an armour stand on it rode in forced chunks,
-so these numbers say what the server's physics can do, **not** what a real client can follow. The owner's ride decides.
+with `tools/mcbots-railspeed` (`rig.js`, `run.js`, `ride.js`, and the one-off scripts in `spikes/`, named at each table). In the
+sweep a cart with an armour stand on it rode in forced chunks, so the sweep says what the server's physics can do. What a
+client can follow comes from the bots' rides further down. The owner chose bots as the test riders, so no person rode these
+lanes. The decision is under "Surface" in `docs/specs/2026-11-03-highway-bots-design.md`.
 
 ## Where the speed comes from
 
@@ -101,6 +103,39 @@ asks for more chunks than this, and new terrain should be slower than generated 
 Samples were a few ticks apart, so a single speed reading can be 15 % off and the TPS column is within its noise. The ride
 times are the firm numbers.
 
+## Four bots at once: does the world arrive in time?
+
+`spikes/riders.js <setting>`: `bot50` on the dip lane, `bot51` on the booster lane, `bot52` and `bot53` on the two ice lanes,
+all at once, chunks not forced, sandbox view distance 8, 2026-11-04. Raw rows are in
+`~/.local/state/mcbots/railspeed-riders.jsonl` on the laptop. Each bot counts the chunks the server has sent it. "World ahead" is
+how far its own row of chunks reaches past the rider, and "nearest 81" is how many of the 81 chunks around the rider it has,
+both from x 1000 on.
+
+| Rule | 5 km | World ahead, median | Lowest | Nearest 81, median | Samples on a chunk not yet there | Lowest TPS |
+| --- | --- | --- | --- | --- | --- | --- |
+| 100 | 63 to 64 s | 84 | 70 | 98 % | 0 | 19.7 |
+| 150 | 48 to 49 s | 34 to 35 | 17 | 41 % | 0 | 19.8 |
+| 200 | 44 s | 21 to 26 | -4 to 8 | 30 % | 0 to 1 of about 157 | 19.5 to 19.7 |
+| 400 | 42 to 43 s | 10 to 16 | -16 | 21 to 26 % | 6 and 40 of about 150 | 19.7 |
+| Boat, 72 m/s | 73 to 74 s | 122 to 123 | 106 | 100 % | 0 | as above |
+
+Rule 200 ran twice, the others once. Every ride reached the end, with no kick, no derail and no stop. Dips and boosters took
+the same time at every rule. The boats ran in all five rounds.
+
+- **Rule 400 buys almost nothing.** It saves 1 to 2 s on 5 km over rule 200, and the rider is often past the chunks it has
+  received. At rule 200 that happened once per ride in one of the two rounds, so 200 is already at the edge.
+- **The world keeps up to about 100 m/s and falls behind between 100 and 150.** A likely reason, not measured: each chunk crossed
+  needs 9 new ones in the nearest 81, and `player-max-chunk-send-rate` is 75 a second, which gives about 133 m/s. Raising that
+  setting is an untried lever.
+
+Limits:
+
+- A sample lags the rider by one console round trip, so the world ahead is overstated by up to about 10 blocks at 200 m/s.
+- It counts chunks received, not what a client has drawn. A person would see less than this, not more.
+- The main server's view distance of 10 asks for more chunks per block, so its numbers may be tighter. Not measured.
+- The four lanes lie 30 blocks apart and share most chunks, so this is a light load on the server. Four roads far apart
+  are stage 3's check.
+
 ## Against other ways of travelling
 
 From `minecraft.wiki/w/Transportation` unless marked as measured. The 26.2 changelog names no change to these.
@@ -111,7 +146,7 @@ From `minecraft.wiki/w/Transportation` unless marked as measured. The 26.2 chang
 | Flat rail | 230 measured, 400 calculated, 200 for a rider | needs gold along the whole road |
 | Riptide III trident | about 375 at the launch | only in rain or water, in single bursts |
 | Water, soul soil, Dolphin's Grace, Speed II, full enchantments | 147 | needs dolphins and potions the whole way |
-| Boat on blue ice | 72.73, code matches the wiki, not yet ridden | 1,000 to 2,000 blue ice per km |
+| Boat on blue ice | 72.73 from the code and the wiki, a bot told to go that fast held 72 | 1,000 to 2,000 blue ice per km |
 | Elytra with rockets | 33.5 | needs no road |
 
 ## What can limit a real rider
@@ -120,10 +155,12 @@ From `minecraft.wiki/w/Transportation` unless marked as measured. The 26.2 chang
   `/srv/containers/minecraft/data/config/paper-global.yml`, the copy of 2026-10-31, and this repo does not override them. At
   view distance 8 one chunk crossed asks for up to 17 new ones, so at 200 m/s that is about 210 a second. The bot still rode
   at that speed without a slow spot, so these rates do not stop a cart as such: they bound how much of the surroundings
-  arrives, closest first. What a person sees at this speed is what the owner's ride has to show.
+  arrives, closest first. The table of the four bots shows how much that is.
 - **Boats** are simulated by the client. 26.2's `handleMoveVehicle` sends a boat back when it moves more than 10 blocks
-  beyond its speed in one packet, far above a boat's 3.6 per tick, and that is no kick. A bot cannot drive a boat, because
-  mineflayer has no boat physics (read from its code, not tried).
+  beyond its speed in one packet, far above a boat's 3.6 per tick, and that is no kick. Mineflayer has no boat physics:
+  `bot.moveVehicle` moved a boat 0 blocks in 5 s. A bot that works out thrust and friction itself and sends `vehicle_move`
+  rode 5 km at 72 m/s, never more than 22 blocks from where the server had the boat. That speed is the one it was told to do,
+  so the ride shows only that the server accepts it and the chunks keep up.
 - **Minecarts** are simulated by the server, and `handleMovePlayer` skips its movement checks for a passenger.
 
 ## A bot on a cart
