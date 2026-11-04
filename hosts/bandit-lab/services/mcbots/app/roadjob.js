@@ -10,7 +10,7 @@ const STACKS = 4; // rock kept for lining: a cave in the first 400 blocks has ab
 const NO_DIG = ['keep', 'player', 'danger'];
 const vec = ({x, y, z}) => new Vec3(x, y, z);
 const same = (a, b) => a.x === b.x && a.y === b.y && a.z === b.z;
-const stop = {stop: 'cannot continue'};
+const cannot = (what, {x, y, z}) => ({stop: `cannot continue: ${what} at ${x} ${y} ${z}`});
 const ORIGIN = {x: 0, y: 0, z: 0};
 const ORIGIN_RAMP_END = FIRST_RAIL + RAMP_CELLS;
 const SEGMENT = 16; // one dip each
@@ -67,13 +67,13 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
       for (const c of open) {
         if (!free(read(c))) {
           // Gravel falls after the first block is gone, and grass or a cobweb cannot be built through.
-          if (++falls > FALLS) return stop;
+          if (++falls > FALLS) return cannot('too much falling', c);
           await digAt(r, job, vec(c), null, {pickup: false, stay: true});
           did = true;
           if (!free(read(c))) continue;
         }
         const key = `${c.x},${c.y},${c.z}`, n = tries.get(key) || 0;
-        if (n >= TRIES) return stop;
+        if (n >= TRIES) return cannot('no block stays', c);
         const res = await place(r, c);
         if (res === 'out') return {out: 'lining'};
         if (res === 'placed') { tries.set(key, n + 1); did = true; }
@@ -84,7 +84,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
       let held = 'noref';
       for (const c of help) if ((held = await place(r, c)) !== 'noref') break;
       if (held === 'out') return {out: 'lining'};
-      if (held !== 'placed') return stop;
+      if (held !== 'placed') return cannot('nothing to build against', open[0]);
     }
   }
 
@@ -97,11 +97,11 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         const b = read(c);
         if (same(c, rail) && /rail$/.test(b.name) && railFits(b, road)) break;
         if (kindOf(b.name) === 'air') break;
-        if (tries >= TRIES) return stop;
+        if (tries >= TRIES) return cannot(`${b.name} stays`, c);
         if (kindOf(b.name) === 'fluid') {
           const res = await place(r, c);
           if (res === 'out') return {out: 'lining'};
-          if (res === 'noref') return stop;
+          if (res === 'noref') return cannot('nothing to build against', c);
         } else {
           await digAt(r, job, vec(c), null, {pickup: false, stay: true});
         }
@@ -115,7 +115,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     for (let tries = 0; ; tries++) {
       guard(job);
       if (/rail$/.test(bot.blockAt(vec(rail)).name)) return null;
-      if (tries >= TRIES) return stop;
+      if (tries >= TRIES) return cannot('no rail', rail);
       const item = bot.inventory.items().find((i) => i.name === 'rail');
       if (!item) return {out: 'rail'};
       await bot.equip(item, 'hand');
@@ -339,12 +339,13 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
       const roomy = () => bot.inventory.items().length <= SLOTS - 2;
       if (old && !roomy()) {
         await tossJunk(r, job);
-        await tossStrays(r, job, loadFor(job.args.frontier, gearWanted(r)));
+        const {stick, ...need} = loadFor(job.args.frontier, gearWanted(r)); // the stick farm comes first on the next round
+        await tossStrays(r, job, need);
       }
       if (old && roomy()) await collectRamp(r, job, road, head);
-      else if (old) r.emit('info', `highway: no room to take up the old ramp at ${head} m`);
+      else if (old) r.emit('info', `highway: no room to take up the old ramp at ${head} m (${bot.inventory.items().length} slots taken)`);
     }
-    let k = head;
+    let k = head, cellTries = 0;
     const home = async () => {
       k = await endRail(r, job, road, k);
       job.args.frontier = k;
@@ -379,7 +380,14 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         });
         if (made?.out === 'unloaded') { await sleep(1000); continue; }
         if (made?.out) return home();
+        // Built again from what stands: a place or a dig that failed for a moment must not end a road, and the log says what it was.
+        if (/^cannot continue/.test(made?.stop) && ++cellTries < TRIES) {
+          r.emit('info', `highway: ${made.stop}, trying that cell again`);
+          await sleep(2000);
+          continue;
+        }
         if (made?.stop) return stopRoad(r, job, road, k, made.stop);
+        cellTries = 0;
         k++;
         if (k <= ORIGIN_RAMP_END && isBoosterSlot(k)) await layBooster(r, job, road, k);
         job.t.done = k;

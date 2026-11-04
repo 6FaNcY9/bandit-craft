@@ -112,7 +112,7 @@ module.exports = (async () => {
   }
   { // nothing at all to place against: it says so, and does not try for ever
     const w = world(box(10, 30, -6, 8, -6, 6));
-    assert.deepStrictEqual(await w.buildCell(w.r, w.job, road, 20), {stop: 'cannot continue'});
+    assert.match((await w.buildCell(w.r, w.job, road, 20)).stop, /^cannot continue: /);
   }
   { // a mineshaft's rail lying across the road goes, and ours is laid
     const w = world(roadTo(20, open('20,1,0')));
@@ -151,7 +151,7 @@ module.exports = (async () => {
   }
   { // fluid that comes back stops the road
     const w = world(roadTo(20, {'20,1,1': 'water'}), {back: ['20,1,1']});
-    assert.deepStrictEqual(await w.buildCell(w.r, w.job, road, 20), {stop: 'cannot continue'});
+    assert.match((await w.buildCell(w.r, w.job, road, 20)).stop, /^cannot continue: /);
     assert.strictEqual(w.log.placed.filter((p) => p.endsWith('20,1,1')).length, 3, 'three tries');
     assert.strictEqual(w.log.dug.length, 0, 'the road stays shut');
   }
@@ -164,7 +164,7 @@ module.exports = (async () => {
   }
   { // gravel without end is not a loop without end
     const w = world(roadTo(20, box(20, 20, 2, 60, 0, 0, 'gravel')));
-    assert.deepStrictEqual(await w.buildCell(w.r, w.job, road, 20), {stop: 'cannot continue'});
+    assert.match((await w.buildCell(w.r, w.job, road, 20)).stop, /^cannot continue: /);
     assert.ok(w.log.dug.length <= 16, `dug ${w.log.dug.length}`);
   }
   { // a block it must not dig
@@ -208,7 +208,7 @@ module.exports = (async () => {
   }
   { // a rail that will not stay: three tries, then the road stops
     const w = world(roadTo(20, open('20,0,0', '20,1,0')), {back: ['20,0,0']});
-    assert.deepStrictEqual(await w.buildCell(w.r, w.job, road, 20), {stop: 'cannot continue'});
+    assert.match((await w.buildCell(w.r, w.job, road, 20)).stop, /^cannot continue: /);
   }
   { // a chunk that has not come: nothing done, and no stop
     const w = world(roadTo(20));
@@ -817,6 +817,26 @@ module.exports = (async () => {
     w0.bot.entity.position = new Vec3(1000, 70, 1000);
     await m.restock(w0.r, w0.job, road).catch(() => {});
     assert.ok(fetched > 0, 'went to the farm for cobblestone');
+  }
+  { // no room but for the sticks: they go, the stick farm comes first on the next round, and 48 boosters do not stay behind
+    const items = {...load, stick: 128};
+    for (let i = 0; i < 26; i++) items[`kept_${i}`] = 1;
+    const w = job(roadTo(1002), {items}, {at: 1000, args: {length: 1004}});
+    w.r.prefs = {keep: Object.fromEntries(Array.from({length: 26}, (_, i) => [`kept_${i}`, true]))};
+    await w.layRamp(w.r, w.job, road, 1000);
+    await w.highway(w.r, w.job);
+    assert.notStrictEqual(w.name(cell(road, 996)), 'powered_rail');
+    assert.ok(!w.r.bot.inventory.items().some((i) => i.name === 'stick'));
+  }
+  { // a place that fails for a moment does not end a road: the cell is tried again, and the owner never hears of it
+    const w = job(roadTo(301), {}, {at: 301, args: {length: 302}});
+    const place = w.bot.placeBlock;
+    let refused = 3;
+    w.bot.placeBlock = async (ref, face) => { if (w.bot.held?.name === 'rail' && refused-- > 0) throw new Error('no answer'); return place(ref, face); };
+    await w.highway(w.r, w.job);
+    assert.deepStrictEqual(alerts(w), []);
+    assert.ok(/rail$/.test(w.name(cell(road, 302))));
+    assert.ok(w.log.events.some(([kind, text]) => kind === 'info' && /cannot continue: no rail at 301 0 0/.test(text)), 'and the log says what it was');
   }
   { // a road with an origin of its own brings its load and its start: no farm, no chamber
     let fetched = 0, dug = 0;
