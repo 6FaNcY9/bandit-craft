@@ -174,6 +174,37 @@ Measured with `ride.js` at setting 200 with a booster every 4 blocks, 2 km, chun
 - `bot.dismount()` does nothing: it sends jump. `player_input` with `shift: true` does get the bot off, by the server's
   account, but `bot.vehicle` stays set, so the job must clear it. The position is right again afterwards.
 
+## A builder's whole trip
+
+`spikes/start.js <boosters> <landing>` and `spikes/place.js <east|north>`, 2026-11-04: a bot in survival on a road laid by the
+console in the shape the road will have, a 2-high tunnel with walls and a roof, dips every 16, rule 200, 2 km, both directions.
+
+- **Boarding.** The bot puts a cart from its inventory on the rail, boards it from behind and starts it by input. The direction
+  is where it looks, so standing behind the rail's end and looking at the cart points it along the road.
+- **Starting.** Boosters on every fourth flat rail, with the dips running through them. A powered rail pushes whichever way the
+  cart goes, so one ramp serves both directions.
+
+  | Boosters | Speed at the ramp's end | Rule's 200 m/s reached at |
+  | --- | --- | --- |
+  | 75, about 400 blocks | 104 to 117 m/s | 1.2 km |
+  | 48, about 290 blocks | 81 to 89 m/s | 1.4 to 1.5 km |
+
+  Fewer than 48 were not ridden: the one run with 30 failed on the chunk problem below.
+- **Stopping.** With the rail ending one or three cells before a wall, the cart runs off the rail, stops at the wall, does not
+  bounce and does not hurt the rider, in both directions, arriving at about 170 to 185 m/s. On the floor a cart loses half its speed
+  each tick (`comeOffTrack`). A wall right behind the last rail bounces it back instead (see "Flat rail").
+- **Arriving.** `move_minecart` packets come at most 0.3 s apart during the ride and stop when the cart stands: 2 s of silence means
+  it has arrived. Mineflayer misreads the position inside them (nonsense values), so only their arrival can be used.
+- **Getting off.** `player_input` with `shift`, as above. The bot's position is right afterwards.
+- **Taking the cart back.** An iron pickaxe breaks it in 3 hits 0.9 s apart. By hand it never breaks at that pace: it heals 1 a tick
+  and a hit does 10, and it breaks above 40.
+- **Building.** Placed in road order by a bot in survival, rails take the right shapes through a dip, east and north. A powered rail with
+  a redstone torch in a niche dug into the wall beside it is powered. Those two directions only: the other two are the same by symmetry.
+- **After a login** a bot stands at the world's spawn, not where it left (once, `bot50` on the sandbox).
+
+Not explained: in 2 of 5 runs of `start.js` the bot still had no chunk at its own feet 20 s after a teleport. The next run, with a
+diagnosis added, did not show it. A job has to treat this as "not loaded yet" and report it if it lasts.
+
 ## Material
 
 Stock in the copy of 2026-10-31: 759 gold ingots and 846 powered rails, so 1,605 boosters; 1,620 redstone and 387 redstone

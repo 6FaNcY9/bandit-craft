@@ -157,9 +157,18 @@ bot's ride counts as the real client's in the rule above.
 - The rule costs no building and can change at any time, so a person who finds 200 too fast can lower it with one command.
   The world keeps up fully at 100, and at 200 only about 30 % of the nearest chunks are there. The road stays the same.
 
-Open for the plan of stage 2: a cart standing on a dip stretch cannot start, and dips lose speed below about 68 m/s. So
-every place a rider boards, including the moving road head, needs enough boosters behind it, and which way those face has to
-work for riding back.
+**Boarding and stopping, measured 2026-11-04** (runbook, "A builder's whole trip"). A cart standing on a dip stretch cannot
+start, and dips lose speed below about 68 m/s, so a rider needs a ramp where it boards:
+
+- **Stopping costs nothing.** Every road end has its rail stop one cell before the rock. The cart runs off the rail and stands.
+  The head of the road is such an end by itself, so no brake has to move with it.
+- **A ramp** is 48 boosters on every fourth flat rail, about 290 blocks. It works in both directions.
+- **Each road has two.** One stays at the origin. The other lies behind the head: the builder lays it while it builds the last
+  290 blocks of a load, rides home over it, and on coming back walks it once to pick it up, about 5 minutes a trip by estimate,
+  and leaves no gold behind.
+- **Gold:** 96 boosters a road, 384 for all four, out of 1,605 in stock. It no longer sets the pace.
+- **A rider stranded mid-road** (a restart during a ride, a grave along the way) walks to the nearer end. Rare and slow on a long
+  road; emergency ramps can come later if it hurts.
 
 ### Cross-section
 
@@ -167,8 +176,8 @@ Rail: one wide, two high. Rail at `y 0`, solid floor at `y -1`, solid roof at `y
 rock counts as solid (`anySolid`); anything else solid is left alone only if natural (see "Stops"). Where a side, floor or
 roof is air, a fluid or a falling block, the bot lines it with deepslate from its own digging. Mobs cannot spawn in a rail
 cell, so the road needs no light and no second lane. Every 16 blocks two rails sit one lower, on a floor at `y -2`, sloping
-down and up again: this dip is what keeps the speed. Boosters stand only at starts, 75 on every fourth block over 300 blocks,
-each powered by a redstone torch in a one-block wall niche, or whatever stage 2 shows to be cheaper.
+down and up again: this dip is what keeps the speed. Boosters stand only at ramps, each powered by a redstone torch in a
+one-block wall niche. The rail stops one cell before the rock at both ends of the road.
 
 ### Origin
 

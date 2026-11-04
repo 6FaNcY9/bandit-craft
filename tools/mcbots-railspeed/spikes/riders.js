@@ -210,7 +210,8 @@ async function withBots(names, run) {
   }
 }
 
-(async () => {
+module.exports = {connect}; // start.js logs in the same way
+if (require.main === module) (async () => {
   const setting = Number(process.argv[2]);
   if (!setting) throw new Error('usage: riders.js <setting>');
   await withBots(['bot50', 'bot51', 'bot52', 'bot53'], ([p, q, r, s]) => Promise.all([rideAll(setting, [OWNER_LANES.dip, OWNER_LANES.rail], [p, q]), boat(50, r), boat(60, s)]));
