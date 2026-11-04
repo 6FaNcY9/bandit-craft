@@ -447,8 +447,8 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const {bot} = r;
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
-    // Back at the origin after a restart, with most of a load. With no lining at all it would ride out, build nothing and ride back for ever.
-    if (liningLeft(bot) > FRONT.length && !TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok';
+    // Back at the origin after a restart, with most of a load. With little lining it would ride out, lay a few cells of a cave and ride back for ever.
+    if (liningLeft(bot) * 4 >= want.cobblestone * 3 && !TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok';
     await upStair(r, job, road);
     await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
     await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot

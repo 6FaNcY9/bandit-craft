@@ -616,11 +616,16 @@ module.exports = (async () => {
       await m.restock(w.r, w.job, road);
       assert.strictEqual(calls, 2, 'once at each of the two farms');
     }
-    { // nothing that matters is low, so nobody walks off for a few blocks of cobblestone: a bot back at the origin after a restart stays
-      const {w, asked, m} = setup({...full, rail: 720, stick: 40, cobblestone: 4, iron_sword: 0, sand: 1});
+    { // nothing that matters is low: a bot back at the origin after a restart stays
+      const {w, asked, m} = setup({...full, rail: 720, stick: 40, cobblestone: 48, iron_sword: 0, sand: 1});
       assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
       assert.deepStrictEqual(asked, []);
       assert.strictEqual(w.log.junk, undefined, 'and throws nothing away');
+    }
+    { // sent home by a cave with the niches' few blocks in the bag: a trip for lining, or it rides out, lays three cells and rides back for ever (sandbox: 6 m in 20 minutes)
+      const {w, asked, m} = setup({...full, rail: 720, stick: 40, cobblestone: 17, iron_sword: 0});
+      await m.restock(w.r, w.job, road);
+      assert.ok(asked.length > 0 || w.log.walks.length > 0, 'it goes to the farms');
     }
     { // one round: each farm once, with everything it has at one stop, however the load is ordered
       const round = [{x: 10, y: 0, z: 0, items: ['rail', 'bread']}, {x: 500, y: 0, z: 0, items: ['stick', 'rail']}];
