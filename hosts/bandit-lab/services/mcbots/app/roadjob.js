@@ -2,7 +2,7 @@
 // The highway job: road.js says what a road is, cartride.js how to ride one, and this wires both to a bot, as level.js does.
 const {Vec3} = require('vec3');
 const {refFace} = require('./seal');
-const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
+const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, fellOff, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
 const WALK_WAIT_MS = 5000;
@@ -36,18 +36,19 @@ const KEEPS = /_(helmet|chestplate|leggings|boots|sword|axe|pickaxe|shovel)$|^(s
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const ON_FOOT = /no cart|did not start|could not board|no rail|took over/; // a cart lost or stuck costs time, not the road
+const FRONT = [-1, 0, 1]; // heights shut past a landing, the lowest first to place the rest on
+const liningLeft = (bot) => bot.inventory.items().filter((i) => LINING.test(i.name)).reduce((n, i) => n + i.count, 0);
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
 
 function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, tossJunk, now = Date.now, farms = FARMS, restock = null, buildOrigin = null}) {
   // 26.x may not answer a placing, so what it did is read from the blocks afterwards, as seal.js does.
-  async function place(r, c) {
+  async function place(r, c, spare = FRONT.length) {
     const {bot} = r;
     const solidAt = (x, y, z) => (bot.blockAt(new Vec3(x, y, z))?.boundingBox === 'block' ? 'solid' : 'open');
     const ref = refFace(c, solidAt, bot.entity.position.offset(0, 1.6, 0));
     if (!ref) return 'noref';
-    const item = bot.inventory.items().find((i) => LINING.test(i.name));
-    if (!item) return 'out';
-    await bot.equip(item, 'hand');
+    if (liningLeft(bot) <= spare) return 'out';
+    await bot.equip(bot.inventory.items().find((i) => LINING.test(i.name)), 'hand');
     await bot.placeBlock(bot.blockAt(vec(ref.pos)), vec(ref.face)).catch(() => {});
     return 'placed';
   }
@@ -280,7 +281,10 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
   // if it can, and if not, by taking up rails: the cells past them are built, so one of them is the landing. Returns the last rail.
   async function endRail(r, job, road, k, {forward = true} = {}) {
     const {bot} = r;
-    const landed = (at) => crossSection(road, at + 1).air.every((c) => kindOf(bot.blockAt(vec(c))?.name ?? 'stone') === 'air');
+    const landed = (at) => {
+      const {air, solid} = crossSection(road, at + 1), read = (c) => bot.blockAt(vec(c));
+      return air.every((c) => kindOf(read(c)?.name ?? 'stone') === 'air') && !solid.some((c) => read(c) && isOpen(read(c))); // all air in a cave, with nothing to stand on
+    };
     if (mayEndAt(k) && landed(k)) return k;
     if (forward) {
       while (!mayEndAt(k) && (await buildCell(r, job, road, k + 1)) === 'ok') k++;
@@ -309,10 +313,24 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     }
   }
 
+  // A cart runs on past the rail's end until something stops it, and in a cave nothing does: off the rail at 869 m, the rider came down at
+  // 885 m and y -9 (sandbox). The last lining is kept for this (place), and the next shift digs it away with the cell.
+  async function closeEnd(r, job, road, head) {
+    for (const h of FRONT) {
+      const c = cell(road, head + 2, h), read = () => r.bot.blockAt(vec(c));
+      for (let tries = 0; free(read()) && tries < TRIES; tries++) {
+        guard(job);
+        await place(r, c, 0);
+      }
+      if (free(read())) { r.emit('alert', `highway: ${road.dir}: the road's end at ${head} m stays open at ${c.x} ${c.y} ${c.z}, a cart would run off it`); return; }
+    }
+  }
+
   const goHome = async (r, job, road, head) => {
     const land = cell(road, head + 1);
     await layRamp(r, job, road, head);
     await goNear(r, job, land.x, land.y, land.z, 0, {doing: 'getting on the cart'});
+    await closeEnd(r, job, road, head);
     await travel(r, job, road, head, FIRST_RAIL - 1, 'walking home along the road');
   };
 
@@ -430,7 +448,7 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
     // Back at the origin after a restart, with most of a load. With no lining at all it would ride out, build nothing and ride back for ever.
-    if (bot.inventory.items().some((i) => LINING.test(i.name)) && !TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok';
+    if (liningLeft(bot) > FRONT.length && !TRIP_FOR.some((item) => have(item) * 4 < want[item] * 3)) return 'ok';
     await upStair(r, job, road);
     await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
     await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot
@@ -601,6 +619,15 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
             if (!ON_FOOT.test(e.message)) throw e;
             r.emit('info', `highway: on foot from here, ${e.message}`);
           });
+        }
+        const fell = fellOff(road, bot.entity.position);
+        if (fell !== null) { // not a farm walk from here: that one digs its way up through whatever lies above (a lake at 880 m, sandbox)
+          const {x, y, z} = bot.entity.position.floored(), {head: to} = findHead(blockAt, road, fell), w = cell(road, to, railHeight(to));
+          await goNear(r, job, w.x, w.y, w.z, 0, {doing: `back to the road at ${to} m`}).catch((e) => {
+            guard(job);
+            throw new Error(`off the road at ${x} ${y} ${z}: ${e.message}`);
+          });
+          continue;
         }
         const here = onRoad(road, bot.entity.position);
         const k = here ? here.k : -1;

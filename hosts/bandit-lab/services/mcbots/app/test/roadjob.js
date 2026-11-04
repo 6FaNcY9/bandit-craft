@@ -490,6 +490,48 @@ module.exports = (async () => {
     assert.ok(mayEndAt(head), `head ${head}`);
     assert.notStrictEqual(w.name(cell(road, head + 1, railHeight(head + 1))), 'rail', 'no rail past it');
     assert.deepStrictEqual(alerts(w), [], 'the road is not stopped for this');
+    for (const h of [0, 1]) assert.strictEqual(w.name(cell(road, head + 2, h)), 'cobbled_deepslate', `the last lining goes to the front, at ${h}`);
+  }
+  { // a rail's end in a cave has nothing to stop a cart: a floor under the landing and a front past it (sandbox: off the rail at 869 m, came down at 885 m, y -9)
+    const w = job(roadTo(301, box(301, 330, -6, 8, -6, 6)), {items: {...load, rail: 16}}, {at: 301, args: {}, restock: async (r, j) => { j.cancelled = true; return 'ok'; }});
+    await assert.rejects(w.highway(w.r, w.job), /stopped/);
+    const head = w.log.rides[0];
+    assert.ok(mayEndAt(head), `head ${head}`);
+    assert.strictEqual(w.name(cell(road, head + 1, -1)), 'cobbled_deepslate', 'a floor under the landing');
+    assert.strictEqual(w.name(cell(road, head + 1)), 'air', 'a landing');
+    for (const h of [0, 1]) assert.strictEqual(w.name(cell(road, head + 2, h)), 'cobbled_deepslate', `the front at ${h}`);
+  }
+  { // the next shift takes that front away and goes on
+    const put = roadTo(301, box(301, 330, -6, 8, -6, 6));
+    for (const c of [cell(road, 301, -1), cell(road, 302, -1), cell(road, 302), cell(road, 302, 1)]) put[`${c.x},${c.y},${c.z}`] = 'cobbled_deepslate';
+    const w = job(put, {}, {at: 301, args: {length: 306}});
+    await w.highway(w.r, w.job);
+    assert.deepStrictEqual(alerts(w), []);
+    assert.ok(/rail$/.test(w.name(cell(road, 302))), 'a rail where the front stood');
+    assert.strictEqual(w.name(cell(road, 302, 1)), 'air');
+  }
+  { // far out and off the road: back to the road with no digging, no farm round from there (sandbox: stairs up through a lake)
+    const home = async () => { throw new Error('a load from out there'); };
+    const w = job(roadTo(901), {}, {at: 901, args: {length: 902}, restock: home});
+    w.bot.entity.position = new Vec3(905.5, -9, 0.5);
+    const walk = w.deps.goNear;
+    let dug = null;
+    const m = makeRoad({...w.deps, goNear: async (r, ...a) => { dug = r.digOnly.test('stone'); return walk(r, ...a); }, restock: home, buildOrigin: async () => {}, ride: fakeRide(w)});
+    await m.highway(w.r, w.job);
+    assert.strictEqual(dug, false, 'that walk digs nothing');
+    assert.strictEqual(w.log.walks[0], 900, 'to the last rail');
+    assert.ok(/rail$/.test(w.name(cell(road, 901))));
+    const v = job(roadTo(901), {}, {at: 901, args: {length: 902}, restock: home});
+    v.bot.entity.position = new Vec3(905.5, -9, 0.5);
+    const n = makeRoad({...v.deps, goNear: async () => { throw new Error('could not reach 901 0 0: no path'); }, restock: home, buildOrigin: async () => {}, ride: fakeRide(v)});
+    await assert.rejects(n.highway(v.r, v.job), /off the road at 905 -9 0: could not reach/);
+  }
+  { // off the road near the farms it goes for its load as ever
+    let loads = 0;
+    const w = job(roadTo(301), {}, {at: 301, args: {}, restock: async (r, j) => { loads++; j.cancelled = true; return 'ok'; }});
+    w.bot.entity.position = new Vec3(305.5, -9, 0.5);
+    await assert.rejects(w.highway(w.r, w.job), /stopped/);
+    assert.strictEqual(loads, 1);
   }
   { // on coming back it takes up the old ramp, once, and not when there is none
     const put = roadTo(1001, start);
@@ -574,8 +616,8 @@ module.exports = (async () => {
       await m.restock(w.r, w.job, road);
       assert.strictEqual(calls, 2, 'once at each of the two farms');
     }
-    { // nothing that matters is low, so nobody walks off for a block of cobblestone: a bot back at the origin after a restart stays
-      const {w, asked, m} = setup({...full, rail: 720, stick: 40, cobblestone: 1, iron_sword: 0, sand: 1});
+    { // nothing that matters is low, so nobody walks off for a few blocks of cobblestone: a bot back at the origin after a restart stays
+      const {w, asked, m} = setup({...full, rail: 720, stick: 40, cobblestone: 4, iron_sword: 0, sand: 1});
       assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
       assert.deepStrictEqual(asked, []);
       assert.strictEqual(w.log.junk, undefined, 'and throws nothing away');

@@ -14,6 +14,7 @@ const FIRST_RAIL = 5; // behind the chamber: curb at 3, landing at 4
 const RAMP_BOOSTERS = 48; // measured: reaches 81 to 89 m/s, and the dips take over from there
 const RAMP_CELLS = 256; // what 48 of isBoosterSlot's take
 const BORDER_K = 29999984;
+const FARMS_WITHIN = 512, FELL_SIDE = 32; // blocks from the origin, and from the road
 const FLAT_BEFORE_END = 3; // rails between the last dip and the rail's end: measured, fewer not tried (runbook)
 
 function cell({dir, origin}, k, h = 0, side = 0) {
@@ -42,11 +43,21 @@ function mayEndAt(k) {
   return true;
 }
 
-function onRoad({dir, origin}, pos) {
+function frame({dir, origin}, pos) {
   const d = DIRS[dir];
   const [x, y, z] = [Math.floor(pos.x) - origin.x, Math.floor(pos.y) - origin.y, Math.floor(pos.z) - origin.z];
-  const k = x * d.dx + z * d.dz + 0, side = x * d.sx + z * d.sz + 0; // + 0: no -0 out of a zero direction
-  return k >= 0 && Math.abs(side) <= 1 && y >= -2 && y <= 2 ? {k, side, h: y} : null;
+  return {k: x * d.dx + z * d.dz + 0, side: x * d.sx + z * d.sz + 0, h: y}; // + 0: no -0 out of a zero direction
+}
+
+function onRoad(road, pos) {
+  const {k, side, h} = frame(road, pos);
+  return k >= 0 && Math.abs(side) <= 1 && h >= -2 && h <= 2 ? {k, side, h} : null;
+}
+
+// How far along the road a bot stands that fell off it, out past the farms. Null anywhere else.
+function fellOff(road, pos) {
+  const {k, side} = frame(road, pos);
+  return !onRoad(road, pos) && k > FARMS_WITHIN && Math.abs(side) <= FELL_SIDE ? k : null;
 }
 
 // What a job may dig as plain ground. Moved here from bots.js as it was: the jobs there use it too.
@@ -237,4 +248,4 @@ function loadFor(frontier, ingots = 0) {
   return {...LOAD, rail: first ? LOAD.rail - 128 : LOAD.rail, powered_rail: ramp, redstone_torch: ramp, ...(ingots ? {iron_ingot: ingots} : {})};
 }
 
-module.exports = {FARMS, loadFor, originPlan, readOrigin, mayBuildAt, isClear, findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};
+module.exports = {FARMS, loadFor, originPlan, readOrigin, mayBuildAt, isClear, findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad, fellOff};

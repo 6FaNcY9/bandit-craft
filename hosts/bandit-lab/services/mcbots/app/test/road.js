@@ -1,7 +1,7 @@
 'use strict';
 // The road's geometry and what a block means to it (road.js): pure, no bot.
 const assert = require('node:assert');
-const {originPlan, readOrigin, mayBuildAt, DIRS, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K} = require('../road');
+const {originPlan, readOrigin, mayBuildAt, DIRS, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad, fellOff, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K} = require('../road');
 
 const O = {x: 0, y: 0, z: 0};
 const east = {dir: 'east', origin: O}, west = {dir: 'west', origin: O}, south = {dir: 'south', origin: O}, north = {dir: 'north', origin: O};
@@ -54,6 +54,11 @@ assert.deepStrictEqual(onRoad(north, {x: 0.5, y: -1, z: -39.5}), {k: 40, side: 0
 assert.strictEqual(onRoad(east, {x: 40.5, y: 0, z: 9.5}), null, 'beside it');
 assert.strictEqual(onRoad(east, {x: -40.5, y: 0, z: 0.5}), null, 'behind the origin');
 assert.strictEqual(onRoad(east, {x: 40.5, y: 61, z: 0.5}), null, 'above it');
+assert.strictEqual(fellOff(east, {x: 885.5, y: -9, z: 0.5}), 885);
+assert.strictEqual(fellOff(west, {x: -885.5, y: 44, z: -4.5}), 886);
+assert.strictEqual(fellOff(east, {x: 885.5, y: 0, z: 0.5}), null, 'on it');
+assert.strictEqual(fellOff(east, {x: 300.5, y: -9, z: 0.5}), null, 'the farms are this close');
+assert.strictEqual(fellOff(east, {x: 885.5, y: -9, z: 90.5}), null, 'not along it');
 
 assert.strictEqual(FIRST_RAIL, 5);
 assert.strictEqual(BORDER_K, 29999984);
