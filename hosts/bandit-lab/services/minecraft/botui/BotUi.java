@@ -42,9 +42,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.Event;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.RayTraceResult;
 import org.json.simple.JSONArray;
@@ -77,6 +82,7 @@ public class BotUi extends JavaPlugin implements Listener {
   private byte[] token;
   private HttpServer http;
   private ExecutorService pool;
+  private BotMap map;
 
   @Override
   public void onEnable() {
@@ -113,6 +119,8 @@ public class BotUi extends JavaPlugin implements Listener {
     pool = Executors.newFixedThreadPool(4);
     http.setExecutor(pool);
     http.start();
+    map = new BotMap(this, viewers::contains, System.getenv().getOrDefault("BOTUI_BLUEMAP", "http://127.0.0.1:8100"));
+    map.start();
     getServer().getPluginManager().registerEvents(this, this);
     Bukkit.getScheduler().runTaskTimer(this, this::drawOutlines, 10, 10);
   }
@@ -121,6 +129,7 @@ public class BotUi extends JavaPlugin implements Listener {
   public void onDisable() {
     if (http != null) http.stop(0);
     if (pool != null) pool.shutdownNow();
+    if (map != null) map.stop();
   }
 
   // ---- HTTP -------------------------------------------------------------------------------
@@ -176,6 +185,8 @@ public class BotUi extends JavaPlugin implements Listener {
         case "/show" -> show(x, body);
         case "/close" -> close(x, body);
         case "/outline" -> outline(x, body);
+        case "/map" -> map(x, body);
+        case "/map/give" -> give(x, body);
         default -> reply(x, 404, error("not found"));
       }
     } catch (Exception e) {
@@ -208,6 +219,7 @@ public class BotUi extends JavaPlugin implements Listener {
     }
     viewers.clear();
     viewers.addAll(names);
+    map.retain(viewers);
     reply(x, 200, ok());
   }
 
@@ -300,6 +312,58 @@ public class BotUi extends JavaPlugin implements Listener {
     else reply(x, 400, error("player not online"));
   }
 
+  private static final Set<Integer> ZOOMS = Set.of(1, 2, 5, 10, 25, 50);
+  private static final Set<String> KINDS = Set.of("work", "idle", "bad", "off");
+
+  /** The viewer's whole map view; a repeat of the last one, or one for an offline player, costs nothing. */
+  private void map(HttpExchange x, JSONObject b) throws IOException {
+    String name = str(b, "player");
+    if (name == null || !NAME.matcher(name).matches() || !(b.get("zoom") instanceof Number z) || !ZOOMS.contains(z.intValue()) || z.doubleValue() != z.intValue()
+        || !(b.get("markers") instanceof JSONArray ms)) {
+      reply(x, 400, error("bad map"));
+      return;
+    }
+    BotMap.Center center = null;
+    if (b.get("center") != null) {
+      if (!(b.get("center") instanceof JSONObject c) || !(c.get("x") instanceof Number cx) || !(c.get("z") instanceof Number cz)
+          || !(c.get("dim") == null || c.get("dim") instanceof String)) {
+        reply(x, 400, error("bad center"));
+        return;
+      }
+      center = new BotMap.Center(cx.doubleValue(), cz.doubleValue(), (String) c.get("dim"));
+    }
+    List<BotMap.Marker> markers = new ArrayList<>();
+    for (Object o : ms) {
+      if (!(o instanceof JSONObject m) || !(m.get("x") instanceof Number mx) || !(m.get("z") instanceof Number mz) || !(m.get("dim") instanceof String dim)
+          || !(m.get("kind") instanceof String kind) || !KINDS.contains(kind) || !(m.get("label") instanceof String label)) {
+        reply(x, 400, error("bad marker"));
+        return;
+      }
+      if (markers.size() < BotMap.MAX_MARKERS) markers.add(new BotMap.Marker(mx.doubleValue(), mz.doubleValue(), dim, kind, BotMap.caption(label)));
+    }
+    map.set(name, new BotMap.View(z.intValue(), center, markers));
+    reply(x, 200, ok());
+  }
+
+  private void give(HttpExchange x, JSONObject b) throws Exception {
+    String name = str(b, "player");
+    if (name == null || !NAME.matcher(name).matches()) {
+      reply(x, 400, error("bad player"));
+      return;
+    }
+    JSONObject res = sync(() -> {
+      Player p = Bukkit.getPlayerExact(name);
+      if (p == null) return null;
+      JSONObject o = new JSONObject();
+      String err = viewers.contains(p.getName().toLowerCase(Locale.ROOT)) ? map.give(p) : "Nicht freigeschaltet";
+      o.put("ok", err == null);
+      if (err != null) o.put("error", err);
+      return o;
+    });
+    if (res == null) reply(x, 400, error("player not online"));
+    else reply(x, 200, res);
+  }
+
   private void events(HttpExchange x) throws Exception {
     Map<String, String> q = new HashMap<>();
     String rawQuery = x.getRequestURI().getRawQuery();
@@ -386,19 +450,19 @@ public class BotUi extends JavaPlugin implements Listener {
     else Bukkit.getScheduler().runTask(this, r);
   }
 
-  private void tryOpen(Player p) {
+  private void tryOpen(Player p, String type) {
     if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) {
       p.sendMessage(Component.text("Nicht freigeschaltet"));
     } else if (System.currentTimeMillis() - lastPoll > HUB_TIMEOUT_MS) {
       p.sendMessage(Component.text("Hub nicht erreichbar"));
     } else {
-      emit("open", p, null);
+      emit(type, p, null);
     }
   }
 
   @Override
   public boolean onCommand(CommandSender s, Command c, String label, String[] args) {
-    if (s instanceof Player p) tryOpen(p);
+    if (s instanceof Player p) tryOpen(p, "open");
     return true;
   }
 
@@ -407,8 +471,24 @@ public class BotUi extends JavaPlugin implements Listener {
     Player p = e.getPlayer();
     if (p.isSneaking() && viewers.contains(p.getName().toLowerCase(Locale.ROOT))) {
       e.setCancelled(true);
-      tryOpen(p);
+      tryOpen(p, "open");
     }
+  }
+
+  /** Right click with the tagged map in the main hand: the map dialog instead of the vanilla use; every other map is left alone. */
+  @EventHandler
+  public void onUse(PlayerInteractEvent e) {
+    Player p = e.getPlayer();
+    if (e.getHand() != EquipmentSlot.HAND || (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK)
+        || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !map.isMap(p.getInventory().getItemInMainHand())) return;
+    e.setCancelled(true);
+    e.setUseItemInHand(Event.Result.DENY);
+    tryOpen(p, "mapclick");
+  }
+
+  @EventHandler
+  public void onJoin(PlayerJoinEvent e) {
+    map.join(e.getPlayer());
   }
 
   @EventHandler
@@ -507,6 +587,7 @@ public class BotUi extends JavaPlugin implements Listener {
   public void onQuit(PlayerQuitEvent e) {
     open.remove(e.getPlayer().getUniqueId());
     outlines.remove(e.getPlayer().getUniqueId());
+    map.quit(e.getPlayer());
     emit("quit", e.getPlayer(), null);
   }
 

@@ -7,7 +7,8 @@ const FLASH_MS = 30000;
 // One handler per click `data.a`; later tasks add theirs here. (st, data, ui, viewer) -> void, may be async, may throw.
 // Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
 const QUICK_LABEL = Object.fromEntries(require('./botui-screens').QUICK);
-const {explain} = require('./botui-screens');
+const {explain, ZOOMS} = require('./botui-screens');
+const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
@@ -23,6 +24,13 @@ const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichba
 const box = (p, q) => ({x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)});
 const outline = (ui, viewer, b) => ui.call('/outline', {player: viewer, box: b}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
 const clearSel = async (st, ui, viewer) => { st.sel = {a: null, b: null, dim: null}; await outline(ui, viewer, null); };
+
+// What the map item shows for a viewer: only the bots they may see, only with a known place and world.
+const MARK = {work: 'work', sheltered: 'idle', idle: 'idle', error: 'bad', dead: 'bad', offline: 'off'};
+function markersOf(snaps, allowed) {
+  return snaps.filter((s) => (allowed === '*' || allowed.includes(s.name)) && Array.isArray(s.pos) && s.pos.length >= 3 && Number.isFinite(s.pos[0]) && Number.isFinite(s.pos[2]) && typeof s.dimension === 'string')
+    .map((s) => ({x: s.pos[0], z: s.pos[2], dim: s.dimension, kind: MARK[botState(s)] || 'idle', label: String(s.name).slice(0, 16)}));
+}
 
 const ACTIONS = {
   // `none` after_action keeps the dialog open on the client, so the plugin clears it; Escape closes it either way.
@@ -99,6 +107,24 @@ const ACTIONS = {
     ui.flash(st, `${bot}: ${label} gestartet`, true);
   },
   ziele: (st) => { st.screen = {name: 'ziele'}; },
+  // The plugin moves or creates the viewer's map item; a full inventory comes back as an error and the Lagebild stays.
+  karte: async (st, data, ui, viewer) => {
+    const r = await ui.call('/map/give', {player: viewer});
+    if (!r.ok) { st.screen = {name: 'lage'}; return ui.flash(st, `Keine Karte: ${r.error || 'unbekannter Fehler'}`); }
+    st.screen = {name: 'karte'};
+    await ui.pushMap(viewer, st);
+  },
+  zoom: async (st, data, ui, viewer) => {
+    st.screen = {name: 'karte'};
+    if (!ZOOMS.includes(data.z)) throw new Error('ungültiger Zoom');
+    st.mapState.zoom = data.z;
+    await ui.pushMap(viewer, st);
+  },
+  center: async (st, data, ui, viewer) => {
+    st.screen = {name: 'karte'};
+    st.mapState.center = data.me ? null : oneBot(ui, viewer, data);
+    await ui.pushMap(viewer, st);
+  },
   // The toggles flip a server-side switch: owner only for keeper and plan, the sidebar is each viewer's own.
   keeper: (st, data, ui, viewer) => {
     ownerOnly(ui, viewer);
@@ -223,7 +249,7 @@ class BotUi {
     if (e.type === 'quit') { this.states.delete(viewer); return; }
     let st = this.states.get(viewer);
     if (e.type === 'closed') { if (st) st.open = false; return; }
-    if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0});
+    if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
     st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
     if (e.type === 'open') {
       st.screen = {name: st.sel.a ? 'auftrag' : 'lage'}; st.lastClick = this.now();
@@ -235,7 +261,9 @@ class BotUi {
         else this.flash(st, 'Unbekannte Aktion');
       } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
       if (!st.open) return;
-    } else return; // mapclick etc.: context only
+    } else if (e.type === 'mapclick') {
+      st.screen = {name: 'karte'}; st.lastClick = this.now();
+    } else return;
     try { await this.show(viewer, st); } catch (err) {
       this.flash(st, 'Fehler: ' + err.message);
       await this.show(viewer, st).catch((e2) => { st.open = false; this.log(`botui ${viewer}: ${e2.message}`); });
@@ -264,11 +292,26 @@ class BotUi {
     await this.post(viewer, st, JSON.stringify(await this.render(viewer, st)));
   }
 
+  // The map item's whole view for one viewer; the plugin ignores it unless they are online and holding the map.
+  mapBody(viewer, st) {
+    const {zoom, center} = st?.mapState || {zoom: 5, center: null};
+    const allowed = this.viewerBots[viewer];
+    const at = center && this.api.snapshots().find((s) => s.name === center && (allowed === '*' || allowed.includes(s.name)));
+    return {player: viewer, zoom, center: at?.online && Array.isArray(at.pos) && typeof at.dimension === 'string' ? {x: at.pos[0], z: at.pos[2], dim: at.dimension} : null, markers: this.api.markers(viewer)};
+  }
+
+  pushMap(viewer, st) { return this.call('/map', this.mapBody(viewer, st)); }
+
   // Re-sends a changed REFRESHING screen to open viewers; stops after idleLimitMs without a click.
   async tick() {
     if (this.ticking) return;
     this.ticking = true;
     try {
+      if (this.api.markers) {
+        try { for (const viewer of Object.keys(this.viewerBots)) await this.pushMap(viewer, this.states.get(viewer)); } catch (e) { // plugin down: one try per tick, one log line per outage
+          if (!this.down) { this.log(`botui map: ${e.message}`); this.down = true; }
+        }
+      }
       for (const [viewer, st] of [...this.states]) {
         if (!st.open || st.lastJson === null || !this.screens.REFRESHING.has(st.screen.name)) continue; // null: a show is in flight
         if (this.now() - st.lastClick > this.idleLimitMs) { st.open = false; continue; }
@@ -300,4 +343,4 @@ function stopTargets(viewerBots, viewer, known) {
   return allowed === '*' ? 'all' : allowed.filter((n) => known.includes(n));
 }
 
-module.exports = {BotUi, ACTIONS, allowedBots, stopTargets};
+module.exports = {BotUi, ACTIONS, allowedBots, stopTargets, markersOf};

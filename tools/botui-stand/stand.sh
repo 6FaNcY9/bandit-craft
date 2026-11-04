@@ -42,6 +42,7 @@ gamemode=creative
 view-distance=4
 simulation-distance=4
 P
+  export BOTUI_BLUEMAP="${BOTUI_BLUEMAP:-http://127.0.0.1:18100}" # e2e-map.js serves a fake BlueMap here
   rm -rf "$D/logs" "$D/world"; rm -f "$D/in"; mkfifo "$D/in"
   (sleep infinity >"$D/in" 2>/dev/null) & echo $! >"$D/holder"
   (cd "$D" && exec nix shell nixpkgs#jdk25_headless -c java -Xmx1500M -jar paper.jar --nogui) <"$D/in" >"$D/console.log" 2>&1 &

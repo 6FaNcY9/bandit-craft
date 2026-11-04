@@ -243,10 +243,11 @@ const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole
 if (ingame) ingame.start();
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
 // A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
-const {BotUi, allowedBots, stopTargets} = require('./botui');
+const {BotUi, allowedBots, stopTargets, markersOf} = require('./botui');
 const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
   api: {
     snapshots: () => [...runners.values()].map((r) => r.snapshot()),
+    markers: (viewer) => markersOf([...runners.values()].map((r) => r.snapshot()), cfg.viewerBots[viewer] || []),
     submit: (viewer, {bots, type, args, replace}) => submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false}),
     stopAll: (viewer) => {
       const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);

@@ -28,7 +28,7 @@ async function fake() {
         return res.end(JSON.stringify({boot: f.boot, last, events: evs()}));
       }
       if (u.pathname === '/show' && f.showDelay) await sleep(f.showDelay);
-      res.end(JSON.stringify(u.pathname === '/show' ? (f.refuseRefresh && f.calls.at(-1).body.refresh ? {ok: false, feedback: 'closed'} : f.show) : {ok: true}));
+      res.end(JSON.stringify(u.pathname === '/map/give' ? (f.give || {ok: true}) : u.pathname === '/show' ? (f.refuseRefresh && f.calls.at(-1).body.refresh ? {ok: false, feedback: 'closed'} : f.show) : {ok: true}));
     });
   });
   await new Promise((r) => f.server.listen(0, '127.0.0.1', r));
@@ -378,6 +378,46 @@ async function fake() {
     const shown = f.of('/show').length;
     t += 10; await ui.tick();
     assert.equal(f.of('/show').length, shown);
+    end();
+  }
+  { // Karte: give, zoom, centre and the markers pushed every tick, all within the viewer's rights
+    const snaps = [{name: 'bot1', online: true, pos: [5, 64, 6], dimension: 'overworld', activity: 'idle'}, {name: 'MisaBot', online: true, pos: [100, 64, -40], dimension: 'the_nether', activity: 'mining'}];
+    const give = {ok: true};
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], markers: (v) => require('../botui').markersOf(snaps, v === 'Fancy' ? '*' : ['MisaBot'])};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    f.give = give;
+    const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
+    const maps = (p) => f.of('/map').filter((c) => c.body.player === p).map((c) => c.body);
+    await ui.handle({type: 'open', player: 'Fancy'});
+    await click('Fancy', {a: 'karte'});
+    assert.deepEqual(f.of('/map/give').map((c) => c.body), [{player: 'Fancy'}]);
+    assert.equal(ui.state('Fancy').screen.name, 'karte');
+    assert.deepEqual(maps('Fancy').at(-1), {player: 'Fancy', zoom: 5, center: null, markers: [{x: 5, z: 6, dim: 'overworld', kind: 'idle', label: 'bot1'}, {x: 100, z: -40, dim: 'the_nether', kind: 'work', label: 'MisaBot'}]});
+    await click('Fancy', {a: 'zoom', z: 25}); assert.equal(maps('Fancy').at(-1).zoom, 25);
+    const n = f.of('/map').length;
+    for (const z of [3, '1e9', 'x', undefined]) { await click('Fancy', {a: 'zoom', z}); assert.match(ui.state('Fancy').flash.text, /ungültiger Zoom/); }
+    assert.equal(ui.state('Fancy').mapState.zoom, 25); assert.equal(f.of('/map').length, n);
+    await click('Fancy', {a: 'center', bot: 'MisaBot'});
+    assert.deepEqual(maps('Fancy').at(-1).center, {x: 100, z: -40, dim: 'the_nether'});
+    await click('Fancy', {a: 'center', me: 1}); assert.equal(maps('Fancy').at(-1).center, null);
+    // a restricted viewer: own bots only, in markers and as centre
+    await ui.handle({type: 'open', player: 'Midari'});
+    await click('Midari', {a: 'center', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await click('Midari', {a: 'karte'});
+    assert.deepEqual(maps('Midari').at(-1).markers.map((m) => m.label), ['MisaBot']);
+    // every tick posts /map for every viewer, also those without a state; the markers follow the bots
+    f.calls.length = 0; snaps[0].pos = [9, 64, 9]; t += 10; await ui.tick();
+    assert.deepEqual(f.of('/map').map((c) => c.body.player), ['Fancy', 'Midari']);
+    assert.deepEqual(f.of('/map')[0].body.markers[0], {x: 9, z: 9, dim: 'overworld', kind: 'idle', label: 'bot1'});
+    // a full inventory is told, not hidden, and the dialog stays on the Lagebild
+    f.give = {ok: false, error: 'Inventar voll'};
+    await click('Fancy', {a: 'lage'}); await click('Fancy', {a: 'karte'});
+    assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.match(ui.state('Fancy').flash.text, /Keine Karte: Inventar voll/);
+    // right click on the map opens the Karte, and the Karte is not refreshed
+    await ui.handle({type: 'mapclick', player: 'Fancy'});
+    assert.equal(ui.state('Fancy').screen.name, 'karte'); assert.equal(ui.state('Fancy').open, true);
+    const shown = f.of('/show').length; t += 10; await ui.tick(); assert.equal(f.of('/show').length, shown);
+    await ui.handle({type: 'mapclick', player: 'Stranger'}); assert.equal(ui.state('Stranger'), undefined);
     end();
   }
   console.log('botui ok');

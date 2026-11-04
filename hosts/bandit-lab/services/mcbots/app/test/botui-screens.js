@@ -158,3 +158,19 @@ console.log('botui-screens ok');
   assert.deepEqual(hk({owner: false, allowed: ['MisaBot']}).map((x) => x[0]), ['MisaBot', 'MisaBot']);
   assert.deepEqual(render({name: 'auftrag'}, view({ctx: {gaze: {...gaze, block: 'stone'}}, traders: ['MisaBot']})).actions.filter((a) => a.action?.payload?.a === 'trader_add'), []);
 }
+{ // Karte: six zoom buttons, "Mitte: ich" and one centre button per allowed bot; an input screen, so it never refreshes
+  const snaps = [work('bot1'), work('MisaBot')];
+  const pay = (d, a) => d.actions.filter((x) => x.action.payload?.a === a).map((x) => x.action.payload);
+  assert.ok(!REFRESHING.has('karte'));
+  assert.ok(lage(view({snaps})).actions.some((a) => a.action.payload?.a === 'karte'), 'Karte button is wired');
+  const d = render({name: 'karte'}, view({snaps, mapState: {zoom: 10, center: 'bot1'}}));
+  assert.deepEqual(pay(d, 'zoom').map((p) => p.z), [1, 2, 5, 10, 25, 50]);
+  assert.deepEqual(pay(d, 'center'), [{a: 'center', me: 1}, {a: 'center', bot: 'bot1'}, {a: 'center', bot: 'MisaBot'}]);
+  const m = render({name: 'karte'}, view({snaps, owner: false, allowed: ['MisaBot']}));
+  assert.deepEqual(pay(m, 'center').map((p) => p.bot), [undefined, 'MisaBot']);
+  const {markersOf} = require('../botui');
+  const all = [work('bot1', {pos: [10, 64, -5]}), work('MisaBot', {pos: [1, 70, 2], dimension: 'the_nether'}), idle('EM'), off('gone'), work('dead1', {dead: true}), work('bad', {pos: [NaN, 0, 0]})];
+  assert.deepEqual(markersOf(all, ['MisaBot']), [{x: 1, z: 2, dim: 'the_nether', kind: 'work', label: 'MisaBot'}]);
+  assert.deepEqual(markersOf(all, '*').map((k) => [k.label, k.kind]), [['bot1', 'work'], ['MisaBot', 'work'], ['EM', 'idle'], ['dead1', 'bad']]);
+}
+console.log('botui-screens karte ok');

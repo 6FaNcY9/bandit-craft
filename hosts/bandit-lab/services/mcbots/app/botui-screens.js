@@ -245,9 +245,22 @@ function ziele(view) {
   return dialog('Ziele', body, actions, CLOSE, 2, inputs);
 }
 
+// --- Karte: zoom and centre of the map item. An input screen (never refreshes), so the buttons stay where the player aims.
+const ZOOMS = [1, 2, 5, 10, 25, 50];
+function karte(view) {
+  const ms = view.mapState || {zoom: 5, center: null};
+  const body = [line(txt(`${ms.zoom} ${ms.zoom === 1 ? 'Block' : 'Blöcke'} pro Pixel · Mitte: ${ms.center ? safe(ms.center, 16) : 'du'}`, 'white')), ...flashLine(view.flash)];
+  const mark = (on) => (on ? 'green' : 'white');
+  const actions = [...ZOOMS.map((z) => button(txt(`${z} ${z === 1 ? 'Block' : 'Blöcke'} pro Pixel`, mark(z === ms.zoom)), 'zoom', {z})),
+    button(txt('Mitte: ich', mark(!ms.center)), 'center', {me: 1}),
+    ...mine(view).map((s) => button(txt(`Mitte: ${safe(s.name, 16)}`, mark(ms.center === s.name)), 'center', {bot: s.name})),
+    button(txt('Zurück'), 'lage')];
+  return dialog('Bot-Karte', body, actions, CLOSE);
+}
+
 // A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
-const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), stopall: confirmStop, auftrag, job: jobScreen, ziele};
+const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
 const REFRESHING = new Set(['lage', 'bot']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 
-module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK};
+module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK, ZOOMS};
