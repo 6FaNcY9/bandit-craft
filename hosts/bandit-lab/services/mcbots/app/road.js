@@ -68,35 +68,70 @@ function kindOf(name) {
 }
 
 const LOOK_SIDE = 3, LOOK_AHEAD = 3, LOOK_LOW = -3, LOOK_HIGH = 4;
+const LINING = /^(cobbled_deepslate|cobblestone)$/; // what digging deepslate and stone yields without Silk Touch
+// A bot that died or restarted halfway through a cell left these in it, and they must not read as a player's.
+const OWN = /^(cobbled_deepslate|cobblestone|redstone_torch|powered_rail)$/;
+const OPPOSITE = {east: 'west', west: 'east', south: 'north', north: 'south'};
+const key = ({x, y, z}) => `${x},${y},${z}`;
 
 // What cells fromK..toK hold, before a bot digs them. blockAt(x, y, z) gives {name}, or null where no chunk is loaded.
 function inspect(blockAt, road, fromK, toK) {
   const named = ({x, y, z}) => blockAt(x, y, z)?.name;
+  const {air, solid} = crossSection(road, fromK), halfBuilt = new Set([...air, ...solid].map(key));
   for (let k = fromK; k <= toK + LOOK_AHEAD; k++) {
     for (let side = -LOOK_SIDE; side <= LOOK_SIDE; side++) {
       for (let h = LOOK_LOW; h <= LOOK_HIGH; h++) {
         const at = cell(road, k, h, side), name = named(at);
-        if (name === undefined) return {stop: {why: 'unloaded', at, name: null}, fluids: [], open: []};
+        if (name === undefined) return {stop: {why: 'unloaded', at, name: null}};
         const kind = kindOf(name);
-        if (kind === 'player' || kind === 'danger') return {stop: {why: kind, at, name}, fluids: [], open: []};
+        if (kind === 'player' && OWN.test(name) && halfBuilt.has(key(at))) continue;
+        if (kind === 'player' || kind === 'danger') return {stop: {why: kind, at, name}};
       }
     }
   }
-  const fluids = [], open = [];
   for (let k = fromK; k <= toK; k++) {
-    const {air, solid} = crossSection(road, k);
-    for (const at of air) {
-      const name = named(at), kind = kindOf(name);
-      if (kind === 'keep') return {stop: {why: 'keep', at, name}, fluids: [], open: []};
-      if (kind === 'fluid') fluids.push(at);
-    }
-    for (const at of solid) {
-      const kind = kindOf(named(at));
-      if (kind === 'fluid') fluids.push(at);
-      else if (kind === 'air' || kind === 'falling') open.push(at);
+    for (const at of crossSection(road, k).air) {
+      const name = named(at);
+      if (kindOf(name) === 'keep') return {stop: {why: 'keep', at, name}};
     }
   }
-  return {stop: null, fluids, open};
+  return {stop: null};
 }
 
-module.exports = {NATURAL, kindOf, inspect, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};
+// What a road's wall, floor or roof cannot be: it lets water or mobs through, or falls.
+const isOpen = (b) => ['air', 'fluid', 'falling'].includes(kindOf(b.name)) || b.boundingBox === 'empty';
+
+// The shape a rail has once its neighbours lie: the rail last placed may still differ, so a check of it means little.
+function railShape({dir}, k) {
+  if (k % 16 === 8) return `ascending_${OPPOSITE[dir]}`;
+  if (k % 16 === 9) return `ascending_${dir}`;
+  return DIRS[dir].dx ? 'east_west' : 'north_south';
+}
+// A rail lying across the road, a mineshaft's: it has to go. No shape known (a test's plain block) counts as fitting.
+function railFits(b, {dir}) {
+  const shape = b.getProperties?.().shape;
+  return !shape || (DIRS[dir].dx ? /^(east_west|ascending_east|ascending_west)$/ : /^(north_south|ascending_north|ascending_south)$/).test(shape);
+}
+
+// What is wrong with a finished cell: nothing, or a list of what and where.
+function checkCell(blockAt, road, k) {
+  const out = [], {air, solid, rail} = crossSection(road, k);
+  const at = ({x, y, z}) => blockAt(x, y, z);
+  const here = (c) => `${c.x} ${c.y} ${c.z}`;
+  const niched = isBoosterSlot(k) && niche(road, k);
+  for (const c of air) {
+    const b = at(c), isRail = c.x === rail.x && c.y === rail.y && c.z === rail.z;
+    if (!b) out.push(`not loaded at ${here(c)}`);
+    else if (isRail ? !/rail$/.test(b.name) : kindOf(b.name) !== 'air') out.push(`${b.name} at ${here(c)}`);
+    else if (isRail && (b.getProperties?.().shape ?? railShape(road, k)) !== railShape(road, k)) out.push(`rail ${b.getProperties().shape} at ${here(c)}`);
+  }
+  for (const c of solid) {
+    const b = at(c);
+    if (!b) out.push(`not loaded at ${here(c)}`);
+    else if (niched && c.x === niched.x && c.y === niched.y && c.z === niched.z && b.name === 'redstone_torch') continue;
+    else if (isOpen(b)) out.push(`${b.name} at ${here(c)}`);
+  }
+  return out;
+}
+
+module.exports = {NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};

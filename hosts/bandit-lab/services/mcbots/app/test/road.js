@@ -59,7 +59,7 @@ assert.strictEqual(FIRST_RAIL, 5);
 assert.strictEqual(BORDER_K, 29999984);
 
 // ---- what a block is, and what a segment holds ----
-const {kindOf, inspect} = require('../road');
+const {kindOf, inspect, isOpen, checkCell, railShape, railFits} = require('../road');
 
 for (const n of ['stone', 'deepslate', 'tuff', 'deepslate_iron_ore', 'moss_block', 'sculk', 'sculk_vein', 'pointed_dripstone', 'obsidian', 'amethyst_block', 'budding_amethyst', 'magma_block', 'hanging_roots']) assert.strictEqual(kindOf(n), 'natural', n);
 for (const n of ['air', 'cave_air', 'void_air']) assert.strictEqual(kindOf(n), 'air', n);
@@ -73,7 +73,7 @@ for (const n of ['torch', 'wall_torch', 'cobblestone', 'cobblestone_stairs', 'wh
 // A world of stone, with one thing put in per case: null is a chunk not loaded.
 const world = (put = {}) => (x, y, z) => {
   const key = `${x},${y},${z}`;
-  return key in put ? (put[key] && {name: put[key]}) : {name: 'stone'};
+  return key in put ? (put[key] && {name: put[key], boundingBox: /torch/.test(put[key]) ? 'empty' : 'block'}) : {name: 'stone'};
 };
 assert.strictEqual(inspect(world(), east, 16, 32).stop, null);
 assert.strictEqual(inspect(world({'20,3,3': 'torch'}), east, 16, 32).stop.why, 'player', 'within 3 blocks');
@@ -95,10 +95,50 @@ assert.strictEqual(inspect(world({'20,0,0': 'oak_planks'}), east, 16, 32).stop, 
 assert.strictEqual(inspect(world({'20,2,0': 'sculk_shrieker'}), east, 16, 32).stop.why, 'danger');
 assert.strictEqual(inspect(world({'20,0,3': 'sculk_shrieker'}), east, 16, 32).stop.why, 'danger', 'near, not only in the cells');
 assert.strictEqual(inspect(world({'20,0,0': null}), east, 16, 32).stop.why, 'unloaded');
-assert.strictEqual(inspect(world({'20,0,3': 'water'}), east, 16, 32).stop, null, 'a fluid is no stop');
-assert.deepStrictEqual(inspect(world({'20,0,1': 'water'}), east, 16, 32).fluids, [{x: 20, y: 0, z: 1}], 'but it is listed in the cross-section');
-assert.deepStrictEqual(inspect(world({'20,2,0': 'cave_air'}), east, 16, 32).open, [{x: 20, y: 2, z: 0}], 'an open roof is listed');
-assert.deepStrictEqual(inspect(world({'20,2,0': 'gravel'}), east, 16, 32).open, [{x: 20, y: 2, z: 0}], 'a falling block counts as open');
+assert.strictEqual(inspect(world({'20,0,1': 'water'}), east, 16, 32).stop, null, 'a fluid is no stop');
+assert.strictEqual(inspect(world({'20,2,0': 'cave_air'}), east, 16, 32).stop, null, 'a cave is no stop');
+// A cell left half built by a death or a restart reads as the bot's own, there and nowhere else.
+assert.strictEqual(inspect(world({'16,0,1': 'cobbled_deepslate'}), east, 16, 32).stop, null, 'a wall it lined');
+assert.strictEqual(inspect(world({'16,0,0': 'cobblestone'}), east, 16, 32).stop, null, 'a block in the road for a moment');
+assert.strictEqual(inspect(world({'16,0,1': 'redstone_torch'}), east, 16, 32).stop, null, 'a booster half laid');
+assert.strictEqual(inspect(world({'17,0,1': 'cobblestone'}), east, 16, 32).stop.why, 'player', 'the next cell is not its own');
+assert.strictEqual(inspect(world({'16,0,3': 'cobblestone'}), east, 16, 32).stop.why, 'player', 'nor beside it');
+assert.strictEqual(inspect(world({'16,0,1': 'torch'}), east, 16, 32).stop.why, 'player', 'nor anything else');
 // The same on another road, to show nothing is east only.
 assert.strictEqual(inspect(world({'3,0,-20': 'torch'}), north, 16, 32).stop.why, 'player');
 assert.strictEqual(inspect(world({'4,0,-20': 'torch'}), north, 16, 32).stop, null);
+
+// ---- a finished cell ----
+assert.ok(isOpen({name: 'air'}) && isOpen({name: 'water'}) && isOpen({name: 'gravel'}) && isOpen({name: 'short_grass', boundingBox: 'empty'}));
+assert.ok(!isOpen({name: 'deepslate', boundingBox: 'block'}) && !isOpen({name: 'cobblestone', boundingBox: 'block'}) && !isOpen({name: 'oak_fence', boundingBox: 'block'}));
+const built = (road, k, put = {}) => {
+  const {air, rail} = crossSection(road, k), blocks = {};
+  for (const c of air) blocks[`${c.x},${c.y},${c.z}`] = 'air';
+  blocks[`${rail.x},${rail.y},${rail.z}`] = 'rail';
+  return world({...blocks, ...put});
+};
+assert.deepStrictEqual(checkCell(built(east, 7), east, 7), [], 'flat');
+assert.deepStrictEqual(checkCell(built(east, 8), east, 8), [], 'dip');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,0,0': 'powered_rail'}), east, 7), [], 'a booster is a rail');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,0,0': 'air'}), east, 7), ['air at 7 0 0'], 'no rail');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,1,0': 'stone'}), east, 7), ['stone at 7 1 0'], 'no headroom');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,-1,0': 'air'}), east, 7), ['air at 7 -1 0'], 'no floor');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,2,0': 'gravel'}), east, 7), ['gravel at 7 2 0'], 'a roof that falls');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,1,1': 'water'}), east, 7), ['water at 7 1 1'], 'a leak');
+assert.deepStrictEqual(checkCell(built(east, 12, {'12,0,1': 'redstone_torch'}), east, 12), [], 'a booster\'s torch in its niche');
+assert.deepStrictEqual(checkCell(built(east, 12, {'12,0,1': 'air'}), east, 12), ['air at 12 0 1'], 'an empty niche is a hole');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,0,1': 'redstone_torch'}), east, 7), ['redstone_torch at 7 0 1'], 'no slot here');
+assert.deepStrictEqual(checkCell(built(east, 7, {'7,0,-1': null}), east, 7), ['not loaded at 7 0 -1']);
+
+// Rails: the shape once its neighbours lie, the same in road order on every road (measured east and north).
+assert.deepStrictEqual([7, 8, 9, 10].map((k) => railShape(east, k)), ['east_west', 'ascending_west', 'ascending_east', 'east_west']);
+assert.deepStrictEqual([7, 8, 9, 10].map((k) => railShape(north, k)), ['north_south', 'ascending_south', 'ascending_north', 'north_south']);
+assert.deepStrictEqual([8, 9].map((k) => railShape(west, k)), ['ascending_east', 'ascending_west']);
+assert.deepStrictEqual([8, 9].map((k) => railShape(south, k)), ['ascending_north', 'ascending_south']);
+const shaped = (shape) => ({name: 'rail', getProperties: () => ({shape})});
+assert.ok(railFits(shaped('east_west'), east) && railFits(shaped('ascending_west'), east) && railFits({name: 'rail'}, east));
+assert.ok(!railFits(shaped('north_south'), east) && !railFits(shaped('north_east'), east) && !railFits(shaped('east_west'), north));
+const withRail = (k, shape) => (x, y, z) => (y === (k % 16 === 8 || k % 16 === 9 ? -1 : 0) && z === 0 ? shaped(shape) : built(east, k)(x, y, z));
+assert.deepStrictEqual(checkCell(withRail(7, 'east_west'), east, 7), []);
+assert.deepStrictEqual(checkCell(withRail(7, 'north_south'), east, 7), ['rail north_south at 7 0 0'], 'across the road');
+assert.deepStrictEqual(checkCell(withRail(8, 'east_west'), east, 8), ['rail east_west at 8 -1 0'], 'a dip that does not slope');
