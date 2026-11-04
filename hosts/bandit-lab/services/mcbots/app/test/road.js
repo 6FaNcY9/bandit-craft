@@ -142,3 +142,15 @@ const withRail = (k, shape) => (x, y, z) => (y === (k % 16 === 8 || k % 16 === 9
 assert.deepStrictEqual(checkCell(withRail(7, 'east_west'), east, 7), []);
 assert.deepStrictEqual(checkCell(withRail(7, 'north_south'), east, 7), ['rail north_south at 7 0 0'], 'across the road');
 assert.deepStrictEqual(checkCell(withRail(8, 'east_west'), east, 8), ['rail east_west at 8 -1 0'], 'a dip that does not slope');
+
+// ---- the road's end, read from the blocks ----
+const {findHead} = require('../road');
+const railed = (to, put = {}) => { const out = {}; for (let k = FIRST_RAIL; k <= to; k++) out[k % 16 === 8 || k % 16 === 9 ? `${k},-1,0` : `${k},0,0`] = 'rail'; return world({...out, ...put}); };
+assert.deepStrictEqual(findHead(railed(40), east, 20), {head: 40, open: false}, 'forward from where it stands');
+assert.deepStrictEqual(findHead(railed(40), east, 41), {head: 40, open: false}, 'back from the landing');
+assert.deepStrictEqual(findHead(railed(40), east, 46), {head: 40, open: false}, 'back over rails taken up');
+assert.deepStrictEqual(findHead(railed(40, {'24,-1,0': 'powered_rail'}), east, 20), {head: 40, open: false}, 'through anything that is a rail');
+assert.deepStrictEqual(findHead(railed(40), east, FIRST_RAIL), {head: 40, open: false}, 'from the first rail');
+assert.deepStrictEqual(findHead(world(), east, 20), {head: FIRST_RAIL - 1, open: false}, 'a road with no rail yet: nothing within 64 back');
+assert.deepStrictEqual(findHead(world(), east, 3), {head: FIRST_RAIL - 1, open: false});
+assert.deepStrictEqual(findHead(railed(40, {'30,0,0': null}), east, 20), {head: 29, open: true}, 'the chunk ends the reading, not the road');

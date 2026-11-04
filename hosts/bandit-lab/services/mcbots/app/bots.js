@@ -53,13 +53,15 @@ const hitsNote = (hits, doing, now = Date.now()) => {
 const BACKOFF_CAP = 300000;
 // Kept on deposit: what a bot needs to craft a replacement tool or light a mine.
 // Natural ground an excavation may remove; never placed blocks (cobblestone is a wall).
-const {NATURAL} = require('./road');
+const {NATURAL, DIRS, BORDER_K} = require('./road');
+const roadJob = require('./roadjob');
+const {makeRide} = require('./cartride');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
-const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy', 'trade']);
+const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy', 'trade', 'highway']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
-const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm']); // a resumed build/excavate skips what is done
+const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'highway']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
 
@@ -232,6 +234,16 @@ const VALIDATE = {
     const box = {x1: Math.min(p.x, q.x), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), z2: Math.max(p.z, q.z), top: Math.max(p.y, q.y), bottom: Math.max(-59, Math.min(p.y, q.y))};
     if (box.x2 - box.x1 > 15 || box.z2 - box.z1 > 15 || box.x2 - box.x1 < 2 || box.z2 - box.z1 < 2) throw new Error('a shaft is 3 x 3 to 16 x 16 blocks');
     return box;
+  },
+  // One road from `origin` (the world's 0 0 0 if not given) to the border or to `length`. `frontier` is the job's note of how far it got.
+  highway: (a) => {
+    if (!Object.hasOwn(DIRS, a.dir ?? '')) throw new Error('dir must be east, west, south or north');
+    return {
+      dir: a.dir,
+      ...(a.length === undefined ? {} : {length: num(a.length, 1, BORDER_K, 'length')}),
+      ...(a.frontier === undefined ? {} : {frontier: num(a.frontier, 0, BORDER_K, 'frontier')}),
+      ...(a.origin === undefined ? {} : {origin: xyz(a.origin)}),
+    };
   },
   // Mining at one height of a shaft (the shaft job's box and top/bottom): `y` is the tunnels' feet level,
   // `length` the main tunnels (4-64) and `branch` the side branches (0-16) every 3rd block.
@@ -1091,7 +1103,7 @@ async function waitCalm(r, job, until = Infinity) {
 // Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (alerts.js)
-const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get']);
+const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
@@ -3080,6 +3092,8 @@ const seal = sealJob.makeSeal({goNear, guard, sleep, goals, withdraw: buildWithd
 
 const {level} = levelJob.makeLevel({goNear, waitCalm, guard, sleep, digAt, upkeep, NATURAL, stairRing, at});
 
+const {highway} = roadJob.makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride: makeRide({guard, sleep}), restock: async () => 'ok', buildOrigin: async () => {}});
+
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,
   deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only: 'logs'}})),
@@ -3217,6 +3231,7 @@ const JOBS = {
   treefarm,
   homebed,
   level,
+  highway,
   seal,
   hunt,
   bed,

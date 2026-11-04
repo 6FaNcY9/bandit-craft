@@ -134,4 +134,19 @@ function checkCell(blockAt, road, k) {
   return out;
 }
 
-module.exports = {NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};
+// The last rail, read from the blocks and not from what a file says. From the landing it looks back; open: it ran into a
+// chunk not loaded, so the road may go on past there.
+function findHead(blockAt, road, fromK) {
+  const at = (k) => { const {x, y, z} = cell(road, k, railHeight(k)); return blockAt(x, y, z); };
+  let k = Math.max(fromK, FIRST_RAIL);
+  if (!/rail$/.test(at(k)?.name ?? 'rail')) {
+    const floor = Math.max(FIRST_RAIL, k - 64);
+    while (k >= floor && !/rail$/.test(at(k)?.name ?? '')) k--;
+    return {head: k >= floor ? k : FIRST_RAIL - 1, open: false};
+  }
+  if (!at(k)) return {head: k - 1, open: true};
+  while (/rail$/.test(at(k + 1)?.name ?? '')) k++;
+  return {head: k, open: !at(k + 1)};
+}
+
+module.exports = {findHead, NATURAL, LINING, kindOf, inspect, isOpen, checkCell, railShape, railFits, DIRS, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, isDip, railHeight, crossSection, isBoosterSlot, niche, mayEndAt, onRoad};

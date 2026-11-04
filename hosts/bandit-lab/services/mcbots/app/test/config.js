@@ -286,6 +286,13 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '1,2,3'}));
     for (const url of ['http://10.250.77.9:2586', 'http://10.250.78.1:2586', 'http://10.250.77.1.evil.example']) assert.strictEqual(new NtfyNotifier({...options, url}).send('bot1', 'x', 'off'), false, url);
   }
   assert.doesNotThrow(() => new NtfyNotifier({...options, fetcher: () => { throw Error('offline'); }}).send('bot1', 'x', 'x'));
+  { // a road that stopped waits for the owner, so it reaches the phone; other alerts do not
+    const h = new NtfyNotifier(options), before = sent.length;
+    h.event({bot: 'bot2', kind: 'alert', text: 'highway: east stopped at 40 m: chest at 40 0 0'});
+    assert.deepStrictEqual([sent.length, sent.at(-1).headers.Priority, sent.at(-1).body], [before + 1, 'high', 'highway: east stopped at 40 m: chest at 40 0 0']);
+    h.event({bot: 'bot2', kind: 'alert', text: 'something else'});
+    assert.strictEqual(sent.length, before + 1);
+  }
   assert.doesNotThrow(() => new NtfyNotifier({...options, fetcher: () => Promise.reject(Error('offline'))}).send('bot1', 'x', 'x'));
   // Both local and sanitized remote events share this callback; notification errors cannot stop logging.
   const hooked = new EventLog({onAdd: (e) => n.event(e)});
