@@ -2748,6 +2748,7 @@ const buildContext = (r) => {
 const build = buildJob.makeBuild({goNear, guard, sleep, goals, digAt, withdraw: buildWithdraw, runJob: buildRunJob, gatherContext: buildContext});
 const SCHEMATIC_DIR = process.env.SCHEMATIC_DIR || require('node:path').join(process.env.STATE_DIR || '.', 'schematics'); // a worker has no STATE_DIR, only this
 const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
+  light: (r, job) => lightUp(r, job).catch((e) => { guard(job); r.emit('info', `no torch placed: ${e.message.slice(0, 80)}`); }),
   dir: SCHEMATIC_DIR, care,
   // Waiting for material, the builder makes some itself: one production step for its own project.
   help: async (r, job) => {

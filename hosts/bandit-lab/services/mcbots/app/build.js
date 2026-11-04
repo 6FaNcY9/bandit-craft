@@ -515,7 +515,7 @@ async function clickFace(bot, t, w, sleep) {
   }
 }
 
-function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null, care = null, supplyChest = null}) {
+function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, dir, waitMs = 5 * WAIT_MS, help = null, care = null, light = null, supplyChest = null}) {
   // Near enough to click the cell, never standing in it or under it.
   class GoalBeside extends goals.GoalNear {
     constructor(t, range) {
@@ -563,7 +563,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // Glass where the schematic wants another block is our scaffolding, and it drops nothing. The owner may give a
     // site free (a scaffold stood in the sorter's site on the main server, 2026-10-14): then anything but a
     // container comes out, so nothing of theirs spills.
-    const clearable = (k, name) => natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS ||
+    const clearable = (k, name) => (job.args.tight && /torch$/.test(name)) || natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS ||
       (job.args.clearAll === true && !CONTAINER.test(name)) ||
       // A tight build's air is air: bot50's own blocks blocked a test tunnel's mouth, "not ours" (sandbox 2026-10-18).
       (job.args.tight === true && plan.air.has(k) && !CONTAINER.test(name));
@@ -999,7 +999,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               // needed it stands (then the real block goes there).
               const req = tempFor.get(k), reqT = req && plan.byKey.get(req);
               if (pillars.has(k) && !allPlaced && !(reqT && placing.matches(reqT, stateAt(reqT.x, reqT.y, reqT.z) || {name: '?'}))) continue;
-              if (!t && (h.name === SCAFFOLD || h.name === GLASS) && !allPlaced) continue; // a support or a climb in an air cell, out at the end
+              if (!t && (h.name === SCAFFOLD || h.name === GLASS || (job.args.tight && /torch$/.test(h.name))) && !allPlaced) continue; // a support, a climb or a work light in an air cell, out at the end
               if (!clearable(k, h.name)) { stuck.set(k, h.name); continue; }
               if (h.name !== GLASS && landsInHopper(x, y, z, false)) { stuck.set(k, `${h.name} over a hopper`); continue; }
               // A cell with a free side first: an inner cell shows only its top, which the walk cannot reach
@@ -1011,6 +1011,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           }
         }
         if (clear) {
+          // A dark hollow spawns mobs by day too: three bots died 4 times each and gave up (sandbox church 2026-11-04).
+          if (job.args.tight && light) await light(r, job);
           if (freeSlots() < 2) for (const it of surplusRock(bot.inventory.items(), uses, natural)) { await bot.tossStack(it).catch(() => {}); guard(job); }
           const k = ckey(clear);
           if (r.world && !(await r.world.claim(r.name, k))) { skip.set(clear.k, now + 5000); continue; }
