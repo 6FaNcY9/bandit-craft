@@ -210,36 +210,9 @@ function submitJob({bots, type, args, replace, agent = false}) {
   const unreached = all ? [...runners.values()].filter((r) => r instanceof RemoteRunner && !r.conn).map((r) => r.name) : [];
   return {ok: true, keeperOff, unreached, saveErr, skipped};
 }
-// The sidebar, the panel inbox and the replies of the in-game channel (ingame.js), over the main console.
+// The opt-in sidebar and the chat replies of the in-game channel (ingame.js), over the main console.
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
-  quotas: () => keeper?.state().quotas || [],
-  snapshots: () => [...runners.values()].map((r) => r.snapshot()),
-  // Mirrors bots.js bindOwner for a runner of the map (local or remote); throws the refusal text.
-  order: (viewer, name, words) => {
-    const owner = require('./owner');
-    if (name === 'alle') {
-      if (words[0] !== 'stopp') throw new Error('alle: nur stopp');
-      for (const r of runners.values()) if (!(r instanceof RemoteRunner) || r.conn) { r.enqueue('stop'); ownerOrders.delete(r.name); delete toResume[r.name]; projects.pause(r.name); }
-      saveOrders(); stopAll(); saveJobs(true); broadcast();
-      return 'ok: alle stoppen';
-    }
-    const r = runners.get(name);
-    if (!r) throw new Error('unbekannter Bot');
-    const c = owner.translate(words, {owner: viewer, ownerPos: null});
-    if (c.unknown) throw new Error(owner.HELP);
-    if (c.role) throw new Error('Rolle nur im Chat');
-    if (c.type) {
-      if (c.type === 'trade' || c.args?.own) throw new Error('nur im Chat'); // needs the chat flow (own chest, timed trade)
-      VALIDATE[c.type](c.args); // refuse before replacing the active job
-      r.enqueue(c.type, c.args, {replace: true});
-      ownerOrders.set(name, {type: c.type, args: c.args}); saveOrders();
-      delete toResume[name]; projects.pause(name); saveJobs(true); // as /api/job does when replacing
-      return 'ok: ' + c.type;
-    }
-    if (c.stop) { r.enqueue('stop'); ownerOrders.delete(name); saveOrders(); delete toResume[name]; projects.pause(name); saveJobs(true); return 'ok: bleibe stehen'; }
-    if (c.status) { const s = r.snapshot(); return `ok: Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}`; }
-    throw new Error(owner.HELP);
-  }}) : null;
+  snapshots: () => [...runners.values()].map((r) => r.snapshot())}) : null;
 if (ingame) ingame.start();
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
 // A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
@@ -248,7 +221,11 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
   api: {
     snapshots: () => [...runners.values()].map((r) => r.snapshot()),
     markers: (viewer) => markersOf([...runners.values()].map((r) => r.snapshot()), cfg.viewerBots[viewer] || []),
-    submit: (viewer, {bots, type, args, replace}) => submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false}),
+    submit: (viewer, {bots, type, args, replace}) => {
+      const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false});
+      for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
+      return out;
+    },
     stopAll: (viewer) => {
       const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);
       return bots.length ? submitJob({bots, type: 'stop', agent: false}) : {ok: true, keeperOff: false, unreached: []};

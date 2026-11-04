@@ -22,8 +22,9 @@
     mc-bridge-rcon = 25575;
     mc-bridge-rcon-sandbox = 25576;
     mc-bridge-map = mapPort;
+    mc-bridge-botui = botuiPort;
   };
-  bridgeRule = op: "iptables ${op} nixos-fw -s ${bridgeSubnet} -d ${bridgeGw} -p tcp -m multiport --dports 25565,25575,25576,${toString mapPort} -j nixos-fw-accept";
+  bridgeRule = op: "iptables ${op} nixos-fw -s ${bridgeSubnet} -d ${bridgeGw} -p tcp -m multiport --dports 25565,25575,25576,${toString mapPort},${toString botuiPort} -j nixos-fw-accept";
   bridgeService = port: {
     serviceConfig = {
       ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 127.0.0.1:${toString port}";
@@ -36,6 +37,7 @@
   # Simple Voice Chat (24454/udp, its own config) and BlueMap (8100, loopback) keep the Docker stack's ports.
   voicePort = 24454;
   mapPort = 8100;
+  botuiPort = 8101; # BotUi plugin, loopback only (minecraft/botui)
 
   # The plugins the Docker stack runs, as symlinks into the store (D2: all jars come from plugins.nix).
   # The rehearsal left Jarvis out so its live AI/API config was not used twice; the Docker server is
@@ -220,7 +222,7 @@ in {
         CringeLord21 = "dc503d67-fcc4-4780-9a1e-618d240718d6";
         Kirafunk = "03bb4dae-c33d-420f-b808-2d367852bed8";
       };
-      symlinks = paperPlugins;
+      symlinks = paperPlugins // {"plugins/BotUi.jar" = import ./botui {inherit pkgs;};}; # main server only: the sandbox has no dialogs
       path = [pkgs.yq-go];
       # The rest of paper-global.yml comes with the copied world. A missing file fails the start (fail closed).
       extraStartPre = ''
@@ -278,6 +280,7 @@ in {
     mc-bridge-rcon = bridgeService bridgePorts.mc-bridge-rcon;
     mc-bridge-rcon-sandbox = bridgeService bridgePorts.mc-bridge-rcon-sandbox;
     mc-bridge-map = bridgeService bridgePorts.mc-bridge-map;
+    mc-bridge-botui = bridgeService bridgePorts.mc-bridge-botui;
 
     # Same caps as the Docker container had (16 GiB, 6 CPUs) around the 12 GiB heap.
     minecraft-server-paper.serviceConfig = {
@@ -372,7 +375,7 @@ in {
     };
   };
 
-  # Paper binds loopback, so the bridge reaches RCON (both servers) and the map through forwarders listening on the
+  # Paper binds loopback, so the bridge reaches RCON (both servers), the map and BotUi through forwarders listening on the
   # gateway only (never 0.0.0.0: that would clash with Paper's 127.0.0.1:25575). FreeBind: the bridge may not
   # exist yet. Velocity itself listens on all addresses; only the firewall rule below lets the bridge in.
   # switch-to-configuration leaves a changed .socket running on its old address (nixpkgs#74899; cutover
@@ -386,7 +389,7 @@ in {
     })
     bridgePorts;
 
-  # One rule for the bridge, like ntfy's: Velocity, both RCONs and the map on the gateway; never a Paper game port.
+  # One rule for the bridge, like ntfy's: Velocity, both RCONs, the map and BotUi on the gateway; never a Paper game port.
   networking.firewall.extraCommands = bridgeRule "-A";
   networking.firewall.extraStopCommands = "${bridgeRule "-D"} || true";
 
