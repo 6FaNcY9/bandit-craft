@@ -53,7 +53,7 @@ const hitsNote = (hits, doing, now = Date.now()) => {
 const BACKOFF_CAP = 300000;
 // Kept on deposit: what a bot needs to craft a replacement tool or light a mine.
 // Natural ground an excavation may remove; never placed blocks (cobblestone is a wall).
-const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|gravel|sand|red_sand|andesite|diorite|granite|tuff|calcite|dripstone_block|[a-z_]*_ore|short_grass|tall_grass|fern|large_fern|[a-z_]*_flower|dandelion|poppy|moss_block|moss_carpet|glow_lichen|cave_vines|cave_vines_plant)$/;
+const {NATURAL} = require('./road');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
