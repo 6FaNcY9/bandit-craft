@@ -180,6 +180,18 @@
   assert.equal(sent.length, stops, 'by hand: not stopped');
   const none = mk({}); snap.job = null; now = at('2026-10-26T17:30:00Z'); none.tick();
   assert.equal(sent.length, stops, 'hall not configured: nothing runs');
+  { // chests set in game live under the bot's own key and win over the hall named in the schedule (bots.js picks them the same way)
+    const own = [], r2 = {snapshot: () => ({online: true, dead: false, job: null, queue: []}), enqueue: (...a) => { own.push(a); }};
+    const mine = {x: 3, y: 4, z: 5, sticks: [{x: 6, y: 7, z: 8}]};
+    now = at('2026-10-26T17:30:00Z');
+    new TradeSchedule({runners: new Map([['bot23', r2]]), halls: {misa: {}, bot23: mine}, entries: [e], now: () => now}).tick();
+    assert.deepEqual(own, [['trade', mine]]);
+    // such halls (no box) neither throw at start nor in the config check
+    assert.doesNotThrow(() => new TradeSchedule({runners: new Map(), halls: {bot23: mine}, entries: [e]}).tick());
+    assert.deepEqual(parseHalls('{"misa": {"x": 1, "y": 2, "z": 3}}').misa, {x: 1, y: 2, z: 3});
+    assert.deepEqual(parseHalls('{"misa": {"sticks": [{"x": 1, "y": 2, "z": 3}]}}').misa, {sticks: [{x: 1, y: 2, z: 3}]});
+    assert.throws(() => parseHalls('{"misa": {"stores": [{"x": 1, "y": 2, "z": 3}]}}'), /needs a hall/);
+  }
   // A chat job running with the trade queued behind it: only the trade goes, the player's orders stay.
   const spare = mk({misa: VALIDATE.trade(mh)});
   now = at('2026-10-26T17:30:00Z'); snap.job = {type: 'trade'}; spare.tick();

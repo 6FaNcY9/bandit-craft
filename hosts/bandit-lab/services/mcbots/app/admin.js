@@ -192,6 +192,16 @@ class Admin {
     return bots;
   }
 
+  // The reverse: a bot of the real server that logged in while Paper was starting fell back to the sandbox and stays
+  // there (MisaBot, deploy 2026-11-04). A kick moves it on along Velocity's try list, which is main.
+  async returnBots(sandboxCall) {
+    await this.call(['minecraft:list']); // throws while the real server is down: a kick would send the bot nowhere
+    const [list] = await sandboxCall(['minecraft:list']);
+    const bots = parse.players(list).filter((n) => this.guests.has(n));
+    for (const n of bots) await sandboxCall([`minecraft:kick ${n} this bot plays on the main server`]);
+    return bots;
+  }
+
   consoleSince(since = 0) { return {lastId: this.nextId, entries: this.console.filter((e) => e.id > since)}; }
 
   async act(action, b = {}) {

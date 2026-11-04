@@ -120,6 +120,11 @@ function loadConfig(env = process.env) {
   const guestBots = list(env.GUEST_BOTS);
   const guestBad = guestBots.filter((n) => !NAME_RE.test(n) || agentBots.includes(n) || boardBots.includes(n) || planRoster.includes(n));
   if (guestBad.length) throw new Error(`GUEST_BOTS must be bot names outside AGENT_BOTS, BOARD_BOTS and PLAN_ROSTER: ${guestBad.join(', ')}`);
+  // The owner's bots on the real server while the other helpers stay in the sandbox (owner 2026-11-04): they move on
+  // orders only, so no keeper, board, plan, agent or help job; unlike a guest they use the supply chest.
+  const mainBots = list(env.MAIN_BOTS);
+  const mainBad = mainBots.filter((n) => !NAME_RE.test(n) || agentBots.includes(n) || boardBots.includes(n) || planRoster.includes(n) || guestBots.includes(n));
+  if (mainBad.length) throw new Error(`MAIN_BOTS must be bot names outside AGENT_BOTS, BOARD_BOTS, PLAN_ROSTER and GUEST_BOTS: ${mainBad.join(', ')}`);
   const slayerUrl = (env.SLAYER_URL || '').replace(/\/+$/, '');
   if (slayerUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(slayerUrl)) throw new Error('SLAYER_URL must be http://host:port');
   const slayerStatusCmd = require('./slayer').parseCmd(env.SLAYER_STATUS_CMD);
@@ -129,8 +134,21 @@ function loadConfig(env = process.env) {
   if (!Number.isInteger(rconPort) || rconPort < 1 || rconPort > 65535) throw new Error('RCON_PORT must be a port');
   if (!!rconHost !== !!rconPassword) throw new Error('RCON_HOST and RCON_PASSWORD must be set together');
   // Players whose sidebar and panel inbox the hub serves over the console (ingame.js).
-  const ingameViewers = list(env.INGAME_VIEWERS ?? 'fancy8869,MidariBread');
-  if (ingameViewers.some((n) => !/^\w{1,16}$/.test(n))) throw new Error('bad INGAME_VIEWERS');
+  // "a,b" (bare names may use every bot) or "a=*;b=bot1,bot2": which bots each viewer may command.
+  const viewerBots = {};
+  for (const part of (env.INGAME_VIEWERS ?? 'fancy8869=*;MidariBread=MisaBot,EM_Trader').split(';').map((x) => x.trim()).filter(Boolean)) {
+    const eq = part.indexOf('=');
+    const entries = eq < 0 ? list(part).map((n) => [n, '*']) : [[part.slice(0, eq).trim(), list(part.slice(eq + 1))]];
+    for (const [n, bots] of entries) {
+      const b = bots.length === 1 && bots[0] === '*' ? '*' : bots;
+      if (!/^\w{1,16}$/.test(n) || !b.length || (b !== '*' && b.some((x) => !NAME_RE.test(x)))) throw new Error('bad INGAME_VIEWERS');
+      viewerBots[n] = b;
+    }
+  }
+  const ingameViewers = Object.keys(viewerBots);
+  const botuiUrl = (env.BOTUI_URL || '').replace(/\/+$/, '');
+  if (botuiUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(botuiUrl)) throw new Error('BOTUI_URL must be http://host:port');
+  if (botuiUrl && !rconPassword) throw new Error('BOTUI_URL needs RCON_PASSWORD (the plugin token)');
   // Where the main server's rescue lands a stranded bot (rescue.js), "x,y,z"; unset, no rescue there.
   const spot = (env.RESCUE_SPOT || '').trim();
   if (spot && !/^-?\d{1,7},-?\d{1,3},-?\d{1,7}$/.test(spot)) throw new Error('RESCUE_SPOT must be x,y,z');
@@ -169,6 +187,7 @@ function loadConfig(env = process.env) {
     agentBots,
     boardBots,
     guestBots,
+    mainBots,
     tradeHalls,
     tradeSchedule,
     slayerUrl,
@@ -176,6 +195,8 @@ function loadConfig(env = process.env) {
     sandboxRcon: sbHost ? {host: sbHost, port: sbPort, password: sbPassword} : null,
     rescueSpot,
     ingameViewers,
+    viewerBots,
+    botuiUrl,
     slayerStatusCmd,
     workerPort,
     workerHost: env.WORKER_HOST || '127.0.0.1',

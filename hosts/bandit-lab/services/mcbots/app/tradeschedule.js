@@ -15,7 +15,7 @@ function parseHalls(text) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('TRADE_HALLS must be an object of hall name to hall');
   return Object.fromEntries(Object.entries(raw).map(([name, h]) => {
     if (!/^[\w-]{1,24}$/.test(name)) throw new Error(`bad TRADE_HALLS name: ${name}`);
-    if (!h?.hall && Object.keys(h || {}).length) throw new Error(`TRADE_HALLS ${name} needs a hall box`); // {}: the hall built into trade.js
+    if (!h?.hall && h?.stores !== undefined) throw new Error(`TRADE_HALLS ${name} needs a hall box`); // {}, x/y/z and sticks: the hall built into trade.js
     return [name, VALIDATE.trade(h)];
   }));
 }
@@ -48,7 +48,7 @@ class TradeSchedule {
   tick() {
     const t = this.now();
     for (const e of this.entries) {
-      const args = this.halls[e.hall], r = this.runners.get(e.bot);
+      const args = this.halls[e.bot.toLowerCase()] || this.halls[e.hall], r = this.runners.get(e.bot);
       if (!args || !r) continue; // an unconfigured hall: nothing runs
       const s = r.snapshot();
       if (inWindow(e, t)) {

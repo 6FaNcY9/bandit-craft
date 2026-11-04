@@ -1,0 +1,8 @@
+name: BotUi
+version: 1.0.0
+main: botui.BotUi
+api-version: "26.1"
+commands:
+  bots:
+    description: Open the bot command stand
+    usage: /bots

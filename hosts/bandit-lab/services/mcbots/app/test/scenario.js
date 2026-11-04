@@ -65,6 +65,6 @@ const assert = require('node:assert');
   sent.length = 0;
   polls = 0;
   assert.strictEqual(await main(['excavate-16-kill'], sb, {call, http, now: () => t, sleep: async (ms) => { t += ms; }, out: say}), 0);
-  assert.deepStrictEqual(sent.filter((l) => l.startsWith('kill')), ['kill bot19'], 'killed once, when half the parts were done');
+  assert.deepStrictEqual(sent.filter((l) => l.startsWith('kill')), ['kill bot20'], 'killed once, when half the parts were done');
   console.log('ok');
 })();

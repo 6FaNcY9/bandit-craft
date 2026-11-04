@@ -17,6 +17,7 @@ const gravesLib = require('./graves');
 const {NtfyNotifier} = require('./notify');
 const {Keeper, idle} = require('./keeper');
 const {TradeSchedule} = require('./tradeschedule');
+const {TraderChests} = require('./traderchests');
 const {Board} = require('./board');
 const scenarioRun = require('./scenario-run');
 const {Plan} = require('./plan');
@@ -89,7 +90,7 @@ setInterval(() => {
   const open = world.openNeeds();
   for (const [name, runner] of runners) {
     const s = runner.snapshot();
-    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !cfg.guestBots.includes(name) && open.some((n) => n.bot !== name)) {
+    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !cfg.guestBots.includes(name) && !cfg.mainBots.includes(name) && open.some((n) => n.bot !== name)) {
       try { runner.enqueue('help', {}); } catch {}
     }
   }
@@ -102,7 +103,7 @@ const slayer = new Slayer({url: cfg.slayerUrl, cmd: cfg.slayerStatusCmd, decisio
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
 const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
-const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: cfg.guestBots}) : null;
+const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
 const agentStatuses = new Map(); // agent -> its last POST /api/agentstatus (goal, workers, role, t)
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
 const demoLog = require('./owner').makeDemoLog(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'demonstrations.jsonl') : null);
@@ -129,8 +130,10 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots]}) : null;
+const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots]}) : null;
 // Scheduled trading (TRADE_SCHEDULE): a guest's trader works its hall in set time windows; nothing without a configured hall.
+// Chests set in game replace the configured ones of that bot; cfg.tradeHalls is edited in place, so runners and the schedule follow.
+const traderChests = new TraderChests({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'trader-chests.json') : null, halls: cfg.tradeHalls, log: (m) => log('trade', m), onChange: () => hub?.sendTradeHalls()});
 const tradeSchedule = cfg.tradeSchedule.length ? new TradeSchedule({runners, halls: cfg.tradeHalls, entries: cfg.tradeSchedule, log}) : null;
 // The job board (board.js): owner jobs cut into slices that only BOARD_BOTS dig. A box touching a protected area
 // (PROTECTED_AREAS and the dashboard's protected zones, which join that array) is refused when the job is made.
@@ -165,37 +168,79 @@ function stopAll() {
   board?.pauseAll(); // the board too: no part goes out again until the owner resumes the job
   return keeperOff;
 }
-// The sidebar, the panel inbox and the replies of the in-game channel (ingame.js), over the main console.
+// The body of POST /api/job after the origin and agent checks, also behind the in-game UI (botui.js); throws the refusal.
+// "all" skips remote bots whose worker is away, so a Stop reaches every bot that can still hear it; naming an offline bot is an error.
+function submitJob({bots, type, args, replace, agent = false}) {
+  const all = bots === 'all';
+  const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
+  if (!targets.length || targets.includes(undefined)) throw new Error('unknown bot');
+  const errors = [], skipped = []; // skipped: bots with no open grave (an additive field, the dashboard ignores it)
+  const stopping = type === 'stop' || replace === true;
+  // A field that is one of the dashboard's wheat zones means all of them, tended in turn (wheatfarm.js).
+  const wheatZones = places.list.filter((p) => p.kind === 'wheat' && p.box && p.dim === 'overworld').map(({box: b}) => ({x1: b.x1, z1: b.z1, x2: b.x2, z2: b.z2}));
+  const jobArgs = type === 'wheatfarm' ? require('./wheatfarm').withFields(args || {}, wheatZones) : args || {};
+  for (const r of targets) {
+    try {
+      const pos = r.snapshot().pos;
+      const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
+      if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); skipped.push(r.name); continue; }
+      // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
+      r.enqueue(type, perBotArgs, {replace: replace === true, ...(type === 'graves' ? {first: true} : {})});
+      if (!agent && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
+      if (stopping) {
+        delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
+        projects.pause(r.name);
+      }
+      if (PROJECTS.has(type)) projects.note(r.name, type, VALIDATE[type](args || {}));
+    } catch (e) {
+      errors.push(`${r.name}: ${e.message}`); // one bot failing must not keep the others from getting the job
+    }
+  }
+  if (!agent) saveOrders();
+  // Stop all is authoritative here, not in the browser: standing orders off first
+  // (they would hand idle bots new work), then every pending recovery dropped.
+  let keeperOff = false;
+  if (all && type === 'stop') {
+    keeperOff = stopAll();
+  }
+  broadcast();
+  if (errors.length) throw new Error(errors.join('; '));
+  // Persist the stopped state before saying so; the bots are stopped either way.
+  const saveErr = stopping ? saveJobs(true) : null;
+  const unreached = all ? [...runners.values()].filter((r) => r instanceof RemoteRunner && !r.conn).map((r) => r.name) : [];
+  return {ok: true, keeperOff, unreached, saveErr, skipped};
+}
+// The opt-in sidebar and the chat replies of the in-game channel (ingame.js), over the main console.
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
-  quotas: () => keeper?.state().quotas || [],
-  snapshots: () => [...runners.values()].map((r) => r.snapshot()),
-  // Mirrors bots.js bindOwner for a runner of the map (local or remote); throws the refusal text.
-  order: (viewer, name, words) => {
-    const owner = require('./owner');
-    if (name === 'alle') {
-      if (words[0] !== 'stopp') throw new Error('alle: nur stopp');
-      for (const r of runners.values()) if (!(r instanceof RemoteRunner) || r.conn) { r.enqueue('stop'); ownerOrders.delete(r.name); delete toResume[r.name]; projects.pause(r.name); }
-      saveOrders(); stopAll(); saveJobs(true); broadcast();
-      return 'ok: alle stoppen';
-    }
-    const r = runners.get(name);
-    if (!r) throw new Error('unbekannter Bot');
-    const c = owner.translate(words, {owner: viewer, ownerPos: null});
-    if (c.unknown) throw new Error(owner.HELP);
-    if (c.role) throw new Error('Rolle nur im Chat');
-    if (c.type) {
-      if (c.type === 'trade' || c.args?.own) throw new Error('nur im Chat'); // needs the chat flow (own chest, timed trade)
-      VALIDATE[c.type](c.args); // refuse before replacing the active job
-      r.enqueue(c.type, c.args, {replace: true});
-      ownerOrders.set(name, {type: c.type, args: c.args}); saveOrders();
-      delete toResume[name]; projects.pause(name); saveJobs(true); // as /api/job does when replacing
-      return 'ok: ' + c.type;
-    }
-    if (c.stop) { r.enqueue('stop'); ownerOrders.delete(name); saveOrders(); delete toResume[name]; projects.pause(name); saveJobs(true); return 'ok: bleibe stehen'; }
-    if (c.status) { const s = r.snapshot(); return `ok: Leben ${s.health}, Essen ${s.food}, ${s.job?.label || 'frei'}, Rolle ${s.role}`; }
-    throw new Error(owner.HELP);
-  }}) : null;
+  snapshots: () => [...runners.values()].map((r) => r.snapshot())}) : null;
 if (ingame) ingame.start();
+// The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
+// A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
+const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui');
+const placedBots = () => placeBots([...runners.values()].map((r) => r.snapshot()), {vhost: process.env.MC_VHOST, guests: cfg.guestBots, mainBots: cfg.mainBots});
+const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
+  api: {
+    snapshots: placedBots,
+    markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
+    submit: (viewer, {bots, type, args, replace}) => {
+      const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false});
+      for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
+      return out;
+    },
+    stopAll: (viewer) => {
+      const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);
+      return bots.length ? submitJob({bots, type: 'stop', agent: false}) : {ok: true, keeperOff: false, unreached: []};
+    },
+    get keeper() { return keeper; },
+    get plan() { return plan; },
+    traderChests,
+    // Bots that trade: scheduled ones, guests (they get their first chest here) and those with a hall of their own.
+    traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...cfg.guestBots, ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
+    places: () => places.list,
+    schematics: async () => (await listSchematics()).filter((x) => !x.error).map((x) => x.file),
+    sidebar: (viewer, on) => mainConsole?.([on ? `team join mcbots ${viewer}` : `team leave ${viewer}`]),
+  }}) : null;
+if (botui) botui.start();
 const supplyStock = () => (supplyChest ? world.stockAt(supplyChest) : world.stock); // the supply chest's numbers, not the plan's base chest's
 const staticAreas = cfg.protectedAreas.slice();
 function applyPlaces() {
@@ -206,7 +251,7 @@ function applyPlaces() {
   const w = places.zone('wheat')?.box;
   const wheatField = w ? {x1: w.x1, z1: w.z1, x2: w.x2, z2: w.z2} : null; // hungry bots get bread there (bots.js wheatFood)
   for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField, tradeHalls: cfg.tradeHalls});
-  if (hub) { Object.assign(hub, {supplyChest, wheatField}); hub.broadcastPolicy(); }
+  if (hub) { Object.assign(hub, {supplyChest, wheatField, places: places.list}); hub.broadcastPolicy(); }
   if (keeper) {
     keeper.chest = supplyChest;
     keeper.site = site ? {x: site.x, y: site.y, z: site.z} : cfg.keeperSite;
@@ -737,45 +782,7 @@ const server = http.createServer(async (req, res) => {
       const {bots, type, args, replace, solver} = await readJson(req);
       const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || busyOf(runners.get(n)?.snapshot()), ownerOrderOf: (n) => ownerOrders.get(n)?.type, limiter: solverLimiter});
       if (refused) return json(403, {error: refused});
-      // "all" skips remote bots whose worker is away, so a Stop reaches every
-      // bot that can still hear it; naming an offline bot is an error.
-      const all = bots === 'all';
-      const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
-      if (!targets.length || targets.includes(undefined)) throw new Error('unknown bot');
-      const errors = [];
-      const stopping = type === 'stop' || replace === true;
-      // A field that is one of the dashboard's wheat zones means all of them, tended in turn (wheatfarm.js).
-      const wheatZones = places.list.filter((p) => p.kind === 'wheat' && p.box && p.dim === 'overworld').map(({box: b}) => ({x1: b.x1, z1: b.z1, x2: b.x2, z2: b.z2}));
-      const jobArgs = type === 'wheatfarm' ? require('./wheatfarm').withFields(args || {}, wheatZones) : args || {};
-      for (const r of targets) {
-        try {
-          const pos = r.snapshot().pos;
-          const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
-          if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); continue; }
-          // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
-          r.enqueue(type, perBotArgs, {replace: replace === true, ...(type === 'graves' ? {first: true} : {})});
-          if (!agent && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
-          if (stopping) {
-            delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
-            projects.pause(r.name);
-          }
-          if (PROJECTS.has(type)) projects.note(r.name, type, VALIDATE[type](args || {}));
-        } catch (e) {
-          errors.push(`${r.name}: ${e.message}`); // one bot failing must not keep the others from getting the job
-        }
-      }
-      if (!agent) saveOrders();
-      // Stop all is authoritative here, not in the browser: standing orders off first
-      // (they would hand idle bots new work), then every pending recovery dropped.
-      let keeperOff = false;
-      if (all && type === 'stop') {
-        keeperOff = stopAll();
-      }
-      broadcast();
-      if (errors.length) throw new Error(errors.join('; '));
-      // Persist the stopped state before saying so; the bots are stopped either way.
-      const saveErr = stopping ? saveJobs(true) : null;
-      const unreached = all ? [...runners.values()].filter((r) => r instanceof RemoteRunner && !r.conn).map((r) => r.name) : [];
+      const {saveErr, unreached, keeperOff} = submitJob({bots, type, args, replace, agent});
       if (saveErr) return json(500, {error: `stopped, but the stopped state could not be saved (${saveErr}): saved jobs may come back after a restart`, unreached});
       return json(200, {ok: true, keeperOff, unreached});
     } catch (e) {
@@ -897,9 +904,10 @@ const keeperTick = setInterval(() => {
     log('keeper', `error: ${e.message}`);
   }
 }, 5000);
-// MC_VHOST (the bots play in the sandbox): keep the real server, which the Server panel's RCON reaches, bot-free.
+// MC_VHOST (the bots play in the sandbox): keep the real server, which the Server panel's RCON reaches, free of all but its own bots, and those out of the sandbox.
 const evictTick = admin && process.env.MC_VHOST ? setInterval(() => {
   admin.evictBots().then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} off the real server to the sandbox`), () => {});
+  if (sandboxConsole) admin.returnBots(sandboxConsole).then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} from the sandbox back to the real server`), () => {});
 }, 30000) : null;
 
 // Alerts for the lead agent (alerts.js), from what a local bot in the overworld sees.

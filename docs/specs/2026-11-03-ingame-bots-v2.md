@@ -1,5 +1,7 @@
 # Bots in the game, v2: a real management GUI (2026-11-03)
 
+> Superseded 2026-11-04 by `2026-11-04-kommandostand.md`: the `/bots` chest menus and the `pa data` push and inbox described here are gone; the sidebar, the chat grammar and the "fertig" line stay.
+
 Owner feedback on v1 (2026-11-02): "viel zu wenige Infos", the menu must be structured and detail-rich.
 v1 ships the plumbing (sidebar, `pa data` inbox/outbox, console replies, `/bots` with one lore line per
 bot). v2 builds the actual management surface on top of it.

@@ -6,6 +6,7 @@
 const WebSocket = require('ws');
 const {WorldModel} = require('./world');
 const {farmBox} = require('./wheatfarm');
+const {Places, use: usePlaces} = require('./places');
 // The hub's wheat field as a farm box, or null for anything else.
 const fieldOf = (b) => { try { return b ? farmBox(b) : null; } catch { return null; } };
 const {BotRunner, keptOf} = require('./bots');
@@ -200,6 +201,8 @@ class HubClient {
     this.makeRunner = makeRunner || ((name, {protectedAreas, supplyChest}) => new BotRunner(name, {host: mcHost, port: mcPort, log, world: this.world, protectedAreas, supplyChest, loginSeed, hostLabel, ownerUuids, demoLog, onEvent}));
     this.runners = [];
     this.protectedAreas = []; // one array every runner holds; the hub's policy is spliced into it
+    this.zones = new Places(); // in memory, from the hub: plan-config, the job validators and the storage index read them
+    usePlaces(this.zones);
     this.supplyChest = null;
     this.tradeHalls = {};
     this.ws = null;
@@ -325,6 +328,7 @@ class HubClient {
     this.supplyChest = m.supplyChest || null;
     this.wheatField = fieldOf(m.wheatField);
     if (m.tradeHalls) this.tradeHalls = m.tradeHalls; // a policy frame without it keeps the halls
+    if (Array.isArray(m.places)) this.zones.list = m.places;
     for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; }
   }
 
