@@ -38,6 +38,16 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'a,b'}).ingameViewers, ['a', 'b']);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).ingameViewers, ['fancy8869', 'MidariBread']);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'bad name!'}), /INGAME_VIEWERS/);
+  assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'a,b'}).viewerBots, {a: '*', b: '*'});
+  {
+    const c = loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'fancy8869=*;MidariBread=MisaBot,EM_Trader'});
+    assert.deepStrictEqual(c.viewerBots, {fancy8869: '*', MidariBread: ['MisaBot', 'EM_Trader']});
+    assert.deepStrictEqual(c.ingameViewers, ['fancy8869', 'MidariBread']);
+  }
+  assert.throws(() => loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'a=bad bot'}), /INGAME_VIEWERS/);
+  assert.strictEqual(loadConfig({BOT_NAMES: 'bot1'}).botuiUrl, '');
+  assert.strictEqual(loadConfig({BOT_NAMES: 'bot1', BOTUI_URL: 'http://minecraft:8099/', RCON_HOST: 'm', RCON_PASSWORD: 'p'}).botuiUrl, 'http://minecraft:8099');
+  assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOTUI_URL: 'http://minecraft:8099'}), /BOTUI_URL/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', AGENT_TOKEN: 'short', AGENT_BOTS: 'bot1'}), /32..128/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', AGENT_TOKEN: tok, AGENT_BOTS: 'bot1', WORKER_TOKEN: tok, WORKER_PORT: '8096'}), /differ/);
   const A = require('../agentauth');

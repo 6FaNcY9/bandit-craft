@@ -1,0 +1,144 @@
+'use strict';
+// Hub side of the in-game bot UI: polls the Paper plugin (BotUi) for player events, keeps one state per viewer and
+// shows or refreshes their dialog. Identity is only ever the plugin's Bukkit player name, never a payload field, and
+// a dialog the player closed is never shown again: only a new open or click event may open one.
+const FLASH_MS = 8000;
+
+// One handler per click `data.a`; later tasks add theirs here. (st, data, ui) -> void, may be async, may throw.
+const ACTIONS = {
+  close: (st) => { st.open = false; }, // the plugin stops tracking on its own, no `closed` follows
+  lage: (st) => { st.screen = {name: 'lage'}; },
+};
+
+class BotUi {
+  constructor({url, token, viewerBots, api, log, now = Date.now, fetch = globalThis.fetch, refreshMs = 5000, idleLimitMs = 600000, retryMs = 2000, screens = require('./botui-screens')}) {
+    Object.assign(this, {url, token, viewerBots, api, log, now, fetch, refreshMs, idleLimitMs, retryMs, screens,
+      states: new Map(), since: 0, boot: null, pushed: false, down: false, running: false, ticking: false, ac: new AbortController()});
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.timer = setInterval(() => this.tick().catch((e) => this.log('botui tick: ' + e.message)), this.refreshMs).unref();
+    this.loop();
+  }
+
+  stop() {
+    this.running = false;
+    clearInterval(this.timer);
+    this.ac.abort();
+  }
+
+  state(viewer) { return this.states.get(viewer); }
+
+  async call(path, body, timeoutMs = 10000) {
+    const res = await this.fetch(this.url + path, {
+      method: body ? 'POST' : 'GET',
+      headers: {authorization: 'Bearer ' + this.token, ...(body ? {'content-type': 'application/json'} : {})},
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.any([this.ac.signal, AbortSignal.timeout(timeoutMs)]),
+    });
+    if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async loop() {
+    let wait = this.retryMs;
+    while (this.running) {
+      try {
+        if (!this.pushed) { await this.call('/viewers', {names: Object.keys(this.viewerBots)}); this.pushed = true; }
+        const r = await this.call(`/events?since=${this.since}&wait=${this.boot === null ? 0 : 25}`, null, 30000);
+        if (this.down) { this.log('botui: plugin reachable again'); this.down = false; }
+        wait = this.retryMs;
+        if (r.boot !== this.boot) { // first contact skips the backlog; after a plugin restart ids start over
+          this.pushed = this.boot === null;
+          this.since = this.boot === null ? r.last : 0;
+          this.boot = r.boot;
+          continue;
+        }
+        for (const e of r.events) {
+          this.since = e.id;
+          await this.handle(e).catch((err) => this.log('botui event: ' + err.message));
+        }
+      } catch (e) {
+        if (!this.running) return;
+        if (!this.down) { this.log('botui: plugin unreachable: ' + e.message); this.down = true; }
+        this.pushed = false;
+        await new Promise((ok) => setTimeout(ok, wait).unref());
+        wait = Math.min(wait * 2, 30000);
+      }
+    }
+  }
+
+  canon(player) {
+    const p = String(player).toLowerCase();
+    return Object.keys(this.viewerBots).find((n) => n.toLowerCase() === p);
+  }
+
+  flash(st, text, ok = false) { st.flash = {text, ok, until: this.now() + FLASH_MS}; }
+
+  async handle(e) {
+    const viewer = this.canon(e.player);
+    if (!viewer) return;
+    if (e.type === 'quit') { this.states.delete(viewer); return; }
+    let st = this.states.get(viewer);
+    if (e.type === 'closed') { if (st) st.open = false; return; }
+    if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0});
+    st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
+    if (e.type === 'open') {
+      st.screen = {name: 'lage'}; st.lastClick = this.now();
+    } else if (e.type === 'click') {
+      st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
+      const act = ACTIONS[e.data?.a];
+      try {
+        if (act) await act(st, e.data, this);
+        else this.flash(st, 'Unbekannte Aktion');
+      } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
+      if (!st.open) return;
+    } else return; // mapclick etc.: context only
+    try { await this.show(viewer, st); } catch (err) {
+      this.flash(st, 'Fehler: ' + err.message);
+      await this.show(viewer, st).catch((e2) => { st.open = false; this.log(`botui ${viewer}: ${e2.message}`); });
+    }
+  }
+
+  async render(viewer, st) {
+    const allowed = this.viewerBots[viewer];
+    if (st.flash && st.flash.until < this.now()) st.flash = null;
+    const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
+    const refreshing = this.screens.REFRESHING.has(st.screen.name);
+    return this.screens.render(st.screen, {viewer, snaps, allowed, keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, ctx: st.ctx, sel: st.sel,
+      places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, mapState: st.mapState});
+  }
+
+  async post(viewer, st, json) {
+    const r = await this.call('/show', {player: viewer, dialog: json});
+    if (r.ok) { st.open = true; st.lastJson = json; return; }
+    st.open = false;
+    this.log(`botui ${viewer}: ${r.feedback}`);
+  }
+
+  async show(viewer, st) {
+    st.open = true;
+    await this.post(viewer, st, JSON.stringify(await this.render(viewer, st)));
+  }
+
+  // Re-sends a changed REFRESHING screen to open viewers; stops after idleLimitMs without a click.
+  async tick() {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      for (const [viewer, st] of this.states) {
+        if (!st.open || st.lastJson === null || !this.screens.REFRESHING.has(st.screen.name)) continue; // null: a show is in flight
+        if (this.now() - st.lastClick > this.idleLimitMs) { st.open = false; continue; }
+        const [screen, before] = [st.screen, st.lastJson];
+        const json = JSON.stringify(await this.render(viewer, st));
+        // closed or navigated while rendering: a stale refresh must not pop up or overwrite
+        if (json === st.lastJson || !st.open || st.screen !== screen || st.lastJson !== before) continue;
+        await this.post(viewer, st, json);
+      }
+    } finally { this.ticking = false; }
+  }
+}
+
+module.exports = {BotUi, ACTIONS};
