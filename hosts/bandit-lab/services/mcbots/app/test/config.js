@@ -37,6 +37,7 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'bot2', GUEST_BOTS: 'bot2'}), /GUEST_BOTS must be bot names outside/);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'a,b'}).ingameViewers, ['a', 'b']);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).ingameViewers, ['fancy8869', 'MidariBread']);
+  assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).viewerBots.MidariBread, ['MisaBot', 'EM_Trader']); // the default must not make the guest an owner
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'bad name!'}), /INGAME_VIEWERS/);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'a,b'}).viewerBots, {a: '*', b: '*'});
   {

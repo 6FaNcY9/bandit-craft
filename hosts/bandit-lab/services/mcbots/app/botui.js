@@ -258,7 +258,8 @@ class BotUi {
       st.screen = {name: st.sel.a ? 'auftrag' : 'lage'}; st.lastClick = this.now();
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
-      const act = ACTIONS[e.data?.a];
+      // shortcut: Escape during this click's render re-shows until the queued close arrives one poll later, a flicker; skip the show if a close is already queued when that is ever seen.
+      const act = Object.hasOwn(ACTIONS, e.data?.a) && ACTIONS[e.data.a];
       try {
         if (act) await act(st, e.data, this, viewer);
         else this.flash(st, 'Unbekannte Aktion');

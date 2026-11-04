@@ -192,6 +192,8 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     assert.match(h.ui.state('Fancy').flash.text, /unbekannter Auftrag/);
     await h.click('Fancy', {a: 'quick', job: '__proto__', bot: 'bot1'});
     assert.match(h.ui.state('Fancy').flash.text, /unbekannter Auftrag/);
+    await h.click('Fancy', {a: '__proto__'});
+    assert.match(h.ui.state('Fancy').flash.text, /Unbekannte Aktion/);
   }
   { // send: deposit at the gazed chest; the result is the Lagebild's result line, no chat
     const h = harness();

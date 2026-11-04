@@ -3,6 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const {TraderChests} = require('../traderchests');
 const {VALIDATE} = require('../bots');
+{ // one bad entry does not cost the others: the next save would overwrite them
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tc-')), file = path.join(dir, 'trader-chests.json');
+  fs.writeFileSync(file, JSON.stringify({misa: {sticks: [{x: 'bad'}, {x: 5, y: 62, z: 5}]}}));
+  assert.deepEqual(new TraderChests({file, halls: {}}).list('misa').sticks, [{x: 5, y: 62, z: 5}]);
+  fs.rmSync(dir, {recursive: true});
+}
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tc-')), file = path.join(dir, 'trader-chests.json');
   const box = {x1: 0, y1: 60, z1: 0, x2: 20, y2: 70, z2: 20};

@@ -18,7 +18,9 @@ class TraderChests {
     this.own = {}; // bot key -> {sticks, stores}
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-      for (const [key, o] of Object.entries(raw)) for (const kind of Object.keys(KINDS)) for (const p of o[kind] || []) this.put(key, kind, p);
+      for (const [key, o] of Object.entries(raw)) for (const kind of Object.keys(KINDS)) for (const p of o[kind] || []) {
+        try { this.put(key, kind, p); } catch (e) { this.log(`trader chests: skipped a bad ${kind} entry of ${key}: ${e.message}`); }
+      }
     } catch (e) {
       if (e.code !== 'ENOENT') { this.log(`trader chests: ${file} unreadable, starting empty: ${e.message}`); this.own = {}; }
     }

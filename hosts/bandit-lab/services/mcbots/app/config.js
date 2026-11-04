@@ -131,7 +131,7 @@ function loadConfig(env = process.env) {
   // Players whose sidebar and panel inbox the hub serves over the console (ingame.js).
   // "a,b" (bare names may use every bot) or "a=*;b=bot1,bot2": which bots each viewer may command.
   const viewerBots = {};
-  for (const part of (env.INGAME_VIEWERS ?? 'fancy8869,MidariBread').split(';').map((x) => x.trim()).filter(Boolean)) {
+  for (const part of (env.INGAME_VIEWERS ?? 'fancy8869=*;MidariBread=MisaBot,EM_Trader').split(';').map((x) => x.trim()).filter(Boolean)) {
     const eq = part.indexOf('=');
     const entries = eq < 0 ? list(part).map((n) => [n, '*']) : [[part.slice(0, eq).trim(), list(part.slice(eq + 1))]];
     for (const [n, bots] of entries) {

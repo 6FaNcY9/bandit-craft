@@ -123,6 +123,22 @@ function sampleDialog(size) {
   await sleep(1000);
   assert.equal(c.counts.particles, seen);
 
+  // a non-viewer's forged click reaches neither the queue nor the raytrace
+  await other.click('botui:do', {a: 'bot', bot: 'bot7'});
+  await assertNoEvent((e) => e.player === 'Other', 1500);
+
+  // teleport and death take a dialog away without its exit action: no refresh may bring it back.
+  // Its own player: the later e2e files log Viewer in again, and a dead player stays dead across a relog.
+  await post('/viewers', {names: ['Viewer', 'Dying']});
+  const dying = await connect('Dying');
+  for (const cmd of ['tp Dying 0 120 0', 'kill Dying']) {
+    assert.equal((await (await post('/show', {player: 'Dying', dialog: big})).json()).ok, true);
+    fs.appendFileSync(CONSOLE, cmd + '\n');
+    await waitEvent((e) => e.type === 'closed' && e.player === 'Dying');
+    assert.deepEqual(await (await post('/show', {player: 'Dying', dialog: big, refresh: true})).json(), {ok: false, feedback: 'closed'});
+  }
+  await dying.end();
+
   await c.end();
   await waitEvent((e) => e.type === 'quit' && e.player === 'Viewer');
   await other.end();

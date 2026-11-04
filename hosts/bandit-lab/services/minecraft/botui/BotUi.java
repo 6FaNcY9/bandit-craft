@@ -43,11 +43,14 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.RayTraceResult;
@@ -507,6 +510,8 @@ public class BotUi extends JavaPlugin implements Listener {
   public void onClick(PlayerCustomClickEvent e) {
     if (!(e.getCommonConnection() instanceof PlayerGameConnection g) || !e.getIdentifier().namespace().equals("botui")) return;
     Player p = g.getPlayer();
+    // A modified client can send these without any dialog; each would raytrace on main and push a real event out of the queue.
+    if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) return;
     JSONObject data = new JSONObject();
     if (e.getTag() != null) {
       String snbt = e.getTag().string();
@@ -595,6 +600,26 @@ public class BotUi extends JavaPlugin implements Listener {
     }
   }
 
+  // These take a dialog off the screen without its exit action and the move handler never sees them, so without this the next refresh would bring it back.
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  public void onDeath(PlayerDeathEvent e) {
+    gone(e.getEntity());
+  }
+
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  public void onTeleport(PlayerTeleportEvent e) {
+    gone(e.getPlayer());
+  }
+
+  @EventHandler
+  public void onWorldChange(PlayerChangedWorldEvent e) {
+    gone(e.getPlayer());
+  }
+
+  private void gone(Player p) {
+    if (open.remove(p.getUniqueId())) emit("closed", p, null);
+  }
+
   @EventHandler
   public void onQuit(PlayerQuitEvent e) {
     open.remove(e.getPlayer().getUniqueId());
@@ -624,7 +649,7 @@ public class BotUi extends JavaPlugin implements Listener {
 
   private static void edge(Player p, World w, double x1, double y1, double z1, double x2, double y2, double z2) {
     double len = Math.abs(x2 - x1) + Math.abs(y2 - y1) + Math.abs(z2 - z1);
-    int n = (int) Math.min(96, Math.floor(len) + 1);
+    int n = (int) Math.min(32, Math.floor(len) + 1); // a full-size box stays near 400 particles per draw
     for (int i = 0; i < n; i++) {
       double t = n == 1 ? 0 : (double) i / (n - 1);
       p.spawnParticle(Particle.END_ROD, new Location(w, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, z1 + (z2 - z1) * t), 1, 0, 0, 0, 0);
