@@ -195,27 +195,32 @@ function readOrigin(blockAt, plan) {
   return {top, done};
 }
 
-// The spec's one exception to the protected box: up to 6 above the origin, and the stair.
+// The spec's one exception to the protected box: up to 6 above the origin, and the stair. At that height only as far from an axis as a road can touch
+// (it seals what it finds beside its walls), so nothing else in any box opens.
 function mayBuildAt(plan, origin) {
   const key = (c) => `${c.x},${c.y},${c.z}`;
   const stair = new Set(plan.stair.flatMap((s) => [...s.air, s.floor]).map(key));
-  return (p) => p.y <= origin.y + 6 || stair.has(key(p));
+  return (p) => stair.has(key(p)) || (p.y <= origin.y + 6 && (Math.abs(p.x - origin.x) <= LOOK_SIDE || Math.abs(p.z - origin.z) <= LOOK_SIDE));
 }
 
 // The owner's farms and stores a road may take from, read off a copy of the world (docs/specs/2026-11-03-highway-bots-design.md). Nothing else is a
 // source, whatever a chest holds. What a farm can make from its iron counts as what it has: get plans the crafting. Gold has no farm yet.
+// shortcut: chests and barrels only, because stock and withdraw open nothing else; some 600 rails and 400 powered rails lie in shulker boxes around
+// -51 63 -82 and 22 65 53. Open those when the chests run out of powered rails.
 const IRON = ['iron_ingot', 'rail', 'iron_pickaxe', 'iron_sword', 'minecart'];
 const FARMS = [
-  {x: -51, y: 63, z: -82, items: ['rail', 'powered_rail', 'redstone_torch', 'minecart', 'iron_ingot']}, // the workshop by the stick farm
-  {x: 23, y: 66, z: 55, items: ['rail', 'powered_rail', 'redstone_torch', 'bread', 'minecart']}, // the base at spawn
-  {x: -22, y: 64, z: -119, items: ['stick']},
+  {x: -18, y: 63, z: -83, items: ['rail', 'powered_rail', 'redstone_torch', 'minecart']}, // the workshop's rail store
+  {x: -47, y: 63, z: -82, items: ['rail', 'redstone_torch', 'iron_ingot', 'cobblestone']}, // the workshop
+  {x: 23, y: 66, z: 55, items: ['rail', 'powered_rail', 'bread', 'minecart']}, // the base at spawn
+  {x: -22, y: 64, z: -119, items: ['stick', 'redstone_torch']}, // redstone beside the sticks: get crafts the torches
   {x: -307, y: 61, z: -167, items: IRON},
   {x: 292, y: 130, z: 745, items: IRON},
   {x: -263, y: 58, z: -216, items: ['cobblestone']},
 ];
 // 8 pickaxes do about 1 km of deepslate, so more rails would not get laid. The cobblestone is for a cave right after the start. Sticks first:
 // a farm of iron has none, and rails and tools take them. A first trip also carries the origin's ramp.
-const LOAD = {stick: 128, rail: 1024, iron_pickaxe: 8, powered_rail: 48, redstone_torch: 48, minecart: 1, bread: 32, cobblestone: 128, iron_sword: 1};
+// 32 of 36 slots: the old ramp needs 2 more when the bot comes back to pick it up.
+const LOAD = {stick: 128, rail: 1024, iron_pickaxe: 8, powered_rail: 48, redstone_torch: 48, minecart: 1, bread: 32, cobblestone: 64, iron_sword: 1};
 function loadFor(frontier, ingots = 0) {
   const ramp = !frontier || frontier <= FIRST_RAIL + RAMP_CELLS ? 2 * LOAD.powered_rail : LOAD.powered_rail;
   return {...LOAD, powered_rail: ramp, redstone_torch: ramp, ...(ingots ? {iron_ingot: ingots} : {})};

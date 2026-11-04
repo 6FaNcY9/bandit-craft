@@ -166,7 +166,7 @@ const assert = require('node:assert');
   const mk = (py) => {
     const goals = [], mv = {maxDropDown: 3};
     const bot = Object.assign(new EventEmitter(), {health: 20, entity: {position: new Vec3(0, 70, 0)}, players: {Misa: {entity: {position: new Vec3(0, py, 0)}}},
-      pathfinder: {movements: mv, setGoal: (g) => goals.push(g), isMoving: () => false, stop() {}}});
+      pathfinder: {movements: mv, setGoal: (g) => goals.push(g), isMoving: () => true, stop() {}}});
     return {bot, goals, mv, r: {bot, online: true, combat: {epoch: 0, busy: false}, world: {player: () => null}}};
   };
   const {bot, goals, mv, r} = mk(60);

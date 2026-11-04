@@ -206,7 +206,8 @@ assert.deepStrictEqual(findHead(railed(40, {'30,0,0': null}), east, 20), {head: 
   // the exception to the protected box opens only its own cells
   const may = mayBuildAt(plan, O), s30 = plan.stair[33].air[0];
   assert.strictEqual(s30.y, 31);
-  assert.deepStrictEqual([may({x: 40, y: 6, z: 40}), may({x: 40, y: 7, z: 40}), may(s30), may(plan.stair[33].floor), may({...s30, z: s30.z - 1})], [true, false, true, true, false]);
+  assert.deepStrictEqual([may({x: 40, y: 6, z: 3}), may({x: 40, y: 7, z: 3}), may(s30), may(plan.stair[33].floor), may({...s30, z: s30.z - 1})], [true, false, true, true, false]);
+  assert.deepStrictEqual([may({x: 40, y: 6, z: 4}), may({x: -3, y: 6, z: -60}), may({x: 2, y: 0, z: 2})], [false, true, true], 'at y 6 only what a road can touch: not the whole box');
 }
 
 // Read off the first 2 km east on the sandbox: vines in a cave at k 555 stopped the road as a player's block.

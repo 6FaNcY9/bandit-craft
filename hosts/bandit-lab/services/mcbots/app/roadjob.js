@@ -24,11 +24,13 @@ const RETRY_MS = 300000; // the spec's 5 minutes
 const WARDEN_RANGE = 32;
 const FARMS_MS = 300000; // farms fill slowly, and each try is a walk
 const FEW_RAILS = 64; // not worth a trip
+const GET_MOST = 256; // VALIDATE.get
+const SLOTS = 36;
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
 
-function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, farms = FARMS, restock = null, buildOrigin = null}) {
+function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, tossJunk, farms = FARMS, restock = null, buildOrigin = null}) {
   // 26.x may not answer a placing, so what it did is read from the blocks afterwards, as seal.js does.
   async function place(r, c) {
     const {bot} = r;
@@ -313,7 +315,8 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     const {bot} = r;
     const blockAt = (x, y, z) => bot.blockAt(new Vec3(x, y, z));
     const near = crossSection(road, head);
-    if (!shiftOver(bot) && head > ORIGIN_RAMP_END && bot.blockAt(vec(near.rail))) {
+    // With no slot for the boosters they would lie on the ground and vanish, and gold has no farm: on the road they do no harm.
+    if (!shiftOver(bot) && head > ORIGIN_RAMP_END && bot.inventory.items().length <= SLOTS - 2 && bot.blockAt(vec(near.rail))) {
       let old = false;
       for (let k = head; k > head - SEGMENT && !old; k--) old = isBoosterSlot(k) && blockAt(...Object.values(cell(road, k)))?.name === 'powered_rail';
       if (old) await collectRamp(r, job, road, head);
@@ -346,7 +349,11 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         await waitCalm(r, job);
         if (wardenNear(bot)) return backOff(r, job, road, k, 'a warden');
         if (shiftOver(bot)) return home();
-        const made = await buildCell(r, job, road, k + 1);
+        const made = await buildCell(r, job, road, k + 1).catch((e) => { // refused as unsafe: the road stops as it does for anything else in its way
+          guard(job);
+          if (!/^unsafe/.test(e.message)) throw e;
+          return {stop: e.message};
+        });
         if (made?.out === 'unloaded') { await sleep(1000); continue; }
         if (made?.out) return home();
         if (made?.stop) return stopRoad(r, job, road, k, made.stop);
@@ -364,8 +371,10 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
 
   // What is short, from the nearest farm that lists it, then the next: get plans the chests and the crafting. It sees only the chests this
   // trip read, so what is not on the list cannot become a source. With too little to start a shift it waits and says so, once.
-  async function fetchLoad(r, job) {
+  async function fetchLoad(r, job, road) {
     const {bot} = r;
+    await bot.lookAt(vec(cell(road, FIRST_RAIL + 3, 1)), true); // onto the road, not where it walks next
+    await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
     const away = (f) => Math.hypot(f.x - bot.entity.position.x, f.z - bot.entity.position.z);
@@ -381,7 +390,11 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
               read.add(farm);
               for (const p of chestsNear(r, farm)) await countChest(r, job, p).catch(() => guard(job));
             }
-            await get(r, job, item, count - have(item));
+            for (let short = count - have(item); short > 0; short = count - have(item)) {
+              const before = have(item);
+              await get(r, job, item, Math.min(short, GET_MOST));
+              if (have(item) <= before) break;
+            }
           } catch (e) {
             guard(job);
             r.emit('info', `highway: ${item} at the farm at ${farm.x} ${farm.z}: ${e.message.slice(0, 80)}`);

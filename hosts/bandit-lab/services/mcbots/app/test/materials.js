@@ -437,3 +437,22 @@
   assert.strictEqual(acquireWorld(r).stores[0].stock.rail, 3, 'what it took is gone');
   console.log('highway: farm chests only ok');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// Water beside a road cell inside the protected box is sealed for a road's job, within what its job opens, and for nobody else.
+(async () => {
+  const assert = require('node:assert/strict');
+  const {sealFluids} = require('../bots');
+  const {Vec3} = require('vec3');
+  const placed = [], water = '40,1,1';
+  const items = [{name: 'cobblestone', count: 8, type: 1}];
+  const bot = {entity: {position: new Vec3(39, 0, 0)}, inventory: {items: () => items}, equip: async () => {}, lookAt: async () => {},
+    blockAt: (p) => ({name: `${p.x},${p.y},${p.z}` === water ? 'water' : 'stone', position: p, boundingBox: `${p.x},${p.y},${p.z}` === water ? 'empty' : 'block'}),
+    placeBlock: async (ref, f) => { placed.push(ref.position.plus(f).toString()); }};
+  const r = {bot, protectedAreas: [[-80, -144, 80, 80]]}, job = {cancelled: false, t: {}};
+  assert.strictEqual(await sealFluids(r, job, new Vec3(40, 1, 0)), false, 'not without the job');
+  assert.deepStrictEqual(placed, []);
+  r.mayBuild = (p) => p.y <= 6;
+  await sealFluids(r, job, new Vec3(40, 1, 0)).catch(() => {});
+  assert.ok(placed.length >= 1, 'with it, it is sealed');
+  console.log('sealFluids: the road job\'s exception ok');
+})().catch((e) => { console.error(e); process.exit(1); });

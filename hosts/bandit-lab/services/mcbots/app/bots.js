@@ -1500,7 +1500,7 @@ async function sealFluids(r, job, pos) {
   for (const d of dirs) {
     const n = bot.blockAt(pos.offset(...d));
     // A zone keeps its height: water in the shaft under the Hauptplatz zone (y65-75) is sealed (review 2026-10-19).
-    if (n && FLUID.test(n.name) && insideAreas(r.protectedAreas, n.position.x, n.position.z, n.position.y)) return false;
+    if (n && FLUID.test(n.name) && insideAreas(r.protectedAreas, n.position.x, n.position.z, n.position.y) && !r.mayBuild?.(n.position)) return false;
   }
   for (const d of dirs) {
     guard(job);
@@ -3095,7 +3095,7 @@ const seal = sealJob.makeSeal({goNear, guard, sleep, goals, withdraw: buildWithd
 const {level} = levelJob.makeLevel({goNear, waitCalm, guard, sleep, digAt, upkeep, NATURAL, stairRing, at});
 
 const {highway} = roadJob.makeRoad({
-  goNear, waitCalm, guard, sleep, digAt, edible, ensureGear, ride: makeRide({guard, sleep}),
+  goNear, waitCalm, guard, sleep, digAt, edible, ensureGear, tossJunk, ride: makeRide({guard, sleep}),
   get: (r, job, item, count) => JOBS.get(r, child(job, {type: 'get', args: VALIDATE.get({item, count})})),
   countChest: (r, job, p) => JOBS.stock(r, child(job, {type: 'stock', args: {x: p.x, y: p.y, z: p.z}})),
   chestsNear: (r, {x, y, z}) => r.bot.findBlocks({point: new (require('vec3').Vec3)(x, y, z), matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b.name), maxDistance: 16, count: 48}),

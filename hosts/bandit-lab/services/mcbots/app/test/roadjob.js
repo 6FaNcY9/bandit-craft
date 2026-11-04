@@ -515,50 +515,62 @@ module.exports = (async () => {
     const setup = (items, {get, near = () => [], count = async () => {}} = {}) => {
       const w = world({}, {items}), asked = [];
       w.job.args = {dir: 'east'};
-      const deps = {...w.deps, farms, chestsNear: near, countChest: count, ensureGear: async () => { w.log.geared = true; }, gearWanted: () => 0,
-        get: async (r, j, item, n) => { asked.push([item, n, Math.floor(w.bot.entity.position.x)]); w.log.seen = r.farmChests; if (get) await get(item, n, w); const it = w.inv.find((i) => i.name === item); if (it) it.count += n; else w.inv.push({name: item, count: n}); }};
+      const deps = {...w.deps, farms, chestsNear: near, countChest: count, ensureGear: async () => { w.log.geared = true; }, gearWanted: () => 0, tossJunk: async () => { w.log.junk = true; },
+        get: async (r, j, item, n) => { VALIDATE.get({item, count: n}); asked.push([item, n, Math.floor(w.bot.entity.position.x)]); w.log.seen = r.farmChests; if (get) await get(item, n, w); const it = w.inv.find((i) => i.name === item); if (it) it.count += n; else w.inv.push({name: item, count: n}); }};
       return {w, asked, m: makeRoad(deps)};
     };
     { // fetches only what is short, and rails need no list of their own: get plans chests and crafts
       const {w, asked, m} = setup({...full, rail: 1000});
-      assert.strictEqual(await m.restock(w.r, w.job), 'ok');
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
       assert.deepStrictEqual(asked, [['rail', 24, 10]]);
       assert.strictEqual(w.log.geared, true);
       assert.ok(w.log.seen instanceof Map, 'get looks at the farms only');
       assert.strictEqual(w.r.farmChests, null, 'and everyone else at what they always did');
     }
+    { // a get takes at most 256: a whole load comes in several, and rock from the last trip goes first
+      const {w, asked, m} = setup({...full, rail: 0});
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
+      assert.deepStrictEqual(asked, [['rail', 256, 10], ['rail', 256, 10], ['rail', 256, 10], ['rail', 256, 10]]);
+      assert.strictEqual(w.log.junk, true);
+    }
+    { // a get that brings nothing is not asked again, or it would ask for ever
+      let calls = 0;
+      const {w, m} = setup({...full, rail: 0}, {get: async (item, n, v) => { calls++; const it = v.inv.find((i) => i.name === 'rail'); it.count -= n; }});
+      await m.restock(w.r, w.job, road);
+      assert.strictEqual(calls, 2, 'once at each of the two farms');
+    }
     { // next farm when one is empty
       const {w, asked, m} = setup({...full, rail: 1000}, {get: async (item, n, v) => { if (v.bot.entity.position.x < 100) throw new Error('no way to get iron_ingot'); }});
-      assert.strictEqual(await m.restock(w.r, w.job), 'ok');
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
       assert.deepStrictEqual(asked, [['rail', 24, 10], ['rail', 24, 500]]);
     }
     { // what one farm had counts: the next is asked for the rest
       const {w, asked, m} = setup({...full, rail: 1000}, {get: async (item, n, v) => { const it = v.inv.find((i) => i.name === 'rail'); it.count += 10; throw new Error('out'); }});
-      await m.restock(w.r, w.job);
+      await m.restock(w.r, w.job, road);
       assert.deepStrictEqual(asked, [['rail', 24, 10], ['rail', 14, 500]]);
     }
     { // all empty waits and says so, once
       const {w, m} = setup({...full, rail: 20}, {get: async () => { throw new Error('no way'); }});
-      assert.strictEqual(await m.restock(w.r, w.job), 'waiting');
-      assert.strictEqual(await m.restock(w.r, w.job), 'waiting');
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'waiting');
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'waiting');
       const said = w.log.events.filter(([k]) => k === 'alert').map(([, s]) => s);
       assert.strictEqual(said.length, 1);
       assert.match(said[0], /^highway: east waiting: the farms have no rail/);
     }
     { // a little short is no reason to stay home
       const {w, m} = setup({...full, rail: 800}, {get: async () => { throw new Error('no way'); }});
-      assert.strictEqual(await m.restock(w.r, w.job), 'ok');
+      assert.strictEqual(await m.restock(w.r, w.job, road), 'ok');
       assert.deepStrictEqual(w.log.events.filter(([k]) => k === 'alert'), []);
     }
     { // a farm's chests are read once a trip, and one that will not open is passed over
       const read = [];
       const {w, m} = setup({...full, rail: 1000, bread: 1}, {near: () => ['a', 'b'], count: async (r, j, p) => { read.push(p); if (p === 'a') throw new Error('covered'); }});
-      await m.restock(w.r, w.job);
+      await m.restock(w.r, w.job, road);
       assert.deepStrictEqual(read, ['a', 'b']);
     }
     { // a Stop goes through a farm that fails
       const {w, m} = setup({...full, rail: 1000}, {get: async (item, n, v) => { w.job.cancelled = true; throw new Error('stopped'); }});
-      await assert.rejects(m.restock(w.r, w.job), /stopped/);
+      await assert.rejects(m.restock(w.r, w.job, road), /stopped/);
       assert.strictEqual(w.r.farmChests, null);
     }
     // a first trip carries the origin's ramp too; the second has only its own
@@ -614,9 +626,27 @@ module.exports = (async () => {
       let during, atFarm;
       const m = makeRoad({...w.deps, ride: fakeRide(w), restock: async (r) => { atFarm = [r.mayBuild, r.digOnly]; return 'ok'; }, buildOrigin: async (r) => { during = r.mayBuild; }});
       await m.highway(w.r, w.job);
-      assert.deepStrictEqual([during({x: 9, y: 6, z: 9}), during({x: 9, y: 7, z: 9}), w.r.mayBuild], [true, false, null]);
+      assert.deepStrictEqual([during({x: 2, y: 6, z: 9}), during({x: 2, y: 7, z: 9}), w.r.mayBuild], [true, false, null]);
       assert.deepStrictEqual(atFarm, [null, undefined], 'off to the farms it is any other bot');
     }
+  }
+  { // a dig refused as unsafe ends the road the way a stop does: the owner hears why, and the bot goes home
+    const w = job(roadTo(301, start), {}, {at: 301, args: {}});
+    const dig = w.deps.digAt;
+    const m = makeRoad({...w.deps, ride: fakeRide(w), restock: async () => 'ok', buildOrigin: async () => {}, digAt: async (r, j, p, e, o) => { if (p.x === 305) throw new Error('unsafe: water next to it'); return dig(r, j, p, e, o); }});
+    await m.highway(w.r, w.job);
+    assert.match(alerts(w)[0], /^highway: east stopped at 304 m: unsafe: water next to it/);
+    assert.strictEqual(w.log.rides.length, 1);
+  }
+  { // a full inventory cannot pick the old ramp up, and gold has no farm: it stays on the road, where it does no harm
+    const items = {...load};
+    for (let i = 0; i < 30; i++) items[`junk_${i}`] = 1;
+    const w = job(roadTo(1002), {items}, {at: 1000, args: {length: 1004}});
+    await w.layRamp(w.r, w.job, road, 1000);
+    const dug = w.log.dug.length;
+    await w.highway(w.r, w.job);
+    assert.strictEqual(w.log.dug.filter((d) => d.startsWith('powered_rail')).length, w.log.dug.slice(0, dug).filter((d) => d.startsWith('powered_rail')).length);
+    assert.strictEqual(w.name(cell(road, 996)), 'powered_rail');
   }
   { // a road with an origin of its own brings its load and its start: no farm, no chamber
     let fetched = 0, dug = 0;
