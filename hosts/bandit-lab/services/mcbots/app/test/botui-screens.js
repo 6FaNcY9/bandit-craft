@@ -173,4 +173,6 @@ console.log('botui-screens ok');
   assert.deepEqual(markersOf(all, ['MisaBot']), [{x: 1, z: 2, dim: 'the_nether', kind: 'work', label: 'MisaBot'}]);
   assert.deepEqual(markersOf(all, '*').map((k) => [k.label, k.kind]), [['bot1', 'work'], ['MisaBot', 'work'], ['EM', 'idle'], ['dead1', 'bad']]);
 }
+// the plugin compares marker worlds with Bukkit's world keys
+assert.deepEqual(['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'].map(require('../world').normDim), ['overworld', 'the_nether', 'the_end']);
 console.log('botui-screens karte ok');

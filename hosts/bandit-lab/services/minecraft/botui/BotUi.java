@@ -42,7 +42,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.Event;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -83,6 +82,8 @@ public class BotUi extends JavaPlugin implements Listener {
   private HttpServer http;
   private ExecutorService pool;
   private BotMap map;
+  private final Map<UUID, Long> lastMapClick = new HashMap<>(); // main thread only
+  private static final long MAP_CLICK_COOLDOWN_MS = 500;
 
   @Override
   public void onEnable() {
@@ -475,14 +476,25 @@ public class BotUi extends JavaPlugin implements Listener {
     }
   }
 
+  /** Deprecated as only an approximation of what a click does, but the API offers no replacement. */
+  @SuppressWarnings("deprecation")
+  private static boolean usable(org.bukkit.block.Block b) {
+    return b.getType().isInteractable();
+  }
+
   /** Right click with the tagged map in the main hand: the map dialog instead of the vanilla use; every other map is left alone. */
   @EventHandler
   public void onUse(PlayerInteractEvent e) {
     Player p = e.getPlayer();
     if (e.getHand() != EquipmentSlot.HAND || (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK)
         || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !map.isMap(p.getInventory().getItemInMainHand())) return;
+    // As in vanilla, a click on something usable (door, chest) uses it; sneaking or any other block opens the dialog.
+    if (e.getAction() == Action.RIGHT_CLICK_BLOCK && !p.isSneaking() && usable(e.getClickedBlock())) return;
     e.setCancelled(true);
-    e.setUseItemInHand(Event.Result.DENY);
+    // Holding the button repeats the click every few ticks.
+    long now = System.currentTimeMillis();
+    if (now - lastMapClick.getOrDefault(p.getUniqueId(), 0L) < MAP_CLICK_COOLDOWN_MS) return;
+    lastMapClick.put(p.getUniqueId(), now);
     tryOpen(p, "mapclick");
   }
 
@@ -588,6 +600,7 @@ public class BotUi extends JavaPlugin implements Listener {
     open.remove(e.getPlayer().getUniqueId());
     outlines.remove(e.getPlayer().getUniqueId());
     map.quit(e.getPlayer());
+    lastMapClick.remove(e.getPlayer().getUniqueId());
     emit("quit", e.getPlayer(), null);
   }
 

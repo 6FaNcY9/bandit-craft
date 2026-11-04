@@ -21,10 +21,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
@@ -61,7 +65,8 @@ final class BotMap {
 
   private record Cur(byte x, byte y, byte dir, MapCursor.Type type, String caption) {}
 
-  private record Frame(int[] px, BufferedImage img, List<Cur> cur, long version) {}
+  /** Pixels and cursors have their own versions: a moving bot changes only the cursors, which must not repaint 16384 pixels. */
+  private record Frame(int[] px, BufferedImage img, long pxVer, List<Cur> cur, long curVer) {}
 
   private record Snap(double x, double z, float yaw, String dim) {}
 
@@ -72,7 +77,7 @@ final class BotMap {
     final AtomicBoolean busy = new AtomicBoolean();
     // touched only by that viewer's renderer
     MapCanvas drawnOn;
-    long drawn = -1;
+    long drawnPx = -1, drawnCur = -1;
   }
 
   private static final int SIZE = 128;
@@ -123,7 +128,7 @@ final class BotMap {
   void start() {
     try (InputStream in = Files.newInputStream(idsFile)) {
       ids.load(in);
-    } catch (IOException e) {
+    } catch (IOException | IllegalArgumentException e) { // a corrupt file only means the viewers get new maps
       // first run: no maps yet
     }
     for (Player p : Bukkit.getOnlinePlayers()) join(p);
@@ -132,6 +137,7 @@ final class BotMap {
 
   void stop() {
     pool.shutdownNow();
+    http.close();
   }
 
   /** Main thread: a viewer's map gets our renderer back after a restart or reload. */
@@ -210,7 +216,14 @@ final class BotMap {
 
   private MapView known(String name) {
     String id = ids.getProperty(name);
-    return id == null ? null : Bukkit.getMap(Integer.parseInt(id));
+    if (id == null) return null;
+    try {
+      return Bukkit.getMap(Integer.parseInt(id.trim()));
+    } catch (NumberFormatException e) { // corrupt entry: forget it, the next give makes a new map
+      ids.remove(name);
+      plugin.getLogger().warning("ignoring bad map id for " + name + " in maps.properties");
+      return null;
+    }
   }
 
   private synchronized MapView viewOf(Player p) {
@@ -256,14 +269,19 @@ final class BotMap {
       Slot s = slots.get(owner);
       if (s == null || !s.holding || !viewer.test(owner)) return;
       Frame f = s.frame;
-      if (f == null || (s.drawnOn == canvas && s.drawn == f.version)) return;
-      canvas.drawImage(0, 0, f.img);
-      MapCursorCollection cc = canvas.getCursors();
-      while (cc.size() > 0) cc.removeCursor(cc.getCursor(0));
-      for (Cur c : f.cur) cc.addCursor(new MapCursor(c.x, c.y, c.dir, c.type, true, c.caption == null ? null : Component.text(c.caption)));
-      canvas.setCursors(cc);
+      if (f == null) return;
+      boolean fresh = s.drawnOn != canvas; // a new canvas (first render, relog) starts blank
+      // drawImage matches the 16384 pixels to the map palette on this thread, so it runs only when the pixels changed
+      if (fresh || s.drawnPx != f.pxVer) canvas.drawImage(0, 0, f.img);
+      if (fresh || s.drawnCur != f.curVer) {
+        MapCursorCollection cc = canvas.getCursors();
+        while (cc.size() > 0) cc.removeCursor(cc.getCursor(0));
+        for (Cur c : f.cur) cc.addCursor(new MapCursor(c.x, c.y, c.dir, c.type, true, c.caption == null ? null : Component.text(c.caption)));
+        canvas.setCursors(cc);
+      }
       s.drawnOn = canvas;
-      s.drawn = f.version;
+      s.drawnPx = f.pxVer;
+      s.drawnCur = f.curVer;
     }
   }
 
@@ -324,10 +342,11 @@ final class BotMap {
       if (c != null) cur.add(c);
     }
     Frame old = s.frame;
-    if (old != null && Arrays.equals(old.px(), px) && old.cur().equals(cur)) return; // nothing changed: no redraw
-    BufferedImage img = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
-    img.setRGB(0, 0, SIZE, SIZE, px, 0, SIZE);
-    s.frame = new Frame(px, img, cur, versions.incrementAndGet());
+    boolean samePx = old != null && Arrays.equals(old.px(), px), sameCur = old != null && old.cur().equals(cur);
+    if (samePx && sameCur) return; // nothing changed: no redraw
+    BufferedImage img = old != null && samePx ? old.img() : new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
+    if (!samePx) img.setRGB(0, 0, SIZE, SIZE, px, 0, SIZE);
+    s.frame = new Frame(px, img, samePx ? old.pxVer() : versions.incrementAndGet(), cur, sameCur ? old.curVer() : versions.incrementAndGet());
   }
 
   /** A cursor unit is half a pixel; null when it falls off the map. */
@@ -355,8 +374,16 @@ final class BotMap {
     int[] data = null;
     long ttl = MISS_TTL_MS;
     try {
-      HttpResponse<byte[]> r = http.send(HttpRequest.newBuilder(URI.create(base + "/maps/" + map + "/tiles/" + lod + "/x" + tx + "/z" + tz + ".png"))
-          .timeout(Duration.ofSeconds(5)).build(), HttpResponse.BodyHandlers.ofByteArray());
+      // HttpRequest.timeout does not bound a body that stalls, and a stuck compose would freeze every map: bound the whole fetch
+      CompletableFuture<HttpResponse<byte[]>> call = http.sendAsync(HttpRequest.newBuilder(URI.create(base + "/maps/" + map + "/tiles/" + lod + "/x" + tx + "/z" + tz + ".png"))
+          .build(), HttpResponse.BodyHandlers.ofByteArray());
+      HttpResponse<byte[]> r;
+      try {
+        r = call.get(10, TimeUnit.SECONDS);
+      } catch (TimeoutException | ExecutionException e) {
+        call.cancel(true);
+        throw new IOException(e);
+      }
       if (r.statusCode() == 200) {
         data = decode(r.body());
         if (data != null) ttl = TILE_TTL_MS;

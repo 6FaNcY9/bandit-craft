@@ -8,11 +8,12 @@ const str = (s) => Buffer.concat([varint(Buffer.byteLength(s)), Buffer.from(s)])
 function connect(username, port = 25599) {
   return new Promise((resolve, reject) => {
     const c = mc.createClient({host: '127.0.0.1', port, username, auth: 'offline', version: '26.1'});
-    const dialogs = [], maps = [], counts = {particles: 0}, inv = []; // inv: the player inventory window as the server last sent it
+    const dialogs = [], maps = [], counts = {particles: 0}, inv = [], windows = []; // inv: the player inventory window as the server last sent it
     c.on('error', reject);
     c.on('position', (p) => c.write('teleport_confirm', {teleportId: p.teleportId})); // else the server ignores our movement
     c.on('packet', (data, meta) => {
       if (meta.name === 'show_dialog') dialogs.push(nbt.simplify(data.dialog.data));
+      else if (meta.name === 'open_window') windows.push(data.windowId);
       else if (meta.name === 'map') maps.push(data);
       else if (meta.name === 'window_items' && data.windowId === 0) inv.splice(0, inv.length, ...data.items);
       else if (meta.name === 'set_slot' && data.windowId === 0) inv[data.slot] = data.item;
@@ -21,7 +22,7 @@ function connect(username, port = 25599) {
     c.once('login', () => {
       c.write('player_loaded', {}); // the server ignores movement until the client reports it has loaded
       resolve({
-        dialogs, maps, counts, inv,
+        dialogs, maps, counts, inv, windows,
         // The dialog click packet is written raw: minecraft-data's anonymous-NBT shape makes Paper drop the connection.
         click(id, data) {
           const value = {};
@@ -34,6 +35,8 @@ function connect(username, port = 25599) {
         sneak: (on) => c.write('player_input', {inputs: {shift: on}}),
         swap: () => c.write('block_dig', {status: 6, location: {x: 0, y: 0, z: 0}, face: 0, sequence: 0}), // swap hands (F)
         useItem: (hand = 'main_hand') => c.write('use_item', {hand, sequence: 0, rotation: {x: 0, y: 0}}), // right click with the item in hand
+        useBlock: (x, y, z, hand = 'main_hand') => c.write('block_place', {hand, location: {x, y, z}, direction: 1, cursorX: 0.5, cursorY: 1, cursorZ: 0.5, insideBlock: false, worldBorderHit: false, sequence: 1}),
+        closeWindow: (id) => c.write('close_window', {windowId: id}),
         look: (yaw, pitch) => c.write('look', {yaw, pitch, flags: {onGround: true, hasHorizontalCollision: false}}),
         end: () => new Promise((r) => { c.once('end', r); c.end(); }),
       });
