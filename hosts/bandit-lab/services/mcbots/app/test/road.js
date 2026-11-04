@@ -208,3 +208,6 @@ assert.deepStrictEqual(findHead(railed(40, {'30,0,0': null}), east, 20), {head: 
   assert.strictEqual(s30.y, 31);
   assert.deepStrictEqual([may({x: 40, y: 6, z: 40}), may({x: 40, y: 7, z: 40}), may(s30), may(plan.stair[33].floor), may({...s30, z: s30.z - 1})], [true, false, true, true, false]);
 }
+
+// Read off the first 2 km east on the sandbox: vines in a cave at k 555 stopped the road as a player's block.
+assert.strictEqual(kindOf('vine'), 'natural');

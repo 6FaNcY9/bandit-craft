@@ -618,6 +618,18 @@ module.exports = (async () => {
       assert.deepStrictEqual(atFarm, [null, undefined], 'off to the farms it is any other bot');
     }
   }
+  { // a road with an origin of its own brings its load and its start: no farm, no chamber
+    let fetched = 0, dug = 0;
+    const w = job({'0,0,0': 'air'}, {}, {at: 0});
+    const here = {x: 1000, y: 200, z: 1000}, on = {dir: 'east', origin: here};
+    w.job.args = {dir: 'east', origin: here, length: 8};
+    for (let k = 0; k < FIRST_RAIL; k++) for (const h of [0, 1]) w.blocks.set(key(cell(on, k, h)), 'air');
+    w.bot.entity.position = new Vec3(1004.5, 200, 1000.5);
+    const m = makeRoad({...w.deps, ride: fakeRide(w), restock: async () => { fetched++; return 'ok'; }, buildOrigin: async () => { dug++; }});
+    await m.highway(w.r, w.job);
+    assert.deepStrictEqual([fetched, dug], [0, 0]);
+    assert.strictEqual(w.name(cell(on, 8, railHeight(8))), 'rail');
+  }
   { // the job's arguments
     assert.deepStrictEqual(VALIDATE.highway({dir: 'east'}), {dir: 'east'});
     assert.deepStrictEqual(VALIDATE.highway({dir: 'north', length: 2000, frontier: 40, origin: {x: 1, y: 2, z: 3}}), {dir: 'north', length: 2000, frontier: 40, origin: {x: 1, y: 2, z: 3}});

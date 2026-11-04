@@ -51,7 +51,7 @@ function onRoad({dir, origin}, pos) {
 
 // What a job may dig as plain ground. Moved here from bots.js as it was: the jobs there use it too.
 const NATURAL = /^(stone|deepslate|dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|gravel|sand|red_sand|andesite|diorite|granite|tuff|calcite|dripstone_block|[a-z_]*_ore|short_grass|tall_grass|fern|large_fern|[a-z_]*_flower|dandelion|poppy|wildflowers|moss_block|moss_carpet|glow_lichen|cave_vines|cave_vines_plant)$/;
-const ROCK = /^(obsidian|smooth_basalt|magma_block|pointed_dripstone|infested_[a-z_]+|raw_[a-z]+_block|amethyst_block|budding_amethyst|[a-z]+_amethyst_bud|amethyst_cluster|sculk|sculk_vein|sculk_catalyst|sculk_sensor|hanging_roots|azalea|flowering_azalea|azalea_leaves|flowering_azalea_leaves|spore_blossom|big_dripleaf|big_dripleaf_stem|small_dripleaf|brown_mushroom|red_mushroom|seagrass|tall_seagrass|kelp|kelp_plant|ice|packed_ice|blue_ice)$/;
+const ROCK = /^(vine|obsidian|smooth_basalt|magma_block|pointed_dripstone|infested_[a-z_]+|raw_[a-z]+_block|amethyst_block|budding_amethyst|[a-z]+_amethyst_bud|amethyst_cluster|sculk|sculk_vein|sculk_catalyst|sculk_sensor|hanging_roots|azalea|flowering_azalea|azalea_leaves|flowering_azalea_leaves|spore_blossom|big_dripleaf|big_dripleaf_stem|small_dripleaf|brown_mushroom|red_mushroom|seagrass|tall_seagrass|kelp|kelp_plant|ice|packed_ice|blue_ice)$/;
 const STRUCTURE = /^([a-z_]+_planks|[a-z_]+_fence|rail|cobweb|tuff_[a-z_]+|chiseled_tuff[a-z_]*|polished_tuff[a-z_]*|(waxed_)?((exposed|weathered|oxidized)_)?(chiseled_|cut_)?copper(_[a-z_]+)?|(waxed_)?((exposed|weathered|oxidized)_)?cut_copper[a-z_]*)$/;
 const KEEP = /^(chest|trapped_chest|barrel|hopper|spawner|trial_spawner|vault|dispenser|dropper)$/;
 

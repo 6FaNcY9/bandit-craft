@@ -488,13 +488,15 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
         const here = onRoad(road, bot.entity.position);
         const k = here ? here.k : -1;
         if (k < FIRST_RAIL) {
-          if ((await offRoad(() => (restock || fetchLoad)(r, job, road))) === 'waiting') {
-            for (let left = FARMS_MS; left > 0; left -= 1000) { guard(job); await sleep(1000); }
-            continue;
+          if (!job.args.origin) { // a road with an origin of its own brings its load and its start
+            if ((await offRoad(() => (restock || fetchLoad)(r, job, road))) === 'waiting') {
+              for (let left = FARMS_MS; left > 0; left -= 1000) { guard(job); await sleep(1000); }
+              continue;
+            }
+            guard(job);
+            if ((await (buildOrigin || digOrigin)(r, job, road)) === 'stopped') return;
+            guard(job);
           }
-          guard(job);
-          if (!job.args.origin && (await (buildOrigin || digOrigin)(r, job, road)) === 'stopped') return; // a road with an origin of its own has its own start
-          guard(job);
           const land = cell(road, FIRST_RAIL - 1), first = findHead(blockAt, road, FIRST_RAIL);
           if (onRoad(road, bot.entity.position)?.k !== FIRST_RAIL - 1) await goNear(r, job, land.x, land.y, land.z, 0, {doing: 'walking to the road'});
           if (first.head < FIRST_RAIL && !first.open) {

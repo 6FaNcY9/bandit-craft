@@ -120,10 +120,11 @@ const SCENARIOS = [
       {kind: 'cells', x1: 3528, y1: 201, z1: 3028, x2: 3536, y2: 206, z2: 3036, specs: ['minecraft:dirt', 'minecraft:cobblestone'], max: 0}]},
   {name: '17-highway-40', timeoutS: 900,
     // A road east from k 0 at x 3505, y 205, z 3030, through a stone block with what a road meets: a cave at k 11..14, water behind the wall at k 20,
-    // gravel over the ceiling at k 23..26. Rails at y 205, in the dips (k%16 8,9) at y 204. The starter room k 0..4 stands in for the origin chamber.
+    // gravel over the ceiling at k 23..26, a flooded stretch at k 32..35. Rails at y 205, in the dips (k%16 8,9) at y 204. The starter room k 0..4 stands in for the origin chamber.
     // A rail only stays on a floor, so 36 rails, open cells and no air or fluid in the shell say what checkCell says for k 5..40.
     setup: [fill(3505, 201, 3024, 3552, 210, 3036, 'stone'), fill(3505, 205, 3030, 3509, 206, 3030, 'air'),
       fill(3516, 203, 3029, 3519, 206, 3031, 'air'), 'setblock 3525 205 3031 minecraft:water', fill(3528, 207, 3029, 3531, 208, 3031, 'gravel'),
+      fill(3537, 204, 3029, 3540, 207, 3031, 'water'), // flooded: the real road has 14 such stretches in its first 2 km
       'give bot50 minecraft:rail 128', 'give bot50 minecraft:powered_rail 32', 'give bot50 minecraft:redstone_torch 32', 'give bot50 minecraft:cobblestone 64',
       'give bot50 minecraft:minecart 1', 'give bot50 minecraft:iron_pickaxe 3', 'tp bot50 3509.5 205 3030.5'],
     job: {type: 'highway', args: {dir: 'east', origin: {x: 3505, y: 205, z: 3030}, length: 40}},
