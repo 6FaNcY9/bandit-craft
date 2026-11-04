@@ -181,7 +181,8 @@ in {
         script = ''
           d=/srv/minecraft/paper/plugins/CommandPanels
           install -d -o minecraft -g minecraft -m 0770 "$d" "$d/panels"
-          # Retired v1 chest menus (the Kommandostand owns /bots now): installing never deletes, so drop them.
+          # Retired v1 chest menus (the Kommandostand owns /bots now): installing never deletes, so drop them. The Paper start
+          # does the same before CommandPanels loads (nix-minecraft.nix extraStartPre); remove both together.
           rm -f "$d/panels/bots.yml" "$d/panels/botmenu.yml"
           for panel in "$PANELS"/*.yml; do
             install -o minecraft -g minecraft -m 0644 "$panel" "$d/panels/$(basename "$panel")"

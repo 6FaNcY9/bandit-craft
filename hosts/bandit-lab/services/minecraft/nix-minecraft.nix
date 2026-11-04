@@ -227,6 +227,9 @@ in {
       # The rest of paper-global.yml comes with the copied world. A missing file fails the start (fail closed).
       extraStartPre = ''
         test -f config/paper-global.yml
+        # One-time cleanup of the retired v1 menus (Kommandostand owns /bots): gone before Paper loads CommandPanels, so
+        # the old panel never claims the command. Remove this line and minecraft-panels' rm once the lab has restarted with it.
+        rm -f plugins/CommandPanels/panels/bots.yml plugins/CommandPanels/panels/botmenu.yml
         ${forwardingPatch}
       '';
     };

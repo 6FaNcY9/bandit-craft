@@ -48,6 +48,7 @@ const ACTIONS = {
   new: (st, data, ui, viewer) => { st.screen = {name: 'auftrag', ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})}; },
   job: (st, data, ui, viewer) => {
     if (!jobs.hasJob(data.key)) throw new Error('unbekannter Auftrag');
+    if (!jobs.mayOrder(ui.viewerBots[viewer], data.key)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
     st.screen = {name: 'job', key: data.key, preset: jobs.presetOf(data, jobs.JOBS[data.key]), ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})};
   },
   // Every field is the player's input: jobs.build validates all of it, then VALIDATE has the last word (dashboard path).
@@ -71,6 +72,7 @@ const ACTIONS = {
     }
   },
   corner: async (st, data, ui, viewer) => {
+    ownerOnly(ui, viewer); // area jobs are the owner's
     const g = st.ctx.gaze, dim = st.ctx.dim;
     st.screen = {name: 'auftrag'};
     if (data.which !== 'a' && data.which !== 'b') throw new Error('unbekannte Ecke');
@@ -97,6 +99,7 @@ const ACTIONS = {
   quick: (st, data, ui, viewer) => {
     const bot = oneBot(ui, viewer, data), label = QUICK_LABEL[data.job];
     if (!label) throw new Error('unbekannter Auftrag');
+    if (!jobs.mayOrder(ui.viewerBots[viewer], data.job)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
     let args = {};
     if (data.job === 'deposit' || data.job === 'rearm') {
       const c = ui.api.keeper?.state().chest;

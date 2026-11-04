@@ -110,6 +110,14 @@ a bot. Off hand, chest or item frame: it stays a normal map item. No cursor exis
 `INGAME_VIEWERS` becomes `fancy8869=*;MidariBread=MisaBot,EM_Trader` (a bare name still means `*`). Every screen and order is filtered by this list on the hub. Non-viewers
 get `Nicht freigeschaltet`.
 
+A viewer whose entry is not `*` is a guest and gets an allow-list, enforced in `build()` (a forged click is refused, hiding buttons is
+not the guard): `mine`, `chop`, `goto`, `guard`, `homebed`, `graves`, plus Stopp for their own bots. Everything else is refused (supply
+chest, `get`, `deposit`, `withdraw`, `stock`, `tidy`, `craft`, `smelt`, `schematic`, farms, `rearm`, `help`, `shift*`, all area jobs; chat
+still confines her `abbau` and `bau` to her own area). Her screens show no corner selection, and her targets are only the gazed block,
+her own position or typed coordinates: no named places and no Vorratskiste, as that list reveals the owner's base. The Lagebild's
+`Bedarf` line is the owner's. Trader chests (`trader_add`) are the gazed chest in the overworld, the same reach as chat `kiste`, which
+checks only that the block is a chest.
+
 ## What goes away
 
 CommandPanels `/bots` and `botmenu`, the `pa data` push and inbox. Stays: the opt-in sidebar (now a button in Ziele), the chat grammar, the "fertig" line.

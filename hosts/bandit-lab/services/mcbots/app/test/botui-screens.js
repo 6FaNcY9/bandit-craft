@@ -103,6 +103,11 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.match(body(bot(view({snaps: [idle('bot1')], allowed: ['bot1']}), 'bot9'))[0], /nicht gefunden/);
   assert.match(body(bot(view({snaps: [idle('bot2')], allowed: ['bot1']}), 'bot2'))[0], /nicht gefunden/);
 }
+{ // Bedarf (the owner's base stock) is the owner's line
+  const keeper = {state: () => ({available: true, quotas: [{item: 'coal', want: 32, have: 3}]})}, snaps = [idle('bot1')];
+  assert.match(JSON.stringify(lage(view({snaps, keeper}))), /Bedarf: coal 3\/32/);
+  assert.doesNotMatch(JSON.stringify(lage(view({snaps, keeper, owner: false, allowed: ['bot1']}))), /Bedarf|coal/);
+}
 { // Alle stopp: owner only, behind a confirmation that goes back instead of closing
   const snaps = [idle('bot1')];
   assert.ok(labels(lage(view({snaps, owner: true}))).includes('Alle stopp'));

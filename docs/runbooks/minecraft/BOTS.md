@@ -81,7 +81,7 @@ switches a progress line every 10 %. `kiste` (the block she looks at) or `kiste 
 trapped chest, barrel), `lagern` deposits into it, `behalte <n> <item>` / `behalte nichts <item>` edits the keep list
 (English item names; `kenne <item> nicht` otherwise). `handel sticks [1h|30m|<emeralds>]` runs the `trade` job in the
 hall `TRADE_HALLS[bot]`, else `TRADE_HALLS.misa` (no hall: `geht nicht: keine Handelshalle`). `lagern` and `handel` need the
-chat flow: the in-game menu (`/bots`) answers `nur im Chat`; the dashboard goes through `/api/job`. A menu click replaces the running job and the list, and its Stopp drops everything. Replies go to whoever gave the last order. Failure
+chat flow: the Kommandostand has no such order, the dashboard goes through `/api/job`. In the Kommandostand the `Wann` choice decides: `Jetzt` replaces the running job and the list, `Danach` appends; Stopp of a bot drops its list, Alle stopp (owner only) everything. A guest viewer (MidariBread) can only order mine, chop, goto, guard, homebed, graves and stop her own bots there. Replies go to whoever gave the last order. Failure
 reasons are German for about 15 common cases (`owner.germanReason`), rare ones stay English.
 With a chest set, a job with fewer than 4 free slots walks there, stores everything except tools, armour, food, 6 cobblestone (`TOOL_STOCK`) and the keep list
 (sticks, planks, coal, charcoal, torches, crafting table and furnace **are** stored: `KEEP_RE` does not apply to own deposits;
@@ -157,8 +157,11 @@ The v1 chest menus (CommandPanels `/bots`, `botmenu`) and the `pa data` push and
   plugin as `BOTUI_URL=http://10.250.77.1:8101` through the socket proxy `mc-bridge-botui` (same firewall rule as RCON and the map).
 - Who: `INGAME_VIEWERS="fancy8869=*;MidariBread=MisaBot,EM_Trader"`; anyone else gets "Nicht freigeschaltet". Empty `BOTUI_URL` switches the
   whole thing off; the bots do not care.
-- Shipping: a new plugin needs a Paper restart (warn the players first, see AGENTS.md). The old `bots.yml` and `botmenu.yml` are deleted
-  from the CommandPanels folder by `minecraft-panels` on deploy, so until the restart `/bots` is unknown.
+- Shipping: the deploy itself restarts `minecraft-server-paper` (nix-minecraft restarts a server whose symlink set changed) and mcbots, which
+  kicks players: run the warn script from AGENTS.md first and deploy when nobody plays. The old `bots.yml` and `botmenu.yml` are removed in
+  Paper's start-pre (`extraStartPre`, before CommandPanels loads) and again by `minecraft-panels`; both lines are one-time cleanup and can go
+  after the first restart with this change.
+- The "fertig" line is armed per bot when a viewer orders in the Kommandostand, so it can fire for the end of another job on that bot.
 - Troubleshooting: `/bots` says the hub is unreachable -> `docker logs mcbots | grep botui` (one line per outage), then on the lab
   `curl -s -H "Authorization: Bearer $(grep ^rcon.password /srv/minecraft/paper/server.properties | cut -d= -f2)" 127.0.0.1:8101/events?since=0`
   (401 = token mismatch, refused = plugin not loaded or port taken: look for "cannot bind" in the Paper log, BotUi disables itself then)

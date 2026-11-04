@@ -73,13 +73,17 @@ const JOBS = {
   light: {label: 'Ausleuchten', type: 'light', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Ausleuchten', limit: 'höchstens 64 x 64 x 48'},
   seal: {label: 'Versiegeln', type: 'seal', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Versiegeln', limit: `3 x 3 bis ${sealJob.MAX_SIDE} x ${sealJob.MAX_SIDE}, höchstens ${sealJob.MAX_HEIGHT} hoch`},
 };
+// A viewer whose bots are a list (not '*') is a guest: only these jobs, no supply chest, no named places, no areas.
+const GUEST_JOBS = new Set(['mine', 'chop', 'goto', 'guard', 'homebed', 'graves']);
+const isGuest = (allowed) => allowed !== '*';
+const mayOrder = (allowed, key) => !isGuest(allowed) || GUEST_JOBS.has(key);
 const hasJob = (key) => typeof key === 'string' && Object.hasOwn(JOBS, key);
 const AREA = Object.keys(JOBS).filter((k) => JOBS[k].needs.includes(area));
 
 const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
 
 // What a gazed block offers, most useful first. preset: the target (when the job uses one) and the block name.
-function contextJobs(gaze) {
+function contextJobs(gaze, allowed = '*') {
   if (!gaze || typeof gaze.block !== 'string') return [];
   const b = gaze.block, keys = [];
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
@@ -88,7 +92,7 @@ function contextJobs(gaze) {
   if (/spawner/.test(b)) keys.push('lightspawner');
   if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
   keys.push('goto', 'guard', 'tidy');
-  return keys.map((key) => {
+  return keys.filter((key) => mayOrder(allowed, key)).map((key) => {
     const job = JOBS[key], preset = {};
     if (job.loc) Object.assign(preset, pt(gaze));
     if (job.needs.includes(block)) preset.block = b;
@@ -116,8 +120,9 @@ function point(o) {
 }
 
 // A target for an order: `gaze`, `pos`, `supply`, `place:<name>`, else text like "12 64 -30".
-function resolveTarget(value, ctx, places = []) {
+function resolveTarget(value, ctx, places = [], guest = false) {
   const v = String(value ?? '').trim();
+  if (guest && (v === 'supply' || v.startsWith('place:'))) throw new Error('Dieses Ziel ist nicht für dich');
   if (v === 'gaze') {
     if (!ctx.gaze) throw new Error('Du schaust auf keinen Block');
     return {...point(ctx.gaze), dim: dimOf(ctx.dim)};
@@ -179,7 +184,8 @@ const num = (v, what) => { const n = Math.round(Number(v)); if (!Number.isFinite
 // A send payload -> the order. env: {ctx, sel, supply, places, snaps, allowed, schematics}. Throws a reason; VALIDATE has the last word.
 function build(key, data, env) {
   if (!hasJob(key)) throw new Error('unbekannter Auftrag');
-  const job = JOBS[key];
+  if (!mayOrder(env.allowed, key)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
+  const guest = isGuest(env.allowed), job = JOBS[key];
   for (const x of Object.values(data)) {
     if (typeof x === 'number' && !Number.isFinite(x)) throw new Error('Ungültige Zahl');
     if (typeof x === 'string' && x.length > TEXT_MAX) throw new Error('Eingabe zu lang');
@@ -198,9 +204,9 @@ function build(key, data, env) {
   const w = has('where');
   if (w && !v.at) {
     const pick = text('wheretext') || text('where') || (w.optional ? 'none' : 'gaze');
-    if (pick !== 'none') v.at = resolveTarget(pick, ctx, env.places);
+    if (pick !== 'none') v.at = resolveTarget(pick, ctx, env.places, guest);
   }
-  if (has('chest')) v.chest = resolveTarget(text('chesttext') || text('chest') || 'supply', ctx, env.places);
+  if (has('chest')) v.chest = resolveTarget(text('chesttext') || text('chest') || 'supply', ctx, env.places, guest);
   if (has('schematic')) {
     if (!env.schematics.includes(data.file)) throw new Error('Bauplan nicht gefunden');
     v.file = data.file;
@@ -228,4 +234,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {isChest, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {isChest, GUEST_JOBS, isGuest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
