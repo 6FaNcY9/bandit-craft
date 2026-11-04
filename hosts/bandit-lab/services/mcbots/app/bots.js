@@ -3098,7 +3098,7 @@ const {highway} = roadJob.makeRoad({
   goNear, waitCalm, guard, sleep, digAt, edible, ensureGear, tossJunk, ride: makeRide({guard, sleep}),
   get: (r, job, item, count) => JOBS.get(r, child(job, {type: 'get', args: VALIDATE.get({item, count})})),
   countChest: (r, job, p) => JOBS.stock(r, child(job, {type: 'stock', args: {x: p.x, y: p.y, z: p.z}})),
-  chestsNear: (r, {x, y, z}) => r.bot.findBlocks({point: new (require('vec3').Vec3)(x, y, z), matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b.name), maxDistance: 16, count: 48}),
+  chestsNear: (r, {x, y, z}) => r.bot.findBlocks({point: new (require('vec3').Vec3)(x, y, z), matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b.name), maxDistance: 16, count: 256}),
   gearWanted: (r) => {
     const worn = ['head', 'torso', 'legs', 'feet'].map((s) => r.bot.inventory.slots[r.bot.getEquipmentDestSlot(s)]).filter(Boolean);
     const owned = [...r.bot.inventory.items(), ...worn].map((i) => i.name);

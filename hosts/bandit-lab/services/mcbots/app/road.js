@@ -208,19 +208,21 @@ function mayBuildAt(plan, origin) {
 // shortcut: chests and barrels only, because stock and withdraw open nothing else; some 600 rails and 400 powered rails lie in shulker boxes around
 // -51 63 -82 and 22 65 53. Open those when the chests run out of powered rails.
 const IRON = ['iron_ingot', 'rail', 'iron_pickaxe', 'iron_sword', 'minecart'];
+// The round a load walks, in this order, from the origin: sticks and a table first, because the iron has neither.
+// Asking item by item crossed the spawn again for each of them and took 33 minutes (sandbox, 2026-11-04).
+// Not the owner's house at 23 66 55, with 2624 bread and 154 powered rails: iron doors no bot can open.
 const FARMS = [
-  {x: -18, y: 63, z: -83, items: ['rail', 'powered_rail', 'redstone_torch', 'minecart']}, // the workshop's rail store
+  {x: -22, y: 66, z: -119, items: ['stick', 'redstone_torch']}, // redstone beside the sticks, at y 69: get crafts the torches
+  {x: -18, y: 63, z: -83, items: ['crafting_table', 'rail', 'powered_rail', 'redstone_torch', 'minecart']}, // the workshop's rail store
   {x: -47, y: 63, z: -82, items: ['rail', 'redstone_torch', 'iron_ingot', 'cobblestone']}, // the workshop
-  {x: 23, y: 66, z: 55, items: ['rail', 'powered_rail', 'bread', 'minecart']}, // the base at spawn
-  {x: -22, y: 64, z: -119, items: ['stick', 'redstone_torch']}, // redstone beside the sticks: get crafts the torches
   {x: -307, y: 61, z: -167, items: IRON},
-  {x: 292, y: 130, z: 745, items: IRON},
-  {x: -263, y: 58, z: -216, items: ['cobblestone']},
+  {x: -263, y: 58, z: -216, items: ['bread', 'cobblestone']}, // the bots' own hall: get bakes its wheat
+  {x: 292, y: 130, z: 745, items: ['rail']}, // shortcut: 1 km away and no bot has walked up to it yet, the last resort when -307 runs out of iron
 ];
 // 8 pickaxes do about 1 km of deepslate, so more rails would not get laid. The cobblestone is for a cave right after the start. Sticks first:
 // a farm of iron has none, and rails and tools take them. A first trip also carries the origin's ramp.
-// 32 of 36 slots: the old ramp needs 2 more when the bot comes back to pick it up.
-const LOAD = {stick: 128, rail: 1024, iron_pickaxe: 8, powered_rail: 48, redstone_torch: 48, minecart: 1, bread: 32, cobblestone: 64, iron_sword: 1};
+// 32 of 36 slots, 34 on a first trip: the old ramp needs 2 more when the bot comes back to pick it up. The table before the rails: a farm of iron has none to craft them at.
+const LOAD = {stick: 128, crafting_table: 1, rail: 960, iron_pickaxe: 8, powered_rail: 48, redstone_torch: 48, minecart: 1, bread: 32, cobblestone: 64, iron_sword: 1};
 function loadFor(frontier, ingots = 0) {
   const ramp = !frontier || frontier <= FIRST_RAIL + RAMP_CELLS ? 2 * LOAD.powered_rail : LOAD.powered_rail;
   return {...LOAD, powered_rail: ramp, redstone_torch: ramp, ...(ingots ? {iron_ingot: ingots} : {})};

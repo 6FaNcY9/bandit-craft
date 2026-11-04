@@ -2,7 +2,7 @@
 // The highway job: road.js says what a road is, cartride.js how to ride one, and this wires both to a bot, as level.js does.
 const {Vec3} = require('vec3');
 const {refFace} = require('./seal');
-const {LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
+const {NATURAL, LINING, FIRST_RAIL, RAMP_BOOSTERS, RAMP_CELLS, BORDER_K, cell, crossSection, railHeight, kindOf, isOpen, checkCell, railFits, isBoosterSlot, niche, inspect, findHead, onRoad, mayEndAt, originPlan, readOrigin, mayBuildAt, isClear, FARMS, loadFor} = require('./road');
 
 const TRIES = 3; // the spec's limit: three tries in a row at the same place, then the road stops
 const FALLS = 16; // gravel coming down the column above a cell; more than this is no cell to build
@@ -26,11 +26,14 @@ const FARMS_MS = 300000; // farms fill slowly, and each try is a walk
 const FEW_RAILS = 64; // not worth a trip
 const GET_MOST = 256; // VALIDATE.get
 const SLOTS = 36;
+const FARM_LEVELS = 3; // climbing to a chest upstairs sent a bot across the spawn for half an hour (sandbox, 2026-11-04); every load item lies within this
+const READ_MS = 120000;
+const STRAY = /_log$|_stem$|_leaves$|_sapling$|^egg$/; // with NATURAL, what walking picks up
 const ORIGIN_KEY = 'highway:origin';
 const CLAIM_HOLD_MS = 45000; // world.js: a claim runs out if it is not renewed
 const rideLimit = (k) => 120000 + (k || 0) * 20; // at the 50 m/s no ride goes below
 
-function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, tossJunk, farms = FARMS, restock = null, buildOrigin = null}) {
+function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, countChest, chestsNear, ensureGear, gearWanted, tossJunk, now = Date.now, farms = FARMS, restock = null, buildOrigin = null}) {
   // 26.x may not answer a placing, so what it did is read from the blocks afterwards, as seal.js does.
   async function place(r, c) {
     const {bot} = r;
@@ -377,20 +380,32 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
     await tossJunk(r, job); // the rock of the last trip: a load takes nearly every slot
     const have = (item) => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);
     const want = loadFor(job.args.frontier, gearWanted(r));
-    const away = (f) => Math.hypot(f.x - bot.entity.position.x, f.z - bot.entity.position.z);
-    const read = new Set();
+    const walkTo = (farm, items) => goNear(r, job, farm.x, farm.y, farm.z, 8, {doing: `walking to the farm at ${farm.x} ${farm.z} for ${items[0]}`});
     r.farmChests = (job.t.farmChests ||= new Map());
     try {
-      for (const [item, count] of Object.entries(want)) {
-        for (const farm of farms.filter((f) => f.items.includes(item)).sort((a, b) => away(a) - away(b))) {
-          if (have(item) >= count) break;
+      for (const farm of farms) {
+        const items = Object.keys(want).filter((item) => farm.items.includes(item) && have(item) < want[item]);
+        if (!items.length) continue;
+        try {
+          await walkTo(farm, items).catch((e) => { guard(job); return walkTo(farm, items); }); // "no progress for 30 s" is often a moment's jam
+        } catch (e) {
+          guard(job);
+          r.emit('info', `highway: the farm at ${farm.x} ${farm.z}: ${e.message.slice(0, 80)}`);
+          continue;
+        }
+        for (const it of bot.inventory.items()) {
+          if ((!NATURAL.test(it.name) && !STRAY.test(it.name)) || it.name in want || r.prefs?.keep?.[it.name]) continue;
+          await bot.tossStack(it).catch(() => {});
+          guard(job);
+        }
+        const until = now() + READ_MS;
+        for (const p of chestsNear(r, farm).filter((c) => Math.abs(c.y - farm.y) <= FARM_LEVELS)) {
+          if (now() > until) break;
+          await countChest(r, job, p).catch(() => guard(job));
+        }
+        for (const item of items) {
           try {
-            await goNear(r, job, farm.x, farm.y, farm.z, 8, {doing: `walking to the farm at ${farm.x} ${farm.z} for ${item}`});
-            if (!read.has(farm)) {
-              read.add(farm);
-              for (const p of chestsNear(r, farm)) await countChest(r, job, p).catch(() => guard(job));
-            }
-            for (let short = count - have(item); short > 0; short = count - have(item)) {
+            for (let short = want[item] - have(item); short > 0; short = want[item] - have(item)) {
               const before = have(item);
               await get(r, job, item, Math.min(short, GET_MOST));
               if (have(item) <= before) break;
@@ -460,7 +475,10 @@ function makeRoad({goNear, waitCalm, guard, sleep, digAt, edible, ride, get, cou
       for (let i = top - 1; i >= 0; i--) {
         const s = plan.stair[i];
         await dig(r, job, [...s.air].reverse());
-        await fill(r, s.floor);
+        // Through a cave a floor has nothing beside it: line holds it with a block in the stair, which the second dig takes away.
+        const lined = await line(r, job, {air: s.air, solid: [s.floor]});
+        if (lined) throw new Error(lined.out ? 'no lining left for the origin' : `the stair's floor cannot be set at ${s.floor.x} ${s.floor.y} ${s.floor.z}`);
+        await dig(r, job, [...s.air].reverse());
         await walk(s.air[0], `digging the stair down, step ${i}`);
       }
       const door = plan.stair[0].air[0], away = (c) => Math.hypot(c.x - door.x, c.z - door.z);

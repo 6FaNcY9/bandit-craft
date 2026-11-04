@@ -212,3 +212,21 @@ assert.deepStrictEqual(findHead(railed(40, {'30,0,0': null}), east, 20), {head: 
 
 // Read off the first 2 km east on the sandbox: vines in a cave at k 555 stopped the road as a player's block.
 assert.strictEqual(kindOf('vine'), 'natural');
+
+{ // the load: a farm of iron has no table to craft rails at, so the table comes before the rails, and everything in it has a farm
+  const {loadFor: load, FARMS: farms} = require('../road');
+  const keys = Object.keys(load(undefined, 1));
+  assert.ok(keys.includes('crafting_table') && keys.indexOf('crafting_table') < keys.indexOf('rail'), 'a table before the rails');
+  for (const item of keys) assert.ok(farms.some((f) => f.items.includes(item)), `${item} has a farm`);
+  const one = new Set(['iron_pickaxe', 'iron_sword', 'minecart']), slots = (l) => Object.entries(l).reduce((n, [item, c]) => n + (one.has(item) ? c : Math.ceil(c / 64)), 0);
+  assert.ok(slots(load(undefined)) <= 34, `a first load leaves room for what walking picks up: ${slots(load(undefined))}`);
+  assert.ok(slots(load(5000)) <= 34, 'and a later one for the old ramp');
+  const at = (item) => farms.findIndex((f) => f.items.includes(item));
+  assert.ok(at('stick') < farms.findIndex((f) => f.x === -307) && at('crafting_table') < farms.findIndex((f) => f.x === -307), 'the round brings sticks and a table to the iron');
+}
+
+{ // nobody fetches from the owner's house at spawn: iron doors no bot can open, and a pit behind them. Bread comes from the wheat in the bots' own hall
+  const {FARMS: farms} = require('../road');
+  assert.ok(!farms.some((f) => f.x === 23 && f.z === 55));
+  assert.deepStrictEqual(farms.filter((f) => f.items.includes('bread')).map((f) => f.x), [-263]);
+}
