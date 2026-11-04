@@ -36,6 +36,22 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.deepEqual(labels(d).slice(8), ['Neuer Auftrag', 'Ziele', 'Karte', 'Alle stopp']);
   assert.deepEqual(d.actions.slice(8).map((a) => a.action.payload.a), ['new', 'ziele', 'karte', 'stopall']);
 }
+{ // a kick and a stall in plain German, never the server's raw JSON
+  assert.match(explain('kicked: {"text":"You are logging in too fast, try again later."}'), /zu schnell/);
+  assert.equal(explain('kicked: {"text":"Server closed"}'), 'vom Server geworfen: Server closed');
+  assert.equal(explain('kicked: {"translate":"multiplayer.disconnect.x"}'), 'vom Server geworfen');
+  assert.equal(explain('schematic: no progress for 300 s: could not clear'), 'kommt nicht voran');
+}
+{ // a button says what a bot does, not the job's raw arguments
+  const raw = (type, label) => work('bot1', {job: {type, label, progress: '', runningS: 10}});
+  const say = (s) => labels(lage(view({snaps: [s]})))[0];
+  assert.match(say(raw('schematic', 'schematic untergrund-kirche.litematic at -190 -12 -108 0 none 8 blocks true 1 blocks')), /Bauen untergrund-kirche$/);
+  assert.match(say(raw('light', 'light -253 58 -90 -200 70 -40')), /Ausleuchten$/);
+  assert.match(say(raw('trade', 'trade crafting emerald_block')), /Handel$/);
+  assert.match(say(raw('highway', 'highway east 2000 1000')), /Straße$/);
+  assert.match(say(raw('mine', 'mine iron_ore 64')), /Abbauen Eisenerz$/);
+  assert.match(say(raw('someday', 'someday a b')), /someday a b$/, 'an unknown type keeps its label');
+}
 { // problems say the cause, at most 3; dead and offline are not "free"
   const err = (n, e) => ({...work(n), lastError: e, lastErrorAgoS: 130});
   const d = lage(view({snaps: [err('bot1', 'inventory still full after depositing (chest full?)'), err('bot2', 'x'), err('bot3', 'y'), err('bot4', 'z'), {...work('bot5'), dead: true}]}));

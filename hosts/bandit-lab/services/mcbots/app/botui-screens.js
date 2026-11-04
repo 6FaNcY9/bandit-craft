@@ -23,6 +23,8 @@ function explain(error) {
   if ((m = /need (\d+) (\w+), have (\d+)/.exec(e))) return `${m[1]} ${m[2]} nötig, nur ${m[3]} da`;
   if (/is not visible and not on the map/.test(e)) return 'nicht sichtbar (offline oder keine Karte)';
   if (/the stick chests are empty/.test(e)) return 'Stick-Kisten leer, wartet';
+  if (/no progress for \d+ s/.test(e)) return 'kommt nicht voran';
+  if (/^kicked: /.test(e)) return /too fast|throttl/i.test(e) ? 'zu schnell angemeldet, neuer Versuch' : `vom Server geworfen${(m = /"text":"([^"]+)"/.exec(e)) ? ': ' + m[1] : ''}`;
   return e;
 }
 
@@ -43,11 +45,21 @@ function dialog(title, body, actions, exit, columns = 2, inputs = []) {
 }
 const CLOSE = {label: 'Schließen', a: 'close'};
 
+// A job's raw label is "schematic x.litematic at -190 -12 -108 0 none ...": on a button only its name and what it works on.
+const JOB_NAME = {...Object.fromEntries(Object.entries(JOBS).filter(([k, j]) => k === j.type).map(([k, j]) => [k, j.label])), trade: 'Handel', highway: 'Straße'};
+const JOB_OBJECT = new Set(['mine', 'shift', 'get', 'withdraw', 'craft', 'smelt', 'schematic']);
+function jobName(job) {
+  const name = JOB_NAME[job.type];
+  if (!name) return safe(job.label);
+  const what = JOB_OBJECT.has(job.type) && String(job.label).split(' ')[1];
+  return what ? `${name} ${safe(germanName(what.replace(/\.litematic$/, '')))}` : name;
+}
+
 // "Baumfarm 5/64 · 12 min" or the plain state word.
 function jobText(s, state) {
   if (!s.job) return STATE_WORD[state];
   const mins = typeof s.job.runningS === 'number' && s.job.runningS >= 60 ? ` · ${ago(s.job.runningS)}` : '';
-  return safe(s.job.label) + (s.job.progress ? ' ' + safe(s.job.progress, 12) : '') + mins;
+  return jobName(s.job) + (s.job.progress ? ' ' + safe(s.job.progress, 12) : '') + mins;
 }
 
 function tooltip(s, state) {
@@ -67,7 +79,7 @@ function problems(snaps) {
   return snaps.filter((s) => ['error', 'dead'].includes(botState(s))).slice(0, 3).map((s) => {
     const cause = s.dead ? 'tot' : safe(explain(s.lastError), 40);
     const when = s.dead || s.lastErrorAgoS < 60 ? '' : ` (vor ${ago(s.lastErrorAgoS)})`;
-    return line(txt(`${safe(s.name, 16)}${s.sandbox ? ' (Sandbox)' : ''}: ${cause}${s.job ? `, ${safe(s.job.label, 20)} steht` : ''}${when}`, 'red'));
+    return line(txt(`${safe(s.name, 16)}${s.sandbox ? ' (Sandbox)' : ''}: ${cause}${s.job ? `, ${safe(jobName(s.job), 20)} steht` : ''}${when}`, 'red'));
   });
 }
 
@@ -96,7 +108,7 @@ function lage(view) {
   ];
   const actions = snaps.map((s, i) => {
     const tag = s.sandbox ? 'Sandbox · ' : '';
-    const room = Math.max(8, 28 - safe(s.name, 16).length - tag.length);
+    const room = Math.max(8, 32 - safe(s.name, 16).length - tag.length);
     const label = ['', txt('● ', COLOR[states[i]]), txt(safe(s.name, 16) + '  '), txt(tag + safe(jobText(s, states[i]), room), 'gray')];
     return button(label, 'bot', {bot: s.name}, tooltip(s, states[i]));
   });
