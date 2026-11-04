@@ -18,6 +18,7 @@ const IDLE_MS = 10000; // a bot must be idle this long before it is taken
 const STOCK_MAX_AGE_MS = 15 * 60 * 1000;
 const COOLDOWN_MS = 10 * 60 * 1000; // after a chain that did not raise the stock
 const ASSIGN_TIMEOUT_MS = 30 * 60 * 1000;
+const MAX_WANT = 4096;
 const MAX_JOB = 64; // items per chain: short chains, fresh numbers in between
 
 const KINDS = {
@@ -89,6 +90,7 @@ class Keeper {
     this.world = world;
     this.chest = chest; // {x,y,z} of the supply chest, or null: nothing to keep
     this.quotas = quotas; // [[item, want]]
+    this.configured = quotas; // the plan swaps this.quotas while it borrows the keeper; setWant and the file only ever touch these
     this.site = site;
     this.places = places;
     this.events = events;
@@ -97,7 +99,13 @@ class Keeper {
     this.file = file;
     // On/off survives a restart: it came back off after the deploy and no standing order ran all night (main server 2026-10-18/19).
     // A missing or bad file means off.
-    try { this.enabled = !!chest && JSON.parse(fs.readFileSync(file, 'utf8')).enabled === true; } catch { this.enabled = false; }
+    this.enabled = false;
+    try {
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      this.enabled = !!chest && saved.enabled === true;
+      // Quotas set in game win over KEEPER_QUOTAS; an item no longer configured is ignored. A file without `wants` keeps the configured numbers.
+      for (const q of this.configured) { const w = saved.wants?.[q[0]]; if (Number.isInteger(w) && w >= 0 && w <= MAX_WANT) q[1] = w; }
+    } catch { /* missing or bad file: off, configured quotas */ }
     this.work = new Map(); // item -> {bot, n, at, before, seen}
     this.counting = null; // {bot, at}: a bot is on its way to count the chest
     this.cooldown = new Map(); // item -> until
@@ -112,11 +120,24 @@ class Keeper {
     this.events?.add('keeper', 'info', text);
   }
 
+  save() {
+    if (this.file) try { fs.writeFileSync(`${this.file}.tmp`, JSON.stringify({enabled: this.enabled, wants: Object.fromEntries(this.configured)})); fs.renameSync(`${this.file}.tmp`, this.file); } catch {}
+  }
+
+  // The in-game Ziele screen: change one quota; survives a restart.
+  setWant(item, want) {
+    const q = this.configured.find(([i]) => i === item);
+    if (!q) throw new Error(`unknown quota item: ${item}`);
+    if (!Number.isInteger(want) || want < 0 || want > MAX_WANT) throw new Error(`want must be a whole number from 0 to ${MAX_WANT}`);
+    q[1] = want;
+    this.save();
+  }
+
   setEnabled(on) {
     if (on && !this.chest) throw new Error('no supply chest is configured, so there is nothing to keep stocked');
     if (this.enabled === !!on) return;
     this.enabled = !!on;
-    if (this.file) try { fs.writeFileSync(`${this.file}.tmp`, JSON.stringify({enabled: this.enabled})); fs.renameSync(`${this.file}.tmp`, this.file); } catch {}
+    this.save();
     this.work.clear();
     this.counting = null;
     this.cooldown.clear();

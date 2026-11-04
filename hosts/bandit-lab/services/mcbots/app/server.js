@@ -17,6 +17,7 @@ const gravesLib = require('./graves');
 const {NtfyNotifier} = require('./notify');
 const {Keeper, idle} = require('./keeper');
 const {TradeSchedule} = require('./tradeschedule');
+const {TraderChests} = require('./traderchests');
 const {Board} = require('./board');
 const scenarioRun = require('./scenario-run');
 const {Plan} = require('./plan');
@@ -131,6 +132,8 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
 const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots]}) : null;
 // Scheduled trading (TRADE_SCHEDULE): a guest's trader works its hall in set time windows; nothing without a configured hall.
+// Chests set in game replace the configured ones of that bot; cfg.tradeHalls is edited in place, so runners and the schedule follow.
+const traderChests = new TraderChests({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'trader-chests.json') : null, halls: cfg.tradeHalls, log: (m) => log('trade', m), onChange: () => hub?.sendTradeHalls()});
 const tradeSchedule = cfg.tradeSchedule.length ? new TradeSchedule({runners, halls: cfg.tradeHalls, entries: cfg.tradeSchedule, log}) : null;
 // The job board (board.js): owner jobs cut into slices that only BOARD_BOTS dig. A box touching a protected area
 // (PROTECTED_AREAS and the dashboard's protected zones, which join that array) is refused when the job is made.
@@ -251,6 +254,9 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     },
     get keeper() { return keeper; },
     get plan() { return plan; },
+    traderChests,
+    // Bots that trade: scheduled ones and those with a hall of their own.
+    traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
     places: () => places.list,
     schematics: async () => (await listSchematics()).filter((x) => !x.error).map((x) => x.file),
     sidebar: (viewer, on) => mainConsole?.([on ? `team join mcbots ${viewer}` : `team leave ${viewer}`]),

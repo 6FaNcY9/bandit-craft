@@ -76,13 +76,15 @@ const JOBS = {
 const hasJob = (key) => typeof key === 'string' && Object.hasOwn(JOBS, key);
 const AREA = Object.keys(JOBS).filter((k) => JOBS[k].needs.includes(area));
 
+const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
+
 // What a gazed block offers, most useful first. preset: the target (when the job uses one) and the block name.
 function contextJobs(gaze) {
   if (!gaze || typeof gaze.block !== 'string') return [];
   const b = gaze.block, keys = [];
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
   if (/_log$|_wood$/.test(b)) keys.push('chop', 'shiftlogs');
-  if (/^(trapped_)?chest$|barrel/.test(b)) keys.push('deposit', 'withdraw', 'stock');
+  if (isChest(b)) keys.push('deposit', 'withdraw', 'stock');
   if (/spawner/.test(b)) keys.push('lightspawner');
   if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
   keys.push('goto', 'guard', 'tidy');
@@ -226,4 +228,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {isChest, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

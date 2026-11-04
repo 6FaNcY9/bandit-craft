@@ -11,6 +11,13 @@ const {explain} = require('./botui-screens');
 const jobs = require('./botui-jobs');
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
+const on = (data) => data.on === 1 || data.on === true;
+const KIND = {sticks: 'Stick-Kiste', stores: 'Smaragd-Kiste'};
+const traderOf = (ui, viewer, data) => {
+  const bot = oneBot(ui, viewer, data);
+  if (!ui.api.traders().includes(bot)) throw new Error('kein Händler');
+  return bot;
+};
 const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichbar'); };
 
 const box = (p, q) => ({x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)});
@@ -90,6 +97,53 @@ const ACTIONS = {
     }
     done(ui.api.submit(viewer, {bots: [bot], type: data.job, args}));
     ui.flash(st, `${bot}: ${label} gestartet`, true);
+  },
+  ziele: (st) => { st.screen = {name: 'ziele'}; },
+  // The toggles flip a server-side switch: owner only for keeper and plan, the sidebar is each viewer's own.
+  keeper: (st, data, ui, viewer) => {
+    ownerOnly(ui, viewer);
+    if (!ui.api.keeper) throw new Error('keine Daueraufträge eingerichtet');
+    ui.api.keeper.setEnabled(on(data));
+    st.screen = {name: 'ziele'};
+  },
+  plan: (st, data, ui, viewer) => {
+    ownerOnly(ui, viewer);
+    if (!ui.api.plan) throw new Error('kein Plan eingerichtet');
+    ui.api.plan.setEnabled(on(data));
+    st.screen = {name: 'ziele'};
+  },
+  sidebar: (st, data, ui, viewer) => {
+    ui.api.sidebar(viewer, on(data));
+    st.screen = {name: 'ziele'};
+    ui.flash(st, on(data) ? 'Seitenleiste an' : 'Seitenleiste aus', true);
+  },
+  // Dynamic action: the sliders arrive as want_<item>. A bad item or number throws from setWant; earlier ones are already saved.
+  saveziele: (st, data, ui, viewer) => {
+    ownerOnly(ui, viewer);
+    st.screen = {name: 'ziele'};
+    let n = 0;
+    for (const [key, v] of Object.entries(data)) {
+      if (!key.startsWith('want_')) continue;
+      ui.api.keeper.setWant(key.slice(5), Math.round(Number(v)));
+      n++;
+    }
+    ui.flash(st, n ? 'Ziele gespeichert' : 'Nichts zu speichern', !!n);
+  },
+  // The chest is the one the player is looking at: coordinates are never taken from the click.
+  trader_add: (st, data, ui, viewer) => {
+    const bot = traderOf(ui, viewer, data), g = st.ctx.gaze;
+    st.screen = {name: 'auftrag'};
+    if (!KIND[data.kind]) throw new Error('unbekannte Kiste');
+    if (!g || !jobs.isChest(g.block)) return ui.flash(st, 'Du schaust keine Kiste an');
+    ui.api.traderChests.add(bot, data.kind, {x: g.x, y: g.y, z: g.z});
+    ui.flash(st, `${bot}: ${KIND[data.kind]} ${g.x} ${g.y} ${g.z}`, true);
+  },
+  trader_del: (st, data, ui, viewer) => {
+    const bot = traderOf(ui, viewer, data);
+    st.screen = {name: 'ziele'};
+    if (!KIND[data.kind]) throw new Error('unbekannte Kiste');
+    ui.api.traderChests.remove(bot, data.kind, {x: data.x, y: data.y, z: data.z});
+    ui.flash(st, 'Kiste entfernt', true);
   },
 };
 
@@ -192,7 +246,7 @@ class BotUi {
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, ctx: st.ctx, sel: st.sel,
-      places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, mapState: st.mapState});
+      places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
 
   // refresh: the plugin itself refuses (feedback "closed") when the player closed the dialog while this was on the wire.

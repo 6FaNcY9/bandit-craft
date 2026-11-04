@@ -2,7 +2,7 @@
 // Pure builders for the in-game dialogs (Minecraft dialog JSON, multi_action). No I/O and no clock: the same view must
 // build the same JSON, because BotUi re-sends a refreshing screen only when its JSON changed.
 const {ago, DIMENSION, failing, botState} = require('./ingame');
-const {JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
+const {isChest, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
 
 // Anything from a snapshot or an error goes through here: no colour codes or control characters, bounded length.
 const safe = (text, max = 60) => {
@@ -180,6 +180,9 @@ function inputsOf(job, view, sc) {
   return {inputs, notes};
 }
 
+// The trader bots this viewer may command.
+const traders = (view) => (view.traders || []).filter((t) => view.allowed === '*' || view.allowed.includes(t));
+
 function auftrag(view, sc) {
   const g = view.ctx?.gaze, sel = view.sel || {}, size = dims(sel);
   const body = [line(txt(g ? `Du schaust auf: ${safe(germanName(g.block), 30)} (${g.x} ${g.y} ${g.z})` : 'Du schaust auf nichts', 'white'))];
@@ -188,6 +191,7 @@ function auftrag(view, sc) {
   body.push(...flashLine(view.flash));
   const withBot = (extra) => ({...extra, ...(sc.bot ? {bot: sc.bot} : {})});
   const actions = contextJobs(g).map(({key, preset}) => button(txt(JOBS[key].here || JOBS[key].label, 'gold'), 'job', withBot({key, ...preset})));
+  if (g && isChest(g.block)) for (const t of traders(view)) for (const [kind, label] of [['sticks', 'Sticks'], ['stores', 'Smaragde']]) actions.push(button(txt(`Handelskiste ${label} → ${safe(t, 16)}`, 'gold'), 'trader_add', {bot: t, kind}));
   actions.push(button(txt(sel.a ? (sel.b ? 'Ecke B neu setzen' : 'Ecke B setzen') : 'Ecke A setzen', 'aqua'), 'corner', {which: sel.a ? 'b' : 'a'}));
   if (sel.a) actions.push(button(txt('Auswahl löschen', 'aqua'), 'clearsel'));
   for (const {key, ok, why} of areaJobs(sel)) {
@@ -211,9 +215,36 @@ function jobScreen(view, sc) {
   return dialog(job.label, body, [send, button(txt('Zurück'), 'new', sc.bot ? {bot: sc.bot} : {})], CLOSE, 2, inputs);
 }
 
+// --- Ziele: owner-only keeper, plan and quota sliders; the sidebar and the trader chests of the viewer's bots
+function ziele(view) {
+  const body = [], actions = [], inputs = [];
+  let k = null;
+  if (view.owner) {
+    try { k = view.keeper?.state(); } catch { /* shown as not configured */ }
+    const toggle = (label, enabled, a) => button(txt(`${label}: ${enabled ? 'an' : 'aus'}`, enabled ? 'green' : 'gray'), a, {on: enabled ? 0 : 1}, lines([[enabled ? 'Klick schaltet aus' : 'Klick schaltet ein']]));
+    if (k?.available) actions.push(toggle('Daueraufträge', k.enabled, 'keeper'));
+    if (view.plan) actions.push(toggle('Plan', !!view.plan.enabled, 'plan'));
+    for (const q of k?.quotas || []) {
+      inputs.push(slider('want_' + q.item, `${safe(q.item, 24)}${q.have !== null ? ' (da: ' + q.have + ')' : ''}`, 0, Math.min(4096, Math.max(64, q.want * 4)), 1, q.want));
+    }
+    if (inputs.length) body.push(line(txt('Ziele pro Rohstoff in der Vorratskiste', 'white')));
+  }
+  actions.push(button(txt('Seitenleiste an'), 'sidebar', {on: 1}), button(txt('Seitenleiste aus'), 'sidebar', {on: 0}));
+  for (const t of traders(view)) {
+    const own = view.traderChests?.list(t) || {};
+    for (const [kind, label] of [['sticks', 'Sticks'], ['stores', 'Smaragde']]) {
+      for (const c of own[kind] || []) actions.push(button(txt(`✖ ${safe(t, 16)} ${label} ${c.x} ${c.y} ${c.z}`, 'red'), 'trader_del', {bot: t, kind, x: c.x, y: c.y, z: c.z}, lines([['Handelskiste entfernen']])));
+    }
+  }
+  body.push(...flashLine(view.flash));
+  if (inputs.length) actions.push({label: txt('Speichern', 'green'), width: 200, action: {type: 'minecraft:dynamic/custom', id: 'botui:do', additions: {a: 'saveziele'}}});
+  actions.push(button(txt('Zurück'), 'lage'));
+  return dialog('Ziele', body, actions, CLOSE, 2, inputs);
+}
+
 // A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
-const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), stopall: confirmStop, auftrag, job: jobScreen};
+const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), stopall: confirmStop, auftrag, job: jobScreen, ziele};
 const REFRESHING = new Set(['lage', 'bot']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 
-module.exports = {safe, explain, lage, bot, confirmStop, render, REFRESHING, QUICK};
+module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK};

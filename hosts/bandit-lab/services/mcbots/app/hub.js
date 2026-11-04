@@ -551,8 +551,11 @@ class Hub {
 
   // Zones or the supply chest changed (server.js applyPlaces): connected workers must follow, not only new ones.
   broadcastPolicy() {
-    for (const c of this.conns) if (c.hello && c.ws.readyState === 1) c.ws.send(JSON.stringify({t: 'policy', protectedAreas: this.protectedAreas, supplyChest: this.chestFor(c), wheatField: this.wheatField}));
+    for (const c of this.conns) if (c.hello && c.ws.readyState === 1) c.ws.send(JSON.stringify({t: 'policy', protectedAreas: this.protectedAreas, supplyChest: this.chestFor(c), wheatField: this.wheatField, tradeHalls: this.tradeHalls}));
   }
+
+  // Trader chests changed in game: the same frame as a zone change, which carries the halls (hubclient applyPolicy).
+  sendTradeHalls() { this.broadcastPolicy(); }
 
   chestFor(conn) {
     return conn.bots?.size && [...conn.bots].every((n) => this.guests.has(n)) ? null : this.supplyChest;

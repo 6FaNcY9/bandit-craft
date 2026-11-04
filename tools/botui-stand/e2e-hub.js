@@ -11,7 +11,11 @@ const snaps = Array.from({length: 8}, (_, i) => ({name: `bot${i + 1}`, online: t
   activity: i % 2 ? 'idle' : 'chopping', job: i % 2 ? null : {label: 'Baumfarm', progress: `${i}/64`, runningS: 700}, queue: [], inventory: [], armour: [null, null, null, null], lastError: null, lastErrorAgoS: null}));
 const submits = [];
 const places = [{name: 'Eichen', kind: 'treefarm', dim: 'overworld', x: 0, y: 64, z: 0, box: {x1: 0, y1: 60, z1: 0, x2: 9, y2: 70, z2: 9}}, {name: 'Lager', kind: 'storage', dim: 'overworld', x: 3, y: 64, z: 4}];
-const api = {snapshots: () => snaps, places: () => places, schematics: async () => ['house.litematic'], keeper: {state: () => ({available: true, quotas: [], chest: {x: 1, y: 2, z: 3}})},
+const wants = [], chestCalls = [];
+const keeper = {enabled: false, state() { return {available: true, enabled: this.enabled, quotas: [{item: 'logs', want: 64, have: 10}, {item: 'coal', want: 32, have: null}], chest: {x: 1, y: 2, z: 3}}; },
+  setEnabled(on) { this.enabled = on; }, setWant(item, n) { wants.push([item, n]); }};
+const api = {snapshots: () => snaps, places: () => places, schematics: async () => ['house.litematic'], keeper, plan: {enabled: false, setEnabled: (on) => { api.plan.enabled = on; }}, traders: () => ['bot2'], sidebar: () => {},
+  traderChests: {add: (...a) => chestCalls.push(['add', ...a]), remove: (...a) => chestCalls.push(['remove', ...a]), list: () => ({sticks: [{x: 5, y: 6, z: 7}], stores: []})},
   submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, stopAll: () => ({ok: true})};
 
 async function waitFor(fn, ms = 5000) {
@@ -84,6 +88,21 @@ const buttons = (d) => (d.actions || []).map((a) => a.action.payload);
   assert.deepEqual(d.inputs.map((i) => i.key), ['who', 'when']);
   d = await step({a: 'clearsel'});
   assert.ok(d.actions.some((a) => text(a.label) === 'Ecke A setzen'));
+  // Ziele: number_range sliders and a dynamic save action through the real Paper (the first slider screen in the stand)
+  d = await step({a: 'ziele'});
+  assert.deepEqual(d.inputs.map((i) => [i.key, i.end]), [['want_logs', 256], ['want_coal', 128]]);
+  assert.ok(buttons(d).some((p) => p.a === 'keeper' && p.on === 1) && buttons(d).some((p) => p.a === 'trader_del' && p.bot === 'bot2'));
+  await c.click('botui:do', {a: 'saveziele', want_logs: 100, want_coal: 7.0}); // sliders arrive as floats
+  await waitFor(() => wants.length === 2);
+  assert.deepEqual(wants, [['logs', 100], ['coal', 7]]);
+  await waitFor(() => /Ziele gespeichert/.test(JSON.stringify(c.dialogs.at(-1))));
+  d = await step({a: 'keeper', on: 1});
+  assert.equal(keeper.enabled, true);
+  assert.ok(buttons(d).some((p) => p.a === 'keeper' && p.on === 0));
+  d = await step({a: 'new'});
+  assert.ok(buttons(d).some((p) => p.a === 'trader_add' && p.bot === 'bot2' && p.kind === 'stores'));
+  await step({a: 'trader_add', bot: 'bot2', kind: 'sticks'});
+  assert.deepEqual(chestCalls, [['add', 'bot2', 'sticks', {x: chest[0], y: chest[1], z: chest[2]}]]);
   await step({a: 'lage'});
   await c.click('botui:do', {a: 'close'});
   await sleep(500);

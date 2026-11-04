@@ -329,5 +329,45 @@ async function fake() {
     assert.doesNotMatch(JSON.stringify(last().body), /gestoppt/);
     end();
   }
+  { // Ziele: owner toggles and saves quotas, a restricted viewer is refused; trader chests come from the gaze, not the click
+    const calls = [], chests = [];
+    const keeper = {enabled: false, state() { return {available: true, enabled: this.enabled, quotas: [{item: 'logs', want: 64, have: 1}]}; }, setEnabled(on) { this.enabled = on; calls.push(['enabled', on]); },
+      setWant(item, n) { if (item !== 'logs') throw new Error('unknown quota item: ' + item); calls.push(['want', item, n]); }};
+    const traderChests = {add: (...a) => chests.push(['add', ...a]), remove: (...a) => chests.push(['remove', ...a]), list: () => ({sticks: [], stores: []})};
+    const api = {snapshots: () => [{name: 'bot1', online: true}, {name: 'MisaBot', online: true}], places: () => [], schematics: async () => [], keeper, plan: {enabled: false, setEnabled: (on) => calls.push(['plan', on])},
+      traderChests, traders: () => ['MisaBot'], sidebar: (v, on) => calls.push(['sidebar', v, on])};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
+    await ui.handle({type: 'open', player: 'Fancy'});
+    await click('Fancy', {a: 'ziele'});
+    assert.equal(ui.state('Fancy').screen.name, 'ziele');
+    await click('Fancy', {a: 'keeper', on: 1}); await click('Fancy', {a: 'plan', on: 1}); await click('Fancy', {a: 'sidebar', on: 0});
+    assert.deepEqual(calls, [['enabled', true], ['plan', true], ['sidebar', 'Fancy', false]]);
+    calls.length = 0;
+    await click('Fancy', {a: 'saveziele', want_logs: 99.6});
+    assert.deepEqual(calls, [['want', 'logs', 100]]); assert.match(ui.state('Fancy').flash.text, /gespeichert/);
+    await click('Fancy', {a: 'saveziele', want_gold: 5}); assert.match(ui.state('Fancy').flash.text, /unknown quota item/);
+    calls.length = 0;
+    for (const a of ['keeper', 'plan', 'saveziele']) { await click('Midari', {a, on: 1, want_logs: 5}); assert.match(ui.state('Midari').flash.text, /Besitzer/); }
+    await click('Midari', {a: 'sidebar', on: 1}); assert.deepEqual(calls, [['sidebar', 'Midari', true]]);
+    // trader chests: the position is the gazed chest
+    const gaze = {x: 7, y: 8, z: 9, block: 'chest'};
+    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'sticks', x: 1, y: 1, z: 1}, {gaze});
+    assert.deepEqual(chests, [['add', 'MisaBot', 'sticks', {x: 7, y: 8, z: 9}]]);
+    await click('Midari', {a: 'trader_add', bot: 'bot1', kind: 'sticks'}, {gaze}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await click('Fancy', {a: 'trader_add', bot: 'bot1', kind: 'sticks'}, {gaze}); assert.match(ui.state('Fancy').flash.text, /kein Händler/);
+    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'bogus'}, {gaze}); assert.match(ui.state('Midari').flash.text, /unbekannte Kiste/);
+    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'stores'}, {gaze: {...gaze, block: 'stone'}}); assert.match(ui.state('Midari').flash.text, /keine Kiste/);
+    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'stores'}); assert.match(ui.state('Midari').flash.text, /keine Kiste/);
+    assert.equal(chests.length, 1);
+    await click('Midari', {a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 7, y: 8, z: 9});
+    assert.deepEqual(chests.at(-1), ['remove', 'MisaBot', 'sticks', {x: 7, y: 8, z: 9}]); assert.equal(ui.state('Midari').screen.name, 'ziele');
+    await click('Midari', {a: 'trader_del', bot: 'bot1', kind: 'sticks', x: 1, y: 1, z: 1}); assert.equal(chests.length, 2);
+    // a Ziele screen is never refreshed under the player's hand
+    const shown = f.of('/show').length;
+    t += 10; await ui.tick();
+    assert.equal(f.of('/show').length, shown);
+    end();
+  }
   console.log('botui ok');
 })().catch((e) => { console.error(e); process.exit(1); });
