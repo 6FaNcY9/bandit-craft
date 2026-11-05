@@ -3109,6 +3109,13 @@ function producer(r, job, args) {
   return {step};
 }
 
+// A chest it cannot get to right now is a wait, not the end of the order: one stuck walk stood bot2 idle (sandbox 2026-11-05).
+const produceStep = (p, r, job) => p.step().catch((e) => {
+  guard(job);
+  if (!/^could not reach|did not open/.test(e.message)) throw e;
+  r.emit('info', `produce: ${e.message.slice(0, 100)}; trying again in a minute`);
+  return {idle: 'the way to the chests is blocked'};
+});
 async function produce(r, job) {
   const p = producer(r, job, job.args);
   for (;;) {
@@ -3116,7 +3123,7 @@ async function produce(r, job) {
     // Food, gear and a pickaxe first, as the build job does: bot2 failed its order on the sorter mountain, no path down
     // to the storage without a pickaxe (main server 2026-10-18).
     await care(r, job);
-    const s = await p.step();
+    const s = await produceStep(p, r, job);
     if (!s.idle) continue;
     job.progress = s.idle;
     if (/all it needs/.test(s.idle)) return;
@@ -4051,4 +4058,4 @@ const JOBS = {
   },
 };
 
-module.exports = {acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

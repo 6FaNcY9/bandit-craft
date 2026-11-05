@@ -66,6 +66,18 @@ module.exports = async () => {
         bot.openContainer = async () => { throw new Error('boom'); };
         await assert.rejects(B.readStock(r, {t: {}}, [{x: 7, y: 2, z: 3}], deps), /boom/, 'other errors still end it');
       }
+      {
+        // A blocked way to the chests waits; anything else, and a Stop, still ends the order.
+        const {produceStep, Cancelled} = require('../../bots');
+        const infos = [], r = {emit: (_k, i) => infos.push(i)};
+        const failing = (msg) => ({step: async () => { throw new Error(msg); }});
+        assert.ok((await produceStep(failing('could not reach 1 2 3: no progress for 30 s'), r, {t: {}})).idle, 'no way there: wait');
+        assert.ok((await produceStep(failing('the container did not open within 10 s'), r, {t: {}})).idle, 'shut chest: wait');
+        assert.ok(infos.some((i) => /trying again/.test(i)), 'and said');
+        await assert.rejects(produceStep(failing('boom'), r, {t: {}}), /boom/, 'other errors end it');
+        await assert.rejects(produceStep(failing('could not reach 1 2 3'), r, {t: {}, cancelled: true}), Cancelled, 'a Stop ends it');
+        assert.deepStrictEqual(await produceStep({step: async () => ({ran: 'x'})}, r, {t: {}}), {ran: 'x'});
+      }
       const s = (name, count) => ({name, count});
       const rock = /^(stone|dirt|andesite|cobblestone)$/;
       const names = (list) => list.map((i) => `${i.name} ${i.count}`);
