@@ -3672,6 +3672,10 @@ const JOBS = {
         }
         const food = box.containerItems().filter((i) => isFood(i.name)).sort((a, b) => (b.name === 'golden_carrot') - (a.name === 'golden_carrot'))[0];
         if (food && foodCount() < 32) await take(food.name, food, Math.min(32 - foodCount(), food.count));
+        // No torch, no light: the church crew dug in the dark with 65 torches in this chest, and the mobs spawned on (sandbox 2026-11-05).
+        const torch = box.containerItems().find((i) => i.name === 'torch');
+        const torches = bot.inventory.items().filter((i) => i.name === 'torch').reduce((n, i) => n + i.count, 0);
+        if (torch && torches < 16) await take('torch', torch, Math.min(16 - torches, torch.count));
         // A spare pickaxe and 2 logs (table + sticks for a stone pickaxe): a pickaxe that breaks deep
         // underground otherwise strands the bot - no wood there, and the way up by hand is "No path"
         // (bot2 and bot3, 2026-10-10). Last, so they never take a slot the food needs.

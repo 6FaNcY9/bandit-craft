@@ -797,7 +797,7 @@ in `app/bots.js`, checked before every block):
 
 A switch on the dashboard ("Standing orders") that keeps the supply chest stocked
 (`app/keeper.js`). Quotas are declared in `default.nix` (`KEEPER_QUOTAS`, now
-`logs:64,cobblestone:128,coal:32,torch:64,raw_iron:16,iron_pickaxe:2,iron_sword:1`; optional `KEEPER_SITE=x,y,z` to walk to
+`logs:64,cobblestone:128,coal:32,torch:64,raw_iron:16,iron_ingot:64,iron_pickaxe:2,iron_sword:1`; optional `KEEPER_SITE=x,y,z` to walk to
 before chopping or mining). Without `SUPPLY_CHEST` or quotas the panel is absent.
 
 - **Off on first start, then as you left it** (`STATE_DIR/keeper.json`, 2026-10-19: it came back off after a deploy and no

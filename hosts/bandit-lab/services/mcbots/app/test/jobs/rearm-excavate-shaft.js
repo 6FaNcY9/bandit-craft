@@ -61,6 +61,15 @@ module.exports = async () => {
     assert.strictEqual(chest.closed, chest.opened, 'window closed');
     assert.ok(x.infos.some((m) => /could not take iron_pickaxe/.test(m)), 'reported');
     assert.strictEqual(b.inv.filter((i) => i.name === 'iron_pickaxe').length, 0);
+    // torches for the dark: up to 16 carried, what the chest has when it has less
+    chest = chestOf([it('torch', 40)]);
+    b = botOf(chest, {inv: [it('torch', 4)]});
+    await run(b).go();
+    assert.strictEqual(b.inv.find((i) => i.name === 'torch').count, 16, 'tops up to 16');
+    chest = chestOf([it('torch', 3)]);
+    b = botOf(chest);
+    await run(b).go();
+    assert.strictEqual(b.inv.find((i) => i.name === 'torch').count, 3, 'takes what there is');
     // 2. the last spare is taken between containerItems() and withdraw(): rearm still equips and feeds
     chest = chestOf([it('diamond_sword'), it('iron_pickaxe'), it('bread', 20)]);
     b = botOf(chest, {inv: [it('stone_pickaxe'), it('iron_boots')]});
