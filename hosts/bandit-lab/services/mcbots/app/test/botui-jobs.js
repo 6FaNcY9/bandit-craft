@@ -304,41 +304,21 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     assert.deepEqual(h.submits[2].args, {block: 'iron_ore', x: 10, y: 65, z: 10});
     assert.equal(screens.REFRESHING.has('auftrag'), false); assert.equal(screens.REFRESHING.has('job'), false);
   }
-  { // a guest (a bot list, not '*'): allow-list in build(), screens show only that, no owner places, no corners
-    const GUEST = ['mine', 'chop', 'goto', 'guard', 'homebed', 'graves'];
+  { // a guest (a bot list, not '*'): every job and target, but only her own bots (owner 2026-11-05: full control for Misa)
     const places = [{name: 'Heimatbasis', kind: 'base', x: 0, y: 64, z: 0, dim: 'overworld'}, {name: 'Eisenmine', kind: 'storage', x: 5, y: 60, z: 5, dim: 'overworld'}, {name: 'Baumfeld', kind: 'treefarm', x: 9, y: 64, z: 9, box: {x1: 0, z1: 0, x2: 4, z2: 4}}];
     const h = harness({places});
     const base = {who: 'frei', when: 'next', n: 16, block: 'iron_ore', item: 'stick', file: 'house.litematic', zone: 'Baumfeld', where: 'pos', chest: 'supply'};
-    for (const key of Object.keys(JOBS).filter((k) => !GUEST.includes(k))) {
+    for (const key of ['mine', 'chop', 'craft', 'get', 'smelt', 'rearm', 'withdraw', 'schematic', 'treefarm', 'goto']) {
       await h.click('Midari', {...base, a: 'send', key});
-      assert.match(h.ui.state('Midari').flash.text, /darfst du nicht/, key);
-      await h.click('Midari', {a: 'job', key});
-      assert.match(h.ui.state('Midari').flash.text, /darfst du nicht/, key);
+      assert.equal(h.submits.at(-1)?.type, JOBS[key].type, `${key}: ${h.ui.state('Midari').flash?.text}`); assert.deepEqual(h.submits.at(-1).bots, ['MisaBot']);
     }
-    await h.click('Midari', {a: 'quick', bot: 'MisaBot', job: 'rearm'}); await h.click('Midari', {a: 'quick', bot: 'MisaBot', job: 'deposit'});
-    await h.click('Midari', {a: 'corner', which: 'a'});
-    assert.equal(h.submits.length, 0);
-    for (const key of ['mine', 'chop', 'goto', 'guard']) { // allowed ones work, also with a typed target
-      await h.click('Midari', {...base, a: 'send', key, where: '', wheretext: '3 64 4'});
-      assert.equal(h.submits.at(-1).type, key, key); assert.deepEqual(h.submits.at(-1).bots, ['MisaBot']);
-    }
-    for (const key of ['homebed', 'graves']) { await h.click('Midari', {...base, a: 'send', key}); assert.equal(h.submits.at(-1).type, key); }
+    for (const where of ['supply', 'place:Heimatbasis']) { await h.click('Midari', {...base, a: 'send', key: 'goto', where, wheretext: ''}); assert.equal(h.submits.at(-1).type, 'goto', where); }
     const n = h.submits.length;
-    for (const where of ['supply', 'place:Heimatbasis']) await h.click('Midari', {...base, a: 'send', key: 'goto', where, wheretext: ''});
-    assert.equal(h.submits.length, n); assert.match(h.ui.state('Midari').flash.text, /nicht für dich/); // no owner base through the target
-    await h.click('Midari', {...base, a: 'send', key: 'goto', where: 'pos', wheretext: ''}); assert.equal(h.submits.length, n + 1);
-    // her screens: no refused job, no place names, no Vorratskiste, no corners, no Bedarf
-    const sealed = (d) => { const s = JSON.stringify(d); for (const w of ['Heimatbasis', 'Eisenmine', 'Baumfeld', 'Vorratskiste', 'Bedarf', 'Ecke', 'Ausrüsten', 'Einlagern', 'Entnehmen', 'Besorgen', 'Herstellen', 'Baumfarm', 'Raum graben']) assert.ok(!s.includes(w), w); };
-    await h.ev('open', 'Midari'); sealed(h.last());
-    for (const g of [chestG, ore, {x: 1, y: 2, z: 3, block: 'oak_log'}, {x: 1, y: 2, z: 3, block: 'spawner'}, {x: 1, y: 2, z: 3, block: 'wheat'}]) {
-      await h.ev('click', 'Midari', {data: {a: 'new'}, gaze: g});
-      const d = h.last(); sealed(d);
-      const sent = d.actions.filter((a) => a.action?.payload?.a === 'job').map((a) => a.action.payload.key);
-      assert.ok(sent.every((k) => GUEST.includes(k)), JSON.stringify(sent));
-    }
-    for (const key of ['goto', 'guard', 'mine']) { await h.click('Midari', {a: 'job', key}); sealed(h.last()); assert.ok(!h.last().inputs.some((i) => i.key === 'where' && i.options.some((o) => /^(supply|place:)/.test(o.id)))); }
-    await h.click('Midari', {a: 'bot', bot: 'MisaBot'}); sealed(h.last());
-    assert.deepEqual(h.last().actions.filter((a) => a.action?.payload?.a === 'quick').map((a) => a.action.payload.job), ['homebed', 'graves']);
+    await h.click('Midari', {...base, a: 'send', key: 'mine', who: 'bot1'}); // never someone else's bot
+    assert.equal(h.submits.length, n); assert.match(h.ui.state('Midari').flash.text, /nicht dein Bot|nicht/);
+    await h.click('Midari', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Ecke A setzen'), 'area jobs too');
+    await h.click('Midari', {a: 'job', key: 'goto'}); assert.ok(JSON.stringify(h.last()).includes('Vorratskiste'));
+    await h.click('Midari', {a: 'stopall'}); assert.match(h.ui.state('Midari').flash.text, /Besitzer/); // server-wide stays the owner's
     // the owner is unchanged: places, supply chest, corners, Bedarf
     await h.ev('click', 'Fancy', {data: {a: 'job', key: 'goto'}});
     const o = JSON.stringify(h.last()); assert.ok(o.includes('Heimatbasis') && o.includes('Vorratskiste'));

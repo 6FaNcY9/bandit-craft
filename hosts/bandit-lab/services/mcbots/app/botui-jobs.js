@@ -73,10 +73,9 @@ const JOBS = {
   light: {label: 'Ausleuchten', type: 'light', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Ausleuchten', limit: 'höchstens 64 x 64 x 48'},
   seal: {label: 'Versiegeln', type: 'seal', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Versiegeln', limit: `3 x 3 bis ${sealJob.MAX_SIDE} x ${sealJob.MAX_SIDE}, höchstens ${sealJob.MAX_HEIGHT} hoch`},
 };
-// A viewer whose bots are a list (not '*') is a guest: only these jobs, no supply chest, no named places, no areas.
-const GUEST_JOBS = new Set(['mine', 'chop', 'goto', 'guard', 'homebed', 'graves']);
-const isGuest = (allowed) => allowed !== '*';
-const mayOrder = (allowed, key) => !isGuest(allowed) || GUEST_JOBS.has(key);
+// A viewer whose bots are a list (not '*') may give every job, but only for their own bots (owner 2026-11-05: Misa has
+// full control of MisaBot and EM_Trader). Server-wide switches (keeper, plan, stop all) stay the owner's (botui.js ownerOnly).
+const mayOrder = (allowed, key) => Object.hasOwn(JOBS, key);
 const hasJob = (key) => typeof key === 'string' && Object.hasOwn(JOBS, key);
 const AREA = Object.keys(JOBS).filter((k) => JOBS[k].needs.includes(area));
 
@@ -120,9 +119,8 @@ function point(o) {
 }
 
 // A target for an order: `gaze`, `pos`, `supply`, `place:<name>`, else text like "12 64 -30".
-function resolveTarget(value, ctx, places = [], guest = false) {
+function resolveTarget(value, ctx, places = []) {
   const v = String(value ?? '').trim();
-  if (guest && (v === 'supply' || v.startsWith('place:'))) throw new Error('Dieses Ziel ist nicht für dich');
   if (v === 'gaze') {
     if (!ctx.gaze) throw new Error('Du schaust auf keinen Block');
     return {...point(ctx.gaze), dim: dimOf(ctx.dim)};
@@ -188,7 +186,7 @@ const num = (v, what) => { const n = Math.round(Number(v)); if (!Number.isFinite
 function build(key, data, env) {
   if (!hasJob(key)) throw new Error('unbekannter Auftrag');
   if (!mayOrder(env.allowed, key)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
-  const guest = isGuest(env.allowed), job = JOBS[key];
+  const job = JOBS[key];
   for (const x of Object.values(data)) {
     if (typeof x === 'number' && !Number.isFinite(x)) throw new Error('Ungültige Zahl');
     if (typeof x === 'string' && x.length > TEXT_MAX) throw new Error('Eingabe zu lang');
@@ -207,9 +205,9 @@ function build(key, data, env) {
   const w = has('where');
   if (w && !v.at) {
     const pick = text('wheretext') || text('where') || (w.optional ? 'none' : 'gaze');
-    if (pick !== 'none') v.at = resolveTarget(pick, ctx, env.places, guest);
+    if (pick !== 'none') v.at = resolveTarget(pick, ctx, env.places);
   }
-  if (has('chest')) v.chest = resolveTarget(text('chesttext') || text('chest') || 'supply', ctx, env.places, guest);
+  if (has('chest')) v.chest = resolveTarget(text('chesttext') || text('chest') || 'supply', ctx, env.places);
   if (has('schematic')) {
     if (!env.schematics.includes(data.file)) throw new Error('Bauplan nicht gefunden');
     v.file = data.file;
@@ -237,4 +235,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {isChest, GUEST_JOBS, isGuest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

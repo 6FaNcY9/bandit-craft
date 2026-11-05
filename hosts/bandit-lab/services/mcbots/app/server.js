@@ -60,18 +60,22 @@ const orderEnded = (e) => {
   const order = ownerOrders.get(e.bot), out = agentauth.orderOutcome(e, order);
   if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
   if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + out.retry)); // never cuts a death hold short
+  // A project goes on by itself whenever its bot is idle (sweep below) until it finishes; a failure waits like an order's.
+  const p = projects.get(e.bot), pout = p && !p.paused ? agentauth.orderOutcome(e, p) : null;
+  if (pout?.end) projects.forget(e.bot);
+  if (pout?.retry && !out) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + pout.retry));
   if (e.kind === 'death') { // every bot's, not only one with an order: a queue of jobs kills it just as well
     const d = agentauth.deathLoop(deathTimes.get(e.bot) || [], e.t);
     deathTimes.set(e.bot, d.times);
     if (d.hold) {
       const r = runners.get(e.bot), queued = r?.snapshot().queue?.length || 0;
-      if (order) orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
+      // A hold, not an end: the order or project starts again after DEATH_HOLD_MS (a paused project never did, bots slept).
+      orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
       if (queued) {
         r.enqueue('stop');
         delete toResume[e.bot];
-        projects.pause(e.bot);
       }
-      events.add('base', 'alert', agentauth.deathLoopAlert(e.bot, order, queued));
+      events.add('base', 'alert', agentauth.deathLoopAlert(e.bot, order || (p && !p.paused ? p : null), queued));
     }
   }
 };
@@ -85,12 +89,24 @@ setInterval(() => {
       events.add(name, 'info', `the owner's ${order.type} order could not go on: ${err.message}`);
     }
   }
+  // An idle bot without an owner order goes on with its project (paused ones only by Resume).
+  const started = new Set();
+  const projectOrders = new Map(Object.entries(projects.all).filter(([n, p]) => !p.paused && !ownerOrders.has(n) && runners.has(n)));
+  for (const [name, p] of agentauth.ordersToStart(projectOrders, (n) => runners.get(n)?.snapshot(), orderRetryAt)) {
+    orderRetryAt.delete(name);
+    started.add(name);
+    events.add(name, 'info', `its ${p.type} project goes on`);
+    try { runners.get(name).enqueue(p.type, p.args); } catch (err) {
+      orderRetryAt.set(name, Date.now() + agentauth.ORDER_RETRY_MS);
+      events.add(name, 'info', `its ${p.type} project could not go on: ${err.message}`);
+    }
+  }
   // Idle bots without an owner order help with another bot's need (the needs board, bots.js helpOnce); only when
   // there is one, so an idle crew does not log a help job every minute.
   const open = world.openNeeds();
   for (const [name, runner] of runners) {
     const s = runner.snapshot();
-    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !cfg.guestBots.includes(name) && !cfg.mainBots.includes(name) && open.some((n) => n.bot !== name)) {
+    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !started.has(name) && !cfg.guestBots.includes(name) && !cfg.mainBots.includes(name) && open.some((n) => n.bot !== name)) {
       try { runner.enqueue('help', {}); } catch {}
     }
   }

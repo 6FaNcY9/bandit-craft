@@ -75,7 +75,6 @@ const ACTIONS = {
     }
   },
   corner: async (st, data, ui, viewer) => {
-    ownerOnly(ui, viewer); // area jobs are the owner's
     const g = st.ctx.gaze, dim = st.ctx.dim;
     st.screen = {name: 'auftrag'};
     if (data.which !== 'a' && data.which !== 'b') throw new Error('unbekannte Ecke');

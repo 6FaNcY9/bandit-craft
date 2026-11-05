@@ -1036,11 +1036,11 @@ const PILLAR_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt', 'netherrack',
 
 function safeMovements(bot, areas, runner = null) {
   const mv = new Movements(bot);
-  // Bots speak 26.1 to a 26.2 server through ViaBackwards; sprinting, parkour
-  // jumps and diagonal corner-cutting make the server reject the move and pull
-  // the bot back (277 corrections in 15 s vs 0 without them, 2026-10-08).
-  mv.allowSprinting = false;
-  mv.allowParkour = false;
+  // Bots speak 26.1 to a 26.2 server through ViaBackwards. On 2026-10-08 sprint, parkour and diagonals gave 277
+  // pullbacks in 15 s; on 2026-11-05 sprint plus parkour gave 0 over 1-3 block gaps and a 30 s soak (sandbox, bot50),
+  // and only together do they clear 2-3 block gaps. Diagonals stay off (corners not measured). Watch `pullbacks`.
+  mv.allowSprinting = true;
+  mv.allowParkour = true;
   mv.allow1by1towers = true;
   // A placed block cost what a step costs, so a bot bridged and pillared rather than walk round, and left the
   // surface full of cobblestone and dirt (857 junk blocks round the base, 2026-10-20); Baritone weighs a placement
@@ -1139,6 +1139,13 @@ async function nightShelter(r, job) {
   // mining (main server 2026-10-19); a fit bot works on and the numbers (odds.js) decide each fight. No combat: as before.
   if (!NIGHT_JOBS.has(job.type) && !UNFIT_NIGHT_JOBS.has(job.type)) return;
   if (r.combat?.fit?.()) return;
+  // Gear first, the hole only when the supply chest has none (owner 2026-11-05: the bots work through the night).
+  if (r.combat && r.supplyChest && Date.now() - (r.nightRearmAt || 0) > FOOD_RETRY_MS) {
+    r.nightRearmAt = Date.now();
+    r.emit('info', 'night: fetching gear from the supply chest before going on');
+    await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => { guard(job); r.emit('info', `night: no gear fetched: ${e.message.slice(0, 80)}`); });
+    if (r.combat.fit()) return;
+  }
   if (!r.combat && !NIGHT_JOBS.has(job.type)) return;
   const feet = bot.entity.position.floored();
   // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.

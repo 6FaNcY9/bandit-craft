@@ -2,7 +2,7 @@
 // Pure builders for the in-game dialogs (Minecraft dialog JSON, multi_action). No I/O and no clock: the same view must
 // build the same JSON, because BotUi re-sends a refreshing screen only when its JSON changed.
 const {ago, DIMENSION, failing, botState} = require('./ingame');
-const {isChest, isGuest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
+const {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
 
 // Anything from a snapshot or an error goes through here: no colour codes or control characters, bounded length.
 const safe = (text, max = 60) => {
@@ -158,9 +158,8 @@ const supplyOpt = (view) => (supplyOf(view.keeper) ? [['supply', 'Vorratskiste']
 
 function targetSelect(view, w) { // where
   const g = view.ctx?.gaze;
-  const guest = isGuest(view.allowed); // a guest sees no supply chest and no named places: that list shows the owner's base
   const opts = [...(w.optional ? [['none', 'Vorratskiste (Standard)']] : []), ...(g ? [['gaze', `Worauf du schaust (${g.x} ${g.y} ${g.z})`]] : []), ['pos', 'Wo du stehst'],
-    ...(w.optional || guest ? [] : supplyOpt(view)), ...(guest ? [] : placesOf(view, (p) => p.kind !== 'protected').map((p) => [`place:${p.name}`, p.name]))];
+    ...(w.optional ? [] : supplyOpt(view)), ...placesOf(view, (p) => p.kind !== 'protected').map((p) => [`place:${p.name}`, p.name])];
   return [select('where', 'Wohin', opts, opts[0][0]), typed('wheretext', 'Oder Koordinaten (x y z)')];
 }
 function chestSelect(view) {
@@ -204,7 +203,7 @@ function inputsOf(job, view, sc) {
 const traders = (view) => (view.traders || []).filter((t) => view.allowed === '*' || view.allowed.includes(t));
 
 function auftrag(view, sc) {
-  const g = view.ctx?.gaze, guest = isGuest(view.allowed), sel = guest ? {} : view.sel || {}, size = dims(sel);
+  const g = view.ctx?.gaze, sel = view.sel || {}, size = dims(sel);
   const body = [line(txt(g ? `Du schaust auf: ${safe(germanName(g.block), 30)} (${g.x} ${g.y} ${g.z})` : 'Du schaust auf nichts', 'white'))];
   if (size) body.push(line(txt(`Bereich: ${size.join(' x ')}`, 'aqua')));
   else if (sel.a) body.push(line(txt(`Ecke A: ${sel.a.x} ${sel.a.y} ${sel.a.z} · Ecke B fehlt noch`, 'aqua')));
@@ -212,9 +211,9 @@ function auftrag(view, sc) {
   const withBot = (extra) => ({...extra, ...(sc.bot ? {bot: sc.bot} : {})});
   const actions = contextJobs(g, view.allowed).map(({key, preset}) => button(txt(JOBS[key].here || JOBS[key].label, 'gold'), 'job', withBot({key, ...preset})));
   if (g && isChest(g.block)) for (const t of traders(view)) for (const [kind, label] of [['sticks', 'Sticks'], ['stores', 'Smaragde']]) actions.push(button(txt(`Handelskiste ${label} → ${safe(t, 16)}`, 'gold'), 'trader_add', {bot: t, kind}));
-  if (!guest) actions.push(button(txt(sel.a ? (sel.b ? 'Ecke B neu setzen' : 'Ecke B setzen') : 'Ecke A setzen', 'aqua'), 'corner', {which: sel.a ? 'b' : 'a'}));
+  actions.push(button(txt(sel.a ? (sel.b ? 'Ecke B neu setzen' : 'Ecke B setzen') : 'Ecke A setzen', 'aqua'), 'corner', {which: sel.a ? 'b' : 'a'}));
   if (sel.a) actions.push(button(txt('Auswahl löschen', 'aqua'), 'clearsel'));
-  for (const {key, ok, why} of guest ? [] : areaJobs(sel)) {
+  for (const {key, ok, why} of areaJobs(sel)) {
     actions.push(ok ? button(txt(JOBS[key].label, 'aqua'), 'job', withBot({key}))
       : {label: txt(JOBS[key].label, 'dark_gray'), width: 200, tooltip: lines([[why, 'red']])}); // no action: the client shows it disabled
   }

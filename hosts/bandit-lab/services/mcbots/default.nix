@@ -43,12 +43,9 @@
       label = "bandit-lab-worker-2";
     };
     # A fourth helper (owner 2026-10-19): a name VeloAuth has never seen (bot1-18 and bot50-59 are in its database).
-    # The first helper back on the main server, as a trial for the Kommandostand (owner 2026-11-04); in MAIN_BOTS below,
-    # so it moves on orders only.
     mcbots-worker-3 = {
       bots = "bot19";
       label = "bandit-lab-worker-3";
-      mainServer = true;
     };
     # Two more helpers (owner 2026-10-19), two to a process like worker-2; names VeloAuth has never seen.
     mcbots-worker-4 = {
@@ -62,11 +59,12 @@
       bots = "MisaBot,EM_Trader";
       label = "bandit-lab-worker-5";
       owners = "${ownerUuids},06ee5c24-21e7-4c96-8adb-f74ccf20a264"; # + MidariBread
-      mainServer = true;
     };
   };
   guestBots = "MisaBot,EM_Trader";
-  mainBots = "bot19";
+  # All helpers play on the main server again, with keeper, board and help job (owner 2026-11-05); the sandbox stays
+  # for tests and scenarios.
+  mainBots = "";
   # Worker processes: each shares mcbots' network namespace, so it reaches the
   # hub on 127.0.0.1 (plain ws:// is accepted only there) and Velocity from
   # mcbots' address, which BotGate admits.
@@ -75,22 +73,18 @@
       image = "${image.imageName}:${image.imageTag}";
       imageFile = image;
       cmd = ["${app}/bin/mcbots-worker"] ++ lib.splitString "," w.bots;
-      environment =
-        {
-          HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
-          MC_HOST = bridgeGw; # Velocity on the host, via the mcbots bridge gateway (see --add-host above)
-          MC_PORT = "25565";
-          OWNER_UUIDS = w.owners or ownerUuids;
-          HOST_LABEL = w.label;
-          NODE_OPTIONS = "--max-old-space-size=768";
-          # The schematics of the dashboard's projects, from mcbots' own volume: bot2 and bot3 failed every schematic
-          # job with "ENOENT ... schematics/ironfarm.litematic" (2026-10-15). Read-write, as the containers
-          # filled are recorded there (.filled-*.json) and merged across processes.
-          SCHEMATIC_DIR = "/schematics";
-        }
-        // lib.optionalAttrs (!(w.mainServer or false)) {
-          MC_VHOST = "sandbox.bots"; # owner 2026-10-23: helpers test in the sandbox until the board passes
-        };
+      environment = {
+        HUB_URL = "ws://127.0.0.1:${workerPort}/worker";
+        MC_HOST = bridgeGw; # Velocity on the host, via the mcbots bridge gateway (see --add-host above)
+        MC_PORT = "25565";
+        OWNER_UUIDS = w.owners or ownerUuids;
+        HOST_LABEL = w.label;
+        NODE_OPTIONS = "--max-old-space-size=768";
+        # The schematics of the dashboard's projects, from mcbots' own volume: bot2 and bot3 failed every schematic
+        # job with "ENOENT ... schematics/ironfarm.litematic" (2026-10-15). Read-write, as the containers
+        # filled are recorded there (.filled-*.json) and merged across processes.
+        SCHEMATIC_DIR = "/schematics";
+      };
       environmentFiles = ["/run/mcbots/worker-${w.label}.env"]; # BOT_PASSWORD_SEED, HUB_TOKEN (this worker's own, R2-6)
       extraOptions = [
         "--network=container:mcbots"
@@ -115,9 +109,6 @@ in {
           imageFile = image;
           environment = {
             BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, MisaBot and EM_Trader (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
-            # Owner 2026-10-23: helpers test in the sandbox until the board passes (spec 2026-10-23-bots-redesign);
-            # the virtual host sandbox.bots routes them there (../minecraft/sandbox.nix).
-            MC_VHOST = "sandbox.bots";
             MC_HOST = "velocity"; # --add-host below pins the name to the gateway
             MC_PORT = "25565";
             # Only the owner's in-game orders count (owner.js): the sender UUID of a player chat line.
