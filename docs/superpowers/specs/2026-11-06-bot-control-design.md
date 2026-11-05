@@ -159,9 +159,17 @@ clash with reserved blocks (use `runner.reserved`); a castle `produce` may need 
    `schematic` already shares cells between crew members and both resume as projects after a restart. The
    store chest is a pick in the dialog (default: the player's own chest pref, else the supply chest for the
    owner). Partial material shows as `wartet auf` and the missing-material alert; cancel is the bot's Stopp.
-4. **Plans** come from the hub's schematics folder, listed in the dialog (already there, B61). Upload today
-   is the owner's dashboard (`POST /api/schematic`). "Hier" is the aimed-at block or the player's position
-   (the existing `where` input). Size limit: the parser's; nothing new.
+4. **Plans** come from the hub's schematics folder, listed in the dialog (already there, B61). "Hier" is the
+   aimed-at block or the player's position (the existing `where` input).
+   **Upload from in game, no mods (owner 2026-11-06, phase 1):** vanilla Minecraft cannot send files, so a
+   `Bauplan hochladen` button (staff screen and `/bots`) gives the player a click: a dialog `open_url` action
+   or a tellraw link to a small upload page on the hub, with a one-time token bound to that player (10 min,
+   one use). The browser opens, the player picks the `.litematic`, the hub checks it with `parseLitematic`
+   (as `POST /api/schematic` does), stores it under the player's name (`midaribread-<name>.litematic`) and
+   tells them in game that it is ready. Each player's plan list shows their own plans plus shared ones; only
+   the owner's plans and shared ones reach the owner's bots' lists by default. Misa reaches the lab over the
+   tailnet already (her connection comes from a 100.x address); the tailnet policy must let her node reach
+   the upload page's port and nothing else of the dashboard. Size cap: 2 MB per file, 50 files per player.
 5. **Alive and movement earlier** (the owner stressed both): phase 1 gets the cheap part of section 6 (look
    at a near player, the bow, step aside; no pacing) and the door/ladder/scaffold sandbox check of section 7;
    counters move to phase 1 too, so phase 4 has a baseline. Pacing and diagonals stay in phase 4.
