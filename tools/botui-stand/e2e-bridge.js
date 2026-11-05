@@ -43,6 +43,7 @@ function sampleDialog(size) {
   await post('/viewers', {names: ['Viewer']});
   await fetch(`${URL}/events?since=0&wait=0`, {headers: {Authorization: 'Bearer stand-token'}}); // register a hub poll
   const c = await connect('Viewer'), other = await connect('Other');
+  await waitEvent((e) => e.type === 'join' && e.player === 'Viewer'); // viewers only: Other's join stays silent
   await c.command('bots'); // open from /bots
   let ev = await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
   const ev0 = ev;
@@ -110,6 +111,39 @@ function sampleDialog(size) {
   c.swap();
   await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
   c.sneak(false);
+
+  // staff: /zauberstab hands it out (viewers only); right click opens with gaze, left click is a report, a usable block is left to vanilla
+  await other.command('zauberstab');
+  await sleep(500);
+  assert.ok(!other.inv.some((i) => i && i.itemCount > 0), 'non-viewer gets no staff');
+  await c.command('zauberstab');
+  await waitFor(() => c.inv.some((i) => i && i.itemCount > 0));
+  // Paper drops a use_item that aims at a block within reach (the client would send block_place), so aim at a stone 8 blocks away
+  const stone = [px + 8, py + 1, pz];
+  fs.appendFileSync(CONSOLE, `setblock ${stone.join(' ')} stone\n`);
+  await sleep(1000);
+  await c.look(-90, 0);
+  await sleep(300);
+  c.useItem('main_hand', {x: -90, y: 0});
+  ev = await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
+  assert.deepEqual(ev.gaze, {x: stone[0], y: stone[1], z: stone[2], block: 'stone'});
+  c.leftClick();
+  ev = await waitEvent((e) => e.type === 'lage' && e.player === 'Viewer');
+  assert.equal(ev.gaze.block, 'stone');
+  const windows = c.windows.length;
+  await sleep(600); // the right-click cooldown
+  c.useBlock(...chest); // a chest while not sneaking
+  await assertNoEvent((e) => e.player === 'Viewer' && e.type !== 'closed', 1500);
+  await waitFor(() => c.windows.length > windows); // vanilla opened the chest
+  c.closeWindow(c.windows[c.windows.length - 1]);
+  // entity aim: an armor stand between the viewer and the stone
+  fs.appendFileSync(CONSOLE, `summon armor_stand ${px + 2.5} ${py} ${pz + 0.5}\n`);
+  await sleep(1000);
+  await sleep(600);
+  c.useItem('main_hand', {x: -90, y: 0});
+  ev = await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
+  assert.deepEqual(ev.gaze.entity, {type: 'armor_stand', name: null, x: px + 2, y: py, z: pz});
+  assert.equal(ev.gaze.block, 'stone');
 
   // outline: particles arrive, stop on null, a bad box is refused
   const [a, b2, d] = ev0.pos;

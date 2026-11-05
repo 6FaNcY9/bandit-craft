@@ -6,3 +6,6 @@ commands:
   bots:
     description: Open the bot command stand
     usage: /bots
+  zauberstab:
+    description: Get the wizard's staff
+    usage: /zauberstab

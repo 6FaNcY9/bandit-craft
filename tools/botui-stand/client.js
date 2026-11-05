@@ -34,7 +34,8 @@ function connect(username, port = 25599) {
         command: (text) => c.write('chat_command', {command: text.replace(/^\//, '')}),
         sneak: (on) => c.write('player_input', {inputs: {shift: on}}),
         swap: () => c.write('block_dig', {status: 6, location: {x: 0, y: 0, z: 0}, face: 0, sequence: 0}), // swap hands (F)
-        useItem: (hand = 'main_hand') => c.write('use_item', {hand, sequence: 0, rotation: {x: 0, y: 0}}), // right click with the item in hand
+        useItem: (hand = 'main_hand', rotation = {x: 0, y: 0}) => c.write('use_item', {hand, sequence: 0, rotation}), // right click with the item in hand
+        leftClick: () => c.write('arm_animation', {hand: 'main_hand'}), // swing at air: Paper reports LEFT_CLICK_AIR
         useBlock: (x, y, z, hand = 'main_hand') => c.write('block_place', {hand, location: {x, y, z}, direction: 1, cursorX: 0.5, cursorY: 1, cursorZ: 0.5, insideBlock: false, worldBorderHit: false, sequence: 1}),
         closeWindow: (id) => c.write('close_window', {windowId: id}),
         look: (yaw, pitch) => c.write('look', {yaw, pitch, flags: {onGround: true, hasHorizontalCollision: false}}),

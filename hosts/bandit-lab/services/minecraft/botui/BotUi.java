@@ -29,15 +29,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandException;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -52,6 +57,9 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.RayTraceResult;
 import org.json.simple.JSONArray;
@@ -87,6 +95,7 @@ public class BotUi extends JavaPlugin implements Listener {
   private BotMap map;
   private final Map<UUID, Long> lastMapClick = new HashMap<>(); // main thread only
   private static final long MAP_CLICK_COOLDOWN_MS = 500;
+  private NamespacedKey staffKey;
 
   @Override
   public void onEnable() {
@@ -123,6 +132,7 @@ public class BotUi extends JavaPlugin implements Listener {
     pool = Executors.newFixedThreadPool(4);
     http.setExecutor(pool);
     http.start();
+    staffKey = new NamespacedKey(this, "staff");
     map = new BotMap(this, viewers::contains, System.getenv().getOrDefault("BOTUI_BLUEMAP", "http://127.0.0.1:8100"));
     map.start();
     getServer().getPluginManager().registerEvents(this, this);
@@ -427,6 +437,23 @@ public class BotUi extends JavaPlugin implements Listener {
       g.put("block", blockKey(r.getHitBlock().getBlockData().getAsString(false)));
       gaze = g;
     }
+    Entity t = p.getTargetEntity(32);
+    if (t != null) {
+      JSONObject en = new JSONObject();
+      en.put("type", t.getType().getKey().getKey());
+      en.put("name", t instanceof Player tp ? tp.getName() : null);
+      en.put("x", t.getLocation().getBlockX());
+      en.put("y", t.getLocation().getBlockY());
+      en.put("z", t.getLocation().getBlockZ());
+      if (gaze == null) { // the hub reads a gaze only with a block string
+        gaze = new JSONObject();
+        gaze.put("x", en.get("x"));
+        gaze.put("y", en.get("y"));
+        gaze.put("z", en.get("z"));
+        gaze.put("block", "air");
+      }
+      gaze.put("entity", en);
+    }
     synchronized (lock) {
       e.put("id", ids.incrementAndGet());
       e.put("type", type);
@@ -466,8 +493,25 @@ public class BotUi extends JavaPlugin implements Listener {
 
   @Override
   public boolean onCommand(CommandSender s, Command c, String label, String[] args) {
-    if (s instanceof Player p) tryOpen(p, "open");
+    if (!(s instanceof Player p)) return true;
+    if (!c.getName().equals("zauberstab")) tryOpen(p, "open");
+    else if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) p.sendMessage(Component.text("Nicht freigeschaltet"));
+    else if (!p.getInventory().addItem(staff()).isEmpty()) p.sendMessage(Component.text("Inventar voll"));
     return true;
+  }
+
+  private ItemStack staff() {
+    ItemStack i = new ItemStack(Material.STICK);
+    ItemMeta m = i.getItemMeta();
+    m.displayName(Component.text("Zauberstab", NamedTextColor.DARK_PURPLE).decoration(TextDecoration.ITALIC, false));
+    m.lore(List.of(Component.text("Rechtsklick: Befehle · Linksklick: Lage", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
+    m.getPersistentDataContainer().set(staffKey, PersistentDataType.BYTE, (byte) 1);
+    i.setItemMeta(m);
+    return i;
+  }
+
+  private boolean isStaff(ItemStack i) {
+    return i != null && i.hasItemMeta() && i.getItemMeta().getPersistentDataContainer().has(staffKey, PersistentDataType.BYTE);
   }
 
   @EventHandler
@@ -485,12 +529,23 @@ public class BotUi extends JavaPlugin implements Listener {
     return b.getType().isInteractable();
   }
 
-  /** Right click with the tagged map in the main hand: the map dialog instead of the vanilla use; every other map is left alone. */
+  /** Left click with the staff: the situation report. */
+  @EventHandler
+  public void onLeft(PlayerInteractEvent e) {
+    Player p = e.getPlayer();
+    if (e.getHand() != EquipmentSlot.HAND || (e.getAction() != Action.LEFT_CLICK_AIR && e.getAction() != Action.LEFT_CLICK_BLOCK)
+        || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !isStaff(p.getInventory().getItemInMainHand())) return;
+    e.setCancelled(true);
+    tryOpen(p, "lage");
+  }
+
+  /** Right click with the tagged map or the staff in the main hand: the dialog instead of the vanilla use; every other map is left alone. */
   @EventHandler
   public void onUse(PlayerInteractEvent e) {
     Player p = e.getPlayer();
+    ItemStack held = p.getInventory().getItemInMainHand();
     if (e.getHand() != EquipmentSlot.HAND || (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK)
-        || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !map.isMap(p.getInventory().getItemInMainHand())) return;
+        || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !(map.isMap(held) || isStaff(held))) return;
     // As in vanilla, a click on something usable (door, chest) uses it; sneaking or any other block opens the dialog.
     if (e.getAction() == Action.RIGHT_CLICK_BLOCK && !p.isSneaking() && usable(e.getClickedBlock())) return;
     e.setCancelled(true);
@@ -498,12 +553,13 @@ public class BotUi extends JavaPlugin implements Listener {
     long now = System.currentTimeMillis();
     if (now - lastMapClick.getOrDefault(p.getUniqueId(), 0L) < MAP_CLICK_COOLDOWN_MS) return;
     lastMapClick.put(p.getUniqueId(), now);
-    tryOpen(p, "mapclick");
+    tryOpen(p, map.isMap(held) ? "mapclick" : "open");
   }
 
   @EventHandler
   public void onJoin(PlayerJoinEvent e) {
     map.join(e.getPlayer());
+    if (viewers.contains(e.getPlayer().getName().toLowerCase(Locale.ROOT))) emit("join", e.getPlayer(), null);
   }
 
   @EventHandler
