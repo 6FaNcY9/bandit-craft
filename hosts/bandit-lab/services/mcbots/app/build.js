@@ -361,6 +361,23 @@ function bycatch(items, uses, natural) {
   if ((n[SCAFFOLD] || 0) <= SCAFFOLD_KEEP) delete n[SCAFFOLD];
   return Object.keys(n);
 }
+// The cells to dig for a bot walled in by its own build: head first, through the thinnest wall, towards the site when walls tie.
+// bot50 stood in the apse's light slot as the wall rose, and all that was left was "could not reach" (sandbox 2026-11-04).
+function breakOut(feet, open, towards, max = 3) {
+  const free = (x, z) => open(x, feet.y, z) && open(x, feet.y + 1, z);
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(([a, b], [c, d]) => (c * (towards.x - feet.x) + d * (towards.z - feet.z)) - (a * (towards.x - feet.x) + b * (towards.z - feet.z)));
+  let best = null;
+  for (const [dx, dz] of dirs) {
+    if (free(feet.x + dx, feet.z + dz)) continue; // along the slot, no way out
+    for (let d = 2; d <= max && (!best || d - 1 < best.length / 2); d++) {
+      if (!free(feet.x + dx * d, feet.z + dz * d)) continue;
+      best = [];
+      for (let i = 1; i < d; i++) best.push({x: feet.x + dx * i, y: feet.y + 1, z: feet.z + dz * i}, {x: feet.x + dx * i, y: feet.y, z: feet.z + dz * i});
+      break;
+    }
+  }
+  return best;
+}
 // What a digging bot throws away when its slots run out, stack by stack: rock it walked over, beyond what a restock would
 // hold of it. Three bots with up to 768 cobblestone could take no pickaxe and craft nothing, and the clearing stood (sandbox 2026-11-04).
 const USED_KEEP = 256;
@@ -637,6 +654,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // digInside: the walks dig nothing outside the site, so a fill under the base comes in by its openings instead of
     // through the floor above (bot51 dug through the roof of a test cavity, sandbox 2026-10-20). The runner clears it.
     if (job.args.digInside) r.digBox = {x1: lo.x - 1, x2: hi.x + 1, y1: lo.y - 1, y2: hi.y + 1, z1: lo.z - 1, z2: hi.z + 1};
+    let sameSpot = 0, lastSpot = null;
     const stalled = (what) => {
       if (Date.now() - lastProgress > waitMs) throw new Error(`no progress for ${Math.round(waitMs / 1000)} s: ${what}`);
     };
@@ -1356,6 +1374,24 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           if (/must be holding an item/.test(e.message)) { skip.set(k, Date.now() + 5000); continue; }
           if (!/could not reach/.test(e.message)) throw e;
           noPath++;
+          // Still on the same spot after several cells: its own walls, not the distance.
+          const feet = bot.entity.position.floored(), spot = ckey(feet);
+          sameSpot = spot === lastSpot ? sameSpot + 1 : 0;
+          lastSpot = spot;
+          if (sameSpot >= 4) {
+            const way = breakOut(feet, (x, y, z) => free(stateAt(x, y, z)?.name ?? 'stone'), {x: (lo.x + hi.x) / 2, z: (lo.z + hi.z) / 2});
+            if (way) {
+              r.emit('info', `walled in at ${feet.x} ${feet.y} ${feet.z}: breaking out through ${way.length} blocks, they go back later`);
+              for (const c of way) {
+                await digAt(r, job, v(c), null, {pickup: false}).catch((d) => { guard(job); if (!/could not reach|unsafe|aborted|needs a tool/.test(d.message)) throw d; });
+                placed.delete(ckey(c));
+                skip.set(keyOf(c), Date.now() + 120000); // or it puts the wall straight back, still inside
+              }
+              sameSpot = 0;
+              lastProgress = Date.now();
+              continue;
+            }
+          }
           await unstick();
           skip.set(k, Date.now() + 30000);
           stalled(`could not reach ${k}`);
@@ -1393,5 +1429,5 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
   };
 }
 
-module.exports = {finishOf, stacksPerKind, bycatch, surplusRock, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
+module.exports = {finishOf, stacksPerKind, bycatch, surplusRock, breakOut, validate, step, removeStep, materials, shortfall, formatShortfall, countHave, gatherPlan, GATHER, makeBuild, MAX_BLOCKS, PLANTS, RECORDS,
   makeSchematic, schematicPlan, loneChests, clickFace, SCHEMATIC_RE, stillNeeded, readStock, forgetChest, chestStock, stockList, REPLACEABLE, CONTAINER};

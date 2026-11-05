@@ -41,6 +41,12 @@ module.exports = async () => {
       assert.deepStrictEqual(B.bycatch(inv, new Set(['cobblestone']), NAT), ['andesite', 'diorite', 'dirt']);
       assert.deepStrictEqual(B.bycatch([{name: 'dirt', count: 64}], new Set(['cobblestone']), NAT), [], 'one stack of dirt stays');
       assert.deepStrictEqual(B.bycatch(inv, new Set(['andesite', 'dirt']), NAT), ['diorite'], 'what the build uses stays');
+      {
+        // The apse's light slot: one wide, walled in by the bot's own build; the nave lies past one wall to the east.
+        const open = (x, y, z) => (x === 0 && z >= -1 && z <= 1) || x >= 2;
+        assert.deepStrictEqual(B.breakOut({x: 0, y: 5, z: 0}, open, {x: 20, z: 0}), [{x: 1, y: 6, z: 0}, {x: 1, y: 5, z: 0}], 'through the wall towards the site');
+        assert.strictEqual(B.breakOut({x: 0, y: 5, z: 0}, () => false, {x: 20, z: 0}), null, 'solid all round: no way within 3');
+      }
       const s = (name, count) => ({name, count});
       const rock = /^(stone|dirt|andesite|cobblestone)$/;
       const names = (list) => list.map((i) => `${i.name} ${i.count}`);
