@@ -58,7 +58,7 @@ const ACTIONS = {
   send: async (st, data, ui, viewer) => {
     try {
       const o = jobs.build(data.key, data, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(),
-        allowed: ui.viewerBots[viewer], schematics: await ui.api.schematics()});
+        allowed: ui.viewerBots[viewer], viewer, schematics: await ui.api.schematics()});
       const r = ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace});
       done(r);
       if (r?.skipped?.length === o.bots.length) { // nothing was queued (graves: none open)

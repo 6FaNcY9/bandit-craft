@@ -31,7 +31,7 @@ const dimOf = (d) => String(d || 'overworld').replace(/^minecraft:/, '');
 // Input kinds. `where` also takes optional (tidy: default is the supply chest).
 const count = (min, max, step, initial) => ({kind: 'count', min, max, step, initial});
 const block = {kind: 'block'}, item = {kind: 'item'}, chest = {kind: 'chest'}, where = {kind: 'where'}, radius = (initial, min, max) => ({kind: 'radius', initial, min, max}),
-  schematic = {kind: 'schematic'}, rotation = {kind: 'rotation'}, area = {kind: 'area'}, zone = (place) => ({kind: 'zone', place});
+  schematic = {kind: 'schematic'}, rotation = {kind: 'rotation'}, animal = {kind: 'animal'}, area = {kind: 'area'}, zone = (place) => ({kind: 'zone', place});
 
 const pt = (p) => ({x: p.x, y: p.y, z: p.z});
 const R = Math.round;
@@ -60,6 +60,11 @@ const JOBS = {
   smelt: {label: 'Schmelzen', type: 'smelt', general: true, needs: [item, count(1, 64, 1, 8)], args: (v) => ({item: v.item, count: R(v.n)}), say: (v) => `${germanName(v.item)} schmelzen`},
   schematic: {label: 'Bauen', type: 'schematic', general: true, loc: true, needs: [schematic, where, rotation],
     args: (v, ctx) => ({file: v.file, origin: pt(v.at), rotation: v.rotation, chests: ctx.supply ? [pt(ctx.supply)] : []}), say: (v) => `Bauen ${v.file}`},
+  produce: {label: 'Material für Bauplan', type: 'produce', general: true, needs: [schematic, where, rotation, chest],
+    args: (v) => ({file: v.file, origin: pt(v.at), rotation: v.rotation, chests: [pt(v.chest)], store: pt(v.chest)}), say: (v) => `Material für ${v.file}`},
+  summon: {label: 'Hierher rufen', type: 'goto', general: true, needs: [], args: (v, ctx) => pt(resolveTarget('pos', ctx)), say: () => 'Hierher rufen'},
+  followme: {label: 'Folge mir', type: 'follow', needs: [], args: (v, ctx) => ({player: ctx.viewer}), say: () => 'Folgen'},
+  hunt: {label: 'Jagen', here: 'Jagen', type: 'hunt', loc: true, needs: [animal, count(1, 32, 1, 4), where], args: (v) => ({animal: v.animal, count: R(v.n), ...pt(v.at), radius: 24}), say: (v) => `${v.n} ${germanName(v.animal)} jagen`},
   treefarm: {label: 'Baumfarm', type: 'treefarm', general: true, needs: [zone('treefarm')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2}), say: () => 'Baumfarm'},
   wheatfarm: {label: 'Weizenfarm', type: 'wheatfarm', general: true, needs: [zone('wheat')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2}), say: () => 'Weizenfarm'},
   rearm: {label: 'Ausrüsten', type: 'rearm', general: true, needs: [], args: (v, ctx) => supplyAt(ctx), say: () => 'Ausrüsten'},
@@ -82,21 +87,28 @@ const AREA = Object.keys(JOBS).filter((k) => JOBS[k].needs.includes(area));
 const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
 
 // What a gazed block offers, most useful first. preset: the target (when the job uses one) and the block name.
-function contextJobs(gaze, allowed = '*') {
+function contextJobs(gaze, allowed = '*', viewer) {
   if (!gaze || typeof gaze.block !== 'string') return [];
-  const b = gaze.block, keys = [];
+  const b = gaze.block, e = gaze.entity, keys = ['summon'], rows = [];
+  if (e?.type === 'player') {
+    if (Array.isArray(allowed) && allowed.includes(e.name)) rows.push({key: 'botscreen', preset: {bot: e.name}});
+    else if (e.name !== viewer) keys.push('followme');
+  } else if (/^(cow|sheep|pig|chicken)$/.test(e?.type)) keys.push('hunt');
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
   if (/_log$|_wood$/.test(b)) keys.push('chop', 'shiftlogs');
   if (isChest(b)) keys.push('deposit', 'withdraw', 'stock');
   if (/spawner/.test(b)) keys.push('lightspawner');
   if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
   keys.push('goto', 'guard', 'tidy');
-  return keys.filter((key) => mayOrder(allowed, key)).map((key) => {
+  const at = e ? {x: Math.floor(e.x), y: Math.floor(e.y), z: Math.floor(e.z)} : gaze; // an aimed-at entity is the target, not the block behind it
+  const out = keys.filter((key) => mayOrder(allowed, key)).map((key) => {
     const job = JOBS[key], preset = {};
-    if (job.loc) Object.assign(preset, pt(gaze));
+    if (job.loc) Object.assign(preset, pt(at));
+    if (job.needs.includes(animal)) preset.animal = e.type;
     if (job.needs.includes(block)) preset.block = b;
     return {key, preset};
   });
+  return [out[0], ...rows, ...out.slice(1)];
 }
 
 const dims = (sel) => (sel.a && sel.b ? [Math.abs(sel.a.x - sel.b.x) + 1, Math.abs(sel.a.y - sel.b.y) + 1, Math.abs(sel.a.z - sel.b.z) + 1] : null);
@@ -167,6 +179,10 @@ const supplyOf = (keeper) => { try { return keeper?.state().chest || null; } cat
 function presetOf(data, job) {
   const out = {};
   if (job.loc && data.x !== undefined) Object.assign(out, point(data));
+  if (job.needs.includes(animal) && data.animal !== undefined) {
+    if (typeof data.animal !== 'string' || !NAME_RE.test(data.animal)) throw new Error('Tiername ungültig');
+    out.animal = data.animal;
+  }
   if (job.needs.includes(block) && data.block !== undefined) {
     if (typeof data.block !== 'string' || !NAME_RE.test(data.block)) throw new Error('Blockname ungültig');
     out.block = data.block;
@@ -191,10 +207,11 @@ function build(key, data, env) {
     if (typeof x === 'number' && !Number.isFinite(x)) throw new Error('Ungültige Zahl');
     if (typeof x === 'string' && x.length > TEXT_MAX) throw new Error('Eingabe zu lang');
   }
-  const ctx = {...env.ctx, supply: env.supply, sel: env.sel}, v = {};
+  const ctx = {...env.ctx, supply: env.supply, sel: env.sel, viewer: env.viewer}, v = {};
   const has = (k) => job.needs.find((n) => n.kind === k);
   const preset = presetOf(data, job);
   if (preset.x !== undefined) v.at = {...preset, dim: dimOf(ctx.dim)};
+  if (preset.animal) v.animal = preset.animal;
   const text = (k) => String(data[k] ?? '').trim();
   if (has('block')) v.block = nameOf(data.block, text('blockx'), 'Block');
   if (has('item')) v.item = nameOf(data.item, text('itemx'), 'Item');

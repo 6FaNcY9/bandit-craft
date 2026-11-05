@@ -2,7 +2,7 @@
 // Auftrag: job catalog, gaze context, area corners, step 2 inputs and the send path (hostile payloads included).
 const assert = require('node:assert/strict');
 const {BotUi} = require('../botui');
-const {JOBS, CRAFTS, SMELTS, ITEMS, contextJobs, areaJobs, resolveTarget, resolveBots, germanName} = require('../botui-jobs');
+const {JOBS, CRAFTS, SMELTS, ITEMS, contextJobs, build, areaJobs, resolveTarget, resolveBots, germanName} = require('../botui-jobs');
 const {VALIDATE} = require('../bots');
 const screens = require('../botui-screens');
 
@@ -11,23 +11,45 @@ const ore = {x: 5, y: 12, z: -7, block: 'iron_ore'}, chestG = {x: -271, y: 66, z
 const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: chestG, supply: {x: 10, y: 65, z: 10}};
 
 { // context
-  assert.deepEqual(keys(ore), ['mine', 'shift', 'goto', 'guard', 'tidy']);
-  assert.deepEqual(contextJobs(ore)[0].preset, {block: 'iron_ore'});
-  assert.deepEqual(keys(chestG).slice(0, 3), ['deposit', 'withdraw', 'stock']);
-  assert.deepEqual(contextJobs(chestG)[0].preset, {x: -271, y: 66, z: -214});
+  assert.deepEqual(keys(ore), ['summon', 'mine', 'shift', 'goto', 'guard', 'tidy']);
+  assert.deepEqual(contextJobs(ore)[1].preset, {block: 'iron_ore'});
+  assert.deepEqual(keys(chestG).slice(1, 4), ['deposit', 'withdraw', 'stock']);
+  assert.deepEqual(contextJobs(chestG)[1].preset, {x: -271, y: 66, z: -214});
   assert.deepEqual(keys(null), []); assert.deepEqual(keys(undefined), []); assert.deepEqual(keys({}), []);
-  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'oak_log'}).slice(0, 2), ['chop', 'shiftlogs']);
-  assert.equal(keys({block: 'spawner'})[0], 'lightspawner');
-  assert.equal(keys({block: 'farmland'})[0], 'wheatfarm');
+  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'oak_log'}).slice(1, 3), ['chop', 'shiftlogs']);
+  assert.equal(keys({block: 'spawner'})[1], 'lightspawner');
+  assert.equal(keys({block: 'farmland'})[1], 'wheatfarm');
   assert.equal(germanName('iron_ore'), 'Eisenerz'); assert.equal(germanName('some_new_block'), 'some new block');
+}
+
+{ // material for a plan, summon, aimed-at entities
+  const env = {ctx: {gaze: null, pos: [3.4, 64, 4.9], dim: 'overworld'}, sel: {}, supply: {x: 10, y: 65, z: 10}, places: [], snaps: [{name: 'Bot1', online: true}], allowed: '*', schematics: ['house.litematic']};
+    const pick = (key, data, extra = {}) => { const {type, args} = build(key, data, {...env, ...extra}); return {type, args}; };
+  assert.deepEqual(pick('produce', {file: 'house.litematic', where: 'pos', rotation: 0, chest: 'supply'}).args,
+    {file: 'house.litematic', origin: {x: 3, y: 64, z: 4}, rotation: 0, chests: [{x: 10, y: 65, z: 10}], store: {x: 10, y: 65, z: 10}});
+  assert.deepEqual(pick('summon', {}), {type: 'goto', args: {x: 3, y: 64, z: 4}});
+  assert.deepEqual(pick('followme', {}, {viewer: 'Midari'}), {type: 'follow', args: {player: 'Midari'}});
+  assert.deepEqual(pick('hunt', {animal: 'cow', n: 3, x: 1, y: 2, z: 3}), {type: 'hunt', args: {animal: 'cow', count: 3, x: 1, y: 2, z: 3, radius: 24}});
+  assert.throws(() => pick('hunt', {animal: 'creeper', x: 1, y: 2, z: 3}));
+  assert.throws(() => pick('hunt', {animal: 'Cow!', x: 1, y: 2, z: 3}));
+  const cow = {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'cow', name: null, x: 1.5, y: 2, z: 3.2}};
+  assert.deepEqual(contextJobs(cow, '*', 'Fancy').map((r) => r.key), ['summon', 'hunt', 'goto', 'guard', 'tidy']);
+  assert.deepEqual(contextJobs(cow, '*', 'Fancy')[1].preset, {x: 1, y: 2, z: 3, animal: 'cow'});
+  const bot = {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'player', name: 'MisaBot', x: 1, y: 2, z: 3}};
+  assert.deepEqual(contextJobs(bot, ['MisaBot'], 'Midari').slice(0, 2), [{key: 'summon', preset: {}}, {key: 'botscreen', preset: {bot: 'MisaBot'}}]);
+  assert.ok(!contextJobs(bot, ['MisaBot'], 'Midari').some((r) => r.key === 'followme'));
+  const steve = {...bot, entity: {...bot.entity, name: 'Steve'}};
+  assert.deepEqual(contextJobs(steve, ['MisaBot'], 'Midari').map((r) => r.key), ['summon', 'followme', 'goto', 'guard', 'tidy']);
+  assert.ok(!contextJobs({...steve, entity: {...steve.entity, name: 'Midari'}}, ['MisaBot'], 'Midari').some((r) => r.key === 'followme'));
+  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'air'}), ['summon', 'goto', 'guard', 'tidy']);
 }
 
 { // every job builds args its VALIDATE accepts
   const box = {x1: 0, z1: 0, x2: 4, z2: 4};
   const sel = {a: {x: 0, y: 60, z: 0, dim: 'overworld'}, b: {x: 6, y: 62, z: 6, dim: 'overworld'}};
-  const values = {block: 'iron_ore', item: 'stick', n: 16, radius: 16, at: {x: 1, y: 64, z: 2}, chest: {x: 1, y: 64, z: 2}, file: 'a.litematic', rotation: 90, zone: box};
+  const values = {block: 'iron_ore', item: 'stick', n: 16, radius: 16, at: {x: 1, y: 64, z: 2}, chest: {x: 1, y: 64, z: 2}, file: 'a.litematic', rotation: 90, zone: box, animal: 'cow'};
   for (const [key, job] of Object.entries(JOBS)) {
-    assert.doesNotThrow(() => VALIDATE[job.type](job.args(values, {sel, supply: {x: 1, y: 2, z: 3}})), key);
+    assert.doesNotThrow(() => VALIDATE[job.type](job.args(values, {sel, supply: {x: 1, y: 2, z: 3}, viewer: 'Midari', pos: [1, 64, 2], dim: 'overworld'})), key);
     assert.ok(job.label && typeof job.say(values) === 'string', key);
   }
   assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 64.0}, ctx), {block: 'iron_ore', count: 64});
@@ -38,8 +60,8 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: chestG, suppl
   for (const i of CRAFTS) assert.doesNotThrow(() => VALIDATE.craft({item: i, count: 1}), i);
   for (const i of SMELTS) assert.doesNotThrow(() => VALIDATE.smelt({item: i, count: 1}), i);
   for (const i of ITEMS) assert.doesNotThrow(() => VALIDATE.get({item: i, count: 1}) && VALIDATE.withdraw({item: i, count: 1, x: 0, y: 0, z: 0}), i);
-  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'ender_chest'}), ['goto', 'guard', 'tidy']);
-  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'trapped_chest'}).slice(0, 3), ['deposit', 'withdraw', 'stock']);
+  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'ender_chest'}), ['summon', 'goto', 'guard', 'tidy']);
+  assert.deepEqual(keys({x: 1, y: 2, z: 3, block: 'trapped_chest'}).slice(1, 4), ['deposit', 'withdraw', 'stock']);
 }
 
 { // resolveTarget
@@ -129,11 +151,11 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     assert.equal(d.columns, 2);
     assert.match(text(d.body[0].contents), /^Du schaust auf: Truhe \(-271 66 -214\)$/);
     const ls = d.actions.map((a) => text(a.label));
-    assert.deepEqual(ls.slice(0, 5), ['Hier einlagern', 'Hier entnehmen', 'Hier zählen', 'Hierhin gehen', 'Hier bewachen']);
-    assert.equal(d.actions[0].label.color ?? d.actions[0].label.extra?.[0]?.color ?? 'gold', 'gold');
+    assert.deepEqual(ls.slice(0, 6), ['Hierher rufen', 'Hier einlagern', 'Hier entnehmen', 'Hier zählen', 'Hierhin gehen', 'Hier bewachen']);
+    assert.equal(d.actions[1].label.color ?? d.actions[1].label.extra?.[0]?.color ?? 'gold', 'gold');
     assert.equal(ls.at(-1), 'Zurück'); assert.equal(d.actions.at(-1).action.payload.a, 'lage');
     assert.ok(ls.includes('Ecke A setzen') && !ls.includes('Raum graben'));
-    assert.deepEqual(d.actions[0].action.payload, {a: 'job', key: 'deposit', x: -271, y: 66, z: -214});
+    assert.deepEqual(d.actions[1].action.payload, {a: 'job', key: 'deposit', x: -271, y: 66, z: -214});
     assert.equal(text(d.exit_action.label), 'Schließen');
     assert.equal(d.inputs, undefined);
   }
