@@ -47,6 +47,25 @@ module.exports = async () => {
         assert.deepStrictEqual(B.breakOut({x: 0, y: 5, z: 0}, open, {x: 20, z: 0}), [{x: 1, y: 6, z: 0}, {x: 1, y: 5, z: 0}], 'through the wall towards the site');
         assert.strictEqual(B.breakOut({x: 0, y: 5, z: 0}, () => false, {x: 20, z: 0}), null, 'solid all round: no way within 3');
       }
+      {
+        // A chest that stays shut is tried once more from next to it, then passed over: it ended a whole produce job (sandbox 2026-11-05).
+        const {Vec3} = require('vec3');
+        const walks = [], infos = [];
+        let shut = 1;
+        const bot = {game: {dimension: 'stock-test'}, blockAt: () => ({name: 'chest'}), openContainer: async (b) => {
+          if (shut-- > 0) throw new Error('the container did not open within 10 s');
+          return {containerItems: () => [{name: 'cobblestone', count: 5}], close() {}};
+        }};
+        const r = {bot, emit: (_k, m) => infos.push(m)}, deps = {goNear: async (_r, _j, _x, _y, _z, range) => walks.push(range), guard() {}};
+        assert.deepStrictEqual(await B.readStock(r, {t: {}}, [{x: 1, y: 2, z: 3}], deps), {cobblestone: 5}, 'second try counts');
+        assert.deepStrictEqual(walks, [3, 2], 'then from next to it');
+        B.forgetChest('stock-test', {x: 1, y: 2, z: 3});
+        shut = 2;
+        assert.deepStrictEqual(await B.readStock(r, {t: {}}, [{x: 1, y: 2, z: 3}, {x: 4, y: 2, z: 3}], deps), {cobblestone: 5}, 'a shut chest is passed over');
+        assert.ok(infos.some((i) => /1 2 3 did not open/.test(i)), 'and said');
+        bot.openContainer = async () => { throw new Error('boom'); };
+        await assert.rejects(B.readStock(r, {t: {}}, [{x: 7, y: 2, z: 3}], deps), /boom/, 'other errors still end it');
+      }
       const s = (name, count) => ({name, count});
       const rock = /^(stone|dirt|andesite|cobblestone)$/;
       const names = (list) => list.map((i) => `${i.name} ${i.count}`);

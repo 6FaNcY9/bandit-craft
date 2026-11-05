@@ -485,6 +485,22 @@ function stillNeeded(bot, plan) {
 }
 
 // The summed contents of chests, from what bots saw in the last 10 minutes; a chest not seen is opened.
+// Opened from the edge of reach a chest sometimes stays shut (the sorter's main material chest, again and again,
+// sandbox 2026-10-13): once more from next to it, then null, and the caller goes on to the next chest.
+async function openOrPass(r, job, block, c, {goNear, guard}) {
+  for (let tries = 0; ; tries++) {
+    try {
+      return await r.bot.openContainer(block);
+    } catch (e) {
+      guard(job);
+      if (!/did not open/.test(e.message)) throw e;
+      if (tries) break;
+      await goNear(r, job, c.x, c.y, c.z, 2, {under: true, doing: `walking up to the chest at ${c.x} ${c.y} ${c.z}`}).catch(() => guard(job));
+    }
+  }
+  r.emit?.('info', `the chest at ${c.x} ${c.y} ${c.z} did not open: trying the next one`);
+  return null;
+}
 async function readStock(r, job, chests, {goNear, guard}) {
   const dim = normDim(r.bot.game?.dimension);
   const total = {};
@@ -495,7 +511,8 @@ async function readStock(r, job, chests, {goNear, guard}) {
       guard(job);
       const block = r.bot.blockAt(new Vec3(c.x, c.y, c.z));
       if (!block || !/chest|barrel/.test(block.name)) throw new Error(`no chest at ${c.x} ${c.y} ${c.z}`);
-      const win = await r.bot.openContainer(block);
+      const win = await openOrPass(r, job, block, c, {goNear, guard});
+      if (!win) continue;
       try { noteChest(dim, c, win); } finally { win.close(); }
       s = CHEST_STOCK.get(chestKey(dim, c));
     }
@@ -699,23 +716,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         }
         noPath = 0;
         guard(job);
-        let win;
-        for (let tries = 0; !win; tries++) {
-          try {
-            win = await bot.openContainer(block);
-          } catch (e) {
-            guard(job);
-            if (!/did not open/.test(e.message)) throw e;
-            // Opened from the edge of reach it sometimes stays shut (the sorter's main material chest, again and
-            // again, sandbox 2026-10-13): once more from next to it, then the next chest.
-            if (tries) break;
-            await goNear(r, job, c.x, c.y, c.z, 2, {under: true, doing: `walking up to the chest at ${c.x} ${c.y} ${c.z}`}).catch(() => guard(job));
-          }
-        }
-        if (!win) {
-          r.emit?.('info', `the chest at ${c.x} ${c.y} ${c.z} did not open: trying the next one`);
-          continue;
-        }
+        const win = await openOrPass(r, job, block, c, {goNear, guard});
+        if (!win) continue;
         let full = false;
         try {
           note(c, win);
