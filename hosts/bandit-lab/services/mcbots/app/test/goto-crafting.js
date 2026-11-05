@@ -216,6 +216,19 @@ const assert = require('node:assert');
   assert.deepStrictEqual([tables, craftedAt], [[1, 86], [86]], 'crafted at the table by the supply chest');
 })();
 
+{ // walk to a known station only when it is close, or when the bot could not place its own
+  const {walkToStation} = require('../crafting');
+  const inv = (...items) => ({inventory: {items: () => items}});
+  const table = {name: 'crafting_table', count: 1}, log = {name: 'oak_log', count: 1}, planks = {name: 'oak_planks', count: 4};
+  assert.strictEqual(walkToStation(inv(table), 'crafting_table', 5), true, 'close: no new table');
+  assert.strictEqual(walkToStation(inv(table), 'crafting_table', 20), false, 'far, carries one');
+  assert.strictEqual(walkToStation(inv(log), 'crafting_table', 20), false, 'far, one log makes one');
+  assert.strictEqual(walkToStation(inv(planks), 'crafting_table', 20), false, 'far, four planks make one');
+  assert.strictEqual(walkToStation(inv(), 'crafting_table', 20), true, 'far, nothing to make one from');
+  assert.strictEqual(walkToStation(inv({name: 'cobblestone', count: 8}), 'furnace', 20), false, 'far, eight cobblestone make a furnace');
+  assert.strictEqual(walkToStation(inv({name: 'cobblestone', count: 7}), 'furnace', 20), true, 'one short of a furnace');
+}
+
 (async () => { // ensurePlanks: no logs in hand come from the base chest (bot3 could not make a hoe beside 87 logs, 2026-10-15)
   const {makeCrafting} = require('../crafting');
   const items = [];

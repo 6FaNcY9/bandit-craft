@@ -53,6 +53,15 @@ function nearBlock(bot, name, maxDistance = 24) {
   return id === undefined ? null : bot.findBlock({matching: id, maxDistance});
 }
 
+// A table costs about 2 s to make and place; a bot walks 4.3 blocks/s and may not get there at all. Past this, its own.
+const STATION_WALK_MAX = 8;
+function walkToStation(bot, name, dist) {
+  if (dist <= STATION_WALK_MAX) return true;
+  const held = (re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
+  if (count(bot, name) > 0) return false;
+  return name === 'crafting_table' ? !(held(/_log$/) || held(/_planks$/) >= 4) : count(bot, 'cobblestone') < 8;
+}
+
 // Place an item from the inventory on a free spot next to the bot.
 // Grass, flowers and leaf litter count as free: placing replaces them.
 const open = (b) => b && b.boundingBox === 'empty' && !/water|lava/.test(b.name);
@@ -168,7 +177,10 @@ function makeCrafting({goNear, guard, fetch = null}) {
   async function station(r, job, name, depth) {
     const {bot} = r;
     let block = nearBlock(bot, name);
-    if (block && bot.entity.position.distanceTo(block.position.offset(0.5, 0.5, 0.5)) > 4) {
+    const dist = block ? bot.entity.position.distanceTo(block.position.offset(0.5, 0.5, 0.5)) : 0;
+    // A road bot walks: a table placed beside it stands on its road.
+    if (block && dist > 4 && job.type !== 'highway' && !walkToStation(bot, name, dist)) block = null;
+    else if (block && dist > 4) {
       try {
         await goNear(r, job, block.position.x, block.position.y, block.position.z, 3);
       } catch (e) {
@@ -354,4 +366,4 @@ function fixCraftTiming(bot) {
   });
 }
 
-module.exports = {makeCrafting, placeNear, holding, fixCraftTiming, trackRecipeBook, bookCraft, FUELS, count, fuelFor, nearBlock};
+module.exports = {makeCrafting, walkToStation, placeNear, holding, fixCraftTiming, trackRecipeBook, bookCraft, FUELS, count, fuelFor, nearBlock};
