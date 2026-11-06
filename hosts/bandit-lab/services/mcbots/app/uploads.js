@@ -81,7 +81,7 @@ async function handle(req, res, url, deps) {
     return res.once('finish', () => req.destroy());
   }
   let s;
-  try { s = await deps.parse(bytes); } catch { return json(400, {error: 'Das ist keine gültige .litematic-Datei'}); }
+  try { s = await deps.parse(bytes); } catch (e) { return json(400, {error: /^Bauplan zu groß/.test(e.message) ? e.message : 'Das ist keine gültige .litematic-Datei'}); }
   // Everything from here to the write is synchronous: the token is taken exactly once, and only when the file is storable.
   const player = deps.uploads.peek(token);
   if (player === null) return json(403, {error: GONE});
