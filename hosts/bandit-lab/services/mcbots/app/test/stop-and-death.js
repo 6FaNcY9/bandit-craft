@@ -367,7 +367,7 @@ const {BotRunner} = require('../bots');
     const {PLANS} = require('../keeper');
     const c = {x: 1, y: 2, z: 3};
     const ok = PLANS.stone_bricks(16, c, {cobblestone: 24, coal: 2, oak_log: 1});
-    assert.deepStrictEqual(ok.map((j) => j[0]), ['withdraw', 'withdraw', 'withdraw', 'smelt', 'craft', 'deposit']);
+    assert.deepStrictEqual(ok.map((j) => j[0]), ['withdraw', 'withdraw', 'withdraw', 'smelt', 'craft', 'deposit', 'deposit']);
     assert.deepStrictEqual([ok[3][1].item, ok[3][1].count, ok[4][1].item, ok[5][1].only], ['cobblestone', 16, 'stone_bricks', 'stone_bricks']);
     assert.match(PLANS.stone_bricks(16, c, {cobblestone: 23, coal: 2, oak_log: 1}).blocked, /24 cobblestone/);
   }

@@ -32,6 +32,8 @@ const have = (items, key) => Object.entries(items || {}).filter(([n]) => matcher
 
 // How to make `n` more of a quota item: [[jobType, args], ...] or {blocked: why}.
 // `c` is the chest {x,y,z}; `stock` the chest contents.
+// The extra cobblestone, logs and ingots a crafting chain withdrew stay in the bot when only the product is deposited; a plain deposit (it keeps coal, tools and food) returns them.
+const LEFTOVERS = (c) => ['deposit', {...c}];
 const PLANS = {
   logs: (n, c) => [['chop', {count: n}], ['deposit', {...c, only: 'logs'}]],
   cobblestone: (n, c) => [['mine', {block: 'stone', count: n}], ['deposit', {...c, only: 'cobblestone'}]],
@@ -54,7 +56,7 @@ PLANS.stone_bricks = (n, c, stock) => {
   const need = [['cobblestone', n + 8], ['coal', Math.ceil(n / 8)], ['logs', 1]];
   const short = need.find(([what, k]) => have(stock, what) < k);
   if (short) return {blocked: `needs ${short[1]} ${short[0]} in the chest first`};
-  return [...need.map(([what, k]) => ['withdraw', {item: what, count: k, ...c}]), ['smelt', {item: 'cobblestone', count: n}], ['craft', {item: 'stone_bricks', count: n}], ['deposit', {...c, only: 'stone_bricks'}]];
+  return [...need.map(([what, k]) => ['withdraw', {item: what, count: k, ...c}]), ['smelt', {item: 'cobblestone', count: n}], ['craft', {item: 'stone_bricks', count: n}], ['deposit', {...c, only: 'stone_bricks'}], LEFTOVERS(c)];
 };
 // Spare pickaxes, so rearm finds one when a bot's breaks (4x "no pickaxe left" on the lab, 2026-10-10).
 // A stone pickaxe is 3 cobblestone + 2 sticks; the logs make the sticks and one crafting table.
@@ -62,7 +64,7 @@ PLANS.stone_pickaxe = (n, c, stock) => {
   const logs = Math.ceil(n / 2) + 1;
   if (have(stock, 'cobblestone') < 3 * n) return {blocked: `needs ${3 * n} cobblestone in the chest first`};
   if (have(stock, 'logs') < logs) return {blocked: `needs ${logs} logs in the chest (for the sticks and a table)`};
-  return [['withdraw', {item: 'cobblestone', count: 3 * n, ...c}], ['withdraw', {item: 'logs', count: logs, ...c}], ['craft', {item: 'stone_pickaxe', count: n}], ['deposit', {...c, only: 'stone_pickaxe'}]];
+  return [['withdraw', {item: 'cobblestone', count: 3 * n, ...c}], ['withdraw', {item: 'logs', count: logs, ...c}], ['craft', {item: 'stone_pickaxe', count: n}], ['deposit', {...c, only: 'stone_pickaxe'}], LEFTOVERS(c)];
 };
 // Raw iron for the kit below; a mine job with this block keeps what it digs (bots.js ensureGear does not smelt it).
 PLANS.raw_iron = (n, c) => [['mine', {block: 'iron_ore', count: n}], ['deposit', {...c, only: 'raw_iron'}]];
@@ -74,7 +76,7 @@ for (const [item, ingots] of [['iron_pickaxe', 3], ['iron_sword', 2]]) {
     const need = [['raw_iron', raw], ['coal', Math.ceil(raw / 8)], ['cobblestone', 8], ['logs', Math.ceil(n / 2) + 1]];
     const short = need.find(([what, k]) => have(stock, what) < k);
     if (short) return {blocked: `needs ${short[1]} ${short[0]} in the chest first`};
-    return [...need.map(([what, k]) => ['withdraw', {item: what, count: k, ...c}]), ['smelt', {item: 'raw_iron', count: raw}], ['craft', {item, count: n}], ['deposit', {...c, only: item}]];
+    return [...need.map(([what, k]) => ['withdraw', {item: what, count: k, ...c}]), ['smelt', {item: 'raw_iron', count: raw}], ['craft', {item, count: n}], ['deposit', {...c, only: item}], LEFTOVERS(c)];
   };
 }
 // Any quota item without a chain above: let the acquire planner (bots.js getItem) find its own way, then shelve the result.

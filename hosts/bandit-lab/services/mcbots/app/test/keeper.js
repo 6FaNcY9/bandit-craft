@@ -131,16 +131,17 @@ const {WorldModel} = require('../world');
   assert.match(PLANS.torch(16, chest, {coal: 3, oak_log: 1}).blocked, /4 coal/);
   assert.match(PLANS.torch(16, chest, {coal: 4}).blocked, /log/);
   // spare pickaxes: cobblestone and logs from the chest, crafted, put back
-  assert.deepStrictEqual(PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 3}).map((j) => [j[0], j[1].item, j[1].count]), [['withdraw', 'cobblestone', 9], ['withdraw', 'logs', 3], ['craft', 'stone_pickaxe', 3], ['deposit', undefined, undefined]]);
+  assert.deepStrictEqual(PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 3}).map((j) => [j[0], j[1].item, j[1].count]), [['withdraw', 'cobblestone', 9], ['withdraw', 'logs', 3], ['craft', 'stone_pickaxe', 3], ['deposit', undefined, undefined], ['deposit', undefined, undefined]]);
   assert.strictEqual(PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 3})[3][1].only, 'stone_pickaxe');
   assert.match(PLANS.stone_pickaxe(3, chest, {cobblestone: 8, oak_log: 3}).blocked, /9 cobblestone/);
   assert.match(PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 2}).blocked, /3 logs/);
-  assert.strictEqual(PLANS.stone_pickaxe(1, chest, {cobblestone: 3, birch_log: 2}).length, 4);
+  assert.strictEqual(PLANS.stone_pickaxe(1, chest, {cobblestone: 3, birch_log: 2}).length, 5);
   // iron kit: raw iron, coal, cobblestone and logs come out, the bot smelts and crafts, the tool goes back
   const kitStock = {raw_iron: 6, coal: 1, cobblestone: 8, oak_log: 2};
-  assert.deepStrictEqual(PLANS.iron_pickaxe(2, chest, kitStock).map((j) => j[0]), ['withdraw', 'withdraw', 'withdraw', 'withdraw', 'smelt', 'craft', 'deposit']);
+  assert.deepStrictEqual(PLANS.iron_pickaxe(2, chest, kitStock).map((j) => j[0]), ['withdraw', 'withdraw', 'withdraw', 'withdraw', 'smelt', 'craft', 'deposit', 'deposit']);
   assert.deepStrictEqual(PLANS.iron_pickaxe(2, chest, kitStock).find((j) => j[0] === 'smelt')[1], {item: 'raw_iron', count: 6});
-  assert.strictEqual(PLANS.iron_pickaxe(2, chest, kitStock).at(-1)[1].only, 'iron_pickaxe');
+  assert.strictEqual(PLANS.iron_pickaxe(2, chest, kitStock).at(-2)[1].only, 'iron_pickaxe');
+  assert.strictEqual(PLANS.iron_pickaxe(2, chest, kitStock).at(-1)[1].only, undefined, 'then a plain deposit returns the leftovers (review M4)');
   assert.match(PLANS.iron_pickaxe(2, chest, {...kitStock, raw_iron: 5}).blocked, /6 raw_iron/);
   assert.match(PLANS.iron_sword(1, chest, {...kitStock, coal: 0}).blocked, /1 coal/);
   assert.deepStrictEqual(PLANS.coal(32, chest, {oak_log: 500}).map((j) => j[0]), ['withdraw', 'smelt', 'deposit', 'deposit'], 'logs to spare: charcoal');
