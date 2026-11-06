@@ -619,7 +619,7 @@ class BotRunner {
       let aliveState = {}, busyUntil = 0;
       const timer = setInterval(() => {
         try {
-          if (Date.now() < busyUntil || !this.online || this.dead || this.current || this.queue.length || this.combat?.busy || (this.shelterAt && isNight(bot)) || bot.currentWindow || !bot.entity) return;
+          if (Date.now() < busyUntil || !this.online || this.dead || this.current || this.queue.length || this.combat?.busy || (this.inShelter() && isNight(bot)) || bot.currentWindow || !bot.entity) return;
           const p = bot.entity.position;
           const players = Object.values(bot.players).filter((q) => q.username !== bot.username && q.entity).map((q) => ({name: q.username, uuid: q.uuid, ...q.entity.position})); // other bots are not told apart
           const r = aliveStep({me: p, players, owners: this.ownerUuids, now: Date.now(), state: aliveState});
@@ -737,6 +737,7 @@ class BotRunner {
     bot.on('death', () => {
       const doing = this.activity(); // before `dead`, which hides it
       this.dead = true;
+      this.shelterAt = null;
       this.lastError = 'died';
       const p = bot.entity?.position;
       const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
@@ -769,6 +770,7 @@ class BotRunner {
       this.reportScaffold();
       this.online = false;
       this.dead = false;
+      this.shelterAt = null;
       if (spawnedAt) this.emit('disconnect', `left the game (${why})`); // failed connection attempts are not news
       this.combat.stop();
       const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
@@ -862,6 +864,12 @@ class BotRunner {
       b?.collectBlock?.cancelTask().catch(() => {});
       b?.stopDigging?.();
     } catch {}
+  }
+
+  // Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.
+  inShelter() {
+    const s = this.shelterAt, p = this.bot?.entity?.position;
+    return !!s && !!p && Math.floor(p.x) === s.x && Math.floor(p.z) === s.z && Math.floor(p.y) === s.y - 2;
   }
 
   // A job cut short by a death or a disconnect goes back to the front of the
@@ -991,7 +999,7 @@ class BotRunner {
       isDay: this.online ? b.time?.isDay ?? (Number.isFinite(b.time?.timeOfDay) && b.time.timeOfDay >= 0 && b.time.timeOfDay < 12000) : null,
       fit: this.online ? !!this.combat?.fit?.() : false, // the keeper sends only a fit bot to a spawner
       combat: this.combat.mode || null,
-      sheltered: !!this.shelterAt && !!b && isNight(b), // in its night shelter (nightShelter): agents leave it alone until morning
+      sheltered: this.inShelter() && !!b && isNight(b), // in its night shelter (nightShelter): agents leave it alone until morning
       gettingFood: !!this.gettingFood, // hungry and fetching food (upkeep): agents leave it alone until it has some
       job: this.current && {label: label(this.current), progress: this.current.progress, type: this.current.type, done: this.current.t?.done || 0, total: this.current.t?.total || 0, runningS: Math.round((Date.now() - (this.current.startedAt || Date.now())) / 1000)},
       activity: this.activity(),
@@ -1201,7 +1209,7 @@ async function nightShelter(r, job) {
   if (!r.combat && !NIGHT_JOBS.has(job.type)) return;
   const feet = bot.entity.position.floored();
   // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.
-  const back = !!r.shelterAt && feet.x === r.shelterAt.x && feet.z === r.shelterAt.z && feet.y === r.shelterAt.y - 2;
+  const back = r.inShelter();
   const at = (dy) => bot.blockAt(feet.offset(0, dy, 0));
   if (!back) {
     if ((bot.blockAt(feet.offset(0, 1, 0))?.skyLight ?? 0) < 8 || insideAreas(r.protectedAreas, feet.x, feet.z)) return;

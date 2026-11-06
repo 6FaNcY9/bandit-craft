@@ -71,6 +71,18 @@ const {BotRunner} = require('../bots');
   const {RESUME_WINDOW_MS, BACKOFF_CAP} = require('../bots');
   assert.ok(RESUME_WINDOW_MS >= 2 * BACKOFF_CAP + 315000, `window ${RESUME_WINDOW_MS}`);
 }
+// A shelter left behind by a Stop does not freeze the bot on later nights: it counts only while the bot stands in the hole.
+{
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  const pos = {x: 10.5, y: 62, z: 20.5};
+  r.bot = {entity: {position: pos}, time: {timeOfDay: 15000}, game: {}};
+  r.shelterAt = {x: 10, y: 64, z: 20};
+  assert.strictEqual(r.inShelter(), true);
+  assert.strictEqual(r.snapshot().sheltered, true);
+  pos.x = 200; // walked off after a Stop
+  assert.strictEqual(r.inShelter(), false);
+  assert.strictEqual(r.snapshot().sheltered, false, 'agents may order it again');
+}
 // A job that had nothing to do says so in its finished event; the agent reads it.
 (async () => {
   const {JOBS} = require('../bots');
