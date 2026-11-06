@@ -2,8 +2,9 @@
 // Picture menus (chest inventories with item icons) for the in-game bot UI: pure builders from a render view to the
 // plugin's /menu body, no I/O. Same rule as botui-screens: the same view must build the same menu, because BotUi
 // re-sends a refreshing screen only when its JSON changed.
-const {choiceOf} = require('./idle');
+const {choiceOf, CHOICES} = require('./idle');
 const {safe} = require('./botui-screens');
+const {germanName} = require('./botui-jobs');
 
 // One slot: `payload` comes back as the click's data, `extra` carries count/damage/head/glint/lore.
 const slot = (i, item, name, payload, extra = {}) => ({slot: i, item, name: safe(name, 40), payload, ...extra});
@@ -32,8 +33,59 @@ function overview(view) {
   return {type: 'chest', title: 'Bots', rows: 6, slots};
 }
 
+const snapOf = (view, name) => view.snaps.find((s) => s.name === name) || {name, online: false};
+const back = (i, a, bot) => slot(i, 'arrow', 'Zurück', {a, ...(bot ? {bot} : {})});
+
+// The running job type -> the slot that started it (Abbauen and Bauen have no badge slot to light up here).
+const GLINT = {follow: 'lead', goto: 'ender_pearl', guard: 'iron_sword', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling'};
+
+// One bot, 3 rows: head with its state, orders, then Wenn frei / Inventar / Zurück.
+function botPage(view, screen) {
+  const s = snapOf(view, screen.bot), bot = s.name, hp = s.online ? Math.max(0, Math.min(20, Math.round(s.health) || 0)) : 0;
+  const food = s.online ? Math.max(0, Math.min(20, Math.round(s.food) || 0)) : 0;
+  const idle = view.idle?.get(bot), label = (idle && choiceOf(idle.id)?.label) || 'Nichts';
+  const lore = [safe(s.online ? s.activity || 'frei' : 'offline', 40), `♥ ${hp}/20 · Essen ${food}/20`, s.chest ? `Kiste: ${s.chest.x} ${s.chest.y} ${s.chest.z}` : 'Kiste: keine'];
+  const go = (i, item, name, job) => slot(i, item, name, {a: 'go', bot, job}, {glint: GLINT[s.job?.type] === item});
+  return {type: 'chest', title: safe(bot, 30), rows: 3, slots: [
+    slot(0, 'player_head', bot, {a: 'botm', bot}, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
+    go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'), go(4, 'iron_sword', 'Bewach diesen Ort', 'guardhere'),
+    go(5, 'chest', 'Einlagern', 'deposit'), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
+    go(12, 'iron_axe', 'Holz holen', 'chop'), slot(14, 'bricks', 'Bauen…', {a: 'job', key: 'schematic', bot}), go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
+    slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), back(26, 'ov')]};
+}
+
+// "Wenn frei": one slot per choice the viewer may pick; the keeper only for the owner's own bots.
+const IDLE_ITEM = {holz: ['spruce_log', 'fällt Bäume und füllt seine Kiste'], stein: ['cobblestone', 'baut Stein ab und füllt seine Kiste'],
+  baumfarm: ['oak_sapling', 'pflegt die Baumfarm'], wache: ['iron_sword', 'bewacht den Ort, an dem du ihn gesetzt hast'], keeper: ['clock', 'übernimmt die Daueraufträge']};
+function idlePage(view, screen) {
+  const s = snapOf(view, screen.bot), cur = view.idle?.get(s.name)?.id;
+  const slots = CHOICES.filter((c) => IDLE_ITEM[c.id] && (c.id !== 'keeper' || !s.guest)).map((c, i) =>
+    slot(i, IDLE_ITEM[c.id][0], c.label, {a: 'idle_set', bot: s.name, choice: c.id, m: 1}, {glint: cur === c.id, lore: [IDLE_ITEM[c.id][1]]}));
+  slots.push(slot(7, 'barrier', 'Nichts', {a: 'idle_set', bot: s.name, choice: 'none', m: 1}, {glint: !cur}), back(8, 'botm', s.name));
+  return {type: 'chest', title: `${safe(s.name, 20)}: wenn frei`, rows: 1, slots};
+}
+
+// The bot's inventory as picture slots, read-only (a click re-opens the same page).
+function inventoryPage(view, screen) {
+  const s = snapOf(view, screen.bot), slots = [];
+  for (const line of s.inventory || []) {
+    const m = /^([a-z0-9_]+) x(\d+)$/.exec(String(line));
+    if (m && slots.length < 53) slots.push(slot(slots.length, m[1], `${germanName(m[1])} ×${m[2]}`, {a: 'invm', bot: s.name}, {count: Math.max(1, Math.min(64, Number(m[2])))}));
+  }
+  slots.push(back(53, 'botm', s.name));
+  return {type: 'chest', title: `${safe(s.name, 20)}: Inventar`, rows: 6, slots};
+}
+
+// Staff aimed at a chest: pick which of the viewer's bots remembers it.
+function chestPage(view) {
+  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 17)
+    .map((s, i) => slot(i, 'player_head', s.name, {a: 'chestfor', bot: s.name}, {head: s.name, lore: ['Diese Kiste merken']}));
+  slots.push(back(17, 'ov'));
+  return {type: 'chest', title: 'Kiste merken für…', rows: 2, slots};
+}
+
 // Screens drawn as menus; later tasks add theirs to RENDER.
-const RENDER = {ov: overview};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

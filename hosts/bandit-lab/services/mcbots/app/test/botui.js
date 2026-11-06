@@ -369,6 +369,47 @@ async function fake() {
     assert.equal(ui.state('Fancy').open, false); assert.equal(logs.length, before);
     end();
   }
+  { // bot page: go jobs, rights, flash on the action bar, chest for a bot, idle_set back to the page, staff routing
+    const submits = [], snaps = [{name: 'bot1', online: true, health: 20, activity: 'idle', job: null, chest: {x: 9, y: 9, z: 9}}, {name: 'MisaBot', online: true, health: 10, activity: 'idle', job: null, guest: true}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push([v, j]); return {ok: true, unreached: []}; },
+      idle: {get: () => null, set: () => ({ok: true, label: 'Holz-Schicht'})}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
+    const bars = () => f.of('/actionbar').map((c) => c.body);
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'followme'});
+    assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'follow', args: {player: 'Fancy'}, replace: false}]);
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'deposit'});
+    assert.deepEqual(submits.at(-1)[1].args, {x: 9, y: 9, z: 9});
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'deposit'}); // no bot chest, no supply chest
+    const n = submits.length;
+    assert.equal(submits.at(-1)[0], 'Fancy');
+    assert.deepEqual(bars().at(-1), {player: 'Midari', text: 'Erst eine Kiste merken'});
+    await ev('Midari', {a: 'go', bot: 'bot1', job: 'followme'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'treefarm'});
+    assert.deepEqual(bars().at(-1), {player: 'Midari', text: 'Keine Baumfarm eingerichtet'});
+    assert.equal(submits.length, n);
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'guardhere'}, {pos: [5.5, 64, 6.5]});
+    assert.deepEqual(submits.at(-1)[1], {bots: ['MisaBot'], type: 'guard', args: {x: 5, y: 64, z: 6, radius: 16}, replace: false});
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'rm'}); assert.equal(submits.length, n + 1);
+    await ev('Midari', {a: 'stopmine'});
+    assert.ok(bars().some((b) => /gestoppt/.test(b.text)));
+    await ev('Midari', {a: 'idlem', bot: 'MisaBot'});
+    assert.equal(ui.state('Midari').screen.name, 'idlem');
+    await ev('Midari', {a: 'idle_set', bot: 'MisaBot', choice: 'holz', m: 1});
+    assert.deepEqual(ui.state('Midari').screen, {name: 'botm', bot: 'MisaBot'});
+    await ev('Midari', {a: 'invm', bot: 'MisaBot'});
+    assert.equal(ui.state('Midari').screen.name, 'invm');
+    const gaze = {x: 7, y: 8, z: 9, block: 'chest'};
+    await ui.handle({type: 'open', player: 'Midari', gaze});
+    assert.equal(ui.state('Midari').screen.name, 'chestm');
+    assert.deepEqual(f.of('/menu').at(-1).body.slots.filter((s) => s.head).map((s) => s.head), ['MisaBot']);
+    await ev('Midari', {a: 'chestfor', bot: 'MisaBot'}, {gaze});
+    assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'setchest', args: {x: 7, y: 8, z: 9}, replace: false}]);
+    await ev('Midari', {a: 'chestfor', bot: 'bot1'}, {gaze});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    end();
+  }
   { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
     const set = [], store = {MisaBot: null};
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];
@@ -393,7 +434,7 @@ async function fake() {
       const open = async (player, gaze) => { await ui.handle({type: 'open', player, gaze}); return ui.state(player).screen; };
       assert.equal((await open('Fancy', {x: 1, y: 2, z: 3, block: 'stone'})).name, 'auftrag');
       assert.equal((await open('Fancy', null)).name, 'lage');
-      assert.deepEqual(await open('Midari', bot), {name: 'bot', bot: 'MisaBot'});
+      assert.deepEqual(await open('Midari', bot), {name: 'botm', bot: 'MisaBot'});
       assert.equal((await open('Midari', {...bot, entity: {...bot.entity, name: 'bot1'}})).name, 'auftrag');
     }
     await click('Midari', {a: 'botscreen', bot: 'bot1'});

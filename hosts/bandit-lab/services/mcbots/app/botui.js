@@ -36,6 +36,10 @@ function markersOf(snaps, allowed) {
     .map((s) => ({x: s.pos[0], z: s.pos[2], dim: s.dimension, kind: MARK[botState(s)] || 'idle', label: String(s.name).slice(0, 16)}));
 }
 
+// `go` jobs of the bot page: the botui-jobs key and the fixed fields (deposit and treefarm fill theirs in).
+const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data: {}}, guardhere: {key: 'guard', data: {where: 'pos', radius: 16}},
+  deposit: {key: 'deposit', data: {}}, chop: {key: 'chop', data: {n: 64}}, treefarm: {key: 'treefarm', data: {}}};
+
 const ACTIONS = {
   // `none` after_action keeps the dialog open on the client, so the plugin clears it; Escape closes it either way.
   close: async (st, data, ui, viewer) => {
@@ -45,8 +49,38 @@ const ACTIONS = {
   lage: (st) => { st.screen = {name: 'lage'}; },
   ov: (st) => { st.screen = {name: 'ov'}; },
   oldmenu: (st) => { st.screen = {name: 'lage'}; },
-  // The bot's own menu comes with the next menu screens; for now the click only checks the right and stays on the overview.
-  botm: (st, data, ui, viewer) => { oneBot(ui, viewer, data); st.screen = {name: 'ov'}; },
+  botm: (st, data, ui, viewer) => { st.screen = {name: 'botm', bot: oneBot(ui, viewer, data)}; },
+  idlem: (st, data, ui, viewer) => { st.screen = {name: 'idlem', bot: oneBot(ui, viewer, data)}; },
+  invm: (st, data, ui, viewer) => { st.screen = {name: 'invm', bot: oneBot(ui, viewer, data)}; },
+  // Orders from the bot page: every one goes through jobs.build (rights, validation) and submit.
+  go: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data), spec = Object.hasOwn(GO, data.job) && GO[data.job];
+    if (!spec) throw new Error('unbekannter Auftrag');
+    st.screen = {name: 'botm', bot};
+    const places = ui.api.places(), snap = ui.api.snapshots().find((s) => s.name === bot);
+    let extra = {};
+    if (data.job === 'deposit') {
+      const c = snap?.chest || jobs.supplyOf(ui.api.keeper);
+      if (!c) return ui.flash(st, 'Erst eine Kiste merken');
+      extra = {x: c.x, y: c.y, z: c.z};
+    } else if (data.job === 'treefarm') {
+      const z = places.find((p) => p.kind === 'treefarm' && p.box);
+      if (!z) return ui.flash(st, 'Keine Baumfarm eingerichtet');
+      extra = {zone: z.name};
+    }
+    const o = jobs.build(spec.key, {who: bot, ...spec.data, ...extra}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places, snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+    ui.flash(st, `${bot}: ${o.say}`, true);
+  },
+  // The chest is the one the viewer is looking at: the coordinates come from the gaze, jobs.build checks they match.
+  chestfor: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data), g = st.ctx.gaze;
+    st.screen = {name: 'botm', bot};
+    if (!g || !jobs.isChest(g.block)) return ui.flash(st, 'Du schaust keine Kiste an');
+    const o = jobs.build('setchest', {who: bot, x: g.x, y: g.y, z: g.z}, {ctx: st.ctx, sel: st.sel, supply: null, places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+    ui.flash(st, `${bot}: Kiste ${g.x} ${g.y} ${g.z}`, true);
+  },
   stopmine: (st, data, ui, viewer) => {
     const known = ui.api.snapshots().map((s) => s.name), t = stopTargets(ui.viewerBots, viewer, known), bots = t === 'all' ? known : t;
     st.screen = {name: 'ov'};
@@ -69,7 +103,7 @@ const ACTIONS = {
   // Rights first, then the hub decides (api.idle.set throws a short German reason, e.g. keeper for guests).
   idle_set: (st, data, ui, viewer) => {
     const bot = oneBot(ui, viewer, data);
-    st.screen = {name: 'bot', bot};
+    st.screen = data.m ? {name: 'botm', bot} : {name: 'bot', bot};
     const r = ui.api.idle.set(bot, data.choice === 'none' ? null : data.choice);
     ui.flash(st, `${bot}: wenn frei → ${r?.label || 'Nichts'}`, true);
   },
@@ -276,7 +310,11 @@ class BotUi {
     return Object.keys(this.viewerBots).find((n) => n.toLowerCase() === p);
   }
 
-  flash(st, text, ok = false) { st.flash = {text, ok, until: this.now() + FLASH_MS}; }
+  // A menu has no body to show the flash in: it goes to the action bar once as well.
+  flash(st, text, ok = false) {
+    st.flash = {text, ok, until: this.now() + FLASH_MS};
+    if (st.viewer && menus.MENUS.has(st.screen.name)) this.call('/actionbar', {player: st.viewer, text}).catch((e) => this.log(`botui ${st.viewer}: actionbar: ${e.message}`));
+  }
 
   async handle(e) {
     const viewer = this.canon(e.player);
@@ -285,7 +323,7 @@ class BotUi {
     if (e.type === 'join') { this.api.presence?.(viewer, 'join'); return; }
     let st = this.states.get(viewer);
     if (e.type === 'closed') { if (st) st.open = false; return; }
-    if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
+    if (!st) this.states.set(viewer, st = {viewer, screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
     st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
     if (e.type === 'lage') {
       st.screen = {name: 'ov'}; st.lastClick = this.now();
@@ -293,7 +331,7 @@ class BotUi {
       // right-click / Shift+F: a bot you command -> its screen; anything else aimed at -> orders for it; else the Lagebild
       const g = e.gaze, allowed = this.viewerBots[viewer], who = g?.entity?.type === 'player' && g.entity.name;
       const mineBot = who && (allowed === '*' ? this.api.snapshots().some((s) => s.name === who) : allowed.includes(who));
-      st.screen = mineBot ? {name: 'bot', bot: who} : {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'lage'};
+      st.screen = mineBot ? {name: 'botm', bot: who} : g && !g.entity && jobs.isChest(g.block) ? {name: 'chestm'} : {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'lage'};
       st.lastClick = this.now();
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
