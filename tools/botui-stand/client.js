@@ -8,12 +8,14 @@ const str = (s) => Buffer.concat([varint(Buffer.byteLength(s)), Buffer.from(s)])
 function connect(username, port = 25599) {
   return new Promise((resolve, reject) => {
     const c = mc.createClient({host: '127.0.0.1', port, username, auth: 'offline', version: '26.1'});
-    const dialogs = [], maps = [], counts = {particles: 0}, inv = [], windows = [], chats = []; // inv: the player inventory window as the server last sent it
+    const dialogs = [], maps = [], counts = {particles: 0}, inv = [], windows = [], chats = [], win = {id: 0, type: -1, items: [], stateId: 0}; // inv: the player inventory window as the server last sent it
     c.on('error', reject);
     c.on('position', (p) => c.write('teleport_confirm', {teleportId: p.teleportId})); // else the server ignores our movement
     c.on('packet', (data, meta) => {
       if (meta.name === 'show_dialog') dialogs.push(nbt.simplify(data.dialog.data));
-      else if (meta.name === 'open_window') windows.push(data.windowId);
+      else if (meta.name === 'open_window') { windows.push(data.windowId); Object.assign(win, {id: data.windowId, type: data.inventoryType, items: []}); }
+      else if (meta.name === 'window_items' && data.windowId !== 0) { win.items.splice(0, win.items.length, ...data.items); win.stateId = data.stateId; }
+      else if (meta.name === 'set_slot' && data.windowId !== 0 && data.windowId === win.id) win.items[data.slot] = data.item;
       else if (meta.name === 'system_chat') chats.push(JSON.stringify(nbt.simplify(data.content)));
       else if (meta.name === 'map') maps.push(data);
       else if (meta.name === 'window_items' && data.windowId === 0) inv.splice(0, inv.length, ...data.items);
@@ -23,7 +25,7 @@ function connect(username, port = 25599) {
     c.once('login', () => {
       c.write('player_loaded', {}); // the server ignores movement until the client reports it has loaded
       resolve({
-        dialogs, maps, counts, inv, windows, chats,
+        dialogs, maps, counts, inv, windows, chats, win,
         // The dialog click packet is written raw: minecraft-data's anonymous-NBT shape makes Paper drop the connection.
         click(id, data) {
           const value = {};
@@ -38,6 +40,8 @@ function connect(username, port = 25599) {
         useItem: (hand = 'main_hand', rotation = {x: 0, y: 0}) => c.write('use_item', {hand, sequence: 0, rotation}), // right click with the item in hand
         leftClick: () => c.write('arm_animation', {hand: 'main_hand'}), // swing at air: Paper reports LEFT_CLICK_AIR
         useBlock: (x, y, z, hand = 'main_hand') => c.write('block_place', {hand, location: {x, y, z}, direction: 1, cursorX: 0.5, cursorY: 1, cursorZ: 0.5, insideBlock: false, worldBorderHit: false, sequence: 1}),
+        // mode 0 click, 1 shift-click, 2 number key (button = hotbar index); nothing is predicted client-side, the server decides
+        clickWindow: (slot, button = 0, mode = 0, windowId = win.id) => c.write('window_click', {windowId, stateId: win.stateId, slot, mouseButton: button, mode, changedSlots: [], cursorItem: undefined}),
         closeWindow: (id) => c.write('close_window', {windowId: id}),
         look: (yaw, pitch) => c.write('look', {yaw, pitch, flags: {onGround: true, hasHorizontalCollision: false}}),
         end: () => new Promise((r) => { c.once('end', r); c.end(); }),

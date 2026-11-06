@@ -2,6 +2,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {connect} = require('./client');
+const items = require('minecraft-data')('26.1').items;
+const nameAt = (c, slot) => { const i = c.win.items[slot]; return i && i.itemCount > 0 ? items[i.itemId].name : null; };
 
 const STAND = `${process.env.XDG_RUNTIME_DIR}/botui-stand`;
 const CONSOLE = `${STAND}/in`, LOG = `${STAND}/logs/latest.log`;
@@ -159,6 +161,67 @@ function sampleDialog(size) {
   const seen = c.counts.particles;
   await sleep(1000);
   assert.equal(c.counts.particles, seen);
+
+  // menus: a chest and a hopper of display items; every click and drag is cancelled, only slots with a payload report
+  const menuBody = (o) => ({player: 'Viewer', type: 'chest', title: 'Test', slots: [{slot: 4, item: 'iron_ore', name: 'Eisen', lore: ['a', 'b'], payload: {a: 'x', n: 1}}], ...o});
+  const mpost = async (o) => (await post('/menu', menuBody(o))).json();
+  assert.equal((await post('/menu', menuBody({type: 'furnace'}))).status, 400);
+  assert.equal((await post('/menu', menuBody({slots: [{slot: 27, item: 'stone', name: 'x', payload: {}}]}))).status, 400);
+  assert.equal((await post('/menu', menuBody({player: 'Nobody'}))).status, 400);
+  assert.equal((await mpost({})).ok, true);
+  await waitFor(() => c.win.items.length > 0 && nameAt(c, 4) === 'iron_ore');
+  assert.equal(c.win.items.length, 27 + 36);
+  const invBefore = JSON.stringify(c.inv);
+  assert.ok(c.inv[36] && c.inv[36].itemCount > 0, 'the staff is still in hand');
+  c.clickWindow(4, 0, 0);
+  ev = await waitEvent((e) => e.type === 'click' && e.player === 'Viewer');
+  assert.deepEqual(ev.data, {a: 'x', n: 1, shift: false});
+  c.clickWindow(4, 0, 1);
+  ev = await waitEvent((e) => e.type === 'click' && e.player === 'Viewer');
+  assert.deepEqual(ev.data, {a: 'x', n: 1, shift: true});
+  c.clickWindow(54, 0, 1); // shift-click on the player's own hotbar slot 0
+  c.clickWindow(4, 0, 2); // number key 1 onto the menu slot
+  c.clickWindow(5, 0, 0); // an empty menu slot
+  await assertNoEvent((e) => e.type === 'click' || e.type === 'closed', 1500);
+  assert.equal(JSON.stringify(c.inv), invBefore);
+  assert.equal(nameAt(c, 4), 'iron_ore');
+  // same type, rows and title: updated in place, no close, no reopen
+  const wins = c.windows.length;
+  assert.equal((await mpost({slots: [{slot: 4, item: 'gold_ore', name: 'Gold', payload: {a: 'y'}}]})).ok, true);
+  await waitFor(() => nameAt(c, 4) === 'gold_ore');
+  assert.equal(c.windows.length, wins);
+  c.clickWindow(4, 0, 0);
+  assert.deepEqual((await waitEvent((e) => e.type === 'click' && e.player === 'Viewer')).data, {a: 'y', shift: false});
+  // another title replaces the window without a close event
+  assert.equal((await mpost({title: 'Other'})).ok, true);
+  await waitFor(() => c.windows.length === wins + 1 && nameAt(c, 4) === 'iron_ore');
+  await assertNoEvent((e) => e.type === 'closed', 1000);
+  // an unknown item renders as paper
+  assert.equal((await mpost({slots: [{slot: 0, item: 'no_such_item', name: 'Q', payload: {}}]})).ok, true);
+  await waitFor(() => nameAt(c, 0) === 'paper');
+  // a client close is one closed event; a refresh after it is refused
+  c.closeWindow(c.win.id);
+  await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+  await assertNoEvent((e) => e.type === 'closed', 500);
+  assert.deepEqual(await mpost({refresh: true}), {ok: false, feedback: 'closed'});
+  // a dialog and a menu replace each other without a closed event
+  assert.equal((await mpost({})).ok, true);
+  await waitFor(() => c.windows.length === wins + 3);
+  const dl = c.dialogs.length;
+  assert.equal((await (await post('/show', {player: 'Viewer', dialog: big})).json()).ok, true);
+  await waitFor(() => c.dialogs.length === dl + 1);
+  assert.equal((await mpost({title: 'After dialog'})).ok, true);
+  await waitFor(() => c.windows.length === wins + 4);
+  await assertNoEvent((e) => e.type === 'closed', 1000);
+  c.closeWindow(c.win.id);
+  await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+  // hopper: five slots
+  assert.equal((await mpost({type: 'hopper', slots: [0, 1, 2, 3, 4].map((i) => ({slot: i, item: 'stone', name: `S${i}`, payload: {i}}))})).ok, true);
+  await waitFor(() => c.win.items.length === 5 + 36 && nameAt(c, 4) === 'stone');
+  c.closeWindow(c.win.id);
+  await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+  assert.equal((await (await post('/actionbar', {player: 'Viewer', text: 'hi'})).json()).ok, true);
+  assert.equal((await post('/actionbar', {player: 'Nobody', text: 'hi'})).status, 400);
 
   // a non-viewer's forged click reaches neither the queue nor the raytrace
   await other.click('botui:do', {a: 'bot', bot: 'bot7'});

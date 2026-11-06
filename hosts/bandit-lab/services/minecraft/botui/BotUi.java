@@ -49,6 +49,12 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryCreativeEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -57,9 +63,13 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.RayTraceResult;
@@ -200,6 +210,8 @@ public class BotUi extends JavaPlugin implements Listener {
         case "/viewers" -> viewers(x, body);
         case "/show" -> show(x, body);
         case "/close" -> close(x, body);
+        case "/menu" -> menu(x, body);
+        case "/actionbar" -> actionbar(x, body);
         case "/outline" -> outline(x, body);
         case "/map" -> map(x, body);
         case "/map/give" -> give(x, body);
@@ -254,6 +266,7 @@ public class BotUi extends JavaPlugin implements Listener {
         closed.put("feedback", "closed");
         return closed;
       }
+      closeMenu(p); // a switch, not a close: no event for the hub
       List<String> feedback = new ArrayList<>();
       CommandSender s = Bukkit.createCommandSender(c -> feedback.add(PlainTextComponentSerializer.plainText().serialize(c)));
       boolean ran;
@@ -290,6 +303,183 @@ public class BotUi extends JavaPlugin implements Listener {
       return null;
     });
     reply(x, 200, ok());
+  }
+
+  // ---- menus ------------------------------------------------------------------------------
+
+  /** Holder of a hub menu: its top inventory is the marker every handler below checks. */
+  private static final class MenuHolder implements InventoryHolder {
+    final String type, title;
+    final int rows;
+    Map<Integer, JSONObject> payloads = new HashMap<>();
+    Inventory inv;
+
+    MenuHolder(String type, int rows, String title) {
+      this.type = type;
+      this.rows = rows;
+      this.title = title;
+    }
+
+    @Override
+    public Inventory getInventory() {
+      return inv;
+    }
+  }
+
+  private final Set<UUID> switching = ConcurrentHashMap.newKeySet(); // menus the plugin closes itself: no "closed" event
+
+  private static MenuHolder menuOf(Player p) {
+    return p.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder h ? h : null;
+  }
+
+  private void closeMenu(Player p) {
+    if (menuOf(p) == null) return;
+    switching.add(p.getUniqueId());
+    try {
+      p.closeInventory();
+    } finally {
+      switching.remove(p.getUniqueId());
+    }
+  }
+
+  private static boolean whole(Object o, int min, int max) {
+    return o instanceof Number n && n.doubleValue() == n.intValue() && n.intValue() >= min && n.intValue() <= max;
+  }
+
+  private static boolean textOk(Object o, int max) {
+    return o instanceof String t && t.length() <= max;
+  }
+
+  private static ItemStack menuItem(JSONObject s) {
+    Material m = Material.matchMaterial(str(s, "item"));
+    if (m == null || !m.isItem() || m.isAir()) m = Material.PAPER; // an unknown id never fails the whole menu
+    ItemStack it = new ItemStack(m);
+    ItemMeta meta = it.getItemMeta();
+    meta.displayName(Component.text(str(s, "name")).decoration(TextDecoration.ITALIC, false));
+    if (s.get("lore") instanceof JSONArray a) {
+      List<Component> lore = new ArrayList<>();
+      for (Object l : a) lore.add(Component.text((String) l).decoration(TextDecoration.ITALIC, false));
+      meta.lore(lore);
+    }
+    int count = s.get("count") instanceof Number n ? n.intValue() : 1;
+    if (s.get("maxDamage") instanceof Number md && md.intValue() > 0 && meta instanceof Damageable d) {
+      d.setMaxDamage(md.intValue());
+      d.setDamage(Math.max(0, Math.min(md.intValue(), s.get("damage") instanceof Number dm ? dm.intValue() : 0)));
+      meta.setMaxStackSize(1);
+      count = 1;
+    } else if (count > m.getMaxStackSize()) {
+      meta.setMaxStackSize(count);
+    }
+    if (s.get("glint") instanceof Boolean g) meta.setEnchantmentGlintOverride(g);
+    if (str(s, "head") instanceof String h && NAME.matcher(h).matches() && meta instanceof SkullMeta sm) {
+      Player owner = Bukkit.getPlayerExact(h);
+      if (owner != null) sm.setPlayerProfile(owner.getPlayerProfile());
+    }
+    it.setItemMeta(meta);
+    it.setAmount(count);
+    return it;
+  }
+
+  private void menu(HttpExchange x, JSONObject b) throws Exception {
+    String name = str(b, "player"), type = str(b, "type"), title = str(b, "title");
+    boolean hopper = "hopper".equals(type);
+    int rows = hopper ? 1 : b.get("rows") == null ? 3 : whole(b.get("rows"), 1, 6) ? ((Number) b.get("rows")).intValue() : 0;
+    int size = hopper ? 5 : rows * 9;
+    boolean good = name != null && NAME.matcher(name).matches() && (hopper || "chest".equals(type)) && rows > 0 && textOk(title, 128) && b.get("slots") instanceof JSONArray;
+    if (good) {
+      for (Object o : (JSONArray) b.get("slots")) {
+        good = o instanceof JSONObject s && whole(s.get("slot"), 0, size - 1) && textOk(s.get("item"), 64) && textOk(s.get("name"), 256)
+            && s.get("payload") instanceof JSONObject && (s.get("count") == null || whole(s.get("count"), 1, 99)) && (s.get("head") == null || textOk(s.get("head"), 16))
+            && (s.get("lore") == null || s.get("lore") instanceof JSONArray l && l.size() <= 20 && l.stream().allMatch(e -> textOk(e, 256)));
+        if (!good) break;
+      }
+    }
+    if (!good) {
+      reply(x, 400, error("bad menu"));
+      return;
+    }
+    JSONObject res = sync(() -> {
+      Player p = Bukkit.getPlayerExact(name);
+      if (p == null) return null;
+      MenuHolder cur = menuOf(p);
+      if (Boolean.TRUE.equals(b.get("refresh")) && cur == null) { // a hub refresh must never re-open a closed menu
+        JSONObject closed = new JSONObject();
+        closed.put("ok", false);
+        closed.put("feedback", "closed");
+        return closed;
+      }
+      boolean same = cur != null && cur.type.equals(type) && cur.rows == rows && cur.title.equals(title);
+      MenuHolder h = same ? cur : new MenuHolder(type, rows, title);
+      Map<Integer, JSONObject> payloads = new HashMap<>();
+      Inventory inv = same ? cur.inv : hopper ? Bukkit.createInventory(h, InventoryType.HOPPER, Component.text(title)) : Bukkit.createInventory(h, size, Component.text(title));
+      h.inv = inv;
+      inv.clear();
+      for (Object o : (JSONArray) b.get("slots")) {
+        JSONObject s = (JSONObject) o;
+        int slot = ((Number) s.get("slot")).intValue();
+        inv.setItem(slot, menuItem(s));
+        payloads.put(slot, (JSONObject) s.get("payload"));
+      }
+      h.payloads = payloads;
+      if (!same) {
+        boolean dialog = open.remove(p.getUniqueId());
+        if (dialog) Bukkit.dispatchCommand(Bukkit.createCommandSender(c -> {}), "dialog clear " + p.getName()); // a switch: no "closed" event
+        if (dialog) Bukkit.getScheduler().runTask(this, () -> {
+          if (p.isOnline()) p.openInventory(inv);
+        });
+        else p.openInventory(inv); // replacing another menu closes it with OPEN_NEW, which is no "closed" either
+      }
+      return ok();
+    });
+    if (res == null) reply(x, 400, error("player not online"));
+    else reply(x, 200, res);
+  }
+
+  private void actionbar(HttpExchange x, JSONObject b) throws Exception {
+    String name = str(b, "player");
+    if (name == null || !NAME.matcher(name).matches() || !textOk(b.get("text"), 256)) {
+      reply(x, 400, error("bad player or text"));
+      return;
+    }
+    boolean found = sync(() -> {
+      Player p = Bukkit.getPlayerExact(name);
+      if (p != null) p.sendActionBar(Component.text(str(b, "text")));
+      return p != null;
+    });
+    if (found) reply(x, 200, ok());
+    else reply(x, 400, error("player not online"));
+  }
+
+  // A menu shows display items: nothing may ever move, in either half of the view. Handled even when another plugin cancelled first.
+  @EventHandler(priority = EventPriority.LOWEST)
+  public void onMenuClick(InventoryClickEvent e) {
+    if (!(e.getView().getTopInventory().getHolder() instanceof MenuHolder h)) return;
+    e.setCancelled(true);
+    ClickType t = e.getClick();
+    if (e.getClickedInventory() != e.getView().getTopInventory()) return;
+    if (t != ClickType.LEFT && t != ClickType.RIGHT && t != ClickType.SHIFT_LEFT && t != ClickType.SHIFT_RIGHT) return;
+    JSONObject payload = h.payloads.get(e.getSlot());
+    if (payload == null || !(e.getWhoClicked() instanceof Player p)) return;
+    JSONObject data = new JSONObject(payload);
+    data.put("shift", t.isShiftClick());
+    emit("click", p, data);
+  }
+
+  @EventHandler(priority = EventPriority.LOWEST)
+  public void onMenuCreative(InventoryCreativeEvent e) {
+    if (e.getView().getTopInventory().getHolder() instanceof MenuHolder) e.setCancelled(true);
+  }
+
+  @EventHandler(priority = EventPriority.LOWEST)
+  public void onMenuDrag(InventoryDragEvent e) {
+    if (e.getView().getTopInventory().getHolder() instanceof MenuHolder) e.setCancelled(true);
+  }
+
+  @EventHandler(priority = EventPriority.MONITOR)
+  public void onMenuClose(InventoryCloseEvent e) {
+    if (!(e.getInventory().getHolder() instanceof MenuHolder) || !(e.getPlayer() instanceof Player p)) return;
+    if (switching.contains(p.getUniqueId()) || e.getReason() == InventoryCloseEvent.Reason.OPEN_NEW || e.getReason() == InventoryCloseEvent.Reason.DISCONNECT) return;
+    emit("closed", p, null);
   }
 
   private void outline(HttpExchange x, JSONObject b) throws Exception {
