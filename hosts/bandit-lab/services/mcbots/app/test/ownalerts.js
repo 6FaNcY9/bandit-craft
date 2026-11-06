@@ -43,3 +43,12 @@ const d = digest(log, ['MisaBot', 'EM_Trader'], 10, 100);
 assert.deepEqual(d, ['Seit du weg warst:', 'EM_Trader: steckt fest: kein Weg', 'MisaBot: tot bei 4 5 6']);
 assert.equal(digest([...Array(20)].map((_, i) => ev('MisaBot', 'death', 20 + i, 'died at 1 2 3')), ['MisaBot'], 10, 100).length, 6);
 assert.deepEqual(digest(log, ['MisaBot'], 99, 100), []);
+
+{ // real fail events carry the "gave up: <job> - " prefix (bots.js); a plain 128-block miss is no alert
+  const real = ev('MisaBot', 'fail', 0, 'gave up: mine sand - no free sand within 192 blocks of a far search heading west');
+  assert.equal(classify(real), 'missing');
+  assert.equal(text('missing', real), 'fehlt: kein sand gefunden, auch nicht 192 Blöcke weiter Richtung Westen');
+  assert.equal(classify(ev('MisaBot', 'fail', 0, 'gave up: get sand 64 - no free sand within reach and no walkable heading')), 'missing');
+  assert.equal(classify(ev('MisaBot', 'fail', 0, 'failed: mine sand - no free sand within 128 blocks (collected 0/64)')), null);
+  console.log('ownalerts real fail events ok');
+}
