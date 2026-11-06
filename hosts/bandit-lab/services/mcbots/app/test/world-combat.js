@@ -465,6 +465,17 @@ assert.strictEqual(pw('bot1').length, 32);
 const {normalize} = require('../itemfix');
 assert.deepStrictEqual(normalize({enchantments: [{id: 1, level: 5}]}, {enchantments: {1: {name: 'efficiency'}}}), [{name: 'efficiency', lvl: 5}]);
 assert.deepStrictEqual(normalize([{name: 'x', lvl: 1}], {}), [{name: 'x', lvl: 1}]);
+{ // digfix.js: the pathfinder's repeated dig listeners do not pile up (MaxListenersExceeded, lab 2026-11-06)
+  const {noRepeatDigListeners} = require('../digfix');
+  const bot = new (require('node:events'))();
+  noRepeatDigListeners(bot);
+  const stopped = () => {}, other = () => {};
+  for (let i = 0; i < 30; i++) { bot.on('diggingAborted', stopped); bot.on('diggingCompleted', stopped); }
+  bot.on('diggingAborted', other); bot.on('path_reset', stopped); bot.on('path_reset', stopped);
+  assert.deepStrictEqual([bot.listenerCount('diggingAborted'), bot.listenerCount('diggingCompleted'), bot.listenerCount('path_reset')], [2, 1, 2]);
+  bot.removeAllListeners('diggingAborted');
+  assert.strictEqual(bot.listenerCount('diggingAborted'), 0);
+}
 { // digfix.js: ore blocks get the pickaxe speed bonus (vanilla times)
   const {fix} = require('../digfix');
   assert.strictEqual(fix('26.1'), false); // already applied by bots.js

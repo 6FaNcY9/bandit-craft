@@ -1,6 +1,6 @@
 'use strict';
 require('./itemfix'); // must load before mineflayer
-require('./digfix');
+const {noRepeatDigListeners} = require('./digfix');
 // One BotRunner per bot: connection lifecycle plus a sequential job queue.
 // Adding a job type (crafting, building, ...) = add one entry to JOBS and one
 // to VALIDATE; nothing else changes.
@@ -647,6 +647,7 @@ class BotRunner {
       bot.once('end', () => clearInterval(timer));
     });
     bot.once('spawn', () => { const best = bot.pathfinder.bestHarvestTool; bot.pathfinder.bestHarvestTool = (b) => pathTool(bot, b, best); });
+    noRepeatDigListeners(bot);
     bot.loadPlugin(pathfinder);
     useSettledGoto(bot);
     // The bot's own air: mineflayer 4.39 sets bot.oxygenLevel from ANY entity's air_supply, so a swimming sheep or a

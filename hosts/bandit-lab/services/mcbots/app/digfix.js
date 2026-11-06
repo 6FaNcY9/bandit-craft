@@ -24,4 +24,14 @@ function fix(version) {
 }
 
 fix('26.1'); // the protocol version bots.js connects with
-module.exports = {fix};
+
+// mineflayer-pathfinder adds a diggingAborted/diggingCompleted listener at every path reset while its dig is pending and
+// removes them only when a dig ends, so a storm of resets leaks them (40 MaxListenersExceeded warnings, lab 2026-11-06).
+// The same function twice does nothing more than once: drop the repeat.
+function noRepeatDigListeners(bot) {
+  const on = bot.on;
+  bot.on = function (event, fn) {
+    return (event === 'diggingAborted' || event === 'diggingCompleted') && this.listeners(event).includes(fn) ? this : on.call(this, event, fn);
+  };
+}
+module.exports = {fix, noRepeatDigListeners};
