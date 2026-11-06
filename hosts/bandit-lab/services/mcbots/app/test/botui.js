@@ -540,7 +540,7 @@ async function fake() {
       setWant(item, n) { if (item !== 'logs') throw new Error('unknown quota item: ' + item); calls.push(['want', item, n]); }};
     const traderChests = {add: (...a) => chests.push(['add', ...a]), remove: (...a) => chests.push(['remove', ...a]), list: () => ({sticks: [], stores: []})};
     const api = {snapshots: () => [{name: 'bot1', online: true}, {name: 'MisaBot', online: true}], places: () => [], schematics: async () => [], keeper, plan: {enabled: false, setEnabled: (on) => calls.push(['plan', on])},
-      traderChests, ground: (v, bot, type, a) => { if (v === 'Midari' && a.x === 99) throw new Error('nicht ganz in deinem Bereich'); }, traders: () => ['MisaBot'], sidebar: (v, on) => calls.push(['sidebar', v, on])};
+      traderChests, traders: () => ['MisaBot'], sidebar: (v, on) => calls.push(['sidebar', v, on])};
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
     await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
@@ -564,7 +564,7 @@ async function fake() {
     await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'bogus'}, {gaze}); assert.match(ui.state('Midari').flash.text, /unbekannte Kiste/);
     await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'stores'}, {gaze: {...gaze, block: 'stone'}}); assert.match(ui.state('Midari').flash.text, /keine Kiste/);
     await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'stores'}); assert.match(ui.state('Midari').flash.text, /keine Kiste/);
-    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'sticks'}, {gaze: {...gaze, x: 99}}); assert.match(ui.state('Midari').flash.text, /nicht ganz in deinem Bereich/);
+    await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'sticks'}, {gaze: {...gaze, x: 99}}); assert.equal(chests.pop()[3].x, 99, 'a guest may pick any chest');
     assert.equal(chests.length, 1);
     await click('Midari', {a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 7, y: 8, z: 9});
     assert.deepEqual(chests.at(-1), ['remove', 'MisaBot', 'sticks', {x: 7, y: 8, z: 9}]); assert.equal(ui.state('Midari').screen.name, 'ziele');

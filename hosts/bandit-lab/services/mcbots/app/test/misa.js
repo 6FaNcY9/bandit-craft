@@ -48,24 +48,18 @@
     for (const guest of ['MisaBot', 'EM_Trader']) assert.throws(() => w.postNeed(guest, 'iron_ingot', 4, {x: 1, y: 2, z: 3}), /invalid need/, guest);
     assert.ok(w.postNeed('bot1', 'iron_ingot', 4, {x: 1, y: 2, z: 3}));
   }
-  // rights: a guest's farm or chest lies on its own ground; any other order names none
+  // rights: a guest's farm lies on its own ground; any other order (chests too: the shared base) names none
   const farm = (x1, z1, x2, z2) => ({x1, z1, x2, z2});
   assert.equal(misa.groundRule([base], 'MisaBot', 'treefarm', farm(120, 380, 130, 390)), null);
   assert.match(misa.groundRule([base], 'MisaBot', 'treefarm', farm(-90, 0, -80, 10)), /nicht ganz in deinem Bereich/, "the owner's farm");
   assert.match(misa.groundRule([base], 'MisaBot', 'wheatfarm', farm(100, 380, 130, 390)), /nicht ganz/);
-  assert.equal(misa.groundRule([base], 'MisaBot', 'setchest', {x: 120, y: 64, z: 380}), null);
-  assert.match(misa.groundRule([base], 'MisaBot', 'chest', {x: 0, y: 64, z: 0}), /nicht ganz/);
-  assert.match(misa.groundRule([base, hall], 'MisaBot', 'chest', {x: 160, y: 65, z: 410}), /gesperrt/, "a chest in the owner's hall");
+  assert.equal(misa.groundRule([base], 'MisaBot', 'setchest', {x: 0, y: 64, z: 0}), null);
+  assert.equal(misa.groundRule([base, hall], 'MisaBot', 'chest', {x: 160, y: 65, z: 410}), null);
   assert.equal(misa.groundRule([base], 'MisaBot', 'mine', {}), null);
-  { // her kiste: on her ground only; a runner no area names (the owner's) picks any chest
-    const spot = (x, z) => ({x, y: 64, z});
-    const at = (name) => { const q = new BotRunner(name, {log: () => {}, protectedAreas: [base]}); return [q, {blockAt: () => ({name: 'chest'})}]; };
-    const [q, b] = at('MisaBot');
-    assert.deepEqual(q.ownChest(b, null, spot(120, 380)), spot(120, 380));
-    assert.throws(() => q.ownChest(b, null, spot(0, 0)), /nicht ganz/);
-    assert.deepEqual(q.ownChest(b, null, spot(0, 0), true), spot(0, 0), 'the staff gaze is checked by the hub');
-    const [o, ob] = at('bot1');
-    assert.deepEqual(o.ownChest(ob, null, spot(0, 0)), spot(0, 0));
+  { // her kiste: any chest, also at spawn (her store is there)
+    const spot = {x: 0, y: 64, z: 0};
+    const q = new BotRunner('MisaBot', {log: () => {}, protectedAreas: [base]});
+    assert.deepEqual(q.ownChest({blockAt: () => ({name: 'chest'})}, null, spot), spot);
   }
 
   // corners: 1, 2, 1 again; per player

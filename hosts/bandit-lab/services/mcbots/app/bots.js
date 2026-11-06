@@ -536,15 +536,8 @@ class BotRunner {
   }
 
   // The block for `kiste`: the one the player looks at, or the one at x y z. Throws the German reason.
-  // A guest bot (one an area names) may only pick a chest on its own ground (misa.groundRule); the staff's gaze (trusted) was checked by the hub.
+  // A guest may pick any chest it stands at: the main base around spawn is shared (Misa keeps her store there).
   ownChest(bot, player, spot, trusted = false) {
-    const c = this.pickChest(bot, player, spot, trusted);
-    const bad = !trusted && this.allAreas.some((a) => a[6]?.includes(this.name)) && misa.groundRule(this.allAreas, this.name, 'chest', c);
-    if (bad) throw new Error(bad);
-    return c;
-  }
-
-  pickChest(bot, player, spot, trusted) {
     const box = /^(chest|trapped_chest|barrel)$/;
     if (spot === 'look') {
       if (!player.entity) throw new Error('ich sehe dich nicht');

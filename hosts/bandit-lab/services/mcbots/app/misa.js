@@ -1,4 +1,4 @@
-'use strict';
+;'use strict';
 // Misa's bots (spec 2026-10-29-misa-bots): the "@bot" exemption of protected areas and the building orders' corners.
 // A protected area is [x1, z1, x2, z2, y1, y2, bots]; bots (optional, y1/y2 null for a plain box) are the bots that
 // may work inside it. A runner holds only the areas that do not name it (forBot), so the existing consumers
@@ -16,10 +16,9 @@ function boxRule(areas, name, box) {
   return null;
 }
 
-// A guest's farms and chests lie on its own ground: the order's box (farm) or chest must pass boxRule. null for any other order.
+// A guest's farms lie on its own ground: the order's box must pass boxRule. null for any other order.
 function groundRule(areas, name, type, a) {
-  const box = type === 'treefarm' || type === 'wheatfarm' ? {x1: Math.min(a.x1, a.x2), y1: -64, z1: Math.min(a.z1, a.z2), x2: Math.max(a.x1, a.x2), y2: 320, z2: Math.max(a.z1, a.z2)}
-    : type === 'setchest' || type === 'chest' ? {x1: a.x, y1: a.y, z1: a.z, x2: a.x, y2: a.y, z2: a.z} : null;
+  const box = type === 'treefarm' || type === 'wheatfarm' ? {x1: Math.min(a.x1, a.x2), y1: -64, z1: Math.min(a.z1, a.z2), x2: Math.max(a.x1, a.x2), y2: 320, z2: Math.max(a.z1, a.z2)} : null;
   return box && boxRule(areas, name, box);
 }
 

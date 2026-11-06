@@ -301,7 +301,6 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     presence,
     snapshots: placedBots,
     markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
-    ground,
     submit: (viewer, {bots, type, args, replace}) => {
       for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
       const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false});
