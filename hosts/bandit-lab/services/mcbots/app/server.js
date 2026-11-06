@@ -54,6 +54,10 @@ const SESSION = Date.now().toString(36);
 const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
 const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
 const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
+const idleLib = require('./idle'), {JOBS: ORDER_JOBS} = require('./botui-jobs');
+const idleStore = new idleLib.IdleStore(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'idle.json') : null);
+const idleSince = new Map(); // bot -> when the sweep first saw it with no job and an empty queue
+const idleJobs = new Map(); // bot -> type of the "Wenn frei" job it runs; its failure waits like an order's
 const orderRetryAt = new Map(); // bot -> before then a failed order does not start again
 const deathTimes = new Map(); // bot -> its recent deaths (agentauth.deathLoop)
 const orderEnded = (e) => {
@@ -64,6 +68,11 @@ const orderEnded = (e) => {
   const p = projects.get(e.bot), pout = p && !p.paused ? agentauth.orderOutcome(e, p) : null;
   if (pout?.end) projects.forget(e.bot);
   if (pout?.retry && !out) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + pout.retry));
+  const iout = idleJobs.has(e.bot) && agentauth.orderOutcome(e, {type: idleJobs.get(e.bot), args: true});
+  if (iout) {
+    idleJobs.delete(e.bot);
+    if (iout.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + iout.retry));
+  }
   if (e.kind === 'death') { // every bot's, not only one with an order: a queue of jobs kills it just as well
     const d = agentauth.deathLoop(deathTimes.get(e.bot) || [], e.t);
     deathTimes.set(e.bot, d.times);
@@ -99,6 +108,24 @@ setInterval(() => {
     try { runners.get(name).enqueue(p.type, p.args); } catch (err) {
       orderRetryAt.set(name, Date.now() + agentauth.ORDER_RETRY_MS);
       events.add(name, 'info', `its ${p.type} project could not go on: ${err.message}`);
+    }
+  }
+  // A bot that stays idle for a minute takes its "Wenn frei" order (idle.js), unless something else has it.
+  const snaps = new Map([...runners].map(([n, r]) => [n, r.snapshot()]));
+  idleLib.trackIdle(snaps, idleSince);
+  const busy = new Set([...ownerOrders.keys(), ...started, ...Object.entries(projects.all).filter(([, p]) => !p.paused).map(([n]) => n),
+    ...(board?.parts() || []).filter((p) => p.state === 'claimed').map((p) => p.claim.bot)]);
+  if (keeper) { const k = keeper.state(); for (const b of [k.counting, ...k.quotas.map((q) => q.bot), ...k.lighting.map((l) => l.bot)]) if (b) busy.add(b); }
+  for (const {bot, choice} of idleLib.idleToStart({snaps, store: idleStore, busy, retryAt: orderRetryAt, idleSince})) {
+    started.add(bot);
+    try {
+      const {type, args} = idleJob(bot, choice);
+      submitJob({bots: [bot], type, args, agent: false, remember: false});
+      idleJobs.set(bot, type);
+      events.add(bot, 'info', `idle: ${choice.label}`);
+    } catch (err) {
+      orderRetryAt.set(bot, Math.max(orderRetryAt.get(bot) || 0, Date.now() + agentauth.ORDER_RETRY_MS));
+      events.add(bot, 'info', err.message === 'no chest' ? 'Wenn frei braucht eine Kiste' : `Wenn frei geht nicht: ${err.message}`);
     }
   }
   // Idle bots without an owner order help with another bot's need (the needs board, bots.js helpOnce); only when
@@ -186,7 +213,8 @@ function stopAll() {
 }
 // The body of POST /api/job after the origin and agent checks, also behind the in-game UI (botui.js); throws the refusal.
 // "all" skips remote bots whose worker is away, so a Stop reaches every bot that can still hear it; naming an offline bot is an error.
-function submitJob({bots, type, args, replace, agent = false}) {
+// remember: false keeps the job out of the standing orders and projects (the "Wenn frei" jobs restart by the idle sweep).
+function submitJob({bots, type, args, replace, agent = false, remember = true}) {
   const all = bots === 'all';
   const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
   if (!targets.length || targets.includes(undefined)) throw new Error('unknown bot');
@@ -202,12 +230,12 @@ function submitJob({bots, type, args, replace, agent = false}) {
       if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); skipped.push(r.name); continue; }
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
       r.enqueue(type, perBotArgs, {replace: replace === true, ...(type === 'graves' ? {first: true} : {})});
-      if (!agent && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
+      if (!agent && remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
       if (stopping) {
         delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
         projects.pause(r.name);
       }
-      if (PROJECTS.has(type)) projects.note(r.name, type, VALIDATE[type](args || {}));
+      if (remember && PROJECTS.has(type)) projects.note(r.name, type, VALIDATE[type](args || {}));
     } catch (e) {
       errors.push(`${r.name}: ${e.message}`); // one bot failing must not keep the others from getting the job
     }
@@ -230,6 +258,24 @@ function submitJob({bots, type, args, replace, agent = false}) {
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
   snapshots: () => [...runners.values()].map((r) => r.snapshot())}) : null;
 if (ingame) ingame.start();
+// The job a "Wenn frei" choice becomes for a bot; throws Error('no chest') for a guest without a chest.
+function idleJob(bot, choice) {
+  const r = runners.get(bot), d = choice.data, pt = (p) => ({x: p.x, y: p.y, z: p.z}), v = {...d};
+  if (d.chest === 'own') {
+    v.chest = r.prefs?.chest || (cfg.guestBots.includes(bot) ? null : supplyChest);
+    if (!v.chest) throw new Error('no chest');
+  }
+  if (d.zone === 'first') {
+    const z = places.list.find((p) => p.kind === 'treefarm' && p.box);
+    if (!z) throw new Error('keine Baumfarm-Zone');
+    v.zone = z.box;
+  }
+  if (d.where === 'mark') {
+    if (!choice.mark) throw new Error('keine Wache-Position');
+    v.at = pt(choice.mark);
+  }
+  return {type: ORDER_JOBS[choice.key].type, args: ORDER_JOBS[choice.key].args(v, {})};
+}
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
 // A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
 const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui');
@@ -246,6 +292,24 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     stopAll: (viewer) => {
       const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);
       return bots.length ? submitJob({bots, type: 'stop', agent: false}) : {ok: true, keeperOff: false, unreached: []};
+    },
+    // Kommandostand: the caller has checked the viewer's rights. set throws a short German Error, else {ok, label}.
+    idle: {
+      get: (bot) => idleStore.get(bot),
+      set: (bot, id) => {
+        const r = runners.get(bot), c = id === null ? null : idleLib.choiceOf(id);
+        if (!r) throw new Error('unbekannter Diener');
+        if (id !== null && !c) throw new Error('unbekannte Auswahl');
+        if (id === 'keeper' && cfg.guestBots.includes(bot)) throw new Error('Daueraufträge nur für Bandits Diener');
+        let mark;
+        if (id === 'wache') {
+          const pos = r.snapshot().pos;
+          if (!pos) throw new Error('Position unbekannt');
+          mark = {x: Math.floor(pos[0]), y: Math.floor(pos[1]), z: Math.floor(pos[2])};
+        }
+        idleStore.set(bot, id, mark);
+        return {ok: true, label: c ? c.label : 'nichts'};
+      },
     },
     get keeper() { return keeper; },
     get plan() { return plan; },
