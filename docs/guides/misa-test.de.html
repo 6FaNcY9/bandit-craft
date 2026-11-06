@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Bot-Test für Misa</title>
+<style>
+  @page { size: A4; margin: 14mm 16mm 15mm; }
+  :root { --ink: #1d2433; --mute: #5b6475; --line: #d9dde5; --accent: #2f6f4f; --soft: #eef5f0; --warn: #8a4b12; --warnbg: #fbf1e6; }
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.4; margin: 0; background: #fff; }
+  h1 { font-size: 22pt; margin: 0 0 2mm; letter-spacing: -0.01em; }
+  h2 { font-size: 13.5pt; margin: 5.5mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1.5px solid var(--accent); break-after: avoid; }
+  h3 { font-size: 11pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  .lead { color: var(--mute); font-size: 11pt; margin-bottom: 5mm; }
+  code, .cmd { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 9.5pt; background: #f1f3f6; border: 1px solid var(--line); border-radius: 3px; padding: 0.2mm 1.2mm; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; margin: 1mm 0 3mm; }
+  tr { break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; padding: 1.6mm 2mm; border-bottom: 1px solid var(--line); }
+  th { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mute); border-bottom: 1.5px solid var(--ink); }
+  td:first-child { width: 38%; }
+  .box { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--soft); border-radius: 4px; padding: 3mm 4mm; margin: 2mm 0 4mm; break-inside: avoid; }
+  .warn { border-left-color: var(--warn); background: var(--warnbg); }
+  ol, ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1.2mm; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 2mm 0 2mm; }
+  .card { border: 1px solid var(--line); border-radius: 4px; padding: 3mm 4mm; break-inside: avoid; }
+  .card h3 { margin-top: 0; }
+  .small { font-size: 9pt; color: var(--mute); }
+  .t td:first-child { width: 7%; font-weight: 700; color: var(--accent); }
+  .t td:nth-child(2) { width: 45%; }
+  .ok { color: var(--mute); }
+</style>
+</head>
+<body>
+
+<h1>Bot-Test für Misa</h1>
+<p class="lead">Die neuen Bilder-Menüs sind seit heute Nacht drin. Bitte probier sie mit MisaBot aus und sag Bescheid, was nicht so war wie beschrieben. Dauer: etwa 30 Minuten.</p>
+
+<div class="box"><b>Was du dir merken musst:</b> nur, was <b>anders</b> war als in der rechten Spalte, mit der <b>Nummer</b> des Tests und ungefähr der <b>Uhrzeit</b>.
+Ein Screenshot (F2) hilft sehr. Alles, was die Bots tun, steht im Server-Log, die Uhrzeit reicht also, damit wir es dort finden.</div>
+
+<h2>A. Der Zauberstab</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>A1</td><td>Schreib <code>/zauberstab</code></td><td>Ein Stock liegt in deiner Hand. Im Chat steht: „Der Zauberstab ist jetzt in deiner Hand. Linksklick: Übersicht · Rechtsklick: auf etwas zeigen“.</td></tr>
+  <tr><td>A2</td><td>Fahr im Inventar mit der Maus über den Stab</td><td>Der Text erklärt dasselbe (Linksklick / Rechtsklick).</td></tr>
+  <tr><td>A3</td><td>Halte den Stab und schreib noch mal <code>/zauberstab</code></td><td>Nur der Hinweis im Chat, <b>kein zweiter</b> Stab.</td></tr>
+  <tr><td>A4</td><td><b>Linksklick</b> mit dem Stab in die Luft</td><td>Ein Kisten-Menü „Bots“ geht auf. Darin <b>nur deine zwei Köpfe</b>: MisaBot und EM_Trader, keine anderen Bots.</td></tr>
+  <tr><td>A5</td><td>Menü zu (Esc), dann <b>Rechtsklick</b> in die Luft</td><td>Dasselbe Menü „Bots“.</td></tr>
+  <tr><td>A6</td><td>Schreib <code>/bots</code></td><td>Dasselbe Menü.</td></tr>
+</table>
+
+<h2>B. Nichts lässt sich rausnehmen</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>B1</td><td>Im Menü „Bots“: einen Kopf mit <b>Shift-Klick</b>, mit einer <b>Zahlentaste</b> (1–9), mit <b>F</b> (andere Hand) oder durch <b>Ziehen</b> in dein Inventar holen</td><td>Nichts landet in deinem Inventar. Ein Klick darf trotzdem etwas tun (z. B. die Bot-Seite öffnen).</td></tr>
+  <tr><td>B2</td><td>Danach dein Inventar ansehen</td><td>Keine Köpfe, Spitzhacken oder Barrieren, die vorher nicht da waren.</td></tr>
+</table>
+
+<h2>C. Die Seite von MisaBot</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>C1</td><td>Im Menü „Bots“ auf den Kopf von <b>MisaBot</b> klicken</td><td>Seine Seite: oben Leine, Enderperle, Schwert, Kiste, Barriere; darunter Spitzhacke, Axt, Ziegel, Setzling; unten Uhr, Trichter, Fass, Pfeil.</td></tr>
+  <tr><td>C2</td><td>Maus über seinen Kopf (links oben)</td><td>Was er gerade tut, Herzen, Essen und „Kiste: …“ (oder „Kiste: keine“).</td></tr>
+  <tr><td>C3</td><td>Stell dich 20 Blöcke weg, dann <b>Enderperle (Komm her)</b></td><td>Über deiner Hotbar steht kurz eine Meldung von MisaBot. Er läuft zu dir.</td></tr>
+  <tr><td>C4</td><td><b>Leine (Folg mir)</b>, dann ein Stück laufen</td><td>Er folgt dir. Die Leine im Menü glitzert, solange er folgt.</td></tr>
+  <tr><td>C5</td><td><b>Barriere (Stopp)</b></td><td>Er bleibt stehen. Meldung „MisaBot: gestoppt“.</td></tr>
+  <tr><td>C6</td><td><b>Schwert (Bewach diesen Ort)</b></td><td>Er bleibt an der Stelle und kämpft gegen Monster in der Nähe. Danach wieder Stopp.</td></tr>
+  <tr><td>C7</td><td><b>Fass (Inventar)</b></td><td>Seine Sachen als Bilder mit Anzahl. Klicken nimmt nichts heraus. Der Pfeil führt zurück.</td></tr>
+  <tr><td>C8</td><td>Rechtsklick mit dem Stab <b>direkt auf MisaBot</b></td><td>Seine Seite geht sofort auf.</td></tr>
+</table>
+
+<h2>D. Seine Kiste</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>D1</td><td>Normaler Rechtsklick mit dem Stab auf eine deiner Kisten (<b>ohne</b> Schleichen)</td><td>Die Kiste geht ganz normal auf.</td></tr>
+  <tr><td>D2</td><td><b>Schleichen + Rechtsklick</b> mit dem Stab auf dieselbe Kiste</td><td>Menü „Kiste merken für…“ mit deinen zwei Köpfen.</td></tr>
+  <tr><td>D3</td><td>Auf <b>MisaBot</b> klicken</td><td>Meldung „MisaBot: Kiste x y z“. Auf seiner Seite steht beim Kopf jetzt „Kiste: x y z“.</td></tr>
+  <tr><td>D4</td><td>Auf seiner Seite den <b>Trichter (Kiste merken)</b></td><td>Das Menü geht <b>zu</b>. Über der Hotbar: „Schleich und zeig mit dem Stab auf eine Kiste“. Mach das bei einer anderen Kiste: Meldung mit den neuen Koordinaten.</td></tr>
+  <tr><td>D5</td><td><b>Kiste (Einlagern)</b> auf seiner Seite</td><td>Er läuft zu seiner Kiste und legt seine Sachen hinein (Werkzeug, Rüstung und Essen behält er).</td></tr>
+</table>
+
+<h2>E. Abbauen (das Trichter-Fenster)</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>E1</td><td>Auf seiner Seite die <b>Spitzhacke (Abbauen…)</b></td><td>Ein kleines Fenster mit 5 Feldern: Kopf (wer), Was, Wie viel, Wohin, grüner Farbstoff (Los!).</td></tr>
+  <tr><td>E2</td><td>Auf den <b>Kopf</b> klicken</td><td>„Welcher Bot?“ mit nur deinen Köpfen. MisaBot wählen, dann zurück.</td></tr>
+  <tr><td>E3</td><td>Auf <b>Was</b> klicken</td><td>„Welcher Block?“: oben Erze, Holz, Stein, Erde zum Umschalten, darunter die Blöcke als Bilder. <b>Bruchstein</b> wählen.</td></tr>
+  <tr><td>E4</td><td><b>Wie viel</b> mehrmals klicken</td><td>Wechselt 16 → 64 → 256 → ∞. Auf <b>16</b> stellen.</td></tr>
+  <tr><td>E5</td><td><b>Wohin</b> zeigt seine Kiste aus D3/D4, sonst klicken und auf die Kiste zeigen (schleichen!)</td><td>Dort stehen die Koordinaten der Kiste.</td></tr>
+  <tr><td>E6</td><td><b>Los!</b></td><td>Meldung von MisaBot. Er geht Stein abbauen. Nach ein paar Minuten liegen <b>16 Bruchstein</b> in seiner Kiste.</td></tr>
+  <tr><td>E7</td><td>Rechtsklick mit dem Stab auf einen <b>Stein- oder Erzblock</b></td><td>Das Abbauen-Fenster geht auf, mit diesem Block schon unter „Was“.</td></tr>
+  <tr><td>E8</td><td>Unter „Was“ → „Welcher Block?“ → <b>Stock (Zeig drauf)</b>, dann mit dem Stab auf einen Block zeigen</td><td>Das Menü geht zu, du zeigst auf den Block, danach steht er unter „Was“. Mit Esc oder Pfeil abbrechen.</td></tr>
+</table>
+
+<h2>F. Wenn frei, Holz und das Hauptmenü</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>F1</td><td>Auf seiner Seite die <b>Uhr (Wenn frei…)</b></td><td>Eine Reihe: Holz, Stein, Baumfarm, Wache, Barriere „Nichts“. Die aktuelle Wahl glitzert.</td></tr>
+  <tr><td>F2</td><td><b>Fichtenstamm (Holz-Schicht)</b> wählen, dann MisaBot stoppen und etwa 1–2 Minuten warten</td><td>Meldung „MisaBot: wenn frei → …“, du bist wieder auf seiner Seite. Nach etwa einer Minute fängt er von selbst an, Holz zu holen.</td></tr>
+  <tr><td>F3</td><td>Wieder auf <b>Nichts</b> stellen</td><td>Er hört nach seiner Runde auf und macht nichts Neues.</td></tr>
+  <tr><td>F4</td><td><b>Axt (Holz holen)</b></td><td>Er fällt Bäume in der Nähe und bringt das Holz in seine Kiste.</td></tr>
+  <tr><td>F5</td><td>Im Menü „Bots“ unten: <b>Enderperle (Alle: Komm zu mir)</b>, dann <b>Barriere (Alle: Stopp)</b></td><td>Deine Bots kommen, dann bleiben sie stehen. <b>Nur deine</b>, keine anderen.</td></tr>
+  <tr><td>F6</td><td>Unten rechts das <b>Buch (Alle Befehle (alt))</b></td><td>Das alte Text-Menü geht auf. Dort weiter wie bisher.</td></tr>
+  <tr><td>F7</td><td><b>Buch und Feder (Bauplan hochladen)</b></td><td>Du bekommst einen Link. Öffnet er sich im Browser? Bitte <b>genau aufschreiben</b>, was der Browser zeigt (auch eine Fehlermeldung).</td></tr>
+</table>
+
+<h2>G. Nur deine Bots</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>G1</td><td>Rechtsklick mit dem Stab auf einen Bot, <b>der nicht dir gehört</b> (z. B. bot1)</td><td>Es geht <b>keine</b> Bot-Seite auf, mit der du ihn steuern kannst.</td></tr>
+  <tr><td>G2</td><td>Aus- und wieder einloggen</td><td>Kurze Zusammenfassung im Chat: „Seit du weg warst: …“ (falls etwas passiert ist).</td></tr>
+</table>
+
+<div class="box warn"><b>Wenn ein Bot festhängt oder etwas Komisches macht:</b> Barriere (Stopp) auf seiner Seite drücken, die Nummer und die Uhrzeit merken und mit dem nächsten Test weitermachen. Kaputt machen kannst du nichts.</div>
+<p class="small">Danke! Was du gefunden hast, wird repariert. Die Bots lernen danach als Nächstes Werkbank, Ofen und Zaubertisch als echte Fenster.</p>
+
+</body>
+</html>
