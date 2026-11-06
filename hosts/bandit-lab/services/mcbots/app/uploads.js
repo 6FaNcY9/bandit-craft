@@ -43,7 +43,7 @@ const visible = (files, viewer, owner, viewers = []) => {
   if (owner) return files;
   const own = String(viewer).toLowerCase() + '-';
   const others = viewers.map((v) => String(v).toLowerCase() + '-').filter((p) => p !== own);
-  return files.filter((f) => f.startsWith(own) || !others.some((p) => f.startsWith(p)));
+  return files.filter((f) => { const l = f.toLowerCase(); return l.startsWith(own) || !others.some((p) => l.startsWith(p)); });
 };
 
 // Reads at most max bytes; past that it stops collecting and rejects (the caller answers 413 and closes).
@@ -68,7 +68,7 @@ async function handle(req, res, url, deps) {
   };
   const json = (code, obj, extra) => reply(code, 'application/json', JSON.stringify(obj), extra);
   const token = url.searchParams.get('t');
-  if (deps.uploads.peek(token) === null) return reply(403, 'text/plain; charset=utf-8', GONE);
+  if (deps.uploads.peek(token) === null) return req.method === 'GET' ? reply(403, 'text/plain; charset=utf-8', GONE) : json(403, {error: GONE});
   if (req.method === 'GET') return reply(200, 'text/html; charset=utf-8', deps.page, {'Content-Security-Policy': deps.csp});
   if (!deps.sameOrigin(req) || req.headers['content-type'] !== 'application/octet-stream') return json(403, {error: 'Ungültige Anfrage'});
   const max = deps.max ?? MAX_BYTES;
@@ -84,18 +84,21 @@ async function handle(req, res, url, deps) {
   try { s = await deps.parse(bytes); } catch { return json(400, {error: 'Das ist keine gültige .litematic-Datei'}); }
   // Everything from here to the write is synchronous: the token is taken exactly once, and only when the file is storable.
   const player = deps.uploads.peek(token);
-  if (player === null) return reply(403, 'text/plain; charset=utf-8', GONE);
+  if (player === null) return json(403, {error: GONE});
   const file = fileName(player, url.searchParams.get('name'));
   if (!deps.fileRe.test(file) || file.endsWith('-.litematic')) return json(400, {error: 'Der Dateiname braucht Buchstaben oder Ziffern'});
-  const prefix = player.toLowerCase() + '-', target = path.join(deps.dir, file);
+  const prefix = player.toLowerCase() + '-', target = path.join(deps.dir, file), tmp = `${target}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(deps.dir, {recursive: true});
-    if (!fs.existsSync(target) && fs.readdirSync(deps.dir).filter((f) => f.startsWith(prefix) && deps.fileRe.test(f)).length >= MAX_FILES) return json(400, {error: `Du hast schon ${MAX_FILES} Baupläne, lösch erst welche`});
-    deps.uploads.take(token);
-    const tmp = `${target}.${process.pid}.tmp`;
+    if (!fs.existsSync(target) && fs.readdirSync(deps.dir).filter((f) => f.startsWith(prefix) && deps.fileRe.test(f)).length >= MAX_FILES) return json(400, {error: `Zu viele Baupläne (${MAX_FILES}) – überschreib einen alten Namen oder frag Bandit`});
     fs.writeFileSync(tmp, bytes);
     fs.renameSync(tmp, target);
-  } catch { return json(400, {error: 'Speichern ging schief'}); }
+    deps.uploads.take(token); // synchronous with the check above: single use holds
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch {}
+    deps.log?.(`upload ${file}: ${e.message}`);
+    return json(400, {error: 'Speichern ging schief'});
+  }
   deps.events.add('dashboard', 'info', `schematic ${file} uploaded by ${player}`);
   deps.say?.(player, 'Server', `Bauplan bereit: ${file.replace(/\.litematic$/, '')}`);
   return json(200, {file, blocks: s.blocks.length});

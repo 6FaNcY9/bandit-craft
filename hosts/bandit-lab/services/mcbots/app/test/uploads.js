@@ -33,6 +33,8 @@ const {SCHEMATIC_RE} = require('../build');
   assert.deepEqual(visible(files, 'MidariBread', false, ['fancy8869', 'MidariBread']), ['midaribread-b.litematic', 'shared.litematic']);
   assert.deepEqual(visible(files, 'fancy8869', true, ['fancy8869', 'MidariBread']), files, 'the owner sees everything');
 
+  assert.deepEqual(visible(['MIDARIBREAD-x.litematic', 'Fancy8869-y.litematic'], 'MidariBread', false, ['fancy8869', 'MidariBread']), ['MIDARIBREAD-x.litematic'], 'prefix match ignores case');
+
   // the handler
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'upl-'));
   const events = [], said = [];
@@ -70,18 +72,32 @@ const {SCHEMATIC_RE} = require('../build');
   assert.deepEqual(stored(), ['midaribread-House.litematic'], 'the player comes from the token');
   assert.deepEqual(events.at(-1).slice(2), ['schematic midaribread-House.litematic uploaded by MidariBread']);
   assert.deepEqual(said.at(-1), ['MidariBread', 'Server', 'Bauplan bereit: midaribread-House']);
-  assert.equal((await post(`t=${tk}&name=House2`, good)).status, 403, 'token used up');
+  r = await post(`t=${tk}&name=House2`, good);
+  assert.equal(r.status, 403); assert.match((await r.json()).error, /ungültig/, 'token used up, German JSON');
   assert.deepEqual(stored(), ['midaribread-House.litematic']);
 
   // 50 files per player; overwriting one of them is still fine
   for (let i = 0; i < 49; i++) fs.writeFileSync(path.join(dir, `midaribread-f${i}.litematic`), good);
   tk = deps.uploads.issue('MidariBread');
   r = await post(`t=${tk}&name=one-too-many`, good);
-  assert.equal(r.status, 400); assert.match((await r.json()).error, /50/);
+  assert.equal(r.status, 400); assert.match((await r.json()).error, /Zu viele.*\(50\)/);
   assert.equal(deps.uploads.peek(tk), 'MidariBread');
   assert.equal((await post(`t=${tk}&name=f0`, good)).status, 200);
   assert.equal(stored().filter((f) => f.endsWith('.tmp')).length, 0, 'no temp file left');
   srv.close();
   fs.rmSync(dir, {recursive: true});
   console.log('uploads ok');
+})().catch((e) => { console.error(e); process.exit(1); });
+
+// parseLitematic caps (DoS): a gzip bomb and a Size that multiplies past the cell cap
+(async () => {
+  const zlib = require('node:zlib');
+  await assert.rejects(parseLitematic(zlib.gzipSync(Buffer.alloc(40 * 1024 * 1024))), /zu groß/);
+  const big = writeLitematic({name: 't', regions: [{name: 'r', position: {x: 0, y: 0, z: 0}, size: {x: 1, y: 1, z: 1}, blocks: [{x: 0, y: 0, z: 0, name: 'stone'}]}]});
+  const nbt = require('prismarine-nbt');
+  const parsed = await nbt.parse(big);
+  const sz = parsed.parsed.value.Regions.value.r.value.Size.value;
+  sz.x.value = 3000; sz.y.value = 3000; sz.z.value = 3000;
+  await assert.rejects(parseLitematic(zlib.gzipSync(nbt.writeUncompressed(parsed.parsed))), /8 Mio/);
+  console.log('uploads caps ok');
 })().catch((e) => { console.error(e); process.exit(1); });
