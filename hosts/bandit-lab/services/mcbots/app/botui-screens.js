@@ -309,7 +309,7 @@ function upload(view, sc) {
 }
 
 const SCREENS = {lage, upload, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
-const REFRESHING = new Set(['lage', 'bot']);
+const REFRESHING = new Set(['lage', 'bot', 'ov']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 
 module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK, ZOOMS};

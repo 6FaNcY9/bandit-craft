@@ -11,7 +11,7 @@ async function until(f, what) {
 }
 
 async function fake() {
-  const f = {calls: [], events: [], boot: 'b1', down: false, show: {ok: true, feedback: 'Displayed dialog to x'}};
+  const f = {calls: [], events: [], boot: 'b1', down: false, menu: null, show: {ok: true, feedback: 'Displayed dialog to x'}};
   f.server = http.createServer((req, res) => {
     if (f.down) return req.destroy();
     let body = '';
@@ -28,7 +28,7 @@ async function fake() {
         return res.end(JSON.stringify({boot: f.boot, last, events: evs()}));
       }
       if (u.pathname === '/show' && f.showDelay) await sleep(f.showDelay);
-      res.end(JSON.stringify(u.pathname === '/map/give' ? (f.give || {ok: true}) : u.pathname === '/show' ? (f.refuseRefresh && f.calls.at(-1).body.refresh ? {ok: false, feedback: 'closed'} : f.show) : {ok: true}));
+      res.end(JSON.stringify(u.pathname === '/menu' ? (f.menu || {ok: true}) : u.pathname === '/map/give' ? (f.give || {ok: true}) : u.pathname === '/show' ? (f.refuseRefresh && f.calls.at(-1).body.refresh ? {ok: false, feedback: 'closed'} : f.show) : {ok: true}));
     });
   });
   await new Promise((r) => f.server.listen(0, '127.0.0.1', r));
@@ -342,6 +342,33 @@ async function fake() {
     assert.doesNotMatch(JSON.stringify(last().body), /gestoppt/);
     end();
   }
+  { // overview menu: /menu not /show, click re-posts, closed stops refresh, a refused refresh is quiet, guest stopmine
+    const submits = [], snaps = [{name: 'bot1', online: true, health: 20, activity: 'idle', job: null}, {name: 'MisaBot', online: true, health: 10, activity: 'idle', job: null, guest: true}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push([v, j]); return {ok: true, unreached: []}; }};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const click = (player, data) => ui.handle({type: 'click', player, data});
+    await ui.handle({type: 'lage', player: 'Fancy'});
+    assert.equal(f.of('/menu').length, 1); assert.equal(f.of('/show').length, 0); assert.match(f.of('/menu')[0].body.title, /Bots/);
+    await click('Fancy', {a: 'botm', bot: 'bot1'});
+    assert.equal(f.of('/menu').length, 2);
+    await click('Midari', {a: 'botm', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await click('Midari', {a: 'stopmine'});
+    assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'stop', args: {}}]);
+    await ui.handle({type: 'click', player: 'Midari', pos: [1, 64, 2], data: {a: 'comeall'}});
+    assert.deepEqual(submits.at(-1)[1].bots, ['MisaBot']); assert.equal(submits.at(-1)[1].type, 'goto');
+    await ui.handle({type: 'closed', player: 'Fancy'});
+    const n = f.of('/menu').length;
+    await ui.tick();
+    assert.equal(f.of('/menu').length, n);
+    await click('Fancy', {a: 'ov'});
+    f.menu = {ok: false, feedback: 'closed'};
+    const before = logs.length;
+    snaps[0].health = 5;
+    await ui.tick();
+    assert.equal(ui.state('Fancy').open, false); assert.equal(logs.length, before);
+    end();
+  }
   { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
     const set = [], store = {MisaBot: null};
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];
@@ -352,6 +379,8 @@ async function fake() {
     const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
     const labels = () => last().actions.map((a) => JSON.stringify(a.label));
     await ui.handle({type: 'lage', player: 'Fancy'});
+    assert.equal(ui.state('Fancy').screen.name, 'ov'); assert.equal(f.of('/show').length, 0); assert.match(f.of('/menu')[0].body.title, /Bots/);
+    await click('Fancy', {a: 'oldmenu'});
     assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.equal(f.of('/show').length, 1);
     assert.ok(last().actions.some((a) => a.action.command === '/zauberstab' && a.action.type === 'minecraft:run_command'));
     const bot = {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'player', name: 'MisaBot', x: 1, y: 2, z: 3}};

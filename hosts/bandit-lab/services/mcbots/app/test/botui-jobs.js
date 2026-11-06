@@ -147,6 +147,7 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
   { // step 1 with context; the Lagebild names the gazed block
     const h = harness();
     await h.ev('lage', 'Fancy');
+    await h.click('Fancy', {a: 'oldmenu'}); // the old dialog is still one click away
     assert.equal(text(btn(h.last(), 'Auftrag: Truhe ▸').label), 'Auftrag: Truhe ▸');
     await h.click('Fancy', {a: 'new'});
     const d = h.last();
@@ -173,6 +174,7 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
   { // corners: A stores the gaze, outlines it and closes; B outlines the box and shows the area jobs; clearsel clears
     const h = harness();
     await h.ev('lage', 'Fancy');
+    await h.click('Fancy', {a: 'oldmenu'}); // the old dialog is still one click away
     await h.click('Fancy', {a: 'corner', which: 'a'});
     assert.deepEqual(h.ui.state('Fancy').sel.a, {x: -271, y: 66, z: -214, dim: 'overworld'});
     const o1 = h.calls.filter((c) => c.path === '/outline').at(-1).body;

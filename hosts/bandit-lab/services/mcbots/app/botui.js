@@ -10,6 +10,7 @@ const QUICK_LABEL = Object.fromEntries(require('./botui-screens').QUICK);
 const {explain, ZOOMS} = require('./botui-screens');
 const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
+const menus = require('./botui-menus');
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
 const on = (data) => data.on === 1 || data.on === true;
@@ -42,6 +43,24 @@ const ACTIONS = {
     await ui.call('/close', {player: viewer}).catch((e) => ui.log(`botui ${viewer}: close: ${e.message}`));
   },
   lage: (st) => { st.screen = {name: 'lage'}; },
+  ov: (st) => { st.screen = {name: 'ov'}; },
+  oldmenu: (st) => { st.screen = {name: 'lage'}; },
+  // The bot's own menu comes with the next menu screens; for now the click only checks the right and stays on the overview.
+  botm: (st, data, ui, viewer) => { oneBot(ui, viewer, data); st.screen = {name: 'ov'}; },
+  stopmine: (st, data, ui, viewer) => {
+    const known = ui.api.snapshots().map((s) => s.name), t = stopTargets(ui.viewerBots, viewer, known), bots = t === 'all' ? known : t;
+    st.screen = {name: 'ov'};
+    if (!bots.length) return ui.flash(st, 'Nichts zu stoppen');
+    done(ui.api.submit(viewer, {bots, type: 'stop', args: {}}));
+    ui.flash(st, 'Deine Bots gestoppt', true);
+  },
+  // The summon job for every bot of the viewer that is online and in their world.
+  comeall: (st, data, ui, viewer) => {
+    st.screen = {name: 'ov'};
+    const o = jobs.build('summon', {who: 'alle'}, {ctx: st.ctx, sel: st.sel, supply: null, places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args}));
+    ui.flash(st, `${o.bots.length} Bots kommen zu dir`, true);
+  },
   // A one-time link for the viewer (uploads.js); the dialog opens it in the browser.
   upload: (st, data, ui, viewer) => { st.screen = {name: 'upload', url: ui.api.uploadLink(viewer)}; },
   bot: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
@@ -269,7 +288,7 @@ class BotUi {
     if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
     st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
     if (e.type === 'lage') {
-      st.screen = {name: 'lage'}; st.lastClick = this.now();
+      st.screen = {name: 'ov'}; st.lastClick = this.now();
     } else if (e.type === 'open') {
       // right-click / Shift+F: a bot you command -> its screen; anything else aimed at -> orders for it; else the Lagebild
       const g = e.gaze, allowed = this.viewerBots[viewer], who = g?.entity?.type === 'player' && g.entity.name;
@@ -299,13 +318,16 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, ctx: st.ctx, flash: st.flash});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
 
   // refresh: the plugin itself refuses (feedback "closed") when the player closed the dialog while this was on the wire.
-  async post(viewer, st, json, refresh = false) {
-    const r = await this.call('/show', {player: viewer, dialog: json, ...(refresh ? {refresh: true} : {})});
+  // screen: what render returned; a {menu} goes to /menu, a dialog to /show as its JSON text.
+  async post(viewer, st, screen, refresh = false) {
+    const json = JSON.stringify(screen), flag = refresh ? {refresh: true} : {};
+    const r = screen.menu ? await this.call('/menu', {player: viewer, ...screen.menu, ...flag}) : await this.call('/show', {player: viewer, dialog: json, ...flag});
     if (r.ok) { st.lastJson = json; return; }
     st.open = false;
     if (!(refresh && r.feedback === 'closed')) this.log(`botui ${viewer}: ${r.feedback}`);
@@ -313,7 +335,7 @@ class BotUi {
 
   async show(viewer, st) {
     st.open = true;
-    await this.post(viewer, st, JSON.stringify(await this.render(viewer, st)));
+    await this.post(viewer, st, await this.render(viewer, st));
   }
 
   // The map item's whole view for one viewer; the plugin ignores it unless they are online and holding the map.
@@ -341,10 +363,10 @@ class BotUi {
         if (this.now() - st.lastClick > this.idleLimitMs) { st.open = false; continue; }
         try {
           const [screen, before] = [st.screen, st.lastJson];
-          const json = JSON.stringify(await this.render(viewer, st));
+          const out = await this.render(viewer, st), json = JSON.stringify(out);
           // closed, quit or navigated while rendering: a stale refresh must not pop up or overwrite
           if (json === st.lastJson || !st.open || this.states.get(viewer) !== st || st.screen !== screen || st.lastJson !== before) continue;
-          await this.post(viewer, st, json, true);
+          await this.post(viewer, st, out, true);
         } catch (e) { // one viewer or an outage must not stop the others; one log line per outage
           if (!this.down) { this.log(`botui refresh ${viewer}: ${e.message}`); this.down = true; }
         }
