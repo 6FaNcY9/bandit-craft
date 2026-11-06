@@ -195,6 +195,22 @@ async function fake() {
     await until(() => f.of('/show').length === shows + 1 && ui.state('Fancy').open, 'new open re-shows');
     end();
   }
+  { // a plugin restart ends a live pick: the next staff click routes normally
+    const api = {snapshots: () => [{name: 'bot1', online: true}], places: () => [], schematics: async () => [], idle: {get: () => null}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    ui.start();
+    await until(() => f.of('/viewers').length === 1, 'viewers');
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'shiftm'}});
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'pick', kind: 'chest'}});
+    assert.ok(ui.state('Fancy').pick);
+    f.boot = 'b2';
+    await until(() => f.of('/viewers').length === 2, 'viewers again');
+    assert.equal(ui.state('Fancy').pick, null);
+    const chest = ui.state('Fancy').form.chest;
+    await ui.handle({type: 'open', player: 'Fancy', gaze: {x: 4, y: 5, z: 6, block: 'chest'}});
+    assert.equal(ui.state('Fancy').screen.name, 'chestm'); assert.deepEqual(ui.state('Fancy').form.chest, chest);
+    end();
+  }
   { // connection refused: one log line per outage, resumes by itself
     logs.length = 0;
     const {f, ui, end} = await mk();

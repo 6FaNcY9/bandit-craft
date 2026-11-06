@@ -345,7 +345,7 @@ class BotUi {
         wait = this.retryMs;
         if (r.boot !== this.boot) { // first contact skips the backlog; after a plugin restart ids start over
           this.pushed = this.boot === null;
-          if (this.boot !== null) for (const st of this.states.values()) st.open = false; // the plugin lost its tracking and will not say `closed`
+          if (this.boot !== null) for (const st of this.states.values()) { st.open = false; st.pick = null; } // the plugin lost its tracking and will not say `closed`
           this.since = this.boot === null ? r.last : 0;
           this.boot = r.boot;
           continue;
