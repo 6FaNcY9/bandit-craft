@@ -4,7 +4,7 @@
 // re-sends a refreshing screen only when its JSON changed.
 const {choiceOf, CHOICES} = require('./idle');
 const {safe} = require('./botui-screens');
-const {germanName} = require('./botui-jobs');
+const {germanName, BLOCKS} = require('./botui-jobs');
 
 // One slot: `payload` comes back as the click's data, `extra` carries count/damage/head/glint/lore.
 const slot = (i, item, name, payload, extra = {}) => ({slot: i, item, name: safe(name, 40), payload, ...extra});
@@ -51,7 +51,8 @@ function botPage(view, screen) {
     go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'), go(4, 'iron_sword', 'Bewach diesen Ort', 'guardhere'),
     go(5, 'chest', 'Einlagern', 'deposit'), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
     go(12, 'iron_axe', 'Holz holen', 'chop'), slot(14, 'bricks', 'Bauen…', {a: 'job', key: 'schematic', bot}), go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
-    slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), back(26, 'ov')]};
+    slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type)}),
+    slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), back(26, 'ov')]};
 }
 
 // "Wenn frei": one slot per choice the viewer may pick; the keeper only for the owner's own bots.
@@ -84,9 +85,43 @@ function chestPage(view) {
   return {type: 'chest', title: 'Kiste merken für…', rows: 2, slots};
 }
 
+// Abbauen: the amount cycle and the block grid's tabs (icon, label, ids; every id is in BLOCKS).
+const AMOUNTS = [16, 64, 256, 'inf'];
+const TABS = {erze: BLOCKS.filter((b) => /_ore$|^ancient_debris$/.test(b)), holz: BLOCKS.filter((b) => /_log$/.test(b)), stein: ['stone', 'cobblestone', 'deepslate'], erde: ['dirt', 'sand', 'gravel']};
+const TAB_ICON = {erze: ['iron_ore', 'Erze'], holz: ['oak_log', 'Holz'], stein: ['stone', 'Stein'], erde: ['sand', 'Erde']};
+
+// The 5-slot hopper: who, what, how much, where to, go. `view.form` is the viewer's {bot, block, amount, chest}.
+function shiftPage(view) {
+  const f = view.form, amount = f.amount;
+  return {type: 'hopper', title: 'Abbauen', slots: [
+    slot(0, 'player_head', f.bot, {a: 'botpick'}, {head: f.bot, lore: ['Klick: anderer Bot']}),
+    f.block ? slot(1, f.block, germanName(f.block), {a: 'gridm', tab: 'erze', page: 0}, {lore: ['Klick: aussuchen']}) : slot(1, 'stick', 'Was? Klick: aussuchen', {a: 'gridm', tab: 'erze', page: 0}),
+    slot(2, amount === 16 || amount === 64 ? f.block || 'paper' : 'paper', amount === 'inf' ? '∞ immer weiter' : String(amount), {a: 'amount'}, {count: amount === 16 || amount === 64 ? amount : 1, lore: ['Klick: Menge ändern']}),
+    f.chest ? slot(3, 'barrel', `Wohin: ${f.chest.x} ${f.chest.y} ${f.chest.z}`, {a: 'pick', kind: 'chest'}, {lore: ['Klick: andere Kiste zeigen']}) : slot(3, 'barrier', 'Keine Kiste – klick und zeig auf eine', {a: 'pick', kind: 'chest'}),
+    slot(4, 'lime_dye', 'Los!', {a: 'shiftgo'})]};
+}
+
+// Block grid: tab icons on top, the viewer's last picks, then the tab's blocks (13 at most, so one page); bottom row: point at one, back.
+// shortcut: `page` is carried but ignored, no tab has more than 36 blocks; add paging when one does.
+function gridPage(view, screen) {
+  const tab = Object.hasOwn(TABS, screen.tab) ? screen.tab : 'erze';
+  const slots = Object.entries(TAB_ICON).map(([t, [item, label]], i) => slot(i, item, label, {a: 'gridm', tab: t, page: 0}, {glint: t === tab}));
+  [...(view.recent || []), ...TABS[tab]].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: 'pickblock', block: b})));
+  slots.push(slot(52, 'stick', 'Zeig drauf', {a: 'pick', kind: 'block'}), back(53, 'shiftm'));
+  return {type: 'chest', title: 'Welcher Block?', rows: 6, slots};
+}
+
+// Which bot does it: the viewer's own bots as heads.
+function botPickPage(view) {
+  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 8)
+    .map((s, i) => slot(i, 'player_head', s.name, {a: 'setbot', bot: s.name}, {head: s.name, glint: view.form?.bot === s.name}));
+  slots.push(back(8, 'shiftm'));
+  return {type: 'chest', title: 'Welcher Bot?', rows: 1, slots};
+}
+
 // Screens drawn as menus; later tasks add theirs to RENDER.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, botpick: botPickPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
-module.exports = {MENUS, menu, slot, badgeOf, overview};
+module.exports = {MENUS, menu, slot, badgeOf, overview, AMOUNTS, TABS};

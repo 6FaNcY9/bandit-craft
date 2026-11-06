@@ -40,6 +40,24 @@ function markersOf(snaps, allowed) {
 const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data: {}}, guardhere: {key: 'guard', data: {where: 'pos', radius: 16}},
   deposit: {key: 'deposit', data: {}}, chop: {key: 'chop', data: {n: 64}}, treefarm: {key: 'treefarm', data: {}}};
 
+const PICK_MS = 60000;
+// The viewer's Abbauen form: kept between screens, a new bot brings its own chest (the bot's, else the supply chest).
+function formOf(st, ui, viewer, bot) {
+  const prev = st.form;
+  bot = bot || prev?.bot || st.lastBot || ui.api.snapshots().find((s) => ui.viewerBots[viewer] === '*' || ui.viewerBots[viewer].includes(s.name))?.name;
+  if (!bot) throw new Error('kein Bot');
+  if (!prev || prev.bot !== bot) {
+    const c = ui.api.snapshots().find((s) => s.name === bot)?.chest || jobs.supplyOf(ui.api.keeper);
+    st.form = {bot, block: prev?.block ?? null, amount: prev?.amount ?? 'inf', chest: c ? {x: c.x, y: c.y, z: c.z} : null};
+  }
+  return st.lastBot = bot, st.form;
+}
+function setBlock(st, block) {
+  if (!jobs.BLOCKS.includes(block)) throw new Error('unbekannter Block');
+  st.form.block = block;
+  st.recent = [block, ...(st.recent || []).filter((b) => b !== block)].slice(0, 4);
+}
+
 const ACTIONS = {
   // `none` after_action keeps the dialog open on the client, so the plugin clears it; Escape closes it either way.
   close: async (st, data, ui, viewer) => {
@@ -80,6 +98,47 @@ const ACTIONS = {
     const o = jobs.build('setchest', {who: bot, x: g.x, y: g.y, z: g.z}, {ctx: st.ctx, sel: st.sel, supply: null, places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
     done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
     ui.flash(st, `${bot}: Kiste ${g.x} ${g.y} ${g.z}`, true);
+  },
+  // Abbauen hopper: st.form is the viewer's order in the making, st.pick the point-at-it mode (see BotUi.consumePick).
+  shiftm: (st, data, ui, viewer) => {
+    const bot = data.bot !== undefined ? oneBot(ui, viewer, data) : undefined;
+    formOf(st, ui, viewer, bot);
+    if (data.block !== undefined) setBlock(st, data.block);
+    st.screen = {name: 'shiftm'};
+  },
+  amount: (st, data, ui, viewer) => {
+    const f = formOf(st, ui, viewer);
+    f.amount = menus.AMOUNTS[(menus.AMOUNTS.indexOf(f.amount) + 1) % menus.AMOUNTS.length];
+    st.screen = {name: 'shiftm'};
+  },
+  gridm: (st, data) => {
+    if (!Object.hasOwn(menus.TABS, data.tab)) throw new Error('unbekannter Reiter');
+    st.screen = {name: 'gridm', tab: data.tab, page: 0};
+  },
+  pickblock: (st, data, ui, viewer) => { formOf(st, ui, viewer); setBlock(st, data.block); st.screen = {name: 'shiftm'}; },
+  botpick: (st, data, ui, viewer) => { formOf(st, ui, viewer); st.screen = {name: 'botpick'}; },
+  setbot: (st, data, ui, viewer) => { formOf(st, ui, viewer, oneBot(ui, viewer, data)); st.screen = {name: 'shiftm'}; },
+  pick: async (st, data, ui, viewer) => {
+    if (data.kind !== 'block' && data.kind !== 'chest') throw new Error('unbekannte Auswahl');
+    const bot = data.bot !== undefined ? oneBot(ui, viewer, data) : undefined;
+    if (!bot) formOf(st, ui, viewer);
+    st.pick = {kind: data.kind, bot, until: ui.now() + PICK_MS};
+    st.screen = bot ? {name: 'botm', bot} : {name: 'shiftm'};
+    await ACTIONS.close(st, data, ui, viewer);
+    await ui.call('/actionbar', {player: viewer, text: `Zeig mit dem Stab auf ${data.kind === 'chest' ? 'eine Kiste' : 'einen Block'}`}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
+  },
+  shiftgo: (st, data, ui, viewer) => {
+    const f = formOf(st, ui, viewer), bot = oneBot(ui, viewer, {bot: f.bot});
+    st.screen = {name: 'shiftm'};
+    if (!f.block) return ui.flash(st, 'Erst einen Block wählen');
+    const inf = f.amount === 'inf', log = /_log$/.test(f.block);
+    if (inf && !f.chest) return ui.flash(st, 'Erst eine Kiste wählen');
+    const chesttext = f.chest && `${f.chest.x} ${f.chest.y} ${f.chest.z}`;
+    const [key, d] = log ? (inf ? ['shiftlogs', {chesttext}] : ['chop', {n: f.amount}]) : inf ? ['shift', {block: f.block, chesttext}] : ['mine', {block: f.block, n: f.amount}];
+    const o = jobs.build(key, {who: bot, ...d}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+    st.screen = {name: 'botm', bot};
+    ui.flash(st, `${bot}: ${o.say}`, true);
   },
   stopmine: (st, data, ui, viewer) => {
     const known = ui.api.snapshots().map((s) => s.name), t = stopTargets(ui.viewerBots, viewer, known), bots = t === 'all' ? known : t;
@@ -331,8 +390,14 @@ class BotUi {
       // right-click / Shift+F: a bot you command -> its screen; anything else aimed at -> orders for it; else the Lagebild
       const g = e.gaze, allowed = this.viewerBots[viewer], who = g?.entity?.type === 'player' && g.entity.name;
       const mineBot = who && (allowed === '*' ? this.api.snapshots().some((s) => s.name === who) : allowed.includes(who));
-      st.screen = mineBot ? {name: 'botm', bot: who} : g && !g.entity && jobs.isChest(g.block) ? {name: 'chestm'} : {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'lage'};
       st.lastClick = this.now();
+      if (st.pick && st.pick.until < this.now()) st.pick = null; // expired: dropped, this open is handled normally
+      if (st.pick) { if (!await this.consumePick(st, viewer, g)) return; }
+      else if (mineBot) st.screen = {name: 'botm', bot: who};
+      else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm'};
+      // a set corner A keeps the next open on the area steps
+      else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(g.block)) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
+      else st.screen = {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'lage'};
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
       // shortcut: Escape during this click's render re-shows until the queued close arrives one poll later, a flicker; skip the show if a close is already queued when that is ever seen.
@@ -351,12 +416,26 @@ class BotUi {
     }
   }
 
+  // The staff's right click while a pick is live is the answer. false: wrong target, flash only, the pick stays and no menu opens.
+  async consumePick(st, viewer, g) {
+    const {kind, bot} = st.pick, ok = g && !g.entity && (kind === 'chest' ? jobs.isChest(g.block) : jobs.BLOCKS.includes(g.block));
+    if (!ok) { this.flash(st, kind === 'chest' ? 'Das ist keine Kiste' : 'Das ist kein passender Block'); return false; }
+    st.pick = null;
+    try {
+      if (kind === 'block') setBlock(st, g.block);
+      else if (bot) await ACTIONS.chestfor(st, {bot}, this, viewer);
+      else st.form.chest = {x: g.x, y: g.y, z: g.z};
+    } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
+    if (!bot || kind === 'block') st.screen = {name: 'shiftm'};
+    return true;
+  }
+
   async render(viewer, st) {
     const allowed = this.viewerBots[viewer];
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, ctx: st.ctx, flash: st.flash});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, ctx: st.ctx, flash: st.flash, form: st.form, recent: st.recent});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }

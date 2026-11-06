@@ -37,7 +37,7 @@ assert.ok(MENUS.has('ov'));
   for (const x of s) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
 }
-{ // bot page: head lore, glint on the running job, no Abbauen/Kiste-merken slot yet, every payload a real action
+{ // bot page: head lore, glint on the running job, Abbauen and Kiste merken slots, every payload a real action
   const bv = (s, o = {}) => view({snaps: [s], ...o});
   const page = (s, o) => menu({name: 'botm', bot: s.name}, bv(s, o)).menu;
   const chopper = {name: 'zed', online: true, health: 18, food: 15, activity: 'chopping', job: {type: 'chop'}, chest: {x: 1, y: 2, z: 3}};
@@ -46,7 +46,9 @@ assert.ok(MENUS.has('ov'));
   assert.match(s.find((x) => x.head === 'zed').lore.join('|'), /♥ 18\/20 · Essen 15\/20.*Kiste: 1 2 3/);
   assert.deepEqual(s.filter((x) => x.glint).map((x) => x.item), ['iron_axe']);
   assert.match(page({name: 'zed', online: true, job: null}).slots[0].lore.join('|'), /Kiste: keine/);
-  assert.ok(!s.some((x) => ['shiftm', 'pick'].includes(x.payload.a)));
+  assert.deepEqual(s.find((x) => x.slot === 10).payload, {a: 'shiftm', bot: 'zed'}); assert.ok(!s.find((x) => x.slot === 10).glint);
+  assert.deepEqual(s.find((x) => x.slot === 21).payload, {a: 'pick', kind: 'chest', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 21).item, 'hopper');
+  assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 10).glint, true);
   for (const x of s) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
   assert.deepEqual(s.find((x) => x.item === 'ender_pearl').payload, {a: 'go', bot: 'zed', job: 'summon'});
@@ -73,5 +75,34 @@ assert.ok(MENUS.has('ov'));
   const v = view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, snaps: snaps.filter((x) => x.name === 'MisaBot')});
   const s = menu({name: 'chestm'}, v).menu.slots;
   assert.deepEqual(s.filter((x) => x.head).map((x) => [x.head, x.payload]), [['MisaBot', {a: 'chestfor', bot: 'MisaBot'}]]);
+}
+{ // shift hopper: 5 slots, empty form shows the stick and the barrier, a full one the block, amount and chest
+  const hop = (form, recent) => menu({name: 'shiftm'}, view({form, recent})).menu;
+  let m = hop({bot: 'zed', block: null, amount: 'inf', chest: null});
+  assert.equal(m.type, 'hopper'); assert.deepEqual(m.slots.map((x) => x.slot), [0, 1, 2, 3, 4]);
+  assert.deepEqual([m.slots[1].item, m.slots[3].item, m.slots[4].item], ['stick', 'barrier', 'lime_dye']);
+  assert.equal(m.slots[2].name, '∞ immer weiter'); assert.equal(m.slots[2].count, 1);
+  m = hop({bot: 'zed', block: 'iron_ore', amount: 64, chest: {x: 1, y: 2, z: 3}});
+  assert.deepEqual([m.slots[1].item, m.slots[2].item, m.slots[2].count, m.slots[3].name], ['iron_ore', 'iron_ore', 64, 'Wohin: 1 2 3']);
+  assert.equal(hop({bot: 'zed', block: 'iron_ore', amount: 256}).slots[2].name, '256');
+  for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+}
+{ // grid: holz lists only logs, all ids are real blocks, active tab glints, recents come first
+  const BLOCKS = require('../botui-jobs').BLOCKS;
+  const g = (tab, recent) => menu({name: 'gridm', tab, page: 0}, view({recent})).menu;
+  const m = g('holz', ['iron_ore']);
+  const blocks = m.slots.filter((x) => x.payload.a === 'pickblock');
+  assert.deepEqual(blocks.map((x) => x.item), ['iron_ore', 'oak_log', 'birch_log', 'spruce_log']);
+  for (const x of blocks) assert.ok(BLOCKS.includes(x.payload.block));
+  assert.deepEqual(m.slots.filter((x) => x.glint).map((x) => x.item), ['oak_log']);
+  assert.equal(m.slots.filter((x) => x.slot < 4).length, 4);
+  assert.ok(m.slots.some((x) => x.item === 'stick' && x.payload.kind === 'block') && m.slots.some((x) => x.payload.a === 'shiftm'));
+  assert.ok(g('erze').slots.some((x) => x.item === 'ancient_debris'));
+  for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+  assert.equal(new Set(m.slots.map((x) => x.slot)).size, m.slots.length);
+}
+{ // bot picker: own bots only
+  const v = view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, snaps: snaps.filter((x) => x.name === 'MisaBot'), form: {bot: 'MisaBot'}});
+  assert.deepEqual(menu({name: 'botpick'}, v).menu.slots.filter((x) => x.head).map((x) => [x.head, x.payload]), [['MisaBot', {a: 'setbot', bot: 'MisaBot'}]]);
 }
 console.log('botui-menus ok');

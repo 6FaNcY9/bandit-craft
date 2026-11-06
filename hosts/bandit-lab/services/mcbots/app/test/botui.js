@@ -410,6 +410,69 @@ async function fake() {
     assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
     end();
   }
+  { // Abbauen hopper: form defaults, amount cycle, the four shiftgo orders, point-to-pick, expiry, staff on a block
+    const submits = [], snaps = [{name: 'bot1', online: true, health: 20, activity: 'idle', job: null, chest: {x: 9, y: 9, z: 9}}, {name: 'MisaBot', online: true, health: 10, activity: 'idle', job: null, guest: true}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
+    const open = (player, gaze) => ui.handle({type: 'open', player, gaze});
+    const bars = () => f.of('/actionbar').map((c) => c.body.text);
+    await ev('Fancy', {a: 'shiftm'});
+    assert.deepEqual(ui.state('Fancy').form, {bot: 'bot1', block: null, amount: 'inf', chest: {x: 9, y: 9, z: 9}});
+    assert.equal(f.of('/menu').at(-1).body.type, 'hopper');
+    await ev('Midari', {a: 'shiftm', bot: 'MisaBot'});
+    assert.equal(ui.state('Midari').form.chest, null);
+    const amounts = []; for (let i = 0; i < 4; i++) { await ev('Fancy', {a: 'amount'}); amounts.push(ui.state('Fancy').form.amount); }
+    assert.deepEqual(amounts, [16, 64, 256, 'inf']);
+    await ev('Fancy', {a: 'pickblock', block: 'bedrock'});
+    assert.match(ui.state('Fancy').flash.text, /unbekannter Block/);
+    await ev('Midari', {a: 'setbot', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(ui.state('Midari').form.bot, 'MisaBot');
+    await ev('Fancy', {a: 'shiftgo'});
+    assert.equal(bars().at(-1), 'Erst einen Block wählen'); assert.equal(submits.length, 0);
+    await ev('Midari', {a: 'pickblock', block: 'iron_ore'}); await ev('Midari', {a: 'shiftgo'});
+    assert.equal(bars().at(-1), 'Erst eine Kiste wählen'); assert.equal(submits.length, 0);
+    const run = async (block, amount) => { await ev('Fancy', {a: 'pickblock', block}); ui.state('Fancy').form.amount = amount; await ev('Fancy', {a: 'shiftgo'}); return submits.at(-1); };
+    assert.deepEqual(await run('oak_log', 'inf'), {bots: ['bot1'], type: 'shift', args: {block: 'logs', x: 9, y: 9, z: 9}, replace: false});
+    assert.deepEqual(await run('oak_log', 64), {bots: ['bot1'], type: 'chop', args: {count: 64}, replace: false});
+    assert.deepEqual(await run('iron_ore', 'inf'), {bots: ['bot1'], type: 'shift', args: {block: 'iron_ore', x: 9, y: 9, z: 9}, replace: false});
+    assert.deepEqual(await run('iron_ore', 16), {bots: ['bot1'], type: 'mine', args: {block: 'iron_ore', count: 16}, replace: false});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'}); assert.match(bars().at(-1), /^bot1: /);
+    assert.deepEqual(ui.state('Fancy').recent, ['iron_ore', 'oak_log']);
+    // point-to-pick: a chest sets form.chest and shows the hopper again; a wrong target posts nothing; the pick survives
+    await ev('Fancy', {a: 'shiftm'});
+    await ev('Fancy', {a: 'pick', kind: 'chest'});
+    assert.equal(bars().at(-1), 'Zeig mit dem Stab auf eine Kiste'); assert.equal(f.of('/close').length, 1); assert.equal(ui.state('Fancy').open, false);
+    let menus = f.of('/menu').length;
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'stone'});
+    await until(() => bars().at(-1) === 'Das ist keine Kiste', 'Das ist keine Kiste'); assert.equal(f.of('/menu').length, menus); assert.ok(ui.state('Fancy').pick);
+    await open('Fancy', {x: 4, y: 5, z: 6, block: 'chest'});
+    assert.deepEqual(ui.state('Fancy').form.chest, {x: 4, y: 5, z: 6}); assert.equal(ui.state('Fancy').pick, null);
+    assert.equal(f.of('/menu').at(-1).body.type, 'hopper'); assert.equal(f.of('/menu').at(-1).body.slots[3].name, 'Wohin: 4 5 6');
+    // block pick
+    await ev('Fancy', {a: 'pick', kind: 'block'});
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'bedrock'});
+    await until(() => bars().at(-1) === 'Das ist kein passender Block', 'Das ist kein passender Block');
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'gravel'});
+    assert.equal(ui.state('Fancy').form.block, 'gravel'); assert.equal(f.of('/menu').at(-1).body.slots[1].item, 'gravel');
+    // an old pick is dropped silently, the chest stays and the open routes normally
+    await ev('Fancy', {a: 'pick', kind: 'chest'});
+    t += 61000;
+    menus = f.of('/menu').length;
+    await open('Fancy', {x: 7, y: 8, z: 9, block: 'chest'});
+    assert.deepEqual(ui.state('Fancy').form.chest, {x: 4, y: 5, z: 6}); assert.equal(ui.state('Fancy').screen.name, 'chestm'); assert.equal(ui.state('Fancy').pick, null);
+    // Kiste merken from the bot page submits setchest for that bot and shows its page
+    await ev('Fancy', {a: 'pick', kind: 'chest', bot: 'bot1'});
+    await open('Fancy', {x: 7, y: 8, z: 9, block: 'chest'});
+    assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'setchest', args: {x: 7, y: 8, z: 9}, replace: false});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'});
+    await ev('Midari', {a: 'pick', kind: 'chest', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(ui.state('Midari').pick, undefined);
+    // staff on an ore (not a chest) opens the hopper with it
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'iron_ore'});
+    assert.equal(ui.state('Fancy').screen.name, 'shiftm'); assert.equal(f.of('/menu').at(-1).body.slots[1].item, 'iron_ore');
+    end();
+  }
   { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
     const set = [], store = {MisaBot: null};
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];
@@ -432,7 +495,7 @@ async function fake() {
     assert.ok(!last().actions.some((a) => a.action.payload?.a === 'botscreen')); // a foreign bot: no row
     { // open routing: aimed bot of yours -> its screen; anything else aimed at -> auftrag; nothing -> lage
       const open = async (player, gaze) => { await ui.handle({type: 'open', player, gaze}); return ui.state(player).screen; };
-      assert.equal((await open('Fancy', {x: 1, y: 2, z: 3, block: 'stone'})).name, 'auftrag');
+      assert.equal((await open('Fancy', {x: 1, y: 2, z: 3, block: 'bedrock'})).name, 'auftrag');
       assert.equal((await open('Fancy', null)).name, 'lage');
       assert.deepEqual(await open('Midari', bot), {name: 'botm', bot: 'MisaBot'});
       assert.equal((await open('Midari', {...bot, entity: {...bot.entity, name: 'bot1'}})).name, 'auftrag');
