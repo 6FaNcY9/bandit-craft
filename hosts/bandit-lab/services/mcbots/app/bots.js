@@ -12,6 +12,7 @@ const {Combat, AVOID_FOOD, deathCause} = require('./combat');
 require('./physicsfix');
 const {cacheGetBlock} = require('./pathcache');
 const {BotTrace, SAMPLE_MS, round} = require('./debug');
+const farsearch = require('./farsearch');
 const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
 const {zoneNamed, inZone} = require('./places');
 const buildJob = require('./build');
@@ -954,7 +955,7 @@ class BotRunner {
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
     else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id, `${chatLabel(job)}, ${job.noop ? 'war schon erledigt' : took < 60 ? `${took} s` : `${Math.round(took / 60)} min`}${count}`);
     else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id, `${chatLabel(job)}${count}`);
-    else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `failed: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
+    else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `${/of a far search heading/.test(why) ? 'gave up' : 'failed'}: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
     this.current = null;
     this.digOnly = null;
     this.digBox = null;
@@ -2538,6 +2539,33 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
   });
 }
 
+// One hop of the far search: pick a heading once (a second one after a hop that cannot be walked), walk FAR_HOP blocks
+// along it. false: no heading left, give up. Surface walk for wood and surface blocks, a tunnel at this height for ores.
+async function farHop(r, job, what, far, surface) {
+  const p = r.bot.entity.position;
+  if (far.dir < 0) {
+    far.start ??= {x: p.x, z: p.z};
+    far.dir = farsearch.farHeading(p, r.protectedAreas, r.supplyChest, far.tried);
+    if (far.dir < 0) return false;
+  }
+  const d = farsearch.DIRS[far.dir], to = farsearch.hopTarget(p, d), y = Math.floor(p.y);
+  far.hops++;
+  const msg = farsearch.progress(far);
+  r.emit('info', msg);
+  job.t.doing = msg;
+  try {
+    await goNear(r, job, to.x, y, to.z, 3, surface ? {xz: true, doing: msg} : {doing: msg});
+  } catch (e) {
+    guard(job);
+    r.emit('info', `far search hop stopped: ${e.message.slice(0, 80)}`);
+    far.tried.push(far.dir);
+    far.hops--; // a hop not walked is not distance gained
+    if (++far.fails >= farsearch.FAR_HEADINGS) return false;
+    far.dir = -1; // the next heading, from where it stands
+  }
+  return true;
+}
+
 // Where each ore is densest in 26.2 (the 1.18 distribution): bots mine inside
 // these Y bands, digging down (or up) to them first.
 const ORE_BAND = {coal_ore: [40, 130], iron_ore: [0, 40], copper_ore: [30, 70], gold_ore: [-30, -5], lapis_ore: [-15, 15], redstone_ore: [-60, -45], diamond_ore: [-60, -45], emerald_ore: [100, 250]};
@@ -2584,7 +2612,7 @@ async function collect(r, job, matching, count, what) {
   const leash = shiftLeash(r.supplyChest, job.type === 'shift' ? job.args : null, wood);
   const range = ore || wood ? 128 : 64; // the bot sees every block within its view distance (no anti-xray)
   const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] : null;
-  let explored = 0, descents = 0, left = 0;
+  let explored = 0, descents = 0, left = 0, far = null;
   if (names.some((n) => ORE_BAND[n.replace(/^deepslate_/, '')])) await fetchWood(r, job);
   let got = job.collected || 0; // survives a combat interruption + resume
   let misses = 0, topWalked = false;
@@ -2673,8 +2701,19 @@ async function collect(r, job, matching, count, what) {
         await explore(r, job, what, explored, leash, wood);
         continue;
       }
+      // Nothing free in view and nowhere left to explore: travel on in one direction (not shifts: they keep their leash).
+      if (job.type !== 'shift' && (!far || far.hops < farsearch.FAR_HOPS)) {
+        if (isNight(bot) && r.combat && !r.combat.fit()) { // upkeep's night shelter ran first; an unfit bot does not set out in the dark
+          guard(job);
+          await sleep(5000);
+          continue;
+        }
+        if (await farHop(r, job, what, far ??= {hops: 0, tried: [], dir: -1, fails: 0}, !ore)) continue;
+      }
+      if (far?.hops) throw new Error(farsearch.farFail(what, far));
       throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''}; seen ${seen.length}, ${filtered} outside base and protected areas, ${inLeash} within leash ${leash}, ${blocked} blocked, ${claimed} claimed)`);
     }
+    far = null; // found something: a later dry spell searches afresh
     try {
       if (wood) await unpillar(r, job, pos);
       await waitSafe(r, job, pos.x, pos.z, pos.y);

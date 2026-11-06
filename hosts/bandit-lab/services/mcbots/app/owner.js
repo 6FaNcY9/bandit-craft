@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 const {rotate} = require('./archive');
+const {dirEn} = require('./farsearch');
 const UUID_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const uuid = (s) => typeof s === 'string' && UUID_RE.test(s) ? s.replace(/-/g, '').toLowerCase() : null;
 const ROLES = new Set(['helfer', 'sammler', 'farmer', 'wache']);
@@ -107,6 +108,7 @@ const REASONS = [
   [/^no chests within/, () => 'keine Kiste in der Nähe'],
   [/^no pickaxe for (\S+)/, (m) => `keine Spitzhacke für ${m[1]}`],
   [/^needs a tool that can harvest ([^:\s]+)/, (m) => `kein Werkzeug für ${m[1]}`],
+  [/^no free (\S+) within (\d+) blocks of a far search heading (\w+)/, (m) => `kein ${m[1]} gefunden, auch nicht ${m[2]} Blöcke weiter Richtung ${dirEn(m[3])?.de ?? m[3]}`],
   [/^no free (\S+) within/, (m) => `kein ${m[1]} in Reichweite`],
   [/is inside a protected area$/, () => 'liegt im Schutzgebiet'],
   [/is not visible and not on the map/, () => 'Spieler nicht zu finden'],
