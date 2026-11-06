@@ -266,7 +266,8 @@ public class BotUi extends JavaPlugin implements Listener {
         closed.put("feedback", "closed");
         return closed;
       }
-      closeMenu(p); // a switch, not a close: no event for the hub
+      boolean wasMenu = closeMenu(p); // a switch, not a close: no event for the hub
+      pending.remove(p.getUniqueId());
       List<String> feedback = new ArrayList<>();
       CommandSender s = Bukkit.createCommandSender(c -> feedback.add(PlainTextComponentSerializer.plainText().serialize(c)));
       boolean ran;
@@ -282,6 +283,7 @@ public class BotUi extends JavaPlugin implements Listener {
       o.put("ok", shown);
       o.put("feedback", String.join("\n", feedback));
       if (shown) open.add(p.getUniqueId());
+      else if (wasMenu) emit("closed", p, null); // the menu is gone and no dialog replaced it
       return o;
     });
     if (res == null) reply(x, 400, error("player not online"));
@@ -326,20 +328,22 @@ public class BotUi extends JavaPlugin implements Listener {
     }
   }
 
+  private final Map<UUID, JSONObject> pending = new ConcurrentHashMap<>(); // a menu waiting for the next tick behind a cleared dialog
   private final Set<UUID> switching = ConcurrentHashMap.newKeySet(); // menus the plugin closes itself: no "closed" event
 
   private static MenuHolder menuOf(Player p) {
     return p.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder h ? h : null;
   }
 
-  private void closeMenu(Player p) {
-    if (menuOf(p) == null) return;
+  private boolean closeMenu(Player p) {
+    if (menuOf(p) == null) return false;
     switching.add(p.getUniqueId());
     try {
       p.closeInventory();
     } finally {
       switching.remove(p.getUniqueId());
     }
+    return true;
   }
 
   private static boolean whole(Object o, int min, int max) {
@@ -380,6 +384,35 @@ public class BotUi extends JavaPlugin implements Listener {
     return it;
   }
 
+  /** Validated /menu body: update the open menu in place, or open a new one (replacing another menu is a switch, no "closed"). */
+  private void applyMenu(Player p, JSONObject b) {
+    String type = str(b, "type"), title = str(b, "title");
+    boolean hopper = "hopper".equals(type);
+    int rows = hopper ? 1 : b.get("rows") == null ? 3 : ((Number) b.get("rows")).intValue();
+    int size = hopper ? 5 : rows * 9;
+    MenuHolder cur = menuOf(p);
+    boolean same = cur != null && cur.type.equals(type) && cur.rows == rows && cur.title.equals(title);
+    MenuHolder h = same ? cur : new MenuHolder(type, rows, title);
+    Inventory inv = same ? cur.inv : hopper ? Bukkit.createInventory(h, InventoryType.HOPPER, Component.text(title)) : Bukkit.createInventory(h, size, Component.text(title));
+    h.inv = inv;
+    inv.clear();
+    Map<Integer, JSONObject> payloads = new HashMap<>();
+    for (Object o : (JSONArray) b.get("slots")) {
+      JSONObject s = (JSONObject) o;
+      int slot = ((Number) s.get("slot")).intValue();
+      inv.setItem(slot, menuItem(s));
+      payloads.put(slot, (JSONObject) s.get("payload"));
+    }
+    h.payloads = payloads;
+    if (same) return;
+    switching.add(p.getUniqueId());
+    try {
+      p.openInventory(inv);
+    } finally {
+      switching.remove(p.getUniqueId());
+    }
+  }
+
   private void menu(HttpExchange x, JSONObject b) throws Exception {
     String name = str(b, "player"), type = str(b, "type"), title = str(b, "title");
     boolean hopper = "hopper".equals(type);
@@ -401,33 +434,24 @@ public class BotUi extends JavaPlugin implements Listener {
     JSONObject res = sync(() -> {
       Player p = Bukkit.getPlayerExact(name);
       if (p == null) return null;
-      MenuHolder cur = menuOf(p);
-      if (Boolean.TRUE.equals(b.get("refresh")) && cur == null) { // a hub refresh must never re-open a closed menu
+      UUID id = p.getUniqueId();
+      if (Boolean.TRUE.equals(b.get("refresh")) && menuOf(p) == null && !pending.containsKey(id)) { // a hub refresh must never re-open a closed menu
         JSONObject closed = new JSONObject();
         closed.put("ok", false);
         closed.put("feedback", "closed");
         return closed;
       }
-      boolean same = cur != null && cur.type.equals(type) && cur.rows == rows && cur.title.equals(title);
-      MenuHolder h = same ? cur : new MenuHolder(type, rows, title);
-      Map<Integer, JSONObject> payloads = new HashMap<>();
-      Inventory inv = same ? cur.inv : hopper ? Bukkit.createInventory(h, InventoryType.HOPPER, Component.text(title)) : Bukkit.createInventory(h, size, Component.text(title));
-      h.inv = inv;
-      inv.clear();
-      for (Object o : (JSONArray) b.get("slots")) {
-        JSONObject s = (JSONObject) o;
-        int slot = ((Number) s.get("slot")).intValue();
-        inv.setItem(slot, menuItem(s));
-        payloads.put(slot, (JSONObject) s.get("payload"));
-      }
-      h.payloads = payloads;
-      if (!same) {
-        boolean dialog = open.remove(p.getUniqueId());
-        if (dialog) Bukkit.dispatchCommand(Bukkit.createCommandSender(c -> {}), "dialog clear " + p.getName()); // a switch: no "closed" event
-        if (dialog) Bukkit.getScheduler().runTask(this, () -> {
-          if (p.isOnline()) p.openInventory(inv);
+      if (pending.containsKey(id)) { // a dialog is being replaced: the newest content wins, the one scheduled open stays the only one
+        pending.put(id, b);
+      } else if (open.remove(id)) {
+        Bukkit.dispatchCommand(Bukkit.createCommandSender(c -> {}), "dialog clear " + p.getName()); // a switch: no "closed" event
+        pending.put(id, b);
+        Bukkit.getScheduler().runTask(this, () -> {
+          JSONObject pb = pending.remove(id);
+          if (pb != null && p.isOnline()) applyMenu(p, pb);
         });
-        else p.openInventory(inv); // replacing another menu closes it with OPEN_NEW, which is no "closed" either
+      } else {
+        applyMenu(p, b);
       }
       return ok();
     });
@@ -478,7 +502,7 @@ public class BotUi extends JavaPlugin implements Listener {
   @EventHandler(priority = EventPriority.MONITOR)
   public void onMenuClose(InventoryCloseEvent e) {
     if (!(e.getInventory().getHolder() instanceof MenuHolder) || !(e.getPlayer() instanceof Player p)) return;
-    if (switching.contains(p.getUniqueId()) || e.getReason() == InventoryCloseEvent.Reason.OPEN_NEW || e.getReason() == InventoryCloseEvent.Reason.DISCONNECT) return;
+    if (switching.contains(p.getUniqueId()) || e.getReason() == InventoryCloseEvent.Reason.DISCONNECT) return; // OPEN_NEW from anything but our own switch is another plugin's
     emit("closed", p, null);
   }
 
@@ -921,6 +945,7 @@ public class BotUi extends JavaPlugin implements Listener {
   @EventHandler
   public void onQuit(PlayerQuitEvent e) {
     open.remove(e.getPlayer().getUniqueId());
+    pending.remove(e.getPlayer().getUniqueId());
     outlines.remove(e.getPlayer().getUniqueId());
     map.quit(e.getPlayer());
     lastMapClick.remove(e.getPlayer().getUniqueId());

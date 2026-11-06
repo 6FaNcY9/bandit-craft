@@ -181,6 +181,10 @@ function sampleDialog(size) {
   assert.deepEqual(ev.data, {a: 'x', n: 1, shift: true});
   c.clickWindow(54, 0, 1); // shift-click on the player's own hotbar slot 0
   c.clickWindow(4, 0, 2); // number key 1 onto the menu slot
+  c.clickWindow(4, 40, 2); // offhand key
+  c.clickWindow(4, 0, 5); // drag start/end over the menu slot
+  c.clickWindow(4, 1, 5); c.clickWindow(4, 2, 5);
+  c.clickWindow(54, 0, 6); c.clickWindow(4, 0, 6); // double-click collect
   c.clickWindow(5, 0, 0); // an empty menu slot
   await assertNoEvent((e) => e.type === 'click' || e.type === 'closed', 1500);
   assert.equal(JSON.stringify(c.inv), invBefore);
