@@ -116,6 +116,12 @@ async function fake() {
     assert.equal(stub.seen.at(-1).flash.text, 'Unbekannte Aktion');
     end();
   }
+  { // join and quit reach api.presence (the join digest), quit before the early return; a join opens nothing
+    const seen = [], {f, ui, end} = await mk({api: {presence: (v, t) => seen.push([v, t]), snapshots: () => [], places: () => [], schematics: async () => []}});
+    await ui.handle({type: 'join', player: 'Fancy'}); await ui.handle({type: 'quit', player: 'Fancy'});
+    assert.deepEqual(seen, [['Fancy', 'join'], ['Fancy', 'quit']]); assert.equal(f.of('/show').length, 0);
+    end();
+  }
   { // closed stops refresh; quit forgets the viewer
     const {f, ui, end} = await mk();
     await ui.handle({type: 'open', player: 'Fancy'});

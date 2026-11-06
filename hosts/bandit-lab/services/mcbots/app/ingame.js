@@ -70,6 +70,12 @@ class Ingame {
     }, this.gapMs).unref();
   }
 
+  // One tellraw with several lines (the join digest): say would keep only the newest text of the burst.
+  tell(viewer, lines) {
+    const text = lines.slice(0, 6).map((l) => String(l).slice(0, 100)).join('\n');
+    return this.call([`tellraw ${viewer} ` + JSON.stringify({text})]).catch((e) => this.log('ingame tellraw: ' + e.message));
+  }
+
   event(e) {
     const m = e.kind === 'say' && /^(\w{1,16}): (.*)$/.exec(e.text);
     if (m) return this.viewers.includes(m[1]) ? this.say(m[1], e.bot, m[2]) : undefined;

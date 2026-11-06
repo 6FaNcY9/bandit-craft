@@ -52,6 +52,10 @@ const {Ingame} = require('../ingame');
   calls.length = 0; g.event({bot: 'bot2', kind: 'say', text: 'MidariBread: ok: folge dir'}); await flush();
   assert.ok(calls[0].includes('[bot2] ') && calls[0].includes('ok: folge dir'));
   calls.length = 0; g.event({bot: 'bot1', kind: 'say', text: 'Stranger: hi'}); await flush(); assert.ok(!calls.some((c) => c.startsWith('tellraw'))); // unknown name: no relay
+  // tell: one tellraw, at most 6 lines of 100 chars
+  calls.length = 0; await g.tell('fancy8869', [...Array(8)].map((_, i) => 'z'.repeat(150) + i));
+  assert.equal(calls.length, 1); assert.equal(JSON.parse(calls[0].slice('tellraw fancy8869 '.length)).text.split('\n').length, 6);
+  assert.ok(JSON.parse(calls[0].slice('tellraw fancy8869 '.length)).text.split('\n').every((l) => l.length === 100));
   // a burst: one line per bot, the newest text of each
   calls.length = 0; g.say('fancy8869', 'bot1', 'eins'); g.say('fancy8869', 'bot2', 'zwei'); g.say('fancy8869', 'bot1', 'drei'); await flush();
   const burst = calls.filter((c) => c.startsWith('tellraw fancy8869 '));

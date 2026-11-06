@@ -136,7 +136,7 @@ setInterval(() => {
     }
   }
 }, 60000).unref();
-const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); ingame?.event(e); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
+const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); ingame?.event(e); ownAlerts?.event(e, runners.get(e.bot)?.snapshot()); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.
 const decisions = new EventLog();
@@ -258,6 +258,23 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
   snapshots: () => [...runners.values()].map((r) => r.snapshot())}) : null;
 if (ingame) ingame.start();
+// Owners hear in chat when their servant dies, sticks or lacks material; the digest on joining reads the time of their last quit.
+const ownAlerts = ingame ? new (require('./ownalerts').OwnAlerts)({say: (v, b, t) => ingame.say(v, b, t), viewerBots: cfg.viewerBots}) : null;
+const viewersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'viewers.json') : null;
+const readQuits = () => { try { return JSON.parse(fs.readFileSync(viewersFile, 'utf8')); } catch { return {}; } };
+function presence(viewer, type) {
+  if (!viewersFile || !ingame) return;
+  const quits = readQuits();
+  if (type === 'quit') {
+    fs.mkdirSync(path.dirname(viewersFile), {recursive: true});
+    fs.writeFileSync(`${viewersFile}.tmp`, JSON.stringify({...quits, [viewer]: Date.now()}), {mode: 0o600});
+    fs.renameSync(`${viewersFile}.tmp`, viewersFile);
+  } else {
+    const mine = cfg.viewerBots[viewer] === '*' ? [...runners.keys()] : cfg.viewerBots[viewer] || [];
+    const lines = require('./ownalerts').digest(events.since(0), mine, quits[viewer] ?? null, Date.now());
+    if (lines.length) ingame.tell(viewer, lines);
+  }
+}
 // The job a "Wenn frei" choice becomes for a bot (idle.js resolveIdle throws the short refusals).
 function idleJob(bot, choice) {
   const r = runners.get(bot), zone = places.list.find((p) => p.kind === 'treefarm' && p.box);
@@ -270,6 +287,7 @@ const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui
 const placedBots = () => placeBots([...runners.values()].map((r) => r.snapshot()), {vhost: process.env.MC_VHOST, guests: cfg.guestBots, mainBots: cfg.mainBots});
 const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
   api: {
+    presence,
     snapshots: placedBots,
     markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
     submit: (viewer, {bots, type, args, replace}) => {

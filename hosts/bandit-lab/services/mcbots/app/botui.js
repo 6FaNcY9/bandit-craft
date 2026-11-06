@@ -251,7 +251,8 @@ class BotUi {
   async handle(e) {
     const viewer = this.canon(e.player);
     if (!viewer) return;
-    if (e.type === 'quit') { this.states.delete(viewer); return; }
+    if (e.type === 'quit') { this.api.presence?.(viewer, 'quit'); this.states.delete(viewer); return; }
+    if (e.type === 'join') { this.api.presence?.(viewer, 'join'); return; }
     let st = this.states.get(viewer);
     if (e.type === 'closed') { if (st) st.open = false; return; }
     if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
