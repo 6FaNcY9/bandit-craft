@@ -3720,6 +3720,12 @@ const JOBS = {
     // Only by day or fit: up to 200 blocks into the dark to the iron farm would be a new night trap for an unarmed bot (review 2026-10-19).
     if (job.args.far && (!isNight(bot) || r.combat?.fit?.())) for (const c of layout.farChests({match, chests: r.world?.chests || new Map(), near: {x, z}, from: bot.entity.position})) if (!list.some((o) => layout.keyOf(o) === layout.keyOf(c))) list.push(c);
     let taken = 0, skipped = 0;
+    // A full inventory takes nothing (mineflayer throws): bot1 looped on that for hours (lab 2026-11-06). Toss junk first; if it is
+    // still full, say so once and clearly instead of walking to every chest.
+    if (bot.inventory.emptySlotCount?.() === 0) {
+      await tossJunk(r, job);
+      if (bot.inventory.emptySlotCount() === 0) throw new Error(`inventory is full of things to keep, no room for ${item}: deposit first`);
+    }
     for (const [i, c] of list.entries()) {
       if (taken >= count) break;
       const room = i > 0, farOne = i > rooms.length;

@@ -323,6 +323,19 @@ module.exports = async () => {
     walks.length = 0;
     await assert.rejects(JOBS.withdraw(r, job(3)), /no iron_ingot in the chest or the storage room \(2 storage chests out of reach\)/);
     assert.ok(!walks.includes('-251,-215'), `no second walk to the walled-in chest: ${walks}`);
+    { // a full inventory: junk goes first, else one clear failure before any walk
+      let junk = [it('gravel', 64)], tossed = 0;
+      const full = {...bot, inventory: {items: () => junk, emptySlotCount: () => (junk.length ? 0 : 1)}, tossStack: async () => { tossed++; junk = []; }};
+      const fr = {...r, bot: full, world: new WorldModel()};
+      walks.length = 0;
+      held[L.keyOf(pc.BASE.chest)] = [it('iron_ingot', 3)];
+      await JOBS.withdraw(fr, job(3));
+      assert.deepStrictEqual([tossed, held[L.keyOf(pc.BASE.chest)].length], [1, 0], 'junk tossed, then the ingots taken');
+      junk = [it('diamond', 64)];
+      walks.length = 0;
+      await assert.rejects(JOBS.withdraw(fr, job(3)), /inventory is full of things to keep, no room for iron_ingot/);
+      assert.deepStrictEqual(walks, [], 'no walk to a chest it cannot take from');
+    }
     // goNear under a chest up in the air: the ground cell under it or one beside it, not 3 around (a level lower is
     // out of the server's reach); a chest on the ground keeps its distance
     const goals = [];
