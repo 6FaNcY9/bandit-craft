@@ -147,4 +147,4 @@ function saveRole(file, name, role) {
   fs.renameSync(`${file}.tmp`, file);
 }
 
-module.exports = {isOwnerMessage, parseOrder, translate, makeSayer, chatLabel, germanReason, makeDemoLog, loadRole, saveRole, UUID_RE, HELP, HELP2};
+module.exports = {uuid, isOwnerMessage, parseOrder, translate, makeSayer, chatLabel, germanReason, makeDemoLog, loadRole, saveRole, UUID_RE, HELP, HELP2};

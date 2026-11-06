@@ -33,7 +33,7 @@ const sealJob = require('./seal');
 const owner = require('./owner');
 const {loadPrefs, savePrefs} = require('./prefs');
 const misa = require('./misa');
-const {aliveStep} = require('./alive');
+const {aliveStep, safeCell} = require('./alive');
 
 const NAME_RE = /^(bot[0-9]{1,2}|MisaBot|EM_Trader)$/; // BotGate's pattern (Velocity plugin), case as written in both
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
@@ -606,20 +606,19 @@ class BotRunner {
       let aliveState = {}, busyUntil = 0;
       const timer = setInterval(() => {
         try {
-          if (Date.now() < busyUntil || !this.online || this.current || this.queue.length || this.combat?.busy || (this.shelterAt && isNight(bot)) || bot.currentWindow || !bot.entity) return;
+          if (Date.now() < busyUntil || !this.online || this.dead || this.current || this.queue.length || this.combat?.busy || (this.shelterAt && isNight(bot)) || bot.currentWindow || !bot.entity) return;
           const p = bot.entity.position;
           const players = Object.values(bot.players).filter((q) => q.username !== bot.username && q.entity).map((q) => ({name: q.username, uuid: q.uuid, ...q.entity.position})); // other bots are not told apart
           const r = aliveStep({me: p, players, owners: this.ownerUuids, now: Date.now(), state: aliveState});
           aliveState = r.state;
           if (r.look) bot.lookAt(new Vec3(r.look.x, r.look.y, r.look.z), true).catch(() => {});
-          if (r.sneak) { bot.setControlState('sneak', true); busyUntil = Date.now() + 500; setTimeout(() => { try { bot.setControlState('sneak', false); } catch {} }, 500).unref(); }
+          if (r.sneak) { bot.setControlState('sneak', true); busyUntil = Date.now() + 500; setTimeout(() => { try { if (!this.current) bot.setControlState('sneak', false); } catch {} }, 500).unref(); }
           else if (r.aside) {
             const x = Math.floor(p.x) + r.aside.dx, y = Math.floor(p.y), z = Math.floor(p.z) + r.aside.dz;
             const at = (dy) => bot.blockAt(new Vec3(x, y + dy, z));
-            const air = (dy) => at(dy)?.boundingBox === 'empty' && !['water', 'lava'].includes(at(dy).name);
-            if (at(-1)?.boundingBox === 'block' && air(0) && air(1)) {
+            if (safeCell(at(-1), at(0), at(1))) {
               busyUntil = Date.now() + 400;
-              bot.lookAt(new Vec3(x + 0.5, p.y + 1.6, z + 0.5), true).then(() => { bot.setControlState('forward', true); setTimeout(() => { try { bot.setControlState('forward', false); } catch {} }, 300).unref(); }).catch(() => {});
+              bot.lookAt(new Vec3(x + 0.5, p.y + 1.6, z + 0.5), true).then(() => { if (!this.current) bot.setControlState('forward', true); setTimeout(() => { try { bot.setControlState('forward', false); } catch {} }, 300).unref(); }).catch(() => {});
             }
           }
         } catch {}
