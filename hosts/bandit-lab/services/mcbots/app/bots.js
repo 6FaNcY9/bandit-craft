@@ -894,7 +894,7 @@ class BotRunner {
   async pump() {
     if (this.current || !this.queue.length) return;
     if (this.dead) return; // the respawn handler pumps again
-    if (!this.online && this.queue[0].resume) return; // resumed jobs wait for the reconnect
+    if (!this.online) return; // queued jobs (grave, orders) wait for the reconnect, the spawn handler pumps again
     const job = (this.current = this.queue.shift());
     job.status = 'running';
     this.digOnly = ['excavate', 'clear', 'part', 'shaft', 'level', 'treefarm', 'wheatfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)

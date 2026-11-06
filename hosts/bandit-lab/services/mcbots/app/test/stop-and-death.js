@@ -56,6 +56,16 @@ const {BotRunner} = require('../bots');
   assert.strictEqual(ran, 1);
   JOBS.goto = goto;
 })();
+// An offline bot keeps every queued job (grave, orders), not only resumed ones, until it is back.
+(async () => {
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  r.online = false;
+  r.queue = [{id: 1, type: 'grave', args: {x: 1, y: 2, z: 3}, status: 'queued'}];
+  r.pump();
+  await new Promise((res) => setTimeout(res, 20));
+  assert.strictEqual(r.queue.length, 1, 'the grave job waits for the reconnect');
+  assert.strictEqual(r.queue[0].status, 'queued');
+})();
 // A job that had nothing to do says so in its finished event; the agent reads it.
 (async () => {
   const {JOBS} = require('../bots');
