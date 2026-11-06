@@ -57,7 +57,8 @@ const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JS
 const idleLib = require('./idle'), {JOBS: ORDER_JOBS} = require('./botui-jobs');
 const idleStore = new idleLib.IdleStore(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'idle.json') : null);
 const idleSince = new Map(); // bot -> when the sweep first saw it with no job and an empty queue
-const idleJobs = new Map(); // bot -> type of the "Wenn frei" job it runs; its failure waits like an order's
+const idleHeld = new Set(); // bots the owner stopped: no "Wenn frei" start until they get another job
+let idleStopAll = false; // Stop all: no idle start anywhere until the next non-stop job
 const orderRetryAt = new Map(); // bot -> before then a failed order does not start again
 const deathTimes = new Map(); // bot -> its recent deaths (agentauth.deathLoop)
 const orderEnded = (e) => {
@@ -68,11 +69,9 @@ const orderEnded = (e) => {
   const p = projects.get(e.bot), pout = p && !p.paused ? agentauth.orderOutcome(e, p) : null;
   if (pout?.end) projects.forget(e.bot);
   if (pout?.retry && !out) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + pout.retry));
-  const iout = idleJobs.has(e.bot) && agentauth.orderOutcome(e, {type: idleJobs.get(e.bot), args: true});
-  if (iout) {
-    idleJobs.delete(e.bot);
-    if (iout.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + iout.retry));
-  }
+  // A job of the bot's idle type that ends (done or failed) leaves a pause before the next idle start.
+  const ic = idleStore.get(e.bot) && idleLib.choiceOf(idleStore.get(e.bot).id), iout = ic?.key && agentauth.orderOutcome(e, {type: ORDER_JOBS[ic.key].type, args: true});
+  if (iout) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + (iout.retry || agentauth.ORDER_RETRY_MS)));
   if (e.kind === 'death') { // every bot's, not only one with an order: a queue of jobs kills it just as well
     const d = agentauth.deathLoop(deathTimes.get(e.bot) || [], e.t);
     deathTimes.set(e.bot, d.times);
@@ -116,16 +115,15 @@ setInterval(() => {
   const busy = new Set([...ownerOrders.keys(), ...started, ...Object.entries(projects.all).filter(([, p]) => !p.paused).map(([n]) => n),
     ...(board?.parts() || []).filter((p) => p.state === 'claimed').map((p) => p.claim.bot)]);
   if (keeper) { const k = keeper.state(); for (const b of [k.counting, ...k.quotas.map((q) => q.bot), ...k.lighting.map((l) => l.bot)]) if (b) busy.add(b); }
-  for (const {bot, choice} of idleLib.idleToStart({snaps, store: idleStore, busy, retryAt: orderRetryAt, idleSince})) {
+  for (const {bot, choice} of idleStopAll ? [] : idleLib.idleToStart({snaps, store: idleStore, busy: new Set([...busy, ...idleHeld]), retryAt: orderRetryAt, idleSince})) {
     started.add(bot);
     try {
       const {type, args} = idleJob(bot, choice);
       submitJob({bots: [bot], type, args, agent: false, remember: false});
-      idleJobs.set(bot, type);
       events.add(bot, 'info', `idle: ${choice.label}`);
     } catch (err) {
       orderRetryAt.set(bot, Math.max(orderRetryAt.get(bot) || 0, Date.now() + agentauth.ORDER_RETRY_MS));
-      events.add(bot, 'info', err.message === 'no chest' ? 'Wenn frei braucht eine Kiste' : `Wenn frei geht nicht: ${err.message}`);
+      events.add(bot, 'info', err.message === idleLib.NO_CHEST ? 'Wenn frei braucht eine Kiste' : `Wenn frei geht nicht: ${err.message}`);
     }
   }
   // Idle bots without an owner order help with another bot's need (the needs board, bots.js helpOnce); only when
@@ -209,6 +207,7 @@ function stopAll() {
   if (keeperOff) keeper.setEnabled(false);
   if (plan?.enabled) plan.setEnabled(false); // it would hand the idle bots new work; this also returns the keeper
   board?.pauseAll(); // the board too: no part goes out again until the owner resumes the job
+  idleStopAll = true;
   return keeperOff;
 }
 // The body of POST /api/job after the origin and agent checks, also behind the in-game UI (botui.js); throws the refusal.
@@ -231,6 +230,7 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
       r.enqueue(type, perBotArgs, {replace: replace === true, ...(type === 'graves' ? {first: true} : {})});
       if (!agent && remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
+      if (remember) { type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {
         delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
         projects.pause(r.name);
@@ -258,22 +258,10 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),
   snapshots: () => [...runners.values()].map((r) => r.snapshot())}) : null;
 if (ingame) ingame.start();
-// The job a "Wenn frei" choice becomes for a bot; throws Error('no chest') for a guest without a chest.
+// The job a "Wenn frei" choice becomes for a bot (idle.js resolveIdle throws the short refusals).
 function idleJob(bot, choice) {
-  const r = runners.get(bot), d = choice.data, pt = (p) => ({x: p.x, y: p.y, z: p.z}), v = {...d};
-  if (d.chest === 'own') {
-    v.chest = r.prefs?.chest || (cfg.guestBots.includes(bot) ? null : supplyChest);
-    if (!v.chest) throw new Error('no chest');
-  }
-  if (d.zone === 'first') {
-    const z = places.list.find((p) => p.kind === 'treefarm' && p.box);
-    if (!z) throw new Error('keine Baumfarm-Zone');
-    v.zone = z.box;
-  }
-  if (d.where === 'mark') {
-    if (!choice.mark) throw new Error('keine Wache-Position');
-    v.at = pt(choice.mark);
-  }
+  const r = runners.get(bot), zone = places.list.find((p) => p.kind === 'treefarm' && p.box);
+  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest, guest: cfg.guestBots.includes(bot), supplyChest, treefarmZone: zone?.box, mark: choice.mark});
   return {type: ORDER_JOBS[choice.key].type, args: ORDER_JOBS[choice.key].args(v, {})};
 }
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.

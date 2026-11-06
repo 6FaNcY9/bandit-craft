@@ -38,6 +38,27 @@ class IdleStore {
   }
 }
 
+const NO_CHEST = 'no chest';
+// choice -> the values its botui-jobs entry needs; throws a short refusal when a spot is missing.
+// ctx: chest (the bot's own pref), guest, supplyChest, treefarmZone (a box), mark.
+function resolveIdle(choice, {chest, guest, supplyChest, treefarmZone, mark}) {
+  const d = choice.data, v = {...d}, pt = (p) => ({x: p.x, y: p.y, z: p.z});
+  if (d.chest === 'own') {
+    v.chest = chest || (guest ? null : supplyChest);
+    if (!v.chest) throw new Error(NO_CHEST);
+    v.chest = pt(v.chest);
+  }
+  if (d.zone === 'first') {
+    if (!treefarmZone) throw new Error('keine Baumfarm-Zone');
+    v.zone = treefarmZone;
+  }
+  if (d.where === 'mark') {
+    if (!mark) throw new Error('keine Wache-Position');
+    v.at = pt(mark);
+  }
+  return v;
+}
+
 const isIdle = (s) => !!s?.online && s.connected !== false && !s.job && !(s.queue || []).length;
 // idleSince: bot -> first time the sweep saw it idle; cleared as soon as it has a job.
 function trackIdle(snaps, idleSince, now = Date.now()) {
@@ -54,4 +75,4 @@ function idleToStart({snaps, store, busy, retryAt, idleSince, now = Date.now()})
   }
   return out;
 }
-module.exports = {CHOICES, choiceOf, IdleStore, idleToStart, trackIdle, IDLE_MS};
+module.exports = {CHOICES, choiceOf, IdleStore, idleToStart, trackIdle, resolveIdle, NO_CHEST, IDLE_MS};

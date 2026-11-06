@@ -1,7 +1,7 @@
 'use strict';
 (async () => {
   const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
-  const {IdleStore, idleToStart, trackIdle, CHOICES} = require('../idle');
+  const {IdleStore, idleToStart, resolveIdle, choiceOf, trackIdle, CHOICES} = require('../idle');
   const agentauth = require('../agentauth');
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mcbots-idle-'));
   try {
@@ -41,6 +41,22 @@
     retryAt.set('MisaBot', t0 + 200000 + agentauth.ORDER_RETRY_MS);
     assert.deepEqual(run(t0 + 200000 + agentauth.ORDER_RETRY_MS - 1), []);
     assert.equal(run(t0 + 200000 + agentauth.ORDER_RETRY_MS).length, 1);
+    // offline, queue, held (the server passes held bots as busy)
+    snaps.set('MisaBot', {...idle, online: false}); assert.deepEqual(run(t0 + 500000), []);
+    snaps.set('MisaBot', {...idle, connected: false}); assert.deepEqual(run(t0 + 500000), []);
+    snaps.set('MisaBot', {...idle, queue: [{}]}); assert.deepEqual(run(t0 + 500000), []);
+    snaps.set('MisaBot', idle); idleSince.set('MisaBot', t0);
+    assert.equal(run(t0 + 500000).length, 1);
+    busy.add('MisaBot'); assert.deepEqual(run(t0 + 500000), []); busy.clear();
+    // resolveIdle
+    const own = choiceOf('holz'), box = {x1: 0, z1: 0, x2: 9, z2: 9}, c1 = {x: 1, y: 2, z: 3}, sup = {x: 7, y: 8, z: 9};
+    assert.deepEqual(resolveIdle(own, {chest: c1, guest: true, supplyChest: sup}).chest, c1);
+    assert.deepEqual(resolveIdle(own, {guest: false, supplyChest: sup}).chest, sup);
+    assert.throws(() => resolveIdle(own, {guest: true, supplyChest: sup}), /^Error: no chest$/);
+    assert.deepEqual(resolveIdle(choiceOf('baumfarm'), {treefarmZone: box}).zone, box);
+    assert.throws(() => resolveIdle(choiceOf('baumfarm'), {}), /Baumfarm/);
+    assert.deepEqual(resolveIdle(choiceOf('wache'), {mark: c1}), {where: 'mark', radius: 16, at: c1});
+    assert.throws(() => resolveIdle(choiceOf('wache'), {}), /Wache/);
     console.log('idle: ok');
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 })().catch((e) => { console.error(e); process.exit(1); });
