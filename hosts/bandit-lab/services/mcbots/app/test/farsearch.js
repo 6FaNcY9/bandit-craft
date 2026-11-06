@@ -34,7 +34,7 @@
   const {farFail} = require('../farsearch'), {germanReason} = require('../owner');
   assert.equal(farFail('sand', {hops: 2, dir: -1, last: 6}), 'no free sand within 192 blocks of a far search heading west');
   const t = farFail('sand', {hops: 0, dir: -1});
-  assert.equal(t, 'no free sand within 0 blocks and no walkable heading');
+  assert.equal(t, 'no free sand within reach and no walkable heading');
   assert.equal(germanReason(t), 'kein sand in Reichweite und kein Weg weiter weg');
 })();
 // get: a "no free" mine failure is not a failure of the way (nothing learned, nothing blocked, far text rethrown);

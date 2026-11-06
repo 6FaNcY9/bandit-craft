@@ -43,7 +43,7 @@ function farHeading(me, areas = [], base = null, tried = []) {
 }
 
 // far.last: the heading the text names (far.dir is -1 between two headings)
-const farFail = (what, far) => (far.hops ? `no free ${what} within ${far.hops * FAR_HOP} blocks of a far search heading ${DIRS[far.last ?? far.dir].en}` : `no free ${what} within ${far.hops * FAR_HOP} blocks and no walkable heading`);
+const farFail = (what, far) => (far.hops ? `no free ${what} within ${far.hops * FAR_HOP} blocks of a far search heading ${DIRS[far.last ?? far.dir].en}` : `no free ${what} within reach and no walkable heading`);
 const progress = (far) => `sucht weiter Richtung ${DIRS[far.dir].de} (${far.hops * FAR_HOP} Blöcke)`;
 
 module.exports = {FAR_HOP, FAR_HOPS, FAR_HEADINGS, FAR_TOTAL, DIRS, dirEn, hopTarget, farHeading, farFail, progress};
