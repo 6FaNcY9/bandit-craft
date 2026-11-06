@@ -6,7 +6,7 @@ const MAX_LINES = 6;
 
 function classify(e) {
   if (e.kind === 'death') return 'dead';
-  if (/no way to get/.test(e.text)) return 'missing';
+  if (e.kind === 'fail' && /no way to get/.test(e.text)) return 'missing';
   if (e.kind === 'fail' && /no progress for|No path/.test(e.text)) return 'stuck';
   const took = e.kind === 'done' && /(\d+) s\)/.exec(e.text);
   return took && Number(took[1]) >= 600 ? 'done' : null;
