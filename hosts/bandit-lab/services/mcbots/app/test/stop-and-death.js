@@ -83,6 +83,15 @@ const {BotRunner} = require('../bots');
   assert.strictEqual(r.inShelter(), false);
   assert.strictEqual(r.snapshot().sheltered, false, 'agents may order it again');
 }
+// An order that goes first does not destroy the rearm or grave job it interrupts: that one runs ahead of it.
+{
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  r.online = false; // keeps pump from starting anything
+  r.current = {id: 1, type: 'rearm', args: {x: 1, y: 2, z: 3}, status: 'running'};
+  r.enqueue('mine', {block: 'stone', count: 5}, {first: true});
+  assert.deepStrictEqual(r.queue.map((j) => j.type), ['rearm', 'mine']);
+  assert.deepStrictEqual([r.queue[0].id, r.queue[0].status, r.queue[0].cancelled], [1, 'queued', false]);
+}
 // A job that had nothing to do says so in its finished event; the agent reads it.
 (async () => {
   const {JOBS} = require('../bots');

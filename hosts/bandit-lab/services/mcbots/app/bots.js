@@ -833,6 +833,8 @@ class BotRunner {
       this.cancel();
       this.resumeLater(was, type);
       this.queue.unshift(job);
+      // gear and loot come back first: an order must not strip them (rearm after a death, grave), and they are quick
+      if (was && ['rearm', 'grave'].includes(was.type)) this.queue.unshift({...was, status: 'queued', cancelled: false});
     } else if (at !== undefined) this.queue.splice(at, 0, job);
     else this.queue.push(job);
     this.pump();
