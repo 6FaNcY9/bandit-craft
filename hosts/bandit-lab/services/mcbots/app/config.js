@@ -146,6 +146,9 @@ function loadConfig(env = process.env) {
     }
   }
   const ingameViewers = Object.keys(viewerBots);
+  // Where a player's browser reaches /upload (the dashboard's Tailscale Serve URL); the upload link is this + /upload?t=<token>.
+  const uploadBase = (env.UPLOAD_BASE || 'https://bandit-lab.tail7facc9.ts.net:8445').replace(/\/+$/, '');
+  if (!/^https:\/\/[^\s/]+(:\d+)?$/.test(uploadBase)) throw new Error('UPLOAD_BASE must be https://host[:port]');
   const botuiUrl = (env.BOTUI_URL || '').replace(/\/+$/, '');
   if (botuiUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(botuiUrl)) throw new Error('BOTUI_URL must be http://host:port');
   if (botuiUrl && !rconPassword) throw new Error('BOTUI_URL needs RCON_PASSWORD (the plugin token)');
@@ -197,6 +200,7 @@ function loadConfig(env = process.env) {
     ingameViewers,
     viewerBots,
     botuiUrl,
+    uploadBase,
     slayerStatusCmd,
     workerPort,
     workerHost: env.WORKER_HOST || '127.0.0.1',

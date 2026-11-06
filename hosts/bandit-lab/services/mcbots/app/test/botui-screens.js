@@ -27,14 +27,14 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.equal(d.type, 'minecraft:multi_action'); assert.equal(d.after_action, 'none'); assert.equal(d.pause, false);
   assert.deepEqual(d.exit_action.action, {type: 'minecraft:custom', id: 'botui:do', payload: {a: 'close'}});
   assert.equal(text(d.exit_action.label), 'Schließen');
-  assert.equal(d.actions.length, 13); assert.ok(d.actions.every((a) => a.width === 200));
+  assert.equal(d.actions.length, 14); assert.ok(d.actions.every((a) => a.width === 200));
   assert.ok(d.body.length <= 6);
   assert.match(labels(d)[0], /^● bot0 +Baumfarm 5\/64 · 12 min$/);
   assert.equal(d.actions[0].label[1].color, 'green');
   assert.deepEqual(d.actions[0].action.payload, {a: 'bot', bot: 'bot0'});
   assert.match(text(d.actions[0].tooltip), /chopping/);
-  assert.deepEqual(labels(d).slice(8), ['Neuer Auftrag', 'Ziele', 'Karte', 'Alle stopp', 'Zauberstab holen']);
-  assert.deepEqual(d.actions.slice(8).map((a) => a.action.payload?.a ?? a.action.command), ['new', 'ziele', 'karte', 'stopall', '/zauberstab']);
+  assert.deepEqual(labels(d).slice(8), ['Neuer Auftrag', 'Ziele', 'Karte', 'Alle stopp', 'Bauplan hochladen', 'Zauberstab holen']);
+  assert.deepEqual(d.actions.slice(8).map((a) => a.action.payload?.a ?? a.action.command), ['new', 'ziele', 'karte', 'stopall', 'upload', '/zauberstab']);
 }
 { // a kick and a stall in plain German, never the server's raw JSON
   assert.match(explain('kicked: {"text":"You are logging in too fast, try again later."}'), /zu schnell/);

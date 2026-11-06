@@ -35,6 +35,7 @@ const voxels = require('./voxels');
 let voxelBusy = false; // one /api/voxels read at a time
 const {Slayer} = require('./slayer');
 const {Admin, queued} = require('./admin');
+const uploadsLib = require('./uploads');
 
 const cfg = loadConfig();
 const log = (who, msg) => console.log(`${new Date().toISOString()} [${who}] ${msg}`);
@@ -162,7 +163,7 @@ const three = fs.readFileSync(path.join(__dirname, 'public', 'vendor', 'three.mi
 // no CDN, no eval, no other origin.
 const sha = (html, re) => `'sha256-${require('node:crypto').createHash('sha256').update(String(html).match(re)?.[1] ?? '').digest('base64')}'`;
 const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<script>([\s\S]*?)<\/script>/)}; style-src ${sha(html, /<style>([\s\S]*?)<\/style>/)}; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
-const CSP = csp(page), LEGACY_CSP = csp(legacy); // each page allows its own bodies only
+const CSP = csp(page), LEGACY_CSP = csp(legacy), UPLOAD_CSP = csp(fs.readFileSync(path.join(__dirname, 'public', 'upload.html'))); // each page allows its own bodies only
 // Remote workers register themselves in `runners` (see hub.js), so the
 // dashboard, /api/state and /api/debug list them next to the lab's bots.
 const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, guests: cfg.guestBots, events, settings, tradeHalls: cfg.tradeHalls}) : null;
@@ -283,6 +284,8 @@ function idleJob(bot, choice) {
 }
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
 // A viewer commands just their bots (cfg.viewerBots); "all"-style stops go through stopAll, which narrows to those bots.
+const uploads = new uploadsLib.Uploads();
+const uploadPage = fs.readFileSync(path.join(__dirname, 'public', 'upload.html'));
 const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui');
 const placedBots = () => placeBots([...runners.values()].map((r) => r.snapshot()), {vhost: process.env.MC_VHOST, guests: cfg.guestBots, mainBots: cfg.mainBots});
 const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
@@ -323,7 +326,9 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     // Bots that trade: scheduled ones, guests (they get their first chest here) and those with a hall of their own.
     traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...cfg.guestBots, ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
     places: () => places.list,
-    schematics: async () => (await listSchematics()).filter((x) => !x.error).map((x) => x.file),
+    // A guest sees the shared plans and their own uploads; the owner everything (uploads.js visible).
+    schematics: async (viewer) => uploadsLib.visible((await listSchematics()).filter((x) => !x.error).map((x) => x.file), viewer, cfg.viewerBots[viewer] === '*', cfg.ingameViewers),
+    uploadLink: (viewer) => `${cfg.uploadBase}/upload?t=${uploads.issue(viewer)}`,
     sidebar: (viewer, on) => mainConsole?.([on ? `team join mcbots ${viewer}` : `team leave ${viewer}`]),
   }}) : null;
 if (botui) botui.start();
@@ -515,6 +520,12 @@ const server = http.createServer(async (req, res) => {
   };
   const json = (code, obj) => send(code, 'application/json', JSON.stringify(obj));
   const url = new URL(req.url, 'http://x');
+  // The one route outside the login allowlist: a guest's Tailscale login is not on it, so the one-time token is the gate.
+  // Exactly /upload with GET or POST; uploads.handle refuses without a live token.
+  if (url.pathname === '/upload' && (req.method === 'GET' || req.method === 'POST')) {
+    return uploadsLib.handle(req, res, url, {uploads, dir: SCHEMATIC_DIR, parse: (b) => schematicLib.parseLitematic(b), page: uploadPage, csp: UPLOAD_CSP, events,
+      say: (p, b, t) => ingame?.say(p, b, t), fileRe: buildLib.SCHEMATIC_RE, sameOrigin}).catch((e) => { log('upload', e.message); if (!res.headersSent) json(500, {error: 'Fehler'}); });
+  }
   // A request with a bearer is the agent service (H5) and nothing else: a wrong token never falls
   // back to the human path, and the token only reaches state, events and its own bots' jobs.
   const agent = agentauth.bearerMatches(req.headers.authorization, agentTokenHash);

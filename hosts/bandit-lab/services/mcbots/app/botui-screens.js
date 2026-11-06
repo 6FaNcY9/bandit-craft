@@ -116,6 +116,7 @@ function lage(view) {
   const g = view.ctx?.gaze;
   actions.push(button(txt(g ? `Auftrag: ${safe(germanName(g.block), 24)} ▸` : 'Neuer Auftrag', 'aqua'), 'new'), button(txt('Ziele'), 'ziele'), button(txt('Karte'), 'karte'));
   if (view.owner) actions.push(button(txt('Alle stopp', 'red'), 'stopall'));
+  actions.push(button(txt('Bauplan hochladen'), 'upload'));
   actions.push({label: txt('Zauberstab holen'), width: 200, action: {type: 'minecraft:run_command', command: '/zauberstab'}});
   return dialog('Kommandostand', body, actions, CLOSE);
 }
@@ -296,7 +297,13 @@ function karte(view) {
 }
 
 // A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
-const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
+// The one-time upload link as a browser button; the URL carries the token, so it is shown nowhere else.
+function upload(view, sc) {
+  const body = [line(txt('Öffne die Seite, wähle deine .litematic-Datei aus Litematica (config/litematica/schematics) und lade sie hoch.', 'white')), line(txt('Der Link gilt 10 Minuten und nur für dich.', 'gray')), ...flashLine(view.flash)];
+  return dialog('Bauplan hochladen', body, [{label: txt('Seite öffnen', 'aqua'), width: 200, action: {type: 'minecraft:open_url', url: String(sc.url)}}], {label: 'Zurück', a: 'lage'});
+}
+
+const SCREENS = {lage, upload, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
 const REFRESHING = new Set(['lage', 'bot']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 

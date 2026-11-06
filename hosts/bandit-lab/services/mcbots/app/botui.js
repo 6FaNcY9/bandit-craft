@@ -42,6 +42,8 @@ const ACTIONS = {
     await ui.call('/close', {player: viewer}).catch((e) => ui.log(`botui ${viewer}: close: ${e.message}`));
   },
   lage: (st) => { st.screen = {name: 'lage'}; },
+  // A one-time link for the viewer (uploads.js); the dialog opens it in the browser.
+  upload: (st, data, ui, viewer) => { st.screen = {name: 'upload', url: ui.api.uploadLink(viewer)}; },
   bot: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
   botscreen: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
   idle_open: (st, data, ui, viewer) => { st.screen = {name: 'wennfrei', bot: oneBot(ui, viewer, data)}; },
@@ -67,7 +69,7 @@ const ACTIONS = {
   send: async (st, data, ui, viewer) => {
     try {
       const o = jobs.build(data.key, data, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(),
-        allowed: ui.viewerBots[viewer], viewer, schematics: await ui.api.schematics()});
+        allowed: ui.viewerBots[viewer], viewer, schematics: await ui.api.schematics(viewer)});
       const r = ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace});
       done(r);
       if (r?.skipped?.length === o.bots.length) { // nothing was queued (graves: none open)
@@ -298,7 +300,7 @@ class BotUi {
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
-      places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
+      places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
 
   // refresh: the plugin itself refuses (feedback "closed") when the player closed the dialog while this was on the wire.

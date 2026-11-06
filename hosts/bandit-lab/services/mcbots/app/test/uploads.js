@@ -1,0 +1,87 @@
+'use strict';
+// One-time upload links: token rules, file names, visibility, and the /upload handler over a loopback server.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+const {Uploads, fileName, visible, handle, MAX_BYTES} = require('../uploads');
+const {parseLitematic} = require('../schematic');
+const {writeLitematic} = require('../litematic-write');
+const {SCHEMATIC_RE} = require('../build');
+
+(async () => {
+  let t = 0;
+  const up = new Uploads({now: () => t});
+  const tok = up.issue('MidariBread');
+  assert.match(tok, /^[0-9a-f]{32}$/);
+  assert.equal(up.take('x'.repeat(32)), null, 'unknown token');
+  assert.equal(up.take('../etc'), null);
+  assert.equal(up.take(undefined), null);
+  assert.equal(up.take(tok), 'MidariBread', 'the issuing player, nobody else');
+  assert.equal(up.take(tok), null, 'one use');
+  const tok2 = up.issue('A');
+  t += 10 * 60 * 1000 - 1;
+  assert.equal(up.peek(tok2), 'A');
+  t += 1;
+  assert.equal(up.take(tok2), null, 'expired after 10 min');
+
+  assert.equal(fileName('MidariBread', 'My House!.litematic'), 'midaribread-My_House_.litematic');
+  assert.equal(fileName('Abc', 'x'.repeat(80)).length, 4 + 40 + 10);
+  assert.ok(SCHEMATIC_RE.test(fileName('a'.repeat(16), 'x'.repeat(80))), 'longest name still fits the schematic pattern');
+  const files = ['fancy8869-a.litematic', 'midaribread-b.litematic', 'shared.litematic'];
+  assert.deepEqual(visible(files, 'MidariBread', false, ['fancy8869', 'MidariBread']), ['midaribread-b.litematic', 'shared.litematic']);
+  assert.deepEqual(visible(files, 'fancy8869', true, ['fancy8869', 'MidariBread']), files, 'the owner sees everything');
+
+  // the handler
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'upl-'));
+  const events = [], said = [];
+  const deps = {uploads: new Uploads(), dir, parse: parseLitematic, page: '<p>seite</p>', csp: "default-src 'none'", events: {add: (...a) => events.push(a)},
+    say: (...a) => said.push(a), fileRe: SCHEMATIC_RE, sameOrigin: () => true};
+  const srv = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/upload' && (req.method === 'GET' || req.method === 'POST')) return handle(req, res, url, deps);
+    res.writeHead(404); res.end();
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const post = (q, body, type = 'application/octet-stream') => fetch(`${base}/upload?${q}`, {method: 'POST', body, headers: {'content-type': type}});
+  const good = writeLitematic({name: 't', regions: [{name: 'r', position: {x: 0, y: 0, z: 0}, size: {x: 1, y: 1, z: 1}, blocks: [{x: 0, y: 0, z: 0, name: 'stone'}]}]});
+  const stored = () => fs.readdirSync(dir).sort();
+
+  assert.equal((await fetch(`${base}/upload`)).status, 403, 'no token');
+  assert.equal((await fetch(`${base}/upload?t=${'a'.repeat(32)}`)).status, 403);
+  assert.match(await (await fetch(`${base}/upload?t=zz`)).text(), /ungültig/);
+  let tk = deps.uploads.issue('MidariBread');
+  let r = await fetch(`${base}/upload?t=${tk}`);
+  assert.equal(r.status, 200); assert.equal(r.headers.get('content-security-policy'), "default-src 'none'");
+  assert.equal(deps.uploads.peek(tk), 'MidariBread', 'GET does not consume');
+
+  r = await post(`t=${tk}&name=junk`, Buffer.from('not a litematic'));
+  assert.equal(r.status, 400); assert.deepEqual(stored(), []);
+  assert.equal(deps.uploads.peek(tk), 'MidariBread', 'a failed upload keeps the token');
+  r = await post(`t=${tk}&name=big`, Buffer.alloc(MAX_BYTES + 1));
+  assert.equal(r.status, 413); assert.deepEqual(stored(), []);
+  assert.equal(deps.uploads.peek(tk), 'MidariBread');
+  r = await post(`t=${tk}&name=x`, good, 'text/plain');
+  assert.equal(r.status, 403);
+  r = await post(`t=${tk}&name=House&player=fancy8869`, good);
+  assert.equal(r.status, 200);
+  assert.deepEqual(stored(), ['midaribread-House.litematic'], 'the player comes from the token');
+  assert.deepEqual(events.at(-1).slice(2), ['schematic midaribread-House.litematic uploaded by MidariBread']);
+  assert.deepEqual(said.at(-1), ['MidariBread', 'Server', 'Bauplan bereit: midaribread-House']);
+  assert.equal((await post(`t=${tk}&name=House2`, good)).status, 403, 'token used up');
+  assert.deepEqual(stored(), ['midaribread-House.litematic']);
+
+  // 50 files per player; overwriting one of them is still fine
+  for (let i = 0; i < 49; i++) fs.writeFileSync(path.join(dir, `midaribread-f${i}.litematic`), good);
+  tk = deps.uploads.issue('MidariBread');
+  r = await post(`t=${tk}&name=one-too-many`, good);
+  assert.equal(r.status, 400); assert.match((await r.json()).error, /50/);
+  assert.equal(deps.uploads.peek(tk), 'MidariBread');
+  assert.equal((await post(`t=${tk}&name=f0`, good)).status, 200);
+  assert.equal(stored().filter((f) => f.endsWith('.tmp')).length, 0, 'no temp file left');
+  srv.close();
+  fs.rmSync(dir, {recursive: true});
+  console.log('uploads ok');
+})().catch((e) => { console.error(e); process.exit(1); });

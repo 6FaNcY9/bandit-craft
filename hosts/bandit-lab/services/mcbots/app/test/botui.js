@@ -330,6 +330,12 @@ async function fake() {
     assert.match(ui.state('Midari').flash.text, /Besitzer/);
     await click('Midari', {a: 'stop', bot: 'MisaBot'});
     assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'stop', args: {}}]);
+    // Bauplan hochladen: the link is issued for the clicking viewer, a forged payload url is ignored, the button opens the URL
+    api.uploadLink = (v) => `https://x.test/upload?t=tok-${v}`;
+    await click('Midari', {a: 'upload', url: 'https://evil.test', viewer: 'Fancy'});
+    assert.equal(ui.state('Midari').screen.name, 'upload');
+    assert.deepEqual(last().actions[0].action, {type: 'minecraft:open_url', url: 'https://x.test/upload?t=tok-Midari'});
+    await click('Midari', {a: 'lage'});
     // the flash is gone from the next render once it has expired
     t += 31000;
     await click('Fancy', {a: 'lage'});

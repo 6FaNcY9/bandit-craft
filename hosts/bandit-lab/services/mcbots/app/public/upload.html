@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bauplan hochladen</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:2rem auto;padding:0 1rem;background:#1b1b1f;color:#eee}
+input,button{font:inherit;margin:.5rem 0;display:block}
+button{padding:.5rem 1rem}
+#out{margin-top:1rem;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>Bauplan hochladen</h1>
+<p>Wähle deine <code>.litematic</code>-Datei aus (Litematica speichert sie in <code>config/litematica/schematics</code>). Höchstens 2 MB.</p>
+<input id="file" type="file" accept=".litematic">
+<button id="go">Hochladen</button>
+<div id="out"></div>
+<script>
+const out = document.getElementById('out');
+document.getElementById('go').addEventListener('click', async () => {
+  const f = document.getElementById('file').files[0];
+  if (!f) { out.textContent = 'Bitte erst eine Datei wählen.'; return; }
+  out.textContent = 'Lade hoch …';
+  try {
+    const q = new URLSearchParams(location.search);
+    const r = await fetch('/upload?t=' + encodeURIComponent(q.get('t') || '') + '&name=' + encodeURIComponent(f.name), {method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: f});
+    const j = await r.json().catch(() => ({}));
+    out.textContent = r.ok ? 'Fertig: ' + j.file + '. Im Spiel steht der Bauplan jetzt bereit. Du kannst dieses Fenster schließen.' : (j.error || 'Fehler ' + r.status);
+  } catch { out.textContent = 'Verbindung fehlgeschlagen.'; }
+});
+</script>
+</body>
+</html>
