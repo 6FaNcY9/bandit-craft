@@ -349,7 +349,7 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     await h.click('Fancy', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Ecke A setzen'));
   }
   { // Als Kiste merken: a chest gaze offers it, stone does not; only the viewer's own bots; flash names the spot
-    assert.ok(keys(chestG).includes('setchest')); assert.ok(!keys({x: 1, y: 2, z: 3, block: 'stone'}).includes('setchest'));
+    assert.ok(keys(chestG).includes('setchest')); assert.ok(!keys({...chestG, entity: {type: 'cow', x: 1, y: 2, z: 3}}).includes('setchest'), 'entity aimed: no row'); assert.ok(!keys({x: 1, y: 2, z: 3, block: 'stone'}).includes('setchest'));
     assert.deepEqual(contextJobs(chestG, ['MisaBot'], 'Midari').find((r) => r.key === 'setchest').preset, {x: -271, y: 66, z: -214});
     const h = harness();
     await h.click('Midari', {a: 'send', key: 'setchest', x: -271, y: 66, z: -214, who: 'bot2', when: 'next'});

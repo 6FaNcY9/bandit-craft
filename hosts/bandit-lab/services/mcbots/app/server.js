@@ -220,7 +220,7 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
   const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
   if (!targets.length || targets.includes(undefined)) throw new Error('unknown bot');
   const errors = [], skipped = []; // skipped: bots with no open grave (an additive field, the dashboard ignores it)
-  const stopping = type === 'stop' || replace === true;
+  const stopping = type === 'stop' || (replace === true && type !== 'setchest');
   // A field that is one of the dashboard's wheat zones means all of them, tended in turn (wheatfarm.js).
   const wheatZones = places.list.filter((p) => p.kind === 'wheat' && p.box && p.dim === 'overworld').map(({box: b}) => ({x1: b.x1, z1: b.z1, x2: b.x2, z2: b.z2}));
   const jobArgs = type === 'wheatfarm' ? require('./wheatfarm').withFields(args || {}, wheatZones) : args || {};
@@ -230,7 +230,7 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
       const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
       if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); skipped.push(r.name); continue; }
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
-      r.enqueue(type, perBotArgs, {replace: replace === true, ...(type === 'graves' ? {first: true} : {})});
+      r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' ? {first: true} : {})});
       if (!agent && remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
       if (remember) { type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {

@@ -792,6 +792,12 @@ class BotRunner {
   // this now" instead of waiting behind earlier clicks.
   // first: the job goes ahead of the running one, which is interrupted and goes on afterwards (as after a death).
   enqueue(type, args = {}, {replace = false, first = false, at} = {}) {
+    if (type === 'setchest') { // first, so replace never comes with it: it only stores a prefs entry and takes effect at once, whatever runs
+      if (!this.online) throw new Error('ist nicht online');
+      const c = this.setChest(this.bot, null, VALIDATE.setchest(args), true);
+      this.emit('info', `Kiste: ${c.x} ${c.y} ${c.z}`);
+      return;
+    }
     if (replace && type !== 'stop' && type !== 'remove') {
       this.dropQueue();
       this.stoppedAt = Date.now();
@@ -808,12 +814,6 @@ class BotRunner {
       return;
     }
     if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
-    if (type === 'setchest') { // takes effect at once, whatever runs: it only stores a prefs entry (a 2-hour mine must not delay it)
-      if (!this.online) throw new Error('bot is offline');
-      const c = this.setChest(this.bot, null, VALIDATE.setchest(args), true);
-      this.emit('info', `Kiste: ${c.x} ${c.y} ${c.z}`);
-      return;
-    }
     const job = {id: ++this.jobSeq, type, args: VALIDATE[type](args), status: 'queued'};
     // An area job the bot already runs or has queued is not queued again: bot2's agent ordered the same shaft
     // four more times while the first one ran, and every run walks all its layers again (lab, 2026-10-13).

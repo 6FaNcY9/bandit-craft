@@ -98,7 +98,8 @@ function contextJobs(gaze, allowed = '*', viewer, bots = Array.isArray(allowed) 
   } else if (/^(cow|sheep|pig|chicken)$/.test(e?.type)) keys.push('hunt');
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
   if (/_log$|_wood$/.test(b)) keys.push('chop', 'shiftlogs');
-  if (isChest(b)) keys.push('deposit', 'withdraw', 'stock', 'setchest');
+  if (isChest(b)) keys.push('deposit', 'withdraw', 'stock');
+  if (isChest(b) && !e) keys.push('setchest'); // the hub takes the gazed block, so an aimed-at entity (another position) would only be refused
   if (/spawner/.test(b)) keys.push('lightspawner');
   if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
   keys.push('goto', 'guard', 'tidy');

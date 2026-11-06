@@ -36,6 +36,8 @@ assert.equal(shouldEmpty({...job('mine'), interrupted: true}, [], prefs, 3), fal
   r.bot.blockAt = () => ({name: 'stone'});
   assert.throws(() => r.enqueue('setchest', {x: 9, y: 64, z: 9}), /keine Kiste bei 9 64 9/); assert.deepEqual(r.prefs.chest, {x: 5, y: 64, z: 7});
   r.bot.blockAt = () => ({name: 'barrel'}); r.enqueue('setchest', {x: 9, y: 64, z: 9}); assert.equal(r.prefs.chest.x, 9);
-  r.online = false; assert.throws(() => r.enqueue('setchest', {x: 1, y: 2, z: 3}), /offline/);
+  r.online = false; assert.throws(() => r.enqueue('setchest', {x: 1, y: 2, z: 3}), /ist nicht online/);
+  r.online = true; r.enqueue('setchest', {x: 4, y: 64, z: 4}, {replace: true}); // replace never drops the queue or cancels the job
+  assert.equal(r.queue.length, 1); assert.equal(r.current.type, 'mine'); assert.ok(!r.current.cancelled); assert.equal(r.prefs.chest.x, 4);
 }
 console.log('autoempty ok');

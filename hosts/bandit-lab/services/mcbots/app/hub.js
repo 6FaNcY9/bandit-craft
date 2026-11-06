@@ -226,14 +226,14 @@ class RemoteRunner {
 
   enqueue(type, args = {}, {replace = false, first = false} = {}) {
     if (!this.conn) throw new Error(`${this.name} is offline (its worker is not connected)`);
-    if (type === 'stop' || replace === true) this.kept = []; // the next status frame is up to a second away
+    if (type === 'stop' || (replace === true && type !== 'setchest')) this.kept = []; // the next status frame is up to a second away
     let clean = {};
     if (type === 'remove') clean = {id: int(Number(args?.id))};
     else if (type !== 'stop') {
       if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
       clean = VALIDATE[type](args || {});
     }
-    this.conn.ws.send(JSON.stringify({t: 'job', bot: this.name, type, args: clean, replace: replace === true, ...(first === true ? {first: true} : {})}));
+    this.conn.ws.send(JSON.stringify({t: 'job', bot: this.name, type, args: clean, replace: replace === true && type !== 'setchest', ...(first === true ? {first: true} : {})}));
   }
 }
 
