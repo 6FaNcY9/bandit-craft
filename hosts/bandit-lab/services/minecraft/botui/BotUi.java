@@ -503,16 +503,20 @@ public class BotUi extends JavaPlugin implements Listener {
       int slot = inv.getHeldItemSlot();
       ItemStack cur = inv.getItem(slot);
       boolean occupied = cur != null && !cur.getType().isAir();
-      if (occupied && inv.firstEmpty() == -1) {
+      if (occupied && isStaff(cur)) {
+        p.sendMessage(Component.text(HAND_HINT));
+      } else if (occupied && inv.firstEmpty() == -1) {
         p.sendMessage(Component.text("Inventar voll"));
       } else {
         if (occupied) inv.addItem(cur); // lands in a free slot, the hand slot is still taken
         inv.setItem(slot, staff());
-        p.sendMessage(Component.text("Der Zauberstab ist jetzt in deiner Hand. Linksklick: Übersicht · Rechtsklick: auf etwas zeigen"));
+        p.sendMessage(Component.text(HAND_HINT));
       }
     }
     return true;
   }
+
+  private static final String HAND_HINT = "Der Zauberstab ist jetzt in deiner Hand. Linksklick: Übersicht · Rechtsklick: auf etwas zeigen";
 
   /** Why a click with this hand does not count as a staff click, or null when it does (main-hand staff, or off-hand staff with none in the main hand). */
   private String staffReject(Player p, EquipmentSlot hand) {
@@ -522,14 +526,17 @@ public class BotUi extends JavaPlugin implements Listener {
     return hand == EquipmentSlot.OFF_HAND && !isStaff(main) && isStaff(p.getInventory().getItemInOffHand()) ? null : "offhand";
   }
 
-  private boolean holdsStick(Player p) {
+  private boolean holdsStick(Player p, EquipmentSlot hand) {
+    // the main-hand event of an off-hand-only staff click is not a failure: the off-hand event follows and opens
+    if (hand == EquipmentSlot.HAND && isStaff(p.getInventory().getItemInOffHand())) return false;
     return p.getInventory().getItemInMainHand().getType() == Material.STICK || p.getInventory().getItemInOffHand().getType() == Material.STICK;
   }
 
-  /** One line per player per 2 s, shared by the opened and the ignored lines: if neither ever shows, the event does not reach the plugin. */
+  /** Ignored lines: one per player per 2 s. Opened lines always log (so an open is never hidden) and restart the window. */
   private void staffLog(Player p, Action a, EquipmentSlot hand, String what) {
     long now = System.currentTimeMillis();
-    if (now - lastStaffLog.getOrDefault(p.getUniqueId(), 0L) < 2000) return;
+    boolean opened = what.startsWith("opened");
+    if (!opened && now - lastStaffLog.getOrDefault(p.getUniqueId(), 0L) < 2000) return;
     lastStaffLog.put(p.getUniqueId(), now);
     getLogger().info("staff: " + p.getName() + " " + a + " " + hand + " " + what);
   }
@@ -570,7 +577,7 @@ public class BotUi extends JavaPlugin implements Listener {
     if (e.getAction() != Action.LEFT_CLICK_AIR && e.getAction() != Action.LEFT_CLICK_BLOCK) return;
     String why = staffReject(p, e.getHand());
     if (why != null) {
-      if (holdsStick(p)) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
+      if (holdsStick(p, e.getHand())) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
       return;
     }
     e.setCancelled(true);
@@ -587,7 +594,7 @@ public class BotUi extends JavaPlugin implements Listener {
     boolean isMap = e.getHand() == EquipmentSlot.HAND && map.isMap(held);
     String why = isMap && viewers.contains(p.getName().toLowerCase(Locale.ROOT)) ? null : staffReject(p, e.getHand());
     if (why != null) {
-      if (holdsStick(p)) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
+      if (holdsStick(p, e.getHand())) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
       return;
     }
     // As in vanilla, a click on something usable (door, chest) uses it; sneaking or any other block opens the dialog.
