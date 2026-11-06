@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {WebSocketServer} = require('ws');
 const {loadConfig} = require('./config');
-const {BotRunner, keptOf, VALIDATE, projectMaterials, SCHEMATIC_DIR} = require('./bots');
+const {RESUME_WINDOW_MS, BotRunner, keptOf, VALIDATE, projectMaterials, SCHEMATIC_DIR} = require('./bots');
 const buildLib = require('./build');
 const schematicLib = require('./schematic');
 const {WorldModel, startBlueMap} = require('./world');
@@ -374,7 +374,7 @@ if (jobsFile) {
     toResume = JSON.parse(fs.readFileSync(jobsFile, 'utf8'));
   } catch {} // none saved
 }
-const resumeUntil = Date.now() + 300000; // a bot still away after 5 min starts with no job
+const resumeUntil = Date.now() + RESUME_WINDOW_MS; // a bot still away after that starts with no job
 function resumeJobs() {
   if (Date.now() > resumeUntil) toResume = {};
   for (const [name, list] of Object.entries(toResume)) {

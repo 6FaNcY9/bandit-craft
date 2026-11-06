@@ -66,6 +66,11 @@ const {BotRunner} = require('../bots');
   assert.strictEqual(r.queue.length, 1, 'the grave job waits for the reconnect');
   assert.strictEqual(r.queue[0].status, 'queued');
 })();
+// Saved jobs outlive a late server: at least two login retries at the backoff cap fit in the window.
+{
+  const {RESUME_WINDOW_MS, BACKOFF_CAP} = require('../bots');
+  assert.ok(RESUME_WINDOW_MS >= 2 * BACKOFF_CAP + 315000, `window ${RESUME_WINDOW_MS}`);
+}
 // A job that had nothing to do says so in its finished event; the agent reads it.
 (async () => {
   const {JOBS} = require('../bots');
