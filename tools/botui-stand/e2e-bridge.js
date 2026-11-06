@@ -118,6 +118,9 @@ function sampleDialog(size) {
   assert.ok(!other.inv.some((i) => i && i.itemCount > 0), 'non-viewer gets no staff');
   await c.command('zauberstab');
   await waitFor(() => c.inv.some((i) => i && i.itemCount > 0));
+  // the staff lands in the selected hotbar slot (slot 0 = window slot 36), with the hint in chat
+  await waitFor(() => c.chats.some((m) => m.includes('Zauberstab') && m.includes('Hand')));
+  assert.ok(c.inv[36] && c.inv[36].itemCount > 0 && JSON.stringify(c.inv[36]).includes('Zauberstab'), `staff in hand: ${JSON.stringify(c.inv[36])}`);
   // Paper drops a use_item that aims at a block within reach (the client would send block_place), so aim at a stone 8 blocks away
   const stone = [px + 8, py + 1, pz];
   fs.appendFileSync(CONSOLE, `setblock ${stone.join(' ')} stone\n`);

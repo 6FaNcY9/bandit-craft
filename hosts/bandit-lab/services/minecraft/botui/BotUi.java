@@ -58,6 +58,7 @@ import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -94,6 +95,7 @@ public class BotUi extends JavaPlugin implements Listener {
   private ExecutorService pool;
   private BotMap map;
   private final Map<UUID, Long> lastMapClick = new HashMap<>(); // main thread only
+  private final Map<UUID, Long> lastStaffLog = new HashMap<>(); // main thread only
   private static final long MAP_CLICK_COOLDOWN_MS = 500;
   private NamespacedKey staffKey;
 
@@ -496,8 +498,40 @@ public class BotUi extends JavaPlugin implements Listener {
     if (!(s instanceof Player p)) return true;
     if (!c.getName().equals("zauberstab")) tryOpen(p, "lage"); // /bots is the overview; the staff and Shift + F open what they point at
     else if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) p.sendMessage(Component.text("Nicht freigeschaltet"));
-    else if (!p.getInventory().addItem(staff()).isEmpty()) p.sendMessage(Component.text("Inventar voll"));
+    else {
+      PlayerInventory inv = p.getInventory();
+      int slot = inv.getHeldItemSlot();
+      ItemStack cur = inv.getItem(slot);
+      boolean occupied = cur != null && !cur.getType().isAir();
+      if (occupied && inv.firstEmpty() == -1) {
+        p.sendMessage(Component.text("Inventar voll"));
+      } else {
+        if (occupied) inv.addItem(cur); // lands in a free slot, the hand slot is still taken
+        inv.setItem(slot, staff());
+        p.sendMessage(Component.text("Der Zauberstab ist jetzt in deiner Hand. Linksklick: Übersicht · Rechtsklick: auf etwas zeigen"));
+      }
+    }
     return true;
+  }
+
+  /** Why a click with this hand does not count as a staff click, or null when it does (main-hand staff, or off-hand staff with none in the main hand). */
+  private String staffReject(Player p, EquipmentSlot hand) {
+    if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) return "not viewer";
+    ItemStack main = p.getInventory().getItemInMainHand();
+    if (hand == EquipmentSlot.HAND) return isStaff(main) ? null : "no staff in main hand (" + main.getType() + ", tagged=" + isStaff(main) + ")";
+    return hand == EquipmentSlot.OFF_HAND && !isStaff(main) && isStaff(p.getInventory().getItemInOffHand()) ? null : "offhand";
+  }
+
+  private boolean holdsStick(Player p) {
+    return p.getInventory().getItemInMainHand().getType() == Material.STICK || p.getInventory().getItemInOffHand().getType() == Material.STICK;
+  }
+
+  /** One line per player per 2 s, shared by the opened and the ignored lines: if neither ever shows, the event does not reach the plugin. */
+  private void staffLog(Player p, Action a, EquipmentSlot hand, String what) {
+    long now = System.currentTimeMillis();
+    if (now - lastStaffLog.getOrDefault(p.getUniqueId(), 0L) < 2000) return;
+    lastStaffLog.put(p.getUniqueId(), now);
+    getLogger().info("staff: " + p.getName() + " " + a + " " + hand + " " + what);
   }
 
   private ItemStack staff() {
@@ -533,9 +567,14 @@ public class BotUi extends JavaPlugin implements Listener {
   @EventHandler
   public void onLeft(PlayerInteractEvent e) {
     Player p = e.getPlayer();
-    if (e.getHand() != EquipmentSlot.HAND || (e.getAction() != Action.LEFT_CLICK_AIR && e.getAction() != Action.LEFT_CLICK_BLOCK)
-        || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !isStaff(p.getInventory().getItemInMainHand())) return;
+    if (e.getAction() != Action.LEFT_CLICK_AIR && e.getAction() != Action.LEFT_CLICK_BLOCK) return;
+    String why = staffReject(p, e.getHand());
+    if (why != null) {
+      if (holdsStick(p)) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
+      return;
+    }
     e.setCancelled(true);
+    staffLog(p, e.getAction(), e.getHand(), "opened lage");
     tryOpen(p, "lage");
   }
 
@@ -544,8 +583,13 @@ public class BotUi extends JavaPlugin implements Listener {
   public void onUse(PlayerInteractEvent e) {
     Player p = e.getPlayer();
     ItemStack held = p.getInventory().getItemInMainHand();
-    if (e.getHand() != EquipmentSlot.HAND || (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK)
-        || !viewers.contains(p.getName().toLowerCase(Locale.ROOT)) || !(map.isMap(held) || isStaff(held))) return;
+    if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+    boolean isMap = e.getHand() == EquipmentSlot.HAND && map.isMap(held);
+    String why = isMap && viewers.contains(p.getName().toLowerCase(Locale.ROOT)) ? null : staffReject(p, e.getHand());
+    if (why != null) {
+      if (holdsStick(p)) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
+      return;
+    }
     // As in vanilla, a click on something usable (door, chest) uses it; sneaking or any other block opens the dialog.
     if (e.getAction() == Action.RIGHT_CLICK_BLOCK && !p.isSneaking() && usable(e.getClickedBlock())) return;
     e.setCancelled(true);
@@ -553,7 +597,8 @@ public class BotUi extends JavaPlugin implements Listener {
     long now = System.currentTimeMillis();
     if (now - lastMapClick.getOrDefault(p.getUniqueId(), 0L) < MAP_CLICK_COOLDOWN_MS) return;
     lastMapClick.put(p.getUniqueId(), now);
-    tryOpen(p, map.isMap(held) ? "mapclick" : "open");
+    if (!isMap) staffLog(p, e.getAction(), e.getHand(), "opened open");
+    tryOpen(p, isMap ? "mapclick" : "open");
   }
 
   @EventHandler
