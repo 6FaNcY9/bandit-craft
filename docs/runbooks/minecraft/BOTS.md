@@ -175,6 +175,42 @@ The v1 chest menus (CommandPanels `/bots`, `botmenu`) and the `pa data` push and
   and `systemctl restart mc-bridge-botui.socket` after a port change. Nothing happens on Shift + F: the player is not a viewer.
 - Test stand without a server of the lab: `tools/botui-stand/stand.sh up` (local Paper on 127.0.0.1:25599, token "stand-token"), the e2e scripts beside it.
 
+### Bot control phase 1 (2026-11-06): staff, Wenn frei, alerts, upload, alive
+
+Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/superpowers/plans/2026-11-06-bot-control-phase1.md`.
+
+- Zauberstab: a stick with PDC `botui:staff`, from `/zauberstab` or the Lagebild button (viewers only; the stick carries no rights).
+  Right-click emits `open` with the gaze (block, and `entity` from `getTargetEntity(32)`): aimed at a bot the viewer commands → that
+  bot's screen; any other hit → Auftrag with `contextJobs` rows; nothing hit and no corner → Lagebild. Left-click emits `lage`.
+  Shift + F sends the same `open`; `/bots` emits `lage` (always the Lagebild).
+- Wenn frei (`app/idle.js`, `STATE_DIR/idle.json`): per bot one of holz, stein, wache, baumfarm (keeper for the owner's bots). The
+  minute sweep starts it after 60 s idle when the bot has no owner order, project, keeper work or board slice; `remember:false`, so it
+  never becomes a standing order. A `stop` holds the bot's Wenn frei until its next order; Stop-all holds all. An idle job's end waits
+  `ORDER_RETRY_MS`. Holds are in memory (a hub restart clears them).
+- Meine Kiste: staff on a chest → `Als Kiste merken` (`setchest`, applied at enqueue, never queued, also on remote workers; coordinates
+  must equal the viewer's gaze). After a top-level gathering job (mine, chop, get, shift, excavate, clear, treefarm, wheatfarm, hunt,
+  produce, graves) with an empty queue the runner queues `deposit {own:true}` (`shouldEmpty`, `app/autoempty`-tested). Guests never fall
+  back to the owner's supply chest.
+- Far search (`app/farsearch.js`): when nothing free is in view (all protected, under the base, mined out) a non-shift job travels in
+  hops of 96 blocks, one heading away from the base and protected boxes, ≤ 8 hops per search, ≤ 16 per run, 2 headings at most;
+  progress `sucht weiter Richtung …` as an event and in `doing`. The full failure is "gave up" (retry after 4× `ORDER_RETRY_MS`).
+  `getItem` no longer learns a "no free … within" failure as a broken way (it used to block `mine:<item>` fleet-wide up to 24 h).
+  Internal torch wood (`noFar`) stays local.
+- Alerts to the bot's owner (`app/ownalerts.js`): dead, stuck (No path / no progress), missing (`no way to get`), done (≥ 600 s), one
+  per viewer|bot|kind per 10 min, via `ingame.say`. Join digest via `Ingame.tell` (one tellraw, ≤ 6 lines) from the quit time in
+  `STATE_DIR/viewers.json`; no stored quit = no digest.
+- Plan upload (`app/uploads.js`, `public/upload.html`): Lagebild `Bauplan hochladen` → one-time link (`UPLOAD_BASE`, default the
+  dashboard URL) valid 10 min. Exactly `GET/POST /upload` skip the Tailscale-login allowlist; the token is the only gate there (GET peeks,
+  a successful POST consumes, a failed one keeps it). ≤ 2 MB, ≤ 50 files per player, file `<player>-<name>.litematic`. Guests see shared
+  plans plus their own. `parseLitematic` caps gunzip at 32 MiB and regions at 8 M cells (also for the dashboard upload). Misa's node needs
+  `tcp:8445` on the lab in the tailnet policy.
+- Alive (`app/alive.js`): an idle bot (no job, empty queue, not fighting, sheltering, dead or in a window) looks at the nearest player
+  within 8 blocks every 250 ms, bows (500 ms sneak) once per approach to an owner within 3 blocks, steps one block aside from a player
+  within 0.8 blocks onto a safe cell (no water, lava, fire, plates, tripwire, magma, cactus, campfire, berries, cobweb, powder snow).
+  Off when `HUMAN_LOOK=1`.
+- Movement counters (`app/counters.js`): bot screen `Wege/h: n Rücksetzer · n kein Weg · n fest` (per hour). Movement course in the
+  sandbox: `tools/mcbots-parkour/`, results in `docs/runbooks/minecraft/movement-check.md`.
+
 ## Phone notifications
 
 After an operator deploys this configuration, ntfy listens only on host loopback

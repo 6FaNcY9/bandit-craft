@@ -45,7 +45,7 @@ function sampleDialog(size) {
   const c = await connect('Viewer'), other = await connect('Other');
   await waitEvent((e) => e.type === 'join' && e.player === 'Viewer'); // viewers only: Other's join stays silent
   await c.command('bots'); // open from /bots
-  let ev = await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
+  let ev = await waitEvent((e) => e.type === 'lage' && e.player === 'Viewer'); // /bots opens the Lagebild
   const ev0 = ev;
   assert.equal(ev.dim, 'overworld'); assert.equal(ev.pos.length, 3);
   await other.command('bots'); // non-viewer: no event, told so by the plugin
@@ -99,8 +99,8 @@ function sampleDialog(size) {
   await sleep(1000);
   await c.look(-90, 25);
   await sleep(500);
-  await c.command('bots');
-  ev = await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
+  await c.command('bots'); // the lage event carries the gaze too
+  ev = await waitEvent((e) => e.type === 'lage' && e.player === 'Viewer');
   assert.deepEqual(ev.gaze, {x: chest[0], y: chest[1], z: chest[2], block: 'chest'});
 
   // Shift+F: needs sneaking, and a plain F is left alone

@@ -494,7 +494,7 @@ public class BotUi extends JavaPlugin implements Listener {
   @Override
   public boolean onCommand(CommandSender s, Command c, String label, String[] args) {
     if (!(s instanceof Player p)) return true;
-    if (!c.getName().equals("zauberstab")) tryOpen(p, "open");
+    if (!c.getName().equals("zauberstab")) tryOpen(p, "lage"); // /bots is the overview; the staff and Shift + F open what they point at
     else if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) p.sendMessage(Component.text("Nicht freigeschaltet"));
     else if (!p.getInventory().addItem(staff()).isEmpty()) p.sendMessage(Component.text("Inventar voll"));
     return true;
