@@ -125,7 +125,7 @@ const ACTIONS = {
     st.pick = {kind: data.kind, bot, until: ui.now() + PICK_MS};
     st.screen = bot ? {name: 'botm', bot} : {name: 'shiftm'};
     await ACTIONS.close(st, data, ui, viewer);
-    await ui.call('/actionbar', {player: viewer, text: `Zeig mit dem Stab auf ${data.kind === 'chest' ? 'eine Kiste' : 'einen Block'}`}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
+    await ui.call('/actionbar', {player: viewer, text: `${data.kind === 'chest' ? 'Schleich und zeig mit dem Stab auf eine Kiste' : 'Zeig mit dem Stab auf einen Block'}`}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
   },
   shiftgo: (st, data, ui, viewer) => {
     const f = formOf(st, ui, viewer), bot = oneBot(ui, viewer, {bot: f.bot});
@@ -397,7 +397,7 @@ class BotUi {
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm'};
       // a set corner A keeps the next open on the area steps
       else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(g.block)) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
-      else st.screen = {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'lage'};
+      else st.screen = {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'ov'};
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
       // shortcut: Escape during this click's render re-shows until the queued close arrives one poll later, a flicker; skip the show if a close is already queued when that is ever seen.

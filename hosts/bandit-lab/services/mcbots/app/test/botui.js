@@ -39,7 +39,8 @@ async function fake() {
 }
 
 (async () => {
-  const stub = {body: 'one', REFRESHING: new Set(['lage', 'bot']), seen: [], render(screen, view) { this.seen.push(view); return {type: 'notice', title: screen.name + ':' + this.body}; }};
+  const AIM = {x: 0, y: 0, z: 0, block: 'air', entity: {type: 'zombie'}}; // aimed at something: the stub's order screen (a bare open now goes to the overview menu)
+  const stub = {body: 'one', REFRESHING: new Set(['lage', 'auftrag', 'bot']), seen: [], render(screen, view) { this.seen.push(view); return {type: 'notice', title: screen.name + ':' + this.body}; }};
   let t = 1000;
   const logs = [];
   const mk = async (over = {}) => {
@@ -55,12 +56,12 @@ async function fake() {
     const {f, ui, end} = await mk();
     ui.start();
     await until(() => f.of('/events').length, 'first poll');
-    f.add('open', 'Fancy'); f.add('open', 'Stranger');
+    f.add('open', 'Fancy', {gaze: AIM}); f.add('open', 'Stranger', {gaze: AIM});
     await until(() => f.of('/show').length, 'show');
     await sleep(80);
     assert.deepEqual(f.of('/viewers')[0].body, {names: ['Fancy', 'Midari']});
     assert.equal(dialogs(f).length, 1, 'a non-viewer event is ignored, nothing is re-sent');
-    assert.deepEqual(dialogs(f)[0], {player: 'Fancy', dialog: JSON.stringify({type: 'notice', title: 'lage:one'})});
+    assert.deepEqual(dialogs(f)[0], {player: 'Fancy', dialog: JSON.stringify({type: 'notice', title: 'auftrag:one'})});
     assert.equal(f.of('/show')[0].auth, 'Bearer tok');
     assert.equal(ui.state('Fancy').open, true);
     assert.equal(ui.state('Stranger'), undefined);
@@ -68,7 +69,7 @@ async function fake() {
   }
   { // first poll after a hub start does not replay old events
     const {f, ui, end} = await mk();
-    f.add('open', 'Fancy');
+    f.add('open', 'Fancy', {gaze: AIM});
     ui.start();
     await sleep(150);
     assert.equal(f.of('/show').length, 0);
@@ -76,17 +77,17 @@ async function fake() {
   }
   { // the viewer name matches case-insensitively, the view holds only the viewer's bots
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'midari', pos: [1, 2, 3], dim: 'nether', yaw: 9, gaze: null});
+    await ui.handle({type: 'open', player: 'midari', pos: [1, 2, 3], dim: 'nether', yaw: 9, gaze: AIM});
     const v = stub.seen.at(-1);
     assert.equal(v.viewer, 'Midari');
     assert.deepEqual(v.snaps.map((s) => s.name), ['MisaBot']);
-    assert.deepEqual(v.ctx, {pos: [1, 2, 3], dim: 'nether', yaw: 9, gaze: null});
+    assert.deepEqual(v.ctx, {pos: [1, 2, 3], dim: 'nether', yaw: 9, gaze: AIM});
     assert.equal(dialogs(f)[0].player, 'Midari');
     end();
   }
   { // tick re-sends only a changed REFRESHING screen
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await ui.tick();
     assert.equal(f.of('/show').length, 1);
     stub.body = 'two';
@@ -97,7 +98,7 @@ async function fake() {
   }
   { // close click stops refresh, and a later change does not reopen it
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await ui.handle({type: 'click', player: 'Fancy', data: {a: 'close'}});
     stub.body = 'three';
     await ui.tick();
@@ -108,7 +109,7 @@ async function fake() {
   }
   { // a click re-shows even when nothing changed; an unknown action flashes; lage goes home
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await ui.handle({type: 'click', player: 'Fancy', data: {a: 'lage'}});
     assert.equal(f.of('/show').length, 2);
     await ui.handle({type: 'click', player: 'Fancy', data: {a: 'nope'}});
@@ -124,7 +125,7 @@ async function fake() {
   }
   { // closed stops refresh; quit forgets the viewer
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await ui.handle({type: 'closed', player: 'Fancy'});
     stub.body = 'four';
     await ui.tick();
@@ -136,7 +137,7 @@ async function fake() {
   }
   { // closed arriving while a refresh renders: nothing is posted afterwards
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     stub.body = 'five';
     const slow = stub.render;
     stub.render = function (...a) { const r = slow.apply(this, a); ui.handle({type: 'closed', player: 'Fancy'}); return r; };
@@ -148,7 +149,7 @@ async function fake() {
   { // 10 minutes without a click stops refresh
     const {f, ui, end} = await mk();
     t = 1000;
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     t += 599000; stub.body = 'six';
     await ui.tick();
     assert.equal(f.of('/show').length, 2);
@@ -161,7 +162,7 @@ async function fake() {
   }
   { // input screens never refresh
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     ui.state('Fancy').screen = {name: 'eingabe'};
     stub.body = 'eight';
     await ui.tick();
@@ -172,7 +173,7 @@ async function fake() {
   { // a refused /show leaves the dialog marked closed and logs the feedback
     const {f, ui, end} = await mk();
     f.show = {ok: false, feedback: 'boom'};
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     assert.equal(ui.state('Fancy').open, false);
     assert.ok(logs.some((l) => l.includes('boom')));
     end();
@@ -181,9 +182,9 @@ async function fake() {
     const {f, ui, end} = await mk();
     ui.start();
     await until(() => f.of('/viewers').length === 1, 'viewers');
-    f.add('open', 'Fancy'); f.add('open', 'Fancy'); f.add('open', 'Fancy');
+    f.add('open', 'Fancy', {gaze: AIM}); f.add('open', 'Fancy', {gaze: AIM}); f.add('open', 'Fancy', {gaze: AIM});
     await until(() => f.of('/events').some((c) => c.query.includes('since=3')), 'caught up');
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     assert.equal(ui.state('Fancy').open, true);
     f.boot = 'b2'; f.events = [];
     await until(() => f.of('/viewers').length === 2, 'viewers again');
@@ -191,7 +192,7 @@ async function fake() {
     const after = f.of('/events').length;
     await until(() => f.of('/events').slice(after - 1).some((c) => c.query.startsWith('?since=0&')), 'since reset to 0');
     const shows = f.of('/show').length;
-    f.add('open', 'Fancy');
+    f.add('open', 'Fancy', {gaze: AIM});
     await until(() => f.of('/show').length === shows + 1 && ui.state('Fancy').open, 'new open re-shows');
     end();
   }
@@ -213,7 +214,7 @@ async function fake() {
   }
   { // connection refused: one log line per outage, resumes by itself
     logs.length = 0;
-    const {f, ui, end} = await mk();
+    const {f, ui, end} = await mk({screens: require('../botui-screens')});
     ui.start();
     await until(() => ui.boot, 'up'); // first contact done: an earlier outage would skip the open event as backlog
     f.down = true;
@@ -222,14 +223,14 @@ async function fake() {
     assert.equal(logs.filter((l) => /plugin unreachable/.test(l)).length, 1, logs.join('|')); // the previous block's stop can still log its aborted show
     f.down = false;
     f.add('open', 'Fancy');
-    await until(() => f.of('/show').length, 'resumed');
+    await until(() => f.of('/menu').length, 'resumed');
     end();
   }
   { // a throwing handler sets a flash and keeps polling
     const {f, ui, end} = await mk({api: {snapshots: () => { throw new Error('kaputt'); }, places: () => [], schematics: async () => []}});
     ui.start();
     await until(() => f.of('/events').length, 'poll');
-    f.add('open', 'Fancy');
+    f.add('open', 'Fancy', {gaze: AIM});
     await until(() => ui.state('Fancy'), 'state');
     f.add('click', 'Fancy', {data: {a: 'lage'}});
     await sleep(100);
@@ -242,7 +243,7 @@ async function fake() {
   { // refresh shows carry refresh:true, open and click shows do not; a "closed" answer closes quietly
     logs.length = 0;
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await ui.handle({type: 'click', player: 'Fancy', data: {a: 'lage'}});
     stub.body = 'nine'; await ui.tick();
     assert.deepEqual(f.of('/show').map((c) => c.body.refresh), [undefined, undefined, true]);
@@ -254,7 +255,7 @@ async function fake() {
   }
   { // closed arriving while the refresh /show is on the wire: the answer must not re-arm refresh
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     f.showDelay = 80; stub.body = 'eleven';
     const tick = ui.tick();
     await sleep(30);
@@ -269,7 +270,7 @@ async function fake() {
   }
   { // quit while a tick renders: nothing is posted for the orphan
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     stub.body = 'thirteen';
     const slow = stub.render;
     stub.render = function (...a) { const r = slow.apply(this, a); ui.handle({type: 'quit', player: 'Fancy'}); return r; };
@@ -281,8 +282,8 @@ async function fake() {
   { // a failing refresh logs once per outage and does not stop the other viewers
     logs.length = 0;
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
-    await ui.handle({type: 'open', player: 'Midari'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
+    await ui.handle({type: 'open', player: 'Midari', gaze: AIM});
     f.down = true; stub.body = 'fourteen';
     await ui.tick(); await ui.tick();
     assert.equal(logs.length, 1, logs.join('|'));
@@ -301,7 +302,7 @@ async function fake() {
   }
   { // Schließen really clears the dialog on the plugin; a failing /close only logs
     const {f, ui, end} = await mk();
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await ui.handle({type: 'click', player: 'Fancy', data: {a: 'close'}});
     assert.deepEqual(f.of('/close').map((c) => c.body), [{player: 'Fancy'}]);
     assert.equal(ui.state('Fancy').open, false); assert.equal(f.of('/show').length, 1);
@@ -318,7 +319,7 @@ async function fake() {
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data) => ui.handle({type: 'click', player, data});
     const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM}); await click('Fancy', {a: 'lage'}); // the old text Lagebild is only reachable by this click now
     assert.equal(last().actions.filter((a) => a.action.payload?.a === 'bot').length, 2);
     await click('Fancy', {a: 'bot', bot: 'bot1'});
     assert.deepEqual(ui.state('Fancy').screen, {name: 'bot', bot: 'bot1'});
@@ -337,7 +338,7 @@ async function fake() {
     await click('Fancy', {a: 'stopall_ok'});
     assert.deepEqual(stops, ['Fancy']); assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.match(ui.state('Fancy').flash.text, /Alle gestoppt, Daueraufträge aus/);
     // a restricted viewer: own bot only, no Alle stopp, forged clicks refused
-    await ui.handle({type: 'open', player: 'Midari'});
+    await ui.handle({type: 'open', player: 'Midari', gaze: AIM}); await click('Midari', {a: 'lage'});
     assert.ok(!JSON.stringify(last()).includes('stopall'));
     await click('Midari', {a: 'bot', bot: 'bot1'});
     assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(ui.state('Midari').screen.name, 'lage');
@@ -458,7 +459,7 @@ async function fake() {
     // point-to-pick: a chest sets form.chest and shows the hopper again; a wrong target posts nothing; the pick survives
     await ev('Fancy', {a: 'shiftm'});
     await ev('Fancy', {a: 'pick', kind: 'chest'});
-    assert.equal(bars().at(-1), 'Zeig mit dem Stab auf eine Kiste'); assert.equal(f.of('/close').length, 1); assert.equal(ui.state('Fancy').open, false);
+    assert.equal(bars().at(-1), 'Schleich und zeig mit dem Stab auf eine Kiste'); assert.equal(f.of('/close').length, 1); assert.equal(ui.state('Fancy').open, false);
     let menus = f.of('/menu').length;
     await open('Fancy', {x: 1, y: 2, z: 3, block: 'stone'});
     await until(() => bars().at(-1) === 'Das ist keine Kiste', 'Das ist keine Kiste'); assert.equal(f.of('/menu').length, menus); assert.ok(ui.state('Fancy').pick);
@@ -509,10 +510,10 @@ async function fake() {
     assert.equal(labels().filter((l) => /Hierher rufen/.test(l)).length, 1);
     await ui.handle({type: 'open', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}}); await ui.handle({type: 'click', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}, data: {a: 'new'}});
     assert.ok(!last().actions.some((a) => a.action.payload?.a === 'botscreen')); // a foreign bot: no row
-    { // open routing: aimed bot of yours -> its screen; anything else aimed at -> auftrag; nothing -> lage
+    { // open routing: aimed bot of yours -> its screen; anything else aimed at -> auftrag; nothing -> the overview
       const open = async (player, gaze) => { await ui.handle({type: 'open', player, gaze}); return ui.state(player).screen; };
       assert.equal((await open('Fancy', {x: 1, y: 2, z: 3, block: 'bedrock'})).name, 'auftrag');
-      assert.equal((await open('Fancy', null)).name, 'lage');
+      assert.equal((await open('Fancy', null)).name, 'ov');
       assert.deepEqual(await open('Midari', bot), {name: 'botm', bot: 'MisaBot'});
       assert.equal((await open('Midari', {...bot, entity: {...bot.entity, name: 'bot1'}})).name, 'auftrag');
     }
@@ -542,7 +543,7 @@ async function fake() {
       traderChests, traders: () => ['MisaBot'], sidebar: (v, on) => calls.push(['sidebar', v, on])};
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await click('Fancy', {a: 'ziele'});
     assert.equal(ui.state('Fancy').screen.name, 'ziele');
     await click('Fancy', {a: 'keeper', on: 1}); await click('Fancy', {a: 'plan', on: 1}); await click('Fancy', {a: 'sidebar', on: 0});
@@ -591,7 +592,7 @@ async function fake() {
     f.give = give;
     const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
     const maps = (p) => f.of('/map').filter((c) => c.body.player === p).map((c) => c.body);
-    await ui.handle({type: 'open', player: 'Fancy'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await click('Fancy', {a: 'karte'});
     assert.deepEqual(f.of('/map/give').map((c) => c.body), [{player: 'Fancy'}]);
     assert.equal(ui.state('Fancy').screen.name, 'karte');
@@ -604,7 +605,7 @@ async function fake() {
     assert.deepEqual(maps('Fancy').at(-1).center, {x: 100, z: -40, dim: 'the_nether'});
     await click('Fancy', {a: 'center', me: 1}); assert.equal(maps('Fancy').at(-1).center, null);
     // a restricted viewer: own bots only, in markers and as centre
-    await ui.handle({type: 'open', player: 'Midari'});
+    await ui.handle({type: 'open', player: 'Midari', gaze: AIM});
     await click('Midari', {a: 'center', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
     await click('Midari', {a: 'karte'});
     assert.deepEqual(maps('Midari').at(-1).markers.map((m) => m.label), ['MisaBot']);

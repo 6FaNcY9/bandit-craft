@@ -224,6 +224,12 @@ function sampleDialog(size) {
   await waitFor(() => c.win.items.length === 5 + 36 && nameAt(c, 4) === 'stone');
   c.closeWindow(c.win.id);
   await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+  // /close takes an open menu away too, quietly (no closed event: the hub asked for it)
+  assert.equal((await mpost({})).ok, true);
+  await waitFor(() => c.win.id !== 0 && nameAt(c, 4) === 'iron_ore');
+  assert.equal((await post('/close', {player: 'Viewer'})).status, 200);
+  await waitFor(() => c.win.id === 0);
+  await assertNoEvent((e) => e.type === 'closed', 1000);
   assert.equal((await (await post('/actionbar', {player: 'Viewer', text: 'hi'})).json()).ok, true);
   assert.equal((await post('/actionbar', {player: 'Nobody', text: 'hi'})).status, 400);
 

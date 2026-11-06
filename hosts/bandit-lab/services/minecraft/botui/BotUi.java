@@ -300,6 +300,8 @@ public class BotUi extends JavaPlugin implements Listener {
       Player p = Bukkit.getPlayerExact(name);
       if (p != null) {
         open.remove(p.getUniqueId());
+        pending.remove(p.getUniqueId());
+        closeMenu(p);
         Bukkit.dispatchCommand(Bukkit.createCommandSender(c -> {}), "dialog clear " + p.getName());
       }
       return null;
@@ -475,9 +477,9 @@ public class BotUi extends JavaPlugin implements Listener {
   }
 
   // A menu shows display items: nothing may ever move, in either half of the view. Handled even when another plugin cancelled first.
-  @EventHandler(priority = EventPriority.LOWEST)
+  @EventHandler(priority = EventPriority.HIGHEST)
   public void onMenuClick(InventoryClickEvent e) {
-    if (!(e.getView().getTopInventory().getHolder() instanceof MenuHolder h)) return;
+    if (!(e.getView().getTopInventory().getHolder(false) instanceof MenuHolder h)) return;
     e.setCancelled(true);
     ClickType t = e.getClick();
     if (e.getClickedInventory() != e.getView().getTopInventory()) return;
@@ -489,14 +491,14 @@ public class BotUi extends JavaPlugin implements Listener {
     emit("click", p, data);
   }
 
-  @EventHandler(priority = EventPriority.LOWEST)
+  @EventHandler(priority = EventPriority.HIGHEST)
   public void onMenuCreative(InventoryCreativeEvent e) {
-    if (e.getView().getTopInventory().getHolder() instanceof MenuHolder) e.setCancelled(true);
+    if (e.getView().getTopInventory().getHolder(false) instanceof MenuHolder) e.setCancelled(true);
   }
 
-  @EventHandler(priority = EventPriority.LOWEST)
+  @EventHandler(priority = EventPriority.HIGHEST)
   public void onMenuDrag(InventoryDragEvent e) {
-    if (e.getView().getTopInventory().getHolder() instanceof MenuHolder) e.setCancelled(true);
+    if (e.getView().getTopInventory().getHolder(false) instanceof MenuHolder) e.setCancelled(true);
   }
 
   @EventHandler(priority = EventPriority.MONITOR)
@@ -759,7 +761,7 @@ public class BotUi extends JavaPlugin implements Listener {
     ItemStack i = new ItemStack(Material.STICK);
     ItemMeta m = i.getItemMeta();
     m.displayName(Component.text("Zauberstab", NamedTextColor.DARK_PURPLE).decoration(TextDecoration.ITALIC, false));
-    m.lore(List.of(Component.text("Rechtsklick: Befehle · Linksklick: Lage", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
+    m.lore(List.of(Component.text("Linksklick: Übersicht · Rechtsklick: auf etwas zeigen", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
     m.getPersistentDataContainer().set(staffKey, PersistentDataType.BYTE, (byte) 1);
     i.setItemMeta(m);
     return i;

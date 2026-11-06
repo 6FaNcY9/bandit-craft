@@ -105,4 +105,13 @@ assert.ok(MENUS.has('ov'));
   const v = view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, snaps: snaps.filter((x) => x.name === 'MisaBot'), form: {bot: 'MisaBot'}});
   assert.deepEqual(menu({name: 'botpick'}, v).menu.slots.filter((x) => x.head).map((x) => [x.head, x.payload]), [['MisaBot', {a: 'setbot', bot: 'MisaBot'}]]);
 }
+{ // twelve bots: both pickers grow to two rows, every bot a head, the back arrow in the last slot
+  const many = Array.from({length: 12}, (_, i) => ({name: `b${String(i).padStart(2, '0')}`, online: true, job: null}));
+  for (const name of ['botpick', 'chestm']) {
+    const m = menu({name}, view({snaps: many})).menu;
+    assert.equal(m.rows, 2); assert.equal(m.slots.filter((x) => x.head).length, 12);
+    assert.ok(m.slots.find((x) => x.slot === 17).payload.a);
+    assert.ok(m.slots.every((x) => x.slot < 18));
+  }
+}
 console.log('botui-menus ok');

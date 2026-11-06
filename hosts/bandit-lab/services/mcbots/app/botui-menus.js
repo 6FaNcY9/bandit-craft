@@ -79,10 +79,11 @@ function inventoryPage(view, screen) {
 
 // Staff aimed at a chest: pick which of the viewer's bots remembers it.
 function chestPage(view) {
-  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 17)
+  const rows = Math.min(6, Math.ceil((view.snaps.length + 1) / 9)), last = rows * 9 - 1;
+  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, last)
     .map((s, i) => slot(i, 'player_head', s.name, {a: 'chestfor', bot: s.name}, {head: s.name, lore: ['Diese Kiste merken']}));
-  slots.push(back(17, 'ov'));
-  return {type: 'chest', title: 'Kiste merken für…', rows: 2, slots};
+  slots.push(back(last, 'ov'));
+  return {type: 'chest', title: 'Kiste merken für…', rows, slots};
 }
 
 // Abbauen: the amount cycle and the block grid's tabs (icon, label, ids; every id is in BLOCKS).
@@ -113,10 +114,11 @@ function gridPage(view, screen) {
 
 // Which bot does it: the viewer's own bots as heads.
 function botPickPage(view) {
-  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 8)
+  const rows = Math.min(6, Math.ceil((view.snaps.length + 1) / 9)), last = rows * 9 - 1;
+  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, last)
     .map((s, i) => slot(i, 'player_head', s.name, {a: 'setbot', bot: s.name}, {head: s.name, glint: view.form?.bot === s.name}));
-  slots.push(back(8, 'shiftm'));
-  return {type: 'chest', title: 'Welcher Bot?', rows: 1, slots};
+  slots.push(back(last, 'shiftm'));
+  return {type: 'chest', title: 'Welcher Bot?', rows, slots};
 }
 
 // Screens drawn as menus; later tasks add theirs to RENDER.

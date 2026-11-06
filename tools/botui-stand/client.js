@@ -14,6 +14,7 @@ function connect(username, port = 25599) {
     c.on('packet', (data, meta) => {
       if (meta.name === 'show_dialog') dialogs.push(nbt.simplify(data.dialog.data));
       else if (meta.name === 'open_window') { windows.push(data.windowId); Object.assign(win, {id: data.windowId, type: data.inventoryType, items: []}); }
+      else if (meta.name === 'close_window' && data.windowId === win.id) win.id = 0; // closed by the server
       else if (meta.name === 'window_items' && data.windowId !== 0) { win.items.splice(0, win.items.length, ...data.items); win.stateId = data.stateId; }
       else if (meta.name === 'set_slot' && data.windowId !== 0 && data.windowId === win.id) win.items[data.slot] = data.item;
       else if (meta.name === 'system_chat') chats.push(JSON.stringify(nbt.simplify(data.content)));
