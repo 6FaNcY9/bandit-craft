@@ -612,7 +612,7 @@ class BotRunner {
           const r = aliveStep({me: p, players, owners: this.ownerUuids, now: Date.now(), state: aliveState});
           aliveState = r.state;
           if (r.look) bot.lookAt(new Vec3(r.look.x, r.look.y, r.look.z), true).catch(() => {});
-          if (r.sneak) { bot.setControlState('sneak', true); busyUntil = Date.now() + 500; setTimeout(() => { try { if (!this.current) bot.setControlState('sneak', false); } catch {} }, 500).unref(); }
+          if (r.sneak) { bot.setControlState('sneak', true); busyUntil = Date.now() + 500; setTimeout(() => { try { bot.setControlState('sneak', false); } catch {} }, 500).unref(); }
           else if (r.aside) {
             const x = Math.floor(p.x) + r.aside.dx, y = Math.floor(p.y), z = Math.floor(p.z) + r.aside.dz;
             const at = (dy) => bot.blockAt(new Vec3(x, y + dy, z));
