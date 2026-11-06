@@ -319,6 +319,8 @@ function makeCrafting({goNear, guard, fetch = null}) {
       try {
         // A Stop that lands during any of these awaits must not go on to move items (Codex R6-2).
         guard(job);
+        // No free slot and the input stack stays partly behind: the output would have nowhere to go and the job would stall (review M5).
+        if (bot.inventory.emptySlotCount?.() === 0 && count(bot, input) > n) throw new Error(`inventory is full: no room for the smelted ${input}`);
         // A furnace left with another input or fuel, or a full output, refuses ours ("destination full", the
         // sandbox furnace 2026-10-15): take that out first; it goes into the bot's inventory.
         if (furnace.outputItem()) await furnace.takeOutput();

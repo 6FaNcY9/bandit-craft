@@ -269,6 +269,12 @@ const {WorldModel} = require('../world');
     assert.strictEqual(heldWhile, false, 'bot2 is refused while bot1 smelts');
     assert.deepStrictEqual(log, ['fuel', 'input', 'close']);
     assert.strictEqual(world.claimedByOther('bot2', key), false);
+    // a full inventory: the smelt fails clearly before it puts anything into the furnace
+    log = [];
+    r = mkRunner('bot1', mkFurnace(log));
+    r.bot.inventory = {items: () => [{name: 'raw_iron', count: 5}, {name: 'coal', count: 2}], emptySlotCount: () => 0};
+    await assert.rejects(crafting.smelt(r, {cancelled: false, t: {}}, 'raw_iron', 3), /inventory is full: no room for the smelted raw_iron/);
+    assert.deepStrictEqual(log, ['close']);
     // a furnace left with another input refuses ours ("destination full"): that comes out first; the same fuel stays
     log = [];
     const f5 = mkFurnace(log);
