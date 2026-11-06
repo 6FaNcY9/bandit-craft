@@ -51,6 +51,7 @@ const JOBS = {
   get: {label: 'Besorgen', type: 'get', general: true, needs: [item, count(1, 256, 1, 16)], args: (v) => ({item: v.item, count: R(v.n)}), say: (v) => `${germanName(v.item)} besorgen`},
   deposit: {label: 'Einlagern', here: 'Hier einlagern', type: 'deposit', general: true, loc: true, needs: [where], args: (v) => pt(v.at), say: () => 'Einlagern'},
   withdraw: {label: 'Entnehmen', here: 'Hier entnehmen', type: 'withdraw', general: true, loc: true, needs: [item, count(1, 1728, 1, 64), where], args: (v) => ({item: v.item, count: R(v.n), ...pt(v.at)}), say: (v) => `${germanName(v.item)} entnehmen`},
+  setchest: {label: 'Als Kiste merken', type: 'setchest', loc: true, needs: [where], args: (v) => pt(v.at), say: (v) => `Kiste ${v.at.x} ${v.at.y} ${v.at.z}`},
   stock: {label: 'Zählen', here: 'Hier zählen', type: 'stock', loc: true, needs: [where], args: (v) => pt(v.at), say: () => 'Kiste zählen'},
   goto: {label: 'Hingehen', here: 'Hierhin gehen', type: 'goto', general: true, loc: true, needs: [where], args: (v) => pt(v.at), say: () => 'Hingehen'},
   guard: {label: 'Bewachen', here: 'Hier bewachen', type: 'guard', general: true, loc: true, needs: [where, radius(16, 4, 48)], args: (v) => ({...pt(v.at), radius: R(v.radius)}), say: () => 'Bewachen'},
@@ -97,7 +98,7 @@ function contextJobs(gaze, allowed = '*', viewer, bots = Array.isArray(allowed) 
   } else if (/^(cow|sheep|pig|chicken)$/.test(e?.type)) keys.push('hunt');
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
   if (/_log$|_wood$/.test(b)) keys.push('chop', 'shiftlogs');
-  if (isChest(b)) keys.push('deposit', 'withdraw', 'stock');
+  if (isChest(b)) keys.push('deposit', 'withdraw', 'stock', 'setchest');
   if (/spawner/.test(b)) keys.push('lightspawner');
   if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
   keys.push('goto', 'guard', 'tidy');

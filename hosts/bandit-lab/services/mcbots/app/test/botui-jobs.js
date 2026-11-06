@@ -153,7 +153,7 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     assert.equal(d.columns, 2);
     assert.match(text(d.body[0].contents), /^Du schaust auf: Truhe \(-271 66 -214\)$/);
     const ls = d.actions.map((a) => text(a.label));
-    assert.deepEqual(ls.slice(0, 6), ['Hierher rufen', 'Hier einlagern', 'Hier entnehmen', 'Hier zählen', 'Hierhin gehen', 'Hier bewachen']);
+    assert.deepEqual(ls.slice(0, 7), ['Hierher rufen', 'Hier einlagern', 'Hier entnehmen', 'Hier zählen', 'Als Kiste merken', 'Hierhin gehen', 'Hier bewachen']);
     assert.equal(d.actions[1].label.color ?? d.actions[1].label.extra?.[0]?.color ?? 'gold', 'gold');
     assert.equal(ls.at(-1), 'Zurück'); assert.equal(d.actions.at(-1).action.payload.a, 'lage');
     assert.ok(ls.includes('Ecke A setzen') && !ls.includes('Raum graben'));
@@ -347,6 +347,18 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     await h.ev('click', 'Fancy', {data: {a: 'job', key: 'goto'}});
     const o = JSON.stringify(h.last()); assert.ok(o.includes('Heimatbasis') && o.includes('Vorratskiste'));
     await h.click('Fancy', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Ecke A setzen'));
+  }
+  { // Als Kiste merken: a chest gaze offers it, stone does not; only the viewer's own bots; flash names the spot
+    assert.ok(keys(chestG).includes('setchest')); assert.ok(!keys({x: 1, y: 2, z: 3, block: 'stone'}).includes('setchest'));
+    assert.deepEqual(contextJobs(chestG, ['MisaBot'], 'Midari').find((r) => r.key === 'setchest').preset, {x: -271, y: 66, z: -214});
+    const h = harness();
+    await h.click('Midari', {a: 'send', key: 'setchest', x: -271, y: 66, z: -214, who: 'bot2', when: 'next'});
+    assert.equal(h.submits.length, 0); assert.match(h.ui.state('Midari').flash.text, /nicht dein Bot/);
+    await h.click('Midari', {a: 'send', key: 'setchest', x: -271, y: 66, z: -214, who: 'MisaBot', when: 'next'});
+    assert.deepEqual(h.submits[0], {v: 'Midari', bots: ['MisaBot'], type: 'setchest', args: {x: -271, y: 66, z: -214}, replace: false});
+    assert.equal(flashOf(h.last()), '✔ MisaBot: Kiste -271 66 -214');
+    assert.throws(() => VALIDATE.setchest({x: 1, y: 999, z: 3}));
+    assert.deepEqual(VALIDATE.setchest({x: 1, y: 2, z: 3, junk: 1}), {x: 1, y: 2, z: 3});
   }
   console.log('botui-jobs ok');
 })().catch((e) => { console.error(e); process.exit(1); });

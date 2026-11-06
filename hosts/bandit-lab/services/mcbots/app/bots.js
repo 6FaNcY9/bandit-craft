@@ -138,6 +138,7 @@ const VALIDATE = {
     return {...xyz(a), ...(a.only ? {only: a.only} : {})};
   },
   rearm: xyz,
+  setchest: xyz,
   // Collect the dropped items within `radius` of x,y,z (default: the supply chest) and deposit them there.
   tidy: (a) => ({...(a.x !== undefined ? xyz(a) : {}), radius: num(a.radius ?? 16, 2, 32, 'radius')}),
   grave: xyz, // where the bot died; AxGraves keeps the loot in a grave there
@@ -499,8 +500,7 @@ class BotRunner {
           savePrefs(this.prefsFile, this.name, {verbose: command.verbose}); this.prefs.verbose = command.verbose;
           queued = command.verbose ? 'laut' : 'leise';
         } else if (command.chest) {
-          const c = this.ownChest(bot, player, command.chest);
-          savePrefs(this.prefsFile, this.name, {chest: c}); this.prefs.chest = c;
+          const c = this.setChest(bot, player, command.chest);
           queued = `Kiste: ${c.x} ${c.y} ${c.z}`;
         } else if (command.keep) {
           const {item, count} = command.keep;
@@ -522,6 +522,13 @@ class BotRunner {
         try { if (id) this.demoLog?.outcome(id, 'refused', e.message); } catch (err) { this.log(this.name, `demonstration: ${err.message}`); }
       }
     });
+  }
+
+  // Remember the chest (chat `kiste` and the setchest job): the bot's own chest, where it empties itself after work.
+  setChest(bot, player, spot) {
+    const c = this.ownChest(bot, player, spot);
+    savePrefs(this.prefsFile, this.name, {chest: c}); this.prefs.chest = c;
+    return c;
   }
 
   // The block for `kiste`: the one the player looks at, or the one at x y z. Throws the German reason.
@@ -944,6 +951,11 @@ class BotRunner {
     this.current = null;
     this.digOnly = null;
     this.digBox = null;
+    const spare = this.online && !this.dead && this.prefs?.chest ? ownSpare(this) : [];
+    if (shouldEmpty(job, this.queue, this.prefs, spare.length)) {
+      this.emit('info', `leert ins Lager: ${spare.reduce((n, it) => n + it.count, 0)} Sachen`);
+      this.enqueue('deposit', {own: true});
+    }
     setImmediate(() => this.pump());
   }
 
@@ -974,6 +986,7 @@ class BotRunner {
       dead: this.dead,
       tool: this.tool(),
       freeSlots: this.online ? b.inventory.emptySlotCount() : null,
+      chest: this.prefs?.chest ?? null, // the bot's own chest (prefs), for the bot screen
       queue: this.queue.map(label),
       queueIds: this.queue.map((j) => j.id),
       inventory: top.map(([n, c]) => `${n} x${c}`),
@@ -2150,6 +2163,18 @@ async function lightUp(r, job, ids = [], {wall = false} = {}) {
 // What a deposit leaves with the bot for the next tool (ensureTool): bot2 handed all its cobblestone to the plaza store
 // and chopped on with wooden axes (2026-10-19).
 const TOOL_STOCK = {cobblestone: 6};
+// What stays with the bot on a deposit: TOOL_STOCK, prefs.keep and the job's own keep, per item kind.
+const keepBackOf = (r, items, keep) => {
+  const spare = {...TOOL_STOCK, ...r.prefs?.keep, ...keep};
+  return items.map((it) => { const k = Math.min(spare[it.name] || 0, it.count); spare[it.name] = (spare[it.name] || 0) - k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
+};
+// What `deposit {own:true}` would move now: tools, armour and food stay on the bot, plus the keep lists.
+const ownSpare = (r, keep) => keepBackOf(r, r.bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || /_(helmet|chestplate|leggings|boots)$/.test(it.name) || r.bot.registry.foodsByName[it.name])), keep);
+// Servants empty into their own chest when a top-level gathering job ends and nothing else is queued (Misa 2026-11-06).
+// A child job (Object.create(job)) never does; the next queued job may need the items.
+const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'hunt', 'produce', 'graves']);
+const shouldEmpty = (job, queue, prefs, spareCount) => EMPTIES.has(job.type) && (job.status === 'done' || job.status === 'failed') && !job.interrupted
+  && Object.getPrototypeOf(job) === Object.prototype && !queue.length && !!prefs?.chest && spareCount > 0;
 const JUNK = new Set(['cobblestone', 'cobbled_deepslate', 'dirt', 'gravel', 'granite', 'diorite', 'andesite', 'tuff', 'netherrack', 'calcite', 'dripstone_block', 'rooted_dirt', 'leaf_litter']);
 const jobWants = (job, item) => [job.args?.block, job.args?.item].some((n) => n && (n === item || (item === 'cobblestone' && n === 'stone')));
 async function tossJunk(r, job) {
@@ -3404,6 +3429,8 @@ const JOBS = {
     }
   },
 
+  setchest: (r, job) => { r.setChest(r.bot, null, job.args); },
+
   mine: (r, job) => collect(r, job, [job.args.block], job.args.count, job.args.block),
 
   chop: (r, job) =>
@@ -3427,12 +3454,9 @@ const JOBS = {
     const isFood = (n) => !!bot.registry.foodsByName[n];
     // What a normal deposit files away; `only` (the keeper's coal and torches) puts just that kind into the chest.
     // `keep` ({name: n}): that many of a kind stay with the bot (the wheat farm's 64 seeds to replant from).
-    const keepBack = (items) => {
-      const spare = {...TOOL_STOCK, ...r.prefs?.keep, ...job.args.keep};
-      return items.map((it) => { const k = Math.min(spare[it.name] || 0, it.count); spare[it.name] = (spare[it.name] || 0) - k; return {...it, count: it.count - k}; }).filter((it) => it.count > 0);
-    };
+    const keepBack = (items) => keepBackOf(r, items, job.args.keep);
     // The own chest takes sticks, coal and the rest too (the keep list decides); armour stays on the bot.
-    const junk = () => keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || (own ? /_(helmet|chestplate|leggings|boots)$/ : KEEP_RE).test(it.name) || isFood(it.name))));
+    const junk = () => (own ? ownSpare(r, job.args.keep) : keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name)))));
     const eligible = () => (only ? keepBack(bot.inventory.items().filter((it) => only(it.name))) : junk());
     let moved = 0;
     const byName = {};
@@ -4091,4 +4115,4 @@ const JOBS = {
   },
 };
 
-module.exports = {produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};

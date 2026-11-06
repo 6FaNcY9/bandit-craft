@@ -138,6 +138,7 @@ function bot(view, name) {
     if (s.inventory?.length) body.push(line(txt('Inventar: ', 'gray'), txt(safe(s.inventory.slice(0, 8).join(', '), 150))));
     if (s.pos) body.push(line(txt(`Position ${s.pos.join(' ')} ${DIMENSION[s.dimension] || ''}`.trim(), 'gray')));
   }
+  body.push(line(txt(s.chest ? `Kiste: ${s.chest.x} ${s.chest.y} ${s.chest.z}` : 'Kiste: keine – Zauberstab auf eine Kiste', 'gray')));
   if (failing(s) && s.lastError) body.push(line(txt(safe(explain(s.lastError), 80), 'red')));
   body.push(...flashLine(view.flash));
   const cur = view.idle?.get(s.name), curLabel = cur && choiceOf(cur.id)?.label;
