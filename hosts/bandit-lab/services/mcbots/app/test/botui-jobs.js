@@ -38,6 +38,8 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: chestG, suppl
   const bot = {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'player', name: 'MisaBot', x: 1, y: 2, z: 3}};
   assert.deepEqual(contextJobs(bot, ['MisaBot'], 'Midari').slice(0, 2), [{key: 'summon', preset: {}}, {key: 'botscreen', preset: {bot: 'MisaBot'}}]);
   assert.ok(!contextJobs(bot, ['MisaBot'], 'Midari').some((r) => r.key === 'followme'));
+  assert.deepEqual(contextJobs(bot, '*', 'Fancy', ['bot1', 'MisaBot']).slice(0, 2).map((r) => r.key), ['summon', 'botscreen']); // the owner: any of their bots
+  assert.ok(!contextJobs({...bot, entity: {...bot.entity, name: 'bot1'}}, ['MisaBot'], 'Midari', ['MisaBot']).some((r) => r.key === 'botscreen')); // a foreign bot: no row
   const steve = {...bot, entity: {...bot.entity, name: 'Steve'}};
   assert.deepEqual(contextJobs(steve, ['MisaBot'], 'Midari').map((r) => r.key), ['summon', 'followme', 'goto', 'guard', 'tidy']);
   assert.ok(!contextJobs({...steve, entity: {...steve.entity, name: 'Midari'}}, ['MisaBot'], 'Midari').some((r) => r.key === 'followme'));

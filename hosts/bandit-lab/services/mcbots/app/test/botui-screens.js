@@ -15,7 +15,7 @@ const work = (name, over = {}) => ({...base, name, activity: 'chopping', job: {l
 const idle = (name) => ({...base, name, activity: 'idle', job: null});
 const off = (name) => ({...base, name, online: false, health: null, food: null, pos: null, isDay: null, activity: 'offline', job: null});
 const view = (over) => ({viewer: 'Fancy', snaps: [], allowed: '*', owner: true, keeper: null, flash: null, ...over});
-const botButtons = (d) => d.actions.filter((a) => a.action.payload.a === 'bot');
+const botButtons = (d) => d.actions.filter((a) => a.action.payload?.a === 'bot');
 const labels = (d) => d.actions.map((a) => text(a.label));
 const body = (d) => d.body.map((b) => text(b.contents));
 
@@ -27,14 +27,14 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.equal(d.type, 'minecraft:multi_action'); assert.equal(d.after_action, 'none'); assert.equal(d.pause, false);
   assert.deepEqual(d.exit_action.action, {type: 'minecraft:custom', id: 'botui:do', payload: {a: 'close'}});
   assert.equal(text(d.exit_action.label), 'Schließen');
-  assert.equal(d.actions.length, 12); assert.ok(d.actions.every((a) => a.width === 200));
+  assert.equal(d.actions.length, 13); assert.ok(d.actions.every((a) => a.width === 200));
   assert.ok(d.body.length <= 6);
   assert.match(labels(d)[0], /^● bot0 +Baumfarm 5\/64 · 12 min$/);
   assert.equal(d.actions[0].label[1].color, 'green');
   assert.deepEqual(d.actions[0].action.payload, {a: 'bot', bot: 'bot0'});
   assert.match(text(d.actions[0].tooltip), /chopping/);
-  assert.deepEqual(labels(d).slice(8), ['Neuer Auftrag', 'Ziele', 'Karte', 'Alle stopp']);
-  assert.deepEqual(d.actions.slice(8).map((a) => a.action.payload.a), ['new', 'ziele', 'karte', 'stopall']);
+  assert.deepEqual(labels(d).slice(8), ['Neuer Auftrag', 'Ziele', 'Karte', 'Alle stopp', 'Zauberstab holen']);
+  assert.deepEqual(d.actions.slice(8).map((a) => a.action.payload?.a ?? a.action.command), ['new', 'ziele', 'karte', 'stopall', '/zauberstab']);
 }
 { // a kick and a stall in plain German, never the server's raw JSON
   assert.match(explain('kicked: {"text":"You are logging in too fast, try again later."}'), /zu schnell/);
@@ -108,7 +108,8 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.match(b, /Leben 20 · Essen 18 · Rüstung 2\/4 · frei 12/); assert.match(b, /iron_pickaxe 120\/250/);
   assert.match(b, /item7 x8/); assert.doesNotMatch(b, /item8/);
   assert.match(b, /Position 10 64 -5 Oberwelt/);
-  assert.deepEqual(d.actions.map((a) => a.action.payload), [{a: 'stop', bot: 'bot1'}, {a: 'new', bot: 'bot1'}, {a: 'quick', bot: 'bot1', job: 'deposit'}, {a: 'quick', bot: 'bot1', job: 'rearm'}, {a: 'quick', bot: 'bot1', job: 'homebed'}, {a: 'quick', bot: 'bot1', job: 'graves'}]);
+  assert.deepEqual(d.actions.map((a) => a.action.payload), [{a: 'stop', bot: 'bot1'}, {a: 'new', bot: 'bot1'}, {a: 'idle_open', bot: 'bot1'}, {a: 'quick', bot: 'bot1', job: 'deposit'}, {a: 'quick', bot: 'bot1', job: 'rearm'}, {a: 'quick', bot: 'bot1', job: 'homebed'}, {a: 'quick', bot: 'bot1', job: 'graves'}]);
+  assert.equal(text(d.actions[2].label), 'Wenn frei: Nichts');
   assert.equal(text(d.actions[1].label), 'Auftrag für bot1');
   assert.equal(d.exit_action.action.payload.a, 'lage'); // back to the Lagebild; Escape still closes
   assert.equal(d.after_action, 'none');

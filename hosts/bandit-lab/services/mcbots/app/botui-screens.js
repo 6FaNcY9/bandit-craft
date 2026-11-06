@@ -1,6 +1,7 @@
 'use strict';
 // Pure builders for the in-game dialogs (Minecraft dialog JSON, multi_action). No I/O and no clock: the same view must
 // build the same JSON, because BotUi re-sends a refreshing screen only when its JSON changed.
+const {CHOICES, choiceOf} = require('./idle');
 const {ago, DIMENSION, failing, botState} = require('./ingame');
 const {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, supplyOf} = require('./botui-jobs');
 
@@ -115,6 +116,7 @@ function lage(view) {
   const g = view.ctx?.gaze;
   actions.push(button(txt(g ? `Auftrag: ${safe(germanName(g.block), 24)} ▸` : 'Neuer Auftrag', 'aqua'), 'new'), button(txt('Ziele'), 'ziele'), button(txt('Karte'), 'karte'));
   if (view.owner) actions.push(button(txt('Alle stopp', 'red'), 'stopall'));
+  actions.push({label: txt('Zauberstab holen'), width: 200, action: {type: 'minecraft:run_command', command: '/zauberstab'}});
   return dialog('Kommandostand', body, actions, CLOSE);
 }
 
@@ -137,9 +139,22 @@ function bot(view, name) {
   }
   if (failing(s) && s.lastError) body.push(line(txt(safe(explain(s.lastError), 80), 'red')));
   body.push(...flashLine(view.flash));
+  const cur = view.idle?.get(s.name), curLabel = cur && choiceOf(cur.id)?.label;
   const actions = [button(txt('Stopp', 'red'), 'stop', {bot: s.name}), button(txt('Auftrag für ' + n, 'aqua'), 'new', {bot: s.name}),
+    button(txt(`Wenn frei: ${safe(curLabel || 'Nichts', 30)}`, 'yellow'), 'idle_open', {bot: s.name}),
     ...QUICK.filter(([job]) => mayOrder(view.allowed, job)).map(([job, label]) => button(txt(label), 'quick', {bot: s.name, job}))];
   return dialog(n, body, actions, {label: 'Zur Übersicht', a: 'lage'});
+}
+
+// "Wenn frei": what the bot does by itself once it has been idle a while. The keeper choice is the owner's own bots only.
+function wennfrei(view, sc) {
+  const s = mine(view).find((x) => x.name === sc.bot), n = safe(sc.bot, 16);
+  if (!s) return dialog(n, [line(txt('Bot nicht gefunden', 'red')), ...flashLine(view.flash)], [], {label: 'Zur Übersicht', a: 'lage'});
+  const cur = view.idle?.get(s.name)?.id;
+  const mark = (on) => (on ? 'green' : 'white');
+  const actions = [...CHOICES.filter((c) => c.id !== 'keeper' || !s.guest).map((c) => button(txt(c.label, mark(c.id === cur)), 'idle_set', {bot: s.name, choice: c.id})),
+    button(txt('Nichts', mark(!cur)), 'idle_set', {bot: s.name, choice: 'none'}), button(txt('Zurück'), 'bot', {bot: s.name})];
+  return dialog(`${n}: wenn frei`, [line(txt('Was soll der Bot tun, wenn er eine Weile frei ist?', 'white')), ...flashLine(view.flash)], actions, CLOSE);
 }
 
 function confirmStop() {
@@ -209,7 +224,9 @@ function auftrag(view, sc) {
   else if (sel.a) body.push(line(txt(`Ecke A: ${sel.a.x} ${sel.a.y} ${sel.a.z} · Ecke B fehlt noch`, 'aqua')));
   body.push(...flashLine(view.flash));
   const withBot = (extra) => ({...extra, ...(sc.bot ? {bot: sc.bot} : {})});
-  const actions = contextJobs(g, view.allowed, view.viewer).filter((r) => r.key !== 'botscreen').map(({key, preset}) => button(txt(JOBS[key].here || JOBS[key].label, 'gold'), 'job', withBot({key, ...preset})));
+  const rows = contextJobs(g, view.allowed, view.viewer, mine(view).map((s) => s.name));
+  const actions = rows.map(({key, preset}) => key === 'botscreen' ? button(txt(`${safe(preset.bot, 16)} ▸`, 'aqua'), 'botscreen', {bot: preset.bot})
+    : button(txt(JOBS[key].here || JOBS[key].label, 'gold'), 'job', withBot({key, ...preset})));
   if (g && isChest(g.block)) for (const t of traders(view)) for (const [kind, label] of [['sticks', 'Sticks'], ['stores', 'Smaragde']]) actions.push(button(txt(`Handelskiste ${label} → ${safe(t, 16)}`, 'gold'), 'trader_add', {bot: t, kind}));
   actions.push(button(txt(sel.a ? (sel.b ? 'Ecke B neu setzen' : 'Ecke B setzen') : 'Ecke A setzen', 'aqua'), 'corner', {which: sel.a ? 'b' : 'a'}));
   if (sel.a) actions.push(button(txt('Auswahl löschen', 'aqua'), 'clearsel'));
@@ -217,7 +234,7 @@ function auftrag(view, sc) {
     actions.push(ok ? button(txt(JOBS[key].label, 'aqua'), 'job', withBot({key}))
       : {label: txt(JOBS[key].label, 'dark_gray'), width: 200, tooltip: lines([[why, 'red']])}); // no action: the client shows it disabled
   }
-  for (const [key, job] of Object.entries(JOBS)) if (job.general && mayOrder(view.allowed, key)) actions.push(button(txt(job.label, 'white'), 'job', withBot({key})));
+  for (const [key, job] of Object.entries(JOBS)) if (job.general && mayOrder(view.allowed, key) && !rows.some((r) => r.key === key)) actions.push(button(txt(job.label, 'white'), 'job', withBot({key})));
   actions.push(button(txt('Zurück'), 'lage'));
   return dialog('Neuer Auftrag', body, actions, CLOSE);
 }
@@ -279,7 +296,7 @@ function karte(view) {
 }
 
 // A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
-const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
+const SCREENS = {lage, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
 const REFRESHING = new Set(['lage', 'bot']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 

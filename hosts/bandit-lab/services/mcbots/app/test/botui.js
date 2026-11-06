@@ -303,7 +303,7 @@ async function fake() {
     const click = (player, data) => ui.handle({type: 'click', player, data});
     const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
     await ui.handle({type: 'open', player: 'Fancy'});
-    assert.equal(last().actions.filter((a) => a.action.payload.a === 'bot').length, 2);
+    assert.equal(last().actions.filter((a) => a.action.payload?.a === 'bot').length, 2);
     await click('Fancy', {a: 'bot', bot: 'bot1'});
     assert.deepEqual(ui.state('Fancy').screen, {name: 'bot', bot: 'bot1'});
     await click('Fancy', {a: 'stop', bot: 'bot1'});
@@ -334,6 +334,41 @@ async function fake() {
     t += 31000;
     await click('Fancy', {a: 'lage'});
     assert.doesNotMatch(JSON.stringify(last().body), /gestoppt/);
+    end();
+  }
+  { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
+    const set = [], store = {MisaBot: null};
+    const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [],
+      idle: {get: (b) => store[b] ? {id: store[b]} : null, set: (b, id) => { if (id === 'keeper') throw new Error('Daueraufträge nur für Bandits Diener'); set.push([b, id]); store[b] = id; return {ok: true, label: id ? 'Holz-Schicht' : 'Nichts'}; }}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const click = (player, data) => ui.handle({type: 'click', player, data});
+    const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
+    const labels = () => last().actions.map((a) => JSON.stringify(a.label));
+    await ui.handle({type: 'lage', player: 'Fancy'});
+    assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.equal(f.of('/show').length, 1);
+    assert.ok(last().actions.some((a) => a.action.command === '/zauberstab' && a.action.type === 'minecraft:run_command'));
+    const bot = {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'player', name: 'MisaBot', x: 1, y: 2, z: 3}};
+    await ui.handle({type: 'open', player: 'Fancy', gaze: bot}); await ui.handle({type: 'click', player: 'Fancy', gaze: bot, data: {a: 'new'}});
+    assert.equal(last().actions.filter((a) => a.action.payload?.a === 'botscreen').length, 1);
+    assert.equal(labels().filter((l) => /Hierher rufen/.test(l)).length, 1);
+    await ui.handle({type: 'open', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}}); await ui.handle({type: 'click', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}, data: {a: 'new'}});
+    assert.ok(!last().actions.some((a) => a.action.payload?.a === 'botscreen')); // a foreign bot: no row
+    await click('Midari', {a: 'botscreen', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await click('Fancy', {a: 'botscreen', bot: 'MisaBot'});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'bot', bot: 'MisaBot'});
+    assert.ok(labels().some((l) => l.includes('Wenn frei: Nichts')));
+    await click('Fancy', {a: 'idle_open', bot: 'MisaBot'});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'wennfrei', bot: 'MisaBot'});
+    assert.ok(labels().some((l) => l.includes('Stein-Schicht')) && labels().some((l) => l.includes('"Nichts"')) && !labels().some((l) => l.includes('Daueraufträge'))); // keeper hidden for a guest bot
+    await click('Midari', {a: 'idle_set', bot: 'bot1', choice: 'holz'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(set.length, 0);
+    await click('Midari', {a: 'idle_set', bot: 'MisaBot', choice: 'holz'});
+    assert.deepEqual(set, [['MisaBot', 'holz']]); assert.match(ui.state('Midari').flash.text, /MisaBot: wenn frei → Holz-Schicht/);
+    assert.ok(labels().some((l) => l.includes('Wenn frei: Holz-Schicht in meine Kiste')));
+    await click('Midari', {a: 'idle_set', bot: 'MisaBot', choice: 'keeper'});
+    assert.match(ui.state('Midari').flash.text, /Daueraufträge nur für Bandits Diener/);
     end();
   }
   { // Ziele: owner toggles and saves quotas, a restricted viewer is refused; trader chests come from the gaze, not the click

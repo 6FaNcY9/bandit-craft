@@ -87,11 +87,12 @@ const AREA = Object.keys(JOBS).filter((k) => JOBS[k].needs.includes(area));
 const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
 
 // What a gazed block offers, most useful first. preset: the target (when the job uses one) and the block name.
-function contextJobs(gaze, allowed = '*', viewer) {
+// bots: the bots the viewer commands (all names for the owner); an aimed-at one of them gets a botscreen row.
+function contextJobs(gaze, allowed = '*', viewer, bots = Array.isArray(allowed) ? allowed : []) {
   if (!gaze || typeof gaze.block !== 'string') return [];
   const b = gaze.block, e = gaze.entity, keys = ['summon'], rows = [];
   if (e?.type === 'player') {
-    if (Array.isArray(allowed) && allowed.includes(e.name)) rows.push({key: 'botscreen', preset: {bot: e.name}});
+    if (bots.includes(e.name)) rows.push({key: 'botscreen', preset: {bot: e.name}});
     else if (e.name !== viewer) keys.push('followme');
   } else if (/^(cow|sheep|pig|chicken)$/.test(e?.type)) keys.push('hunt');
   if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');

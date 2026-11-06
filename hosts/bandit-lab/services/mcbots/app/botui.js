@@ -43,6 +43,15 @@ const ACTIONS = {
   },
   lage: (st) => { st.screen = {name: 'lage'}; },
   bot: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
+  botscreen: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
+  idle_open: (st, data, ui, viewer) => { st.screen = {name: 'wennfrei', bot: oneBot(ui, viewer, data)}; },
+  // Rights first, then the hub decides (api.idle.set throws a short German reason, e.g. keeper for guests).
+  idle_set: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    st.screen = {name: 'bot', bot};
+    const r = ui.api.idle.set(bot, data.choice === 'none' ? null : data.choice);
+    ui.flash(st, `${bot}: wenn frei → ${r?.label || 'Nichts'}`, true);
+  },
   stop: (st, data, ui, viewer) => {
     const bot = oneBot(ui, viewer, data);
     done(ui.api.submit(viewer, {bots: [bot], type: 'stop', args: {}}));
@@ -257,7 +266,9 @@ class BotUi {
     if (e.type === 'closed') { if (st) st.open = false; return; }
     if (!st) this.states.set(viewer, st = {screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
     st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
-    if (e.type === 'open') {
+    if (e.type === 'lage') {
+      st.screen = {name: 'lage'}; st.lastClick = this.now();
+    } else if (e.type === 'open') {
       st.screen = {name: st.sel.a ? 'auftrag' : 'lage'}; st.lastClick = this.now();
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
@@ -282,7 +293,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, ctx: st.ctx, sel: st.sel,
+    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
 
