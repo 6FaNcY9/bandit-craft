@@ -12,6 +12,7 @@ const {Combat, AVOID_FOOD, deathCause} = require('./combat');
 require('./physicsfix');
 const {cacheGetBlock} = require('./pathcache');
 const {BotTrace, SAMPLE_MS, round} = require('./debug');
+const {HourCounter} = require('./counters');
 const farsearch = require('./farsearch');
 const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
 const {zoneNamed, inZone} = require('./places');
@@ -377,6 +378,7 @@ class BotRunner {
     this.queue = [];
     this.current = null;
     this.trace = new BotTrace();
+    this.moves = {pullbacks: new HourCounter(), noPath: new HourCounter(), stalls: new HourCounter()}; // per hour, for the bot screen
     this.lastError = '';
     this.backoff = BACKOFF_START;
     this.timer = null;
@@ -666,7 +668,7 @@ class BotRunner {
     require('./crafting').fixCraftTiming(bot);
     require('./crafting').trackRecipeBook(bot);
     unwedge(bot);
-    bot.on('forcedMove', () => this.trace.correction());
+    bot.on('forcedMove', () => { this.trace.correction(); this.moves.pullbacks.add(); });
     const sampler = setInterval(() => {
       this.trace.sample(bot.entity?.position);
       if (this.online) this.lastSeen = Date.now();
@@ -1005,6 +1007,7 @@ class BotRunner {
       lastErrorAgoS: this.trace.error ? Math.round((Date.now() - this.trace.error.t) / 1000) : null,
       lastDone: this.lastDone ? {label: this.lastDone.label, agoS: Math.round((Date.now() - this.lastDone.t) / 1000)} : null,
       pullbacks: this.trace.recentCorrections(),
+      moves: {pullbacks: this.moves.pullbacks.count(), noPath: this.moves.noPath.count(), stalls: this.moves.stalls.count()},
     };
   }
 
@@ -1480,7 +1483,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   // while waitSafe waits out a night or a mob: a night's wait used it up before the walk began, and bot1 then swam
   // against a cave wall at Y 30 for an hour with no deadline at all (main server 2026-10-18).
   const noted = (err) => { if (known) (r.noPath ||= new Map()).set(known, Date.now()); return err; }; // a stop threw Cancelled in guard() before
-  let timedOut = false, stalled = false, deadline = null, watch = null, wider = false, boxed = null, hops = 0;
+  let timedOut = false, stalled = false, deadline = null, watch = null, wider = false, boxed = null, hops = 0, countedNoPath = false;
   const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
   const halt = () => {
     timedOut = true;
@@ -1499,7 +1502,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
       const p = r.bot?.entity?.position;
       if (p && (!last || p.distanceTo(last) >= 1)) { last = p.clone(); still = 0; }
       else if (p && !r.combat?.busy && !r.bot.targetDigBlock) still++;
-      if (still * WATCH_MS >= STILL_MS) { stalled = true; halt(); } else watch = setTimeout(look, WATCH_MS);
+      if (still * WATCH_MS >= STILL_MS) { stalled = true; r.moves?.stalls.add(); halt(); } else watch = setTimeout(look, WATCH_MS);
     };
     watch = setTimeout(look, WATCH_MS);
   };
@@ -1520,6 +1523,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         // The deadline clears the goal, so its error reads "The goal was changed": name the deadline instead (bot1's
         // 90 s in a sand-roofed cave looked like a fight in the archive, 2026-10-15).
         const why = stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : e.message;
+        if (!timedOut && /No path/.test(e.message) && !countedNoPath) { countedNoPath = true; r.moves?.noPath.add(); } // once per walk, not per retry
         const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${why}`);
         // A fight takes the pathfinder over ("The goal was changed", 67 failed walks in 4 days): wait it
         // out, it is no failed try; the deadline still bounds the walk. Its end changes the goal too, with busy

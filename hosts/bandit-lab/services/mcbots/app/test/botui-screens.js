@@ -234,3 +234,12 @@ console.log('botui-screens ok');
 // the plugin compares marker worlds with Bukkit's world keys
 assert.deepEqual(['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'].map(require('../world').normDim), ['overworld', 'the_nether', 'the_end']);
 console.log('botui-screens karte ok');
+
+{ // movement counters on the bot screen, and "wartet auf" for a waiting bot
+  const s = work('bot1', {moves: {pullbacks: 0, noPath: 1, stalls: 0}});
+  assert.ok(body(bot(view({snaps: [s]}), 'bot1')).includes('Wege/h: 0 Rücksetzer · 1 kein Weg · 0 fest'));
+  assert.ok(!body(bot(view({snaps: [work('bot1')]}), 'bot1')).some((l) => l.startsWith('Wege/h')));
+  const w = work('bot1', {activity: 'waiting: material stone_bricks'});
+  assert.ok(JSON.stringify(lage(view({snaps: [w]}))).includes('wartet auf: material stone_bricks'));
+  assert.ok(body(bot(view({snaps: [w]}), 'bot1')).includes('wartet auf: material stone_bricks'));
+}

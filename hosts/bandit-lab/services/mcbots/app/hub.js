@@ -80,6 +80,7 @@ function cleanSnapshot(s) {
     stoppedAgoS: num(s.stoppedAgoS),
     lastDone: obj(s.lastDone) ? {label: str(s.lastDone.label, 160), agoS: num(s.lastDone.agoS)} : null,
     pullbacks: int(s.pullbacks),
+    moves: {pullbacks: int(obj(s.moves)?.pullbacks), noPath: int(obj(s.moves)?.noPath), stalls: int(obj(s.moves)?.stalls)},
   };
 }
 

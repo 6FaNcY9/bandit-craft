@@ -66,7 +66,7 @@ function jobText(s, state) {
 function tooltip(s, state) {
   const out = [[`${STATE_WORD[state]}${s.job ? ': ' + jobText(s, state) : ''}`, COLOR[state]]];
   if (s.sandbox) out.push([ELSEWHERE, 'yellow']);
-  if (s.activity) out.push([s.activity]);
+  if (s.activity) out.push([activityText(s.activity)]);
   if (s.queue?.length) out.push([`danach: ${s.queue.slice(0, 3).join(', ')}${s.queue.length > 3 ? ` +${s.queue.length - 3}` : ''}`]);
   if (s.online) {
     out.push([`Leben ${Math.round(s.health)} · Essen ${Math.round(s.food)} · frei ${s.freeSlots}`]);
@@ -123,13 +123,16 @@ function lage(view) {
 
 const QUICK = [['deposit', 'Einlagern'], ['rearm', 'Ausrüsten'], ['homebed', 'Heim'], ['graves', 'Gräber holen']];
 
+// The bot's own activity text; a bot parked on a missing resource says what it waits for.
+const activityText = (a) => a.replace(/^waiting: /, 'wartet auf: ');
+
 function bot(view, name) {
   const s = mine(view).find((x) => x.name === name);
   if (!s) return dialog(safe(name, 16), [line(txt('Bot nicht gefunden', 'red')), ...flashLine(view.flash)], [], {label: 'Zur Übersicht', a: 'lage'});
   const state = botState(s), n = safe(s.name, 16);
   const body = [line(txt('● ', COLOR[state]), txt(`${STATE_WORD[state]}${s.job ? ': ' + jobText(s, state) : ''}`, 'white'))];
   if (s.sandbox) body.push(line(txt(ELSEWHERE, 'yellow')));
-  if (s.activity) body.push(line(txt(safe(s.activity, 80))));
+  if (s.activity) body.push(line(txt(safe(activityText(s.activity), 80))));
   if (s.queue?.length) body.push(line(txt('Danach: ', 'gray'), txt(safe(s.queue.slice(0, 3).join(', '), 70) + (s.queue.length > 3 ? ` +${s.queue.length - 3}` : ''))));
   if (s.online) {
     const worn = Array.isArray(s.armour) ? s.armour.filter(Boolean).length : 0;
@@ -138,6 +141,7 @@ function bot(view, name) {
     if (s.inventory?.length) body.push(line(txt('Inventar: ', 'gray'), txt(safe(s.inventory.slice(0, 8).join(', '), 150))));
     if (s.pos) body.push(line(txt(`Position ${s.pos.join(' ')} ${DIMENSION[s.dimension] || ''}`.trim(), 'gray')));
   }
+  if (s.moves) body.push(line(txt(`Wege/h: ${s.moves.pullbacks} Rücksetzer · ${s.moves.noPath} kein Weg · ${s.moves.stalls} fest`, 'gray')));
   body.push(line(txt(s.chest ? `Kiste: ${s.chest.x} ${s.chest.y} ${s.chest.z}` : 'Kiste: keine – Zauberstab auf eine Kiste', 'gray')));
   if (failing(s) && s.lastError) body.push(line(txt(safe(explain(s.lastError), 80), 'red')));
   body.push(...flashLine(view.flash));
