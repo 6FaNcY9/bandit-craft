@@ -357,6 +357,12 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     await h.click('Midari', {a: 'send', key: 'setchest', x: -271, y: 66, z: -214, who: 'MisaBot', when: 'next'});
     assert.deepEqual(h.submits[0], {v: 'Midari', bots: ['MisaBot'], type: 'setchest', args: {x: -271, y: 66, z: -214}, replace: false});
     assert.equal(flashOf(h.last()), '✔ MisaBot: Kiste -271 66 -214');
+    await h.click('Midari', {a: 'send', key: 'setchest', x: 1, y: 2, z: 3, who: 'MisaBot', when: 'now'}); // forged: not the gazed chest
+    assert.equal(h.submits.length, 1); assert.match(h.ui.state('Midari').flash.text, /schau auf diese Kiste/);
+    await h.click('Midari', {a: 'send', key: 'setchest', x: -271, y: 66, z: -214, who: 'MisaBot', when: 'now'}); // never replaces the running job
+    assert.equal(h.submits[1].replace, false);
+    await h.ev('click', 'Midari', {data: {a: 'send', key: 'setchest', x: -271, y: 66, z: -214, who: 'MisaBot'}, gaze: {x: -271, y: 66, z: -214, block: 'stone'}});
+    assert.equal(h.submits.length, 2); assert.match(h.ui.state('Midari').flash.text, /schau auf diese Kiste/);
     assert.throws(() => VALIDATE.setchest({x: 1, y: 999, z: 3}));
     assert.deepEqual(VALIDATE.setchest({x: 1, y: 2, z: 3, junk: 1}), {x: 1, y: 2, z: 3});
   }

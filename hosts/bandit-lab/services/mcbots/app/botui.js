@@ -77,7 +77,7 @@ const ACTIONS = {
         st.screen = {name: 'lage'};
         return;
       }
-      ui.flash(st, (o.bots.length > 1 ? o.bots.length + ' Bots' : o.bots[0]) + ': ' + o.say, true);
+      ui.flash(st, (o.bots.length > 1 ? o.bots.length + ' Bots' : o.bots[0]) + ': ' + (r?.pending ? 'Kiste wird gesetzt…' : o.say), true);
       st.screen = {name: 'lage'};
       if (o.area) await clearSel(st, ui, viewer);
     } catch (e) {

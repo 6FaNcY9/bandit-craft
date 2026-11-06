@@ -212,6 +212,10 @@ function build(key, data, env) {
   const ctx = {...env.ctx, supply: env.supply, sel: env.sel, viewer: env.viewer}, v = {};
   const has = (k) => job.needs.find((n) => n.kind === k);
   const preset = presetOf(data, job);
+  if (key === 'setchest') { // the chest must be the block the viewer looks at now; a forged payload sets nothing
+    const g = env.ctx?.gaze;
+    if (!g || !isChest(g.block) || g.x !== preset.x || g.y !== preset.y || g.z !== preset.z) throw new Error('schau auf diese Kiste');
+  }
   if (preset.x !== undefined) v.at = {...preset, dim: dimOf(ctx.dim)};
   if (preset.animal) v.animal = preset.animal;
   const text = (k) => String(data[k] ?? '').trim();
@@ -251,7 +255,7 @@ function build(key, data, env) {
   const bots = resolveBots(text('who') || 'frei', env.snaps, env.allowed, dim);
   const args = job.args(v, ctx);
   VALIDATE[job.type](args);
-  return {type: job.type, args, bots, replace: data.when === 'now', say: job.say(v), area: !!has('area')};
+  return {type: job.type, args, bots, replace: key !== 'setchest' && data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
 module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

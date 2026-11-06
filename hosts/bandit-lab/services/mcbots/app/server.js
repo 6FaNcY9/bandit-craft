@@ -215,6 +215,7 @@ function stopAll() {
 // "all" skips remote bots whose worker is away, so a Stop reaches every bot that can still hear it; naming an offline bot is an error.
 // remember: false keeps the job out of the standing orders and projects (the "Wenn frei" jobs restart by the idle sweep).
 function submitJob({bots, type, args, replace, agent = false, remember = true}) {
+  if (type === 'setchest') remember = false; // a setting, not an order to repeat
   const all = bots === 'all';
   const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
   if (!targets.length || targets.includes(undefined)) throw new Error('unknown bot');
@@ -253,7 +254,7 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
   // Persist the stopped state before saying so; the bots are stopped either way.
   const saveErr = stopping ? saveJobs(true) : null;
   const unreached = all ? [...runners.values()].filter((r) => r instanceof RemoteRunner && !r.conn).map((r) => r.name) : [];
-  return {ok: true, keeperOff, unreached, saveErr, skipped};
+  return {ok: true, keeperOff, unreached, saveErr, skipped, ...(type === 'setchest' && targets.some((r) => r instanceof RemoteRunner) ? {pending: true} : {})}; // pending: a remote worker confirms by event
 }
 // The opt-in sidebar and the chat replies of the in-game channel (ingame.js), over the main console.
 const ingame = mainConsole ? new (require('./ingame').Ingame)({call: mainConsole, viewers: cfg.ingameViewers, guests: cfg.guestBots, log: (m) => log('ingame', m),

@@ -525,14 +525,14 @@ class BotRunner {
   }
 
   // Remember the chest (chat `kiste` and the setchest job): the bot's own chest, where it empties itself after work.
-  setChest(bot, player, spot) {
-    const c = this.ownChest(bot, player, spot);
+  setChest(bot, player, spot, trusted) {
+    const c = this.ownChest(bot, player, spot, trusted);
     savePrefs(this.prefsFile, this.name, {chest: c}); this.prefs.chest = c;
     return c;
   }
 
   // The block for `kiste`: the one the player looks at, or the one at x y z. Throws the German reason.
-  ownChest(bot, player, spot) {
+  ownChest(bot, player, spot, trusted = false) {
     const box = /^(chest|trapped_chest|barrel)$/;
     if (spot === 'look') {
       if (!player.entity) throw new Error('ich sehe dich nicht');
@@ -541,9 +541,10 @@ class BotRunner {
       const p = b.position;
       return {x: p.x, y: p.y, z: p.z};
     }
+    // trusted (the staff's gaze, checked in botui-jobs): an unloaded chunk is accepted; typed numbers must be seen.
     const b = bot.blockAt(new (require('vec3').Vec3)(spot.x, spot.y, spot.z));
-    if (!b) throw new Error(`zu weit weg: ${spot.x} ${spot.y} ${spot.z}`);
-    if (!box.test(b.name)) throw new Error(`keine Kiste bei ${spot.x} ${spot.y} ${spot.z}`);
+    if (!b && !trusted) throw new Error(`zu weit weg: ${spot.x} ${spot.y} ${spot.z}`);
+    if (b && !box.test(b.name)) throw new Error(`keine Kiste bei ${spot.x} ${spot.y} ${spot.z}`);
     return {x: spot.x, y: spot.y, z: spot.z};
   }
 
@@ -807,6 +808,12 @@ class BotRunner {
       return;
     }
     if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
+    if (type === 'setchest') { // takes effect at once, whatever runs: it only stores a prefs entry (a 2-hour mine must not delay it)
+      if (!this.online) throw new Error('bot is offline');
+      const c = this.setChest(this.bot, null, VALIDATE.setchest(args), true);
+      this.emit('info', `Kiste: ${c.x} ${c.y} ${c.z}`);
+      return;
+    }
     const job = {id: ++this.jobSeq, type, args: VALIDATE[type](args), status: 'queued'};
     // An area job the bot already runs or has queued is not queued again: bot2's agent ordered the same shaft
     // four more times while the first one ran, and every run walks all its layers again (lab, 2026-10-13).
@@ -3428,8 +3435,6 @@ const JOBS = {
       if (goal) bot.pathfinder.setGoal(null);
     }
   },
-
-  setchest: (r, job) => { r.setChest(r.bot, null, job.args); },
 
   mine: (r, job) => collect(r, job, [job.args.block], job.args.count, job.args.block),
 

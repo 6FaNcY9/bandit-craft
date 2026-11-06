@@ -26,4 +26,16 @@ assert.equal(shouldEmpty({...job('mine'), interrupted: true}, [], prefs, 3), fal
   assert.ok(withChest.includes('Kiste: 1 64 -3'), withChest.slice(0, 300));
   assert.ok(without.includes('Kiste: keine – Zauberstab auf eine Kiste'));
 }
+{ // setchest applies at once: queue and running job stay untouched; unseen chunk accepted, a seen non-chest refused
+  const {BotRunner} = require('../bots');
+  const saved = [];
+  const r = Object.create(BotRunner.prototype);
+  Object.assign(r, {online: true, name: 'MisaBot', prefs: {}, prefsFile: null, bot: {blockAt: () => null}, queue: [job('chop')], current: job('mine'), emit: (k, t) => saved.push(t)});
+  r.enqueue('setchest', {x: 5, y: 64, z: 7});
+  assert.deepEqual(r.prefs.chest, {x: 5, y: 64, z: 7}); assert.equal(r.queue.length, 1); assert.equal(r.current.type, 'mine'); assert.deepEqual(saved, ['Kiste: 5 64 7']);
+  r.bot.blockAt = () => ({name: 'stone'});
+  assert.throws(() => r.enqueue('setchest', {x: 9, y: 64, z: 9}), /keine Kiste bei 9 64 9/); assert.deepEqual(r.prefs.chest, {x: 5, y: 64, z: 7});
+  r.bot.blockAt = () => ({name: 'barrel'}); r.enqueue('setchest', {x: 9, y: 64, z: 9}); assert.equal(r.prefs.chest.x, 9);
+  r.online = false; assert.throws(() => r.enqueue('setchest', {x: 1, y: 2, z: 3}), /offline/);
+}
 console.log('autoempty ok');

@@ -315,6 +315,7 @@ class HubClient {
           r.enqueue(String(m.type), m.args || {}, {replace: m.replace === true, ...(m.first === true ? {first: true} : {})});
         } catch (e) {
           this.log(r.name, `job from hub rejected: ${e.message}`);
+          if (m.type === 'setchest') r.emit('info', `Kiste nicht gesetzt: ${e.message}`); // the hub flashed "wird gesetzt"
         }
         return;
       }
