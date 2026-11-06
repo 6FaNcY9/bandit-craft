@@ -1,0 +1,21 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {aliveStep} = require('../alive');
+const me = {x: 0, y: 64, z: 0}, P = (name, x, z, uuid = name) => ({name, uuid, x, y: 64, z});
+let r = aliveStep({me, players: [P('far', 6, 0), P('near', 0, 3)], owners: [], now: 0, state: {}});
+assert.deepEqual(r.look, {x: 0, y: 65.6, z: 3});
+r = aliveStep({me, players: [P('far', 20, 0)], owners: [], now: 0, state: {}});
+assert.equal(r.look, null);
+assert.equal(aliveStep({me, players: [], owners: [], now: 0, state: {}}).look, null);
+r = aliveStep({me, players: [P('m', 2, 0)], owners: ['m'], now: 0, state: {}});
+assert.equal(r.sneak, true);
+r = aliveStep({me, players: [P('m', 2, 0)], owners: ['m'], now: 250, state: r.state});
+assert.equal(r.sneak, false);
+r = aliveStep({me, players: [P('m', 6, 0)], owners: ['m'], now: 500, state: r.state}); // left 5 blocks: next approach bows again
+r = aliveStep({me, players: [P('m', 2, 0)], owners: ['m'], now: 750, state: r.state});
+assert.equal(r.sneak, true);
+assert.equal(aliveStep({me, players: [P('s', 2, 0)], owners: ['m'], now: 0, state: {}}).sneak, false);
+assert.deepEqual(aliveStep({me, players: [P('s', 0.5, 0)], owners: [], now: 0, state: {}}).aside, {dx: -1, dz: 0});
+assert.deepEqual(aliveStep({me, players: [P('s', 0, -0.5)], owners: [], now: 0, state: {}}).aside, {dx: 0, dz: 1});
+assert.equal(aliveStep({me, players: [P('s', 2, 0)], owners: [], now: 0, state: {}}).aside, null);
+console.log('alive ok');
