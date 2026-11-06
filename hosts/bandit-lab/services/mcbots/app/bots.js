@@ -535,15 +535,8 @@ class BotRunner {
   }
 
   // The block for `kiste`: the one the player looks at, or the one at x y z. Throws the German reason.
-  // A guest bot (no supply chest: hub.chestFor) may not keep its chest where the dig rule keeps it out: inside a
-  // protected area that does not name it (protectedAreas is already that view).
+  // A guest may pick any chest it stands at: the main base around spawn is shared (Misa keeps her store there).
   ownChest(bot, player, spot, trusted = false) {
-    const c = this.pickChest(bot, player, spot, trusted);
-    if (!this.supplyChest && this.allAreas && insideAreas(this.protectedAreas, c.x, c.z, c.y)) throw new Error('Kiste liegt in einer geschützten Zone');
-    return c;
-  }
-
-  pickChest(bot, player, spot, trusted) {
     const box = /^(chest|trapped_chest|barrel)$/;
     if (spot === 'look') {
       if (!player.entity) throw new Error('ich sehe dich nicht');
