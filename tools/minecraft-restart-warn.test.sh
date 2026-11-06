@@ -19,7 +19,7 @@ rc_of() { set +e; "$@" >/dev/null 2>&1; rc=$?; set -e; echo "$rc"; }
 # happy path
 : >"$LOG"
 "$script" "Podman migration"
-[ "$(cat "$LOG")" = $'say Server restart in 10 minutes: Podman migration\nsay Server restart in 7 minutes\nsay Server restart in 5 minutes' ]
+[ "$(cat "$LOG")" = $'say Server restart in 5 minutes: Podman migration\nsay Server restart in 1 minute' ]
 
 # missing or blank reason: usage error, nothing broadcast
 : >"$LOG"
