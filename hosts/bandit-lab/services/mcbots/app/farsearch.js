@@ -3,7 +3,7 @@
 // local search and explore steps find nothing free, a bot picks one of 8 headings and hops along it.
 const {insideAreas} = require('./world');
 
-const FAR_HOP = 96, FAR_HOPS = 8, FAR_HEADINGS = 2;
+const FAR_HOP = 96, FAR_HOPS = 8, FAR_HEADINGS = 2, FAR_TOTAL = 16; // FAR_TOTAL: hops per job in all, across searches
 const R = Math.SQRT1_2;
 // Minecraft north is -z, east +x. en: job error text, de: what the owner hears.
 const DIRS = [
@@ -42,7 +42,8 @@ function farHeading(me, areas = [], base = null, tried = []) {
   return best;
 }
 
-const farFail = (what, far) => `no free ${what} within ${far.hops * FAR_HOP} blocks of a far search heading ${DIRS[far.dir].en}`;
+// far.last: the heading the text names (far.dir is -1 between two headings)
+const farFail = (what, far) => (far.hops ? `no free ${what} within ${far.hops * FAR_HOP} blocks of a far search heading ${DIRS[far.last ?? far.dir].en}` : `no free ${what} within ${far.hops * FAR_HOP} blocks and no walkable heading`);
 const progress = (far) => `sucht weiter Richtung ${DIRS[far.dir].de} (${far.hops * FAR_HOP} Blöcke)`;
 
-module.exports = {FAR_HOP, FAR_HOPS, FAR_HEADINGS, DIRS, dirEn, hopTarget, farHeading, farFail, progress};
+module.exports = {FAR_HOP, FAR_HOPS, FAR_HEADINGS, FAR_TOTAL, DIRS, dirEn, hopTarget, farHeading, farFail, progress};

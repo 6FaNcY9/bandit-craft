@@ -28,3 +28,34 @@
   assert.doesNotMatch(text, /no way to get|no progress for|No path/);
   assert.equal(orderOutcome({kind: 'fail', text: `gave up: mine spruce_log 2048 - ${text}`}, {type: 'mine', args: {}}).retry, 4 * 5 * 60000);
 })();
+// farFail between two headings (dir -1) names the last real one; no walkable heading has its own text and reason
+(() => {
+  const assert = require('node:assert/strict');
+  const {farFail} = require('../farsearch'), {germanReason} = require('../owner');
+  assert.equal(farFail('sand', {hops: 2, dir: -1, last: 6}), 'no free sand within 192 blocks of a far search heading west');
+  const t = farFail('sand', {hops: 0, dir: -1});
+  assert.equal(t, 'no free sand within 0 blocks and no walkable heading');
+  assert.equal(germanReason(t), 'kein sand in Reichweite und kein Weg weiter weg');
+})();
+// get: a "no free" mine failure is not a failure of the way (nothing learned, nothing blocked, far text rethrown);
+// a genuine failure of a way is still learned
+(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots');
+  const learned = [];
+  const mk = () => ({name: 'bot3', emit() {}, log() {}, acquireFailed: new Map(), protectedAreas: [], world: {chests: new Map(), learn: (k, v) => learned.push([k, v]), learned: () => null},
+    bot: {entity: {position: new Vec3(0, 64, 0)}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null}});
+  const job = () => ({id: 1, type: 'get', args: {item: 'spruce_log', count: 4}, t: {}, collected: 0, progress: ''});
+  const old = JOBS.mine;
+  try {
+    const far = 'no free spruce_log within 768 blocks of a far search heading south';
+    JOBS.mine = async () => { throw new Error(far); };
+    const r = mk();
+    await assert.rejects(JOBS.get(r, job()), (e) => e.message === far);
+    assert.equal(r.acquireFailed.size, 0); assert.equal(learned.length, 0);
+    JOBS.mine = async () => { throw new Error('no path to somewhere'); };
+    const r2 = mk();
+    await assert.rejects(JOBS.get(r2, job()));
+    assert.ok(r2.acquireFailed.size > 0 && learned.some(([, v]) => v.ok === false), 'a real failure is still learned');
+  } finally { JOBS.mine = old; }
+})().catch((e) => { console.error(e); process.exitCode = 1; });

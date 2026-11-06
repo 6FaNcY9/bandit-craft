@@ -955,7 +955,7 @@ class BotRunner {
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
     else if (job.status === 'done') this.emit('done', `finished: ${jobLabel(job)}${job.noop ? ' - already complete' : ''} (${took} s)`, job.id, `${chatLabel(job)}, ${job.noop ? 'war schon erledigt' : took < 60 ? `${took} s` : `${Math.round(took / 60)} min`}${count}`);
     else if (job.status === 'stopped') this.emit('stop', `stopped: ${jobLabel(job)}`, job.id, `${chatLabel(job)}${count}`);
-    else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `${/of a far search heading/.test(why) ? 'gave up' : 'failed'}: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
+    else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `${/of a far search heading|and no walkable heading$/.test(why) ? 'gave up' : 'failed'}: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
     this.current = null;
     this.digOnly = null;
     this.digBox = null;
@@ -2460,7 +2460,7 @@ async function replacePickaxe(r, job, need) {
   const logs = Object.keys(bot.registry.blocksByName).filter((n) => n.endsWith('_log'));
   if (enough('wooden_pickaxe') && !bot.inventory.items().some((i) => /_log$/.test(i.name))) { // planks alone (2 of the 3 needed) are no reason to stay without a pickaxe
     try {
-      await collect(r, child(job), logs, 3, 'logs');
+      await collect(r, child(job, {noFar: true}), logs, 3, 'logs'); // torches' wood never sends the bot far
       // Stone when it carries some: bot50 had 368 cobblestone (sandbox 2026-10-18), a stone pickaxe lasts twice as long.
       await crafting.ensureItem(r, child(job), enough('stone_pickaxe') && craftingLib.count(bot, 'cobblestone') >= 3 ? 'stone_pickaxe' : 'wooden_pickaxe', 1);
       if (has()) return;
@@ -2544,12 +2544,13 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
 async function farHop(r, job, what, far, surface) {
   const p = r.bot.entity.position;
   if (far.dir < 0) {
-    far.start ??= {x: p.x, z: p.z};
     far.dir = farsearch.farHeading(p, r.protectedAreas, r.supplyChest, far.tried);
-    if (far.dir < 0) return false;
+    if (far.dir < 0) { far.stuck = true; return false; }
   }
+  far.last = far.dir;
   const d = farsearch.DIRS[far.dir], to = farsearch.hopTarget(p, d), y = Math.floor(p.y);
   far.hops++;
+  job.t.farHops = (job.t.farHops || 0) + 1;
   const msg = farsearch.progress(far);
   r.emit('info', msg);
   job.t.doing = msg;
@@ -2560,7 +2561,8 @@ async function farHop(r, job, what, far, surface) {
     r.emit('info', `far search hop stopped: ${e.message.slice(0, 80)}`);
     far.tried.push(far.dir);
     far.hops--; // a hop not walked is not distance gained
-    if (++far.fails >= farsearch.FAR_HEADINGS) return false;
+    job.t.farHops--;
+    if (++far.fails >= farsearch.FAR_HEADINGS) { far.stuck = true; return false; }
     far.dir = -1; // the next heading, from where it stands
   }
   return true;
@@ -2702,15 +2704,14 @@ async function collect(r, job, matching, count, what) {
         continue;
       }
       // Nothing free in view and nowhere left to explore: travel on in one direction (not shifts: they keep their leash).
-      if (job.type !== 'shift' && (!far || far.hops < farsearch.FAR_HOPS)) {
-        if (isNight(bot) && r.combat && !r.combat.fit()) { // upkeep's night shelter ran first; an unfit bot does not set out in the dark
-          guard(job);
-          await sleep(5000);
+      if (job.type !== 'shift' && !job.noFar && (job.t.farHops || 0) < farsearch.FAR_TOTAL && (!far || far.hops < farsearch.FAR_HOPS)) {
+        if (isNight(bot) && r.combat && !r.combat.fit()) { // an unfit bot does not set out in the dark: shelter, then look again
+          await waitSafe(r, job, me.x, me.z, me.y);
           continue;
         }
         if (await farHop(r, job, what, far ??= {hops: 0, tried: [], dir: -1, fails: 0}, !ore)) continue;
       }
-      if (far?.hops) throw new Error(farsearch.farFail(what, far));
+      if (far?.hops || far?.stuck) throw new Error(farsearch.farFail(what, far));
       throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''}; seen ${seen.length}, ${filtered} outside base and protected areas, ${inLeash} within leash ${leash}, ${blocked} blocked, ${claimed} claimed)`);
     }
     far = null; // found something: a later dry spell searches afresh
@@ -3096,6 +3097,9 @@ async function getItem(r, job) {
       try { r.world?.learn?.(step.key, {ok: true, secs: (Date.now() - started) / 1000, units}); } catch {}
     } catch (e) {
       guard(job); // a Stop, a death or a lost connection is no failure of the way (sandbox 2026-10-18)
+      // Nothing free in reach (and, now, far) is no failure of the way: learning it would drop the way fleet-wide and the
+      // retry would end at once with "no way to get" (Misa's spruce_log, 2026-11-06). The far text reaches the order.
+      if (step.via === 'mine' && /^no free .* within/.test(e.message)) throw e;
       try { r.world?.learn?.(step.key, {ok: false, secs: (Date.now() - started) / 1000}); } catch {}
       const fails = (job.fails ||= new Map()).set(step.key, (job.fails.get(step.key) || 0) + 1).get(step.key);
       const out = !/^(craft|smelt):/.test(step.key) || fails >= 2;
