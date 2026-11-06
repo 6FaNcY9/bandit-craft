@@ -354,6 +354,13 @@ async function fake() {
     assert.equal(labels().filter((l) => /Hierher rufen/.test(l)).length, 1);
     await ui.handle({type: 'open', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}}); await ui.handle({type: 'click', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}, data: {a: 'new'}});
     assert.ok(!last().actions.some((a) => a.action.payload?.a === 'botscreen')); // a foreign bot: no row
+    { // open routing: aimed bot of yours -> its screen; anything else aimed at -> auftrag; nothing -> lage
+      const open = async (player, gaze) => { await ui.handle({type: 'open', player, gaze}); return ui.state(player).screen; };
+      assert.equal((await open('Fancy', {x: 1, y: 2, z: 3, block: 'stone'})).name, 'auftrag');
+      assert.equal((await open('Fancy', null)).name, 'lage');
+      assert.deepEqual(await open('Midari', bot), {name: 'bot', bot: 'MisaBot'});
+      assert.equal((await open('Midari', {...bot, entity: {...bot.entity, name: 'bot1'}})).name, 'auftrag');
+    }
     await click('Midari', {a: 'botscreen', bot: 'bot1'});
     assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
     await click('Fancy', {a: 'botscreen', bot: 'MisaBot'});

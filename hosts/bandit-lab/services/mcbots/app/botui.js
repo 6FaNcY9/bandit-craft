@@ -269,7 +269,11 @@ class BotUi {
     if (e.type === 'lage') {
       st.screen = {name: 'lage'}; st.lastClick = this.now();
     } else if (e.type === 'open') {
-      st.screen = {name: st.sel.a ? 'auftrag' : 'lage'}; st.lastClick = this.now();
+      // right-click / Shift+F: a bot you command -> its screen; anything else aimed at -> orders for it; else the Lagebild
+      const g = e.gaze, allowed = this.viewerBots[viewer], who = g?.entity?.type === 'player' && g.entity.name;
+      const mineBot = who && (allowed === '*' ? this.api.snapshots().some((s) => s.name === who) : allowed.includes(who));
+      st.screen = mineBot ? {name: 'bot', bot: who} : {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'lage'};
+      st.lastClick = this.now();
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
       // shortcut: Escape during this click's render re-shows until the queued close arrives one poll later, a flicker; skip the show if a close is already queued when that is ever seen.
