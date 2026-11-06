@@ -193,6 +193,15 @@ module.exports = async () => {
       assert.deepStrictEqual(deposits, [{x: 5, y: 64, z: 5}], 'deposits into the supply chest');
       assert.ok(f.infos.some((m) => /^grave at 0 64 0: 65 items back$/.test(m)), f.infos.join('|'));
 
+      // a click that opens a window (a villager next to the grave) leaves nothing open
+      f = fake({entities: [ent(1, 'villager', 0, 64, 1), ent(2, 'armor_stand', 0, 65, 0)]});
+      const w = f.bot._client.write;
+      f.bot._client.write = (packet, p) => { if (p.target === 1) { if (p.mouse === 0) { f.events.push('click villager'); f.bot.currentWindow = {id: 1}; } } else w(packet, p); };
+      f.bot.closeWindow = () => { f.events.push('close window'); f.bot.currentWindow = null; };
+      await JOBS.grave(f.r, graveJob());
+      assert.deepStrictEqual(f.events.filter((e) => /^(click|close)/.test(e)), ['click villager', 'close window', 'click armor_stand sneaking=true']);
+      assert.strictEqual(f.bot.currentWindow ?? null, null);
+
       // armour that came back is put on before the deposit
       f = fake({gives: [{name: 'iron_chestplate', count: 1}]});
       await JOBS.grave(f.r, graveJob());

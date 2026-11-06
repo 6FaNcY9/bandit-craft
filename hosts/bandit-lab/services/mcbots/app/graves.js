@@ -115,6 +115,7 @@ function makeGraves({goNear, guard, sleep, deposit}) {
         guard(job);
         if (e.position.distanceTo(bot.entity.position) > 4) await goNear(r, job, e.position.x, e.position.y, e.position.z, 2, {doing: 'closing in on the grave'});
         await click(bot, e, true, () => guard(job)).catch((err) => r.emit('info', `grave click on ${e.name} failed: ${err.message}`));
+        if (bot.currentWindow) bot.closeWindow(bot.currentWindow); // the nearest entity may have been a villager
         guard(job); // a Stop cancelled that click: end now instead of waiting for items
         for (let i = 0; i < 12 && countAll(bot) === before; i++) await sleep(250);
         guard(job);
