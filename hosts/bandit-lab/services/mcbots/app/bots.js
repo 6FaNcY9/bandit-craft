@@ -875,11 +875,7 @@ class BotRunner {
     } catch {}
   }
 
-  // Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.
-  inShelter() {
-    const s = this.shelterAt, p = this.bot?.entity?.position;
-    return !!s && !!p && Math.floor(p.x) === s.x && Math.floor(p.z) === s.z && Math.floor(p.y) === s.y - 2;
-  }
+  inShelter() { return inShelter(this); }
 
   // A job cut short by a death or a disconnect goes back to the front of the
   // queue (after the re-arm), keeps its progress (job.collected) and walks back
@@ -1181,6 +1177,11 @@ async function waitCalm(r, job, until = Infinity) {
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (alerts.js)
 const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
+// Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.
+function inShelter(r) {
+  const s = r.shelterAt, p = r.bot?.entity?.position;
+  return !!s && !!p && Math.floor(p.x) === s.x && Math.floor(p.z) === s.z && Math.floor(p.y) === s.y - 2;
+}
 const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
 // without armour and died six times in six minutes at the iron farm (main server 2026-10-17); with gear they build on.
@@ -1218,7 +1219,7 @@ async function nightShelter(r, job) {
   if (!r.combat && !NIGHT_JOBS.has(job.type)) return;
   const feet = bot.entity.position.floored();
   // Still in tonight's hole (a new job replaced the waiting one): wait on, do not dig out into the dark.
-  const back = r.inShelter();
+  const back = inShelter(r);
   const at = (dy) => bot.blockAt(feet.offset(0, dy, 0));
   if (!back) {
     if ((bot.blockAt(feet.offset(0, 1, 0))?.skyLight ?? 0) < 8 || insideAreas(r.protectedAreas, feet.x, feet.z)) return;
