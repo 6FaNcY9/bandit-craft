@@ -42,6 +42,12 @@
   assert.equal(misa.boxRule([base, hall], 'MisaBot', box(140, 390, 155, 405, 80, 90)), null, 'a zone keeps its height');
   assert.equal(misa.boxRule([base, hall], 'MisaBot', box(120, 380, 130, 390)), null);
 
+  { // rights: guests never post to the needs board (owner bots would fetch for them): their names fail its name check on purpose
+    const {WorldModel} = require('../world');
+    const w = new WorldModel();
+    for (const guest of ['MisaBot', 'EM_Trader']) assert.throws(() => w.postNeed(guest, 'iron_ingot', 4, {x: 1, y: 2, z: 3}), /invalid need/, guest);
+    assert.ok(w.postNeed('bot1', 'iron_ingot', 4, {x: 1, y: 2, z: 3}));
+  }
   // rights: a guest's farm or chest lies on its own ground; any other order names none
   const farm = (x1, z1, x2, z2) => ({x1, z1, x2, z2});
   assert.equal(misa.groundRule([base], 'MisaBot', 'treefarm', farm(120, 380, 130, 390)), null);

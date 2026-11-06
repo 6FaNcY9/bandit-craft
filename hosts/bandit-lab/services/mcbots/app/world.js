@@ -94,6 +94,7 @@ class WorldModel {
     this.stocks.set(c ? `${c.x},${c.y},${c.z}` : '', this.stock);
   }
 
+  // The bot name pattern keeps guest bots (MisaBot, EM_Trader) off the board on purpose: owner bots would fetch for them (test/misa.js).
   postNeed(bot, item, count, to, why = '') {
     if (typeof bot !== 'string' || !/^[a-z][a-z0-9]{0,15}$/.test(bot) || typeof item !== 'string' || !/^[a-z_]{1,48}$/.test(item) || !Number.isInteger(count) || count < 1 || count > 256 || !to || ![to.x,to.y,to.z].every(Number.isInteger) || typeof why !== 'string' || why.length > 160 || /[\u0000-\u001f\u007f]/.test(why)) throw new Error('invalid need');
     const need = {bot, item, count, to: {x: to.x, y: to.y, z: to.z}, why, t: this.now()};
