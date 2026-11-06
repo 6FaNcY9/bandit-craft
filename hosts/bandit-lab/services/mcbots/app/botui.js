@@ -291,6 +291,7 @@ const ACTIONS = {
     if (!KIND[data.kind]) throw new Error('unbekannte Kiste');
     if (jobs.dimOf(st.ctx.dim) !== 'overworld') return ui.flash(st, 'Nur in der Oberwelt');
     if (!g || !jobs.isChest(g.block)) return ui.flash(st, 'Du schaust keine Kiste an');
+    ui.api.ground?.(viewer, bot, 'chest', {x: g.x, y: g.y, z: g.z});
     ui.api.traderChests.add(bot, data.kind, {x: g.x, y: g.y, z: g.z});
     ui.flash(st, `${bot}: ${KIND[data.kind]} ${g.x} ${g.y} ${g.z}`, true);
   },

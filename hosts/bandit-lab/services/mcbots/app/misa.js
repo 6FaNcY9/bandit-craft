@@ -16,6 +16,13 @@ function boxRule(areas, name, box) {
   return null;
 }
 
+// A guest's farms and chests lie on its own ground: the order's box (farm) or chest must pass boxRule. null for any other order.
+function groundRule(areas, name, type, a) {
+  const box = type === 'treefarm' || type === 'wheatfarm' ? {x1: Math.min(a.x1, a.x2), y1: -64, z1: Math.min(a.z1, a.z2), x2: Math.max(a.x1, a.x2), y2: 320, z2: Math.max(a.z1, a.z2)}
+    : type === 'setchest' || type === 'chest' ? {x1: a.x, y1: a.y, z1: a.z, x2: a.x, y2: a.y, z2: a.z} : null;
+  return box && boxRule(areas, name, box);
+}
+
 // "ecke": the block a player stands on is corner 1, the next one corner 2, then 1 again.
 class Corners {
   constructor() { this.by = new Map(); }
@@ -34,4 +41,4 @@ class Corners {
   }
 }
 
-module.exports = {forBot, boxRule, Corners};
+module.exports = {forBot, boxRule, groundRule, Corners};

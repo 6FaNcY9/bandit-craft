@@ -55,6 +55,7 @@ const SESSION = Date.now().toString(36);
 const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
 const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
 const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
+const misa = require('./misa');
 const idleLib = require('./idle'), {JOBS: ORDER_JOBS} = require('./botui-jobs');
 const idleStore = new idleLib.IdleStore(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'idle.json') : null);
 const idleSince = new Map(); // bot -> when the sweep first saw it with no job and an empty queue
@@ -277,10 +278,16 @@ function presence(viewer, type) {
     if (lines.length) ingame.tell(viewer, lines);
   }
 }
+// Rights: Misa's bots use only ground that PROTECTED_AREAS names for them; the owner may do everything (misa.groundRule).
+function ground(viewer, bot, type, args) {
+  const bad = cfg.viewerBots[viewer] !== '*' && cfg.guestBots.includes(bot) && misa.groundRule(cfg.protectedAreas, bot, type, args);
+  if (bad) throw new Error(bad);
+}
 // The job a "Wenn frei" choice becomes for a bot (idle.js resolveIdle throws the short refusals).
 function idleJob(bot, choice) {
-  const r = runners.get(bot), zone = places.list.find((p) => p.kind === 'treefarm' && p.box);
-  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest, guest: cfg.guestBots.includes(bot), supplyChest, treefarmZone: zone?.box, mark: choice.mark});
+  const guest = cfg.guestBots.includes(bot); // a guest's farm is one on its own ground
+  const r = runners.get(bot), zone = places.list.find((p) => p.kind === 'treefarm' && p.box && !(guest && misa.groundRule(cfg.protectedAreas, bot, 'treefarm', p.box)));
+  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest, guest, supplyChest, treefarmZone: zone?.box, mark: choice.mark});
   return {type: ORDER_JOBS[choice.key].type, args: ORDER_JOBS[choice.key].args(v, {})};
 }
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.
@@ -294,7 +301,9 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     presence,
     snapshots: placedBots,
     markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
+    ground,
     submit: (viewer, {bots, type, args, replace}) => {
+      for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
       const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false});
       for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
       return out;
