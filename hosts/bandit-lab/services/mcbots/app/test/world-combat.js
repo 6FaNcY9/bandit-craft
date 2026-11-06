@@ -258,7 +258,7 @@ assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
   c.stop();
   c.fight({isValid: false}).then(() => {
     assert.deepStrictEqual(calls, ['stop', 'equip'], 'dig stopped first, then the weapon');
-    assert.ok(Date.now() - c.lastFight < 1000);
+    assert.ok(Date.now() - c.lastFight < 10000); // 1 s failed when the loaded suite delayed the microtask
   });
 }
 (async () => {

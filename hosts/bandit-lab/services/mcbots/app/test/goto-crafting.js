@@ -8,7 +8,7 @@ const assert = require('node:assert');
     bot.pathfinder = {setGoal: (g) => bot.emit('goal_updated', g, false)};
     return bot;
   };
-  const tick = () => new Promise((res) => setTimeout(res, 5));
+  const tick = () => new Promise((res) => setTimeout(res, 100)); // 5 ms was too tight when the sandbox build is loaded
   const goal = {};
   let bot = mk(), settled = null;
   settledGoto(bot, goal).then(() => (settled = 'ok'), (e) => (settled = e.message));

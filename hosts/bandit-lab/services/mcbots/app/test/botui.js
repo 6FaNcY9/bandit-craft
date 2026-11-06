@@ -215,7 +215,7 @@ async function fake() {
     logs.length = 0;
     const {f, ui, end} = await mk();
     ui.start();
-    await until(() => f.of('/viewers').length, 'up');
+    await until(() => ui.boot, 'up'); // first contact done: an earlier outage would skip the open event as backlog
     f.down = true;
     await until(() => logs.some((l) => /plugin unreachable/.test(l)), 'outage logged');
     await sleep(150); // more retries must not add lines

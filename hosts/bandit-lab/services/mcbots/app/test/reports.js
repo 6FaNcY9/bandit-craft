@@ -44,15 +44,15 @@
     const job = r.enqueue(type, args);
     return {r, said, job};
   };
-  let t = mk(true, true); await sleep(200);
+  let t = mk(true, true); await sleep(1000); // the job takes 60 ms; 200 ms failed when the sandbox build is loaded
   assert.deepEqual(t.said, ['start: fake', 'fake 50%', 'fertig: fake, 0 s']);
-  t = mk(true, false); await sleep(200);
+  t = mk(true, false); await sleep(1000);
   assert.deepEqual(t.said, ['start: fake', 'fertig: fake, 0 s']);
-  noop = true; t = mk(true, false); await sleep(200); noop = false;
+  noop = true; t = mk(true, false); await sleep(1000); noop = false;
   assert.deepEqual(t.said, ['start: fake', 'fertig: fake, war schon erledigt']);
-  fail = true; t = mk(true, true); await sleep(200); fail = false;
+  fail = true; t = mk(true, true); await sleep(1000); fail = false;
   assert.deepEqual(t.said, ['start: fake', 'fake 50%', 'Problem: fake: kein Weg zu bob']);
-  t = mk(false, true); await sleep(200);
+  t = mk(false, true); await sleep(1000);
   assert.deepEqual(t.said, []);
   // laut during the job takes effect; nothing after the end
   t = mk(true, false); t.r.prefs.verbose = false; setTimeout(() => { t.r.prefs.verbose = true; }, 10); await sleep(200);
