@@ -535,7 +535,15 @@ class BotRunner {
   }
 
   // The block for `kiste`: the one the player looks at, or the one at x y z. Throws the German reason.
+  // A guest bot (no supply chest: hub.chestFor) may not keep its chest where the dig rule keeps it out: inside a
+  // protected area that does not name it (protectedAreas is already that view).
   ownChest(bot, player, spot, trusted = false) {
+    const c = this.pickChest(bot, player, spot, trusted);
+    if (!this.supplyChest && this.allAreas && insideAreas(this.protectedAreas, c.x, c.z, c.y)) throw new Error('Kiste liegt in einer geschützten Zone');
+    return c;
+  }
+
+  pickChest(bot, player, spot, trusted) {
     const box = /^(chest|trapped_chest|barrel)$/;
     if (spot === 'look') {
       if (!player.entity) throw new Error('ich sehe dich nicht');
@@ -2713,9 +2721,13 @@ async function collect(r, job, matching, count, what) {
           await waitSafe(r, job, me.x, me.z, me.y);
           continue;
         }
-        if (await farHop(r, job, what, far ??= {hops: 0, tried: [], dir: -1, fails: 0}, !ore)) continue;
+        if (await farHop(r, job, what, far ??= {hops: 0, tried: [], dir: -1, fails: 0, start: {x: me.x, z: me.z}}, !ore)) continue;
       }
-      if (far?.hops || far?.stuck) throw new Error(farsearch.farFail(what, far));
+      if (far?.hops || far?.stuck) {
+        // Back to where the far search began, so the next retry does not start from out here and drift on.
+        try { await goNear(r, job, far.start.x, bot.entity.position.y, far.start.z, 8, {xz: true, doing: 'walking back from the far search'}); } catch (e) { guard(job); }
+        throw new Error(farsearch.farFail(what, far));
+      }
       throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''}; seen ${seen.length}, ${filtered} outside base and protected areas, ${inLeash} within leash ${leash}, ${blocked} blocked, ${claimed} claimed)`);
     }
     far = null; // found something: a later dry spell searches afresh

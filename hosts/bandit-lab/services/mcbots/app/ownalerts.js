@@ -1,12 +1,13 @@
 'use strict';
 // What a bot's owner hears in chat about their servant (dies, sticks, lacks material, long job done) and the digest
 // when they join. Base alerts for the owner's phone are alerts.js; this is the in-game side.
+const {germanReason} = require('./owner');
 const RATE_MS = 600000;
 const MAX_LINES = 6;
 
 function classify(e) {
   if (e.kind === 'death') return 'dead';
-  if (e.kind === 'fail' && /no way to get/.test(e.text)) return 'missing';
+  if (e.kind === 'fail' && /no way to get|^no free \S+ within .*(far search heading \w+|no walkable heading)$/.test(e.text)) return 'missing';
   if (e.kind === 'fail' && /no progress for|No path/.test(e.text)) return 'stuck';
   const took = e.kind === 'done' && /(\d+) s\)/.exec(e.text);
   return took && Number(took[1]) >= 600 ? 'done' : null;
@@ -18,7 +19,7 @@ function text(kind, e, snap) {
   const t = {
     dead: () => `tot${/ at (-?\d+ -?\d+ -?\d+)/.test(e.text) ? ' bei ' + / at (-?\d+ -?\d+ -?\d+)/.exec(e.text)[1] : at(snap?.pos)}`,
     stuck: () => `steckt fest${at(snap?.pos)}: kein Weg`,
-    missing: () => `fehlt: ${e.text.replace(/^.*no way to get /, '')}`,
+    missing: () => `fehlt: ${/no way to get/.test(e.text) ? e.text.replace(/^.*no way to get /, '') : germanReason(e.text)}`,
     done: () => `fertig: ${e.text.replace(/^finished: /, '').replace(/ \(\d+ s\)$/, '')}`,
   }[kind]();
   return t.slice(0, 100);

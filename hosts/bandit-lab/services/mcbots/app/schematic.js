@@ -9,7 +9,7 @@ const AXES = ['x', 'y', 'z'];
 
 // A small gzip can expand to gigabytes and every cell becomes an object: cap both before the per-cell loop.
 const MAX_INFLATED = 32 * 1024 * 1024, MAX_CELLS = 8000000;
-async function parseLitematic(buffer) {
+async function parseLitematic(buffer, {maxCells = MAX_CELLS} = {}) {
   let parsed;
   if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
     let raw;
@@ -20,7 +20,7 @@ async function parseLitematic(buffer) {
   if (!root.Regions || typeof root.Regions !== 'object' || Array.isArray(root.Regions)) throw new Error('litematic: missing Regions');
   let cells = 0;
   for (const r of Object.values(root.Regions)) cells += AXES.reduce((n, ax) => n * Math.abs(Number(r?.Size?.[ax]) || 0), 1);
-  if (!(cells <= MAX_CELLS)) throw new Error('Bauplan zu groß (max 8 Mio. Blöcke)');
+  if (!(cells <= maxCells)) throw new Error(`Bauplan zu groß (max ${maxCells / 1e6} Mio. Blöcke)`);
   const blocks = [];
   const air = [];
   const min = {x: Infinity, y: Infinity, z: Infinity};

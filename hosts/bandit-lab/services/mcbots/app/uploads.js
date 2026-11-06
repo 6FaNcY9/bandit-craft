@@ -6,12 +6,12 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const TTL_MS = 10 * 60 * 1000, MAX_BYTES = 2 * 1024 * 1024, MAX_FILES = 50;
+const TTL_MS = 10 * 60 * 1000, MAX_BYTES = 2 * 1024 * 1024, MAX_FILES = 50, MAX_CELLS = 3000000; // MAX_CELLS: a link is open to guests, so less than the dashboard's 8 M
 const GONE = 'Dieser Link ist ungültig oder abgelaufen. Hol dir im Spiel einen neuen.';
 const TOKEN_RE = /^[0-9a-f]{32}$/;
 
 class Uploads {
-  constructor({now = Date.now} = {}) { this.now = now; this.tokens = new Map(); }
+  constructor({now = Date.now} = {}) { this.now = now; this.tokens = new Map(); this.busy = new Set(); }
   issue(player) {
     for (const [t, v] of this.tokens) if (v.exp <= this.now()) this.tokens.delete(t);
     const token = crypto.randomBytes(16).toString('hex');
@@ -80,14 +80,18 @@ async function handle(req, res, url, deps) {
     tooBig();
     return res.once('finish', () => req.destroy());
   }
+  if (deps.uploads.busy.has(token)) return json(409, {error: 'Upload läuft schon'});
+  deps.uploads.busy.add(token); // one parse per token at a time; cleared on every exit below
+  try { return await store(bytes); } finally { deps.uploads.busy.delete(token); }
+  async function store(bytes) {
   let s;
-  try { s = await deps.parse(bytes); } catch (e) { return json(400, {error: /^Bauplan zu groß/.test(e.message) ? e.message : 'Das ist keine gültige .litematic-Datei'}); }
+  try { s = await deps.parse(bytes, {maxCells: MAX_CELLS}); } catch (e) { return json(400, {error: /^Bauplan zu groß/.test(e.message) ? e.message : 'Das ist keine gültige .litematic-Datei'}); }
   // Everything from here to the write is synchronous: the token is taken exactly once, and only when the file is storable.
   const player = deps.uploads.peek(token);
   if (player === null) return json(403, {error: GONE});
   const file = fileName(player, url.searchParams.get('name'));
   if (!deps.fileRe.test(file) || file.endsWith('-.litematic')) return json(400, {error: 'Der Dateiname braucht Buchstaben oder Ziffern'});
-  const prefix = player.toLowerCase() + '-', target = path.join(deps.dir, file), tmp = `${target}.${process.pid}.tmp`;
+  const prefix = player.toLowerCase() + '-', target = path.join(deps.dir, file), tmp = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   try {
     fs.mkdirSync(deps.dir, {recursive: true});
     if (!fs.existsSync(target) && fs.readdirSync(deps.dir).filter((f) => f.startsWith(prefix) && deps.fileRe.test(f)).length >= MAX_FILES) return json(400, {error: `Zu viele Baupläne (${MAX_FILES}) – überschreib einen alten Namen oder frag Bandit`});
@@ -102,6 +106,7 @@ async function handle(req, res, url, deps) {
   deps.events.add('dashboard', 'info', `schematic ${file} uploaded by ${player}`);
   deps.say?.(player, 'Server', `Bauplan bereit: ${file.replace(/\.litematic$/, '')}`);
   return json(200, {file, blocks: s.blocks.length});
+  }
 }
 
 module.exports = {Uploads, fileName, visible, handle, TTL_MS, MAX_BYTES, MAX_FILES};

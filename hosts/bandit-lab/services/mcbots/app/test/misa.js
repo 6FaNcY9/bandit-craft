@@ -211,3 +211,14 @@
   const bot = {inventory: {slots, items: () => items}, getEquipmentDestSlot: (s) => ({head: 5, torso: 6, legs: 7, feet: 8, 'off-hand': 45})[s], equip: async (it, slot) => { worn.push(`${it.name}>${slot}`); }};
   wearArmour({bot}).then(() => assert.deepEqual(worn, ['diamond_helmet>head', 'iron_leggings>legs', 'shield>off-hand']));
 }
+
+{ // a guest bot (no supply chest) keeps its chest out of protected areas that do not name it; the owner's bots are not asked
+  const assert = require('node:assert/strict');
+  const {BotRunner} = require('../bots');
+  const areas = [[0, 0, 100, 100, null, null], [200, 0, 300, 100, null, null, ['MisaBot']]];
+  const mk = (name, supplyChest) => new BotRunner(name, {log: () => {}, protectedAreas: areas, supplyChest});
+  const bot = {blockAt: () => ({name: 'chest'})};
+  assert.throws(() => mk('MisaBot', null).ownChest(bot, null, {x: 50, y: 64, z: 50}, true), /Kiste liegt in einer geschützten Zone/);
+  assert.deepEqual(mk('MisaBot', null).ownChest(bot, null, {x: 250, y: 64, z: 50}, true), {x: 250, y: 64, z: 50}, 'a box naming the bot allows it');
+  assert.deepEqual(mk('bot1', {x: 0, y: 64, z: 0}).ownChest(bot, null, {x: 50, y: 64, z: 50}, true), {x: 50, y: 64, z: 50}, 'owner bot unaffected');
+}

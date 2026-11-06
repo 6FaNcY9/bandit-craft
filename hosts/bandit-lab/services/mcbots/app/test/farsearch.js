@@ -39,7 +39,7 @@
 })();
 // get: a "no free" mine failure is not a failure of the way (nothing learned, nothing blocked, far text rethrown);
 // a genuine failure of a way is still learned
-(async () => {
+const first = (async () => {
   const assert = require('node:assert/strict'), {Vec3} = require('vec3');
   const {JOBS} = require('../bots');
   const learned = [];
@@ -59,3 +59,19 @@
     assert.ok(r2.acquireFailed.size > 0 && learned.some(([, v]) => v.ok === false), 'a real failure is still learned');
   } finally { JOBS.mine = old; }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// A far search that gives up walks back to where it began (no drift on the next retry), then throws the same error.
+first.then(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots');
+  const pos = new Vec3(10, 64, 20), walks = [];
+  const bot = {entity: {position: pos}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null,
+    blockAt: () => null, game: {dimension: 'overworld'}, on() {}, once() {},
+    pathfinder: {searchRadius: 100, stop() {}, setGoal() {}, goto: async (g) => { walks.push([g.x, g.z]); pos.x = g.x; pos.z = g.z; }}};
+  const r = {name: 'bot3', emit() {}, log() {}, bot, protectedAreas: [], world: null, skip: new Map(), acquireFailed: new Map(), conflict() {}, combat: {busy: false, hostilesNear: () => [], fit: () => true}, moves: null};
+  const job = {id: 1, type: 'mine', args: {block: 'sand', count: 4}, t: {upkeep: true}, collected: 0, progress: ''};
+  await assert.rejects(JOBS.mine(r, job), (e) => /^no free sand within \d+ blocks of a far search heading/.test(e.message));
+  assert.ok(walks.length >= 2, 'it hopped out');
+  assert.deepEqual(walks.at(-1), [10, 20], 'the last walk goes back to the start');
+  assert.ok(Math.hypot(pos.x - 10, pos.z - 20) < 10, 'and the bot ends there');
+}).catch((e) => { console.error(e); process.exitCode = 1; });

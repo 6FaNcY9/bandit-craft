@@ -524,7 +524,7 @@ const server = http.createServer(async (req, res) => {
   // The one route outside the login allowlist: a guest's Tailscale login is not on it, so the one-time token is the gate.
   // Exactly /upload with GET or POST; uploads.handle refuses without a live token.
   if (url.pathname === '/upload' && (req.method === 'GET' || req.method === 'POST')) {
-    return uploadsLib.handle(req, res, url, {uploads, dir: SCHEMATIC_DIR, parse: (b) => schematicLib.parseLitematic(b), page: uploadPage, csp: UPLOAD_CSP, events,
+    return uploadsLib.handle(req, res, url, {uploads, dir: SCHEMATIC_DIR, parse: (b, o) => schematicLib.parseLitematic(b, o), page: uploadPage, csp: UPLOAD_CSP, events,
       say: (p, b, t) => ingame?.say(p, b, t), fileRe: buildLib.SCHEMATIC_RE, sameOrigin, log: (m) => log('upload', m)}).catch((e) => { log('upload', e.message); if (!res.headersSent) json(500, {error: 'Fehler'}); });
   }
   // A request with a bearer is the agent service (H5) and nothing else: a wrong token never falls

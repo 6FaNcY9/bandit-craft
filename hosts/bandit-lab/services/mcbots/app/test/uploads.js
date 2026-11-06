@@ -84,6 +84,25 @@ const {SCHEMATIC_RE} = require('../build');
   assert.equal(deps.uploads.peek(tk), 'MidariBread');
   assert.equal((await post(`t=${tk}&name=f0`, good)).status, 200);
   assert.equal(stored().filter((f) => f.endsWith('.tmp')).length, 0, 'no temp file left');
+  // per token: a parallel POST gets 409 while the first parses; the mark clears after a failed parse and after success
+  const slow = Object.assign(deps, {parse: (b, o) => new Promise((res) => setTimeout(res, 150)).then(() => parseLitematic(b, o))});
+  tk = deps.uploads.issue('MidariBread');
+  const [a, b] = await Promise.all([post(`t=${tk}&name=f0`, good), new Promise((res) => setTimeout(res, 30)).then(() => post(`t=${tk}&name=f1`, good))]);
+  assert.equal(b.status, 409); assert.deepEqual(await b.json(), {error: 'Upload läuft schon'}); assert.equal(a.status, 200);
+  assert.equal(deps.uploads.busy.size, 0);
+  tk = deps.uploads.issue('MidariBread');
+  assert.equal((await post(`t=${tk}&name=junk2`, Buffer.from('nope'))).status, 400);
+  assert.equal((await post(`t=${tk}&name=f0`, good)).status, 200, 'usable again after a failed parse');
+  deps.parse = slow.parse;
+  // /upload caps a region at 3 M cells (the dashboard keeps 8 M)
+  const nbt = require('prismarine-nbt'), zlib = require('node:zlib');
+  const parsed = await nbt.parse(good);
+  const sz = parsed.parsed.value.Regions.value.r.value.Size.value;
+  sz.x.value = 3001; sz.y.value = 1000; sz.z.value = 1;
+  tk = deps.uploads.issue('MidariBread');
+  r = await post(`t=${tk}&name=huge`, zlib.gzipSync(nbt.writeUncompressed(parsed.parsed)));
+  assert.equal(r.status, 400); assert.equal((await r.json()).error, 'Bauplan zu groß (max 3 Mio. Blöcke)');
+  assert.equal(deps.uploads.peek(tk), 'MidariBread');
   srv.close();
   fs.rmSync(dir, {recursive: true});
   console.log('uploads ok');
