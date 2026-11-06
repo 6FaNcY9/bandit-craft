@@ -211,6 +211,23 @@ Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/super
 - Movement counters (`app/counters.js`): bot screen `Wege/h: n Rücksetzer · n kein Weg · n fest` (per hour). Movement course in the
   sandbox: `tools/mcbots-parkour/`, results in `docs/runbooks/minecraft/movement-check.md`.
 
+#### Picture menus (2026-11-06)
+
+Spec `docs/superpowers/specs/2026-11-06-bot-menus-design.md`; old-dialog coverage in `docs/runbooks/minecraft/botui-coverage.md`.
+Chest and hopper windows with item icons replace the text dialogs as the main surface (plugin `/menu`, `/actionbar`; the hub renders in
+`app/botui-menus.js`, routes in `app/botui.js`). The staff now goes into the hand.
+
+- Open: `/bots` or staff left click → overview `ov` (a head per bot with a health bar, a badge for its job, bottom row Alle: Stopp, Alle: Komm,
+  Karte, Bauplan hochladen, `Alle Befehle (alt)` = the old dialogs). Staff right click on a bot, or a head → bot page `botm`.
+- Bot page icons: lead Folg mir, ender pearl Komm her, sword Bewach diesen Ort, chest Einlagern, barrier Stopp, pickaxe Abbauen…, axe Holz holen,
+  bricks Bauen…, sapling Baumfarm, clock Wenn frei… (`idlem`), hopper Kiste merken, barrel Inventar (`invm`), arrow Zurück. A glint marks the active job.
+- Shift window `shiftm` (hopper, staff right click on a minable block opens it pre-filled): five slots Wer → Was → Wie viel (16/64/256/∞) → Wohin → Los.
+  Was opens the block grid `gridm` (tabs, recently used first, pages); a log gives `shiftlogs` or `chop`, infinite gives `shift`/`shiftlogs`.
+- Pointing: `Zeig drauf` (grid) and `Kiste merken` / Wohin close the menu and take the viewer's next staff right click as the answer (60 s,
+  `PICK_MS`; actionbar hint; wrong target = flash, pick stays). A plugin restart ends a live pick.
+- Staff right click on a chest → `chestm` (heads of the viewer's bots → `setchest`).
+- Menu items cannot be taken; the viewer is the Bukkit player, orders pass the same `VALIDATE`/`resolveBots` checks as before.
+
 ## Phone notifications
 
 After an operator deploys this configuration, ntfy listens only on host loopback
