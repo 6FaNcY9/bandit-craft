@@ -11,6 +11,7 @@ const {explain, ZOOMS} = require('./botui-screens');
 const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
 const menus = require('./botui-menus');
+const {recipeGrid} = require('./recipes');
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
 const on = (data) => data.on === 1 || data.on === true;
@@ -40,17 +41,29 @@ function markersOf(snaps, allowed) {
 const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data: {}}, guardhere: {key: 'guard', data: {where: 'pos', radius: 16}},
   deposit: {key: 'deposit', data: {}}, chop: {key: 'chop', data: {n: 64}}, treefarm: {key: 'treefarm', data: {}}};
 
+const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'botm'];
+// What the result click of the crafting window orders: `craft` when the bot carries every ingredient of that many batches, else `get` (it resolves chains).
+function craftOrder(make, snap, shift = false) {
+  const grid = recipeGrid(make.item), have = menus.haveOf(snap), b = menus.maxBatches(grid, have), want = shift ? Math.max(1, b) : 1;
+  return {key: b >= want ? 'craft' : 'get', item: make.item, n: Math.min(64, want * grid.per)};
+}
+
 const PICK_MS = 60000;
 // The viewer's Abbauen form: kept between screens, a new bot brings its own chest (the bot's, else the supply chest).
+// The bot a screen is about: the payload's (rights checked), else the viewer's last one, else their first.
+function botOf(st, ui, viewer, bot) {
+  bot = bot !== undefined ? oneBot(ui, viewer, {bot}) : st.lastBot || ui.api.snapshots().find((s) => ui.viewerBots[viewer] === '*' || ui.viewerBots[viewer].includes(s.name))?.name;
+  if (!bot) throw new Error('kein Bot');
+  return st.lastBot = bot;
+}
 function formOf(st, ui, viewer, bot) {
   const prev = st.form;
-  bot = bot || prev?.bot || st.lastBot || ui.api.snapshots().find((s) => ui.viewerBots[viewer] === '*' || ui.viewerBots[viewer].includes(s.name))?.name;
-  if (!bot) throw new Error('kein Bot');
+  bot = botOf(st, ui, viewer, bot || prev?.bot);
   if (!prev || prev.bot !== bot) {
     const c = ui.api.snapshots().find((s) => s.name === bot)?.chest || jobs.supplyOf(ui.api.keeper);
     st.form = {bot, block: prev?.block ?? null, amount: prev?.amount ?? 'inf', chest: c ? {x: c.x, y: c.y, z: c.z} : null};
   }
-  return st.lastBot = bot, st.form;
+  return st.form;
 }
 function setBlock(st, block) {
   if (!jobs.BLOCKS.includes(block)) throw new Error('unbekannter Block');
@@ -111,9 +124,35 @@ const ACTIONS = {
     f.amount = menus.AMOUNTS[(menus.AMOUNTS.indexOf(f.amount) + 1) % menus.AMOUNTS.length];
     st.screen = {name: 'shiftm'};
   },
-  gridm: (st, data) => {
-    if (!Object.hasOwn(menus.TABS, data.tab)) throw new Error('unbekannter Reiter');
-    st.screen = {name: 'gridm', tab: data.tab, page: 0};
+  // Herstellen window: st.make is the viewer's craft in the making; the same bot keeps its item.
+  craftm: (st, data, ui, viewer) => {
+    const bot = botOf(st, ui, viewer, data.bot);
+    st.make = {kind: 'craft', bot, item: st.make?.kind === 'craft' && st.make.bot === bot ? st.make.item : null};
+    st.screen = {name: 'craftm'};
+  },
+  gridm: (st, data, ui, viewer) => {
+    const mode = data.mode === undefined ? 'block' : data.mode;
+    if (!Object.hasOwn(menus.GRID_MODES, mode)) throw new Error('unbekannter Modus');
+    if (!Object.hasOwn(menus.GRID_MODES[mode].tabs, data.tab)) throw new Error('unbekannter Reiter');
+    if (data.back !== undefined && !GRID_BACK.includes(data.back)) throw new Error('unbekannter Zurück-Knopf');
+    st.screen = {name: 'gridm', mode, tab: data.tab, page: 0, ...(data.back ? {back: data.back} : {}), ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})};
+  },
+  pickitem: (st, data, ui, viewer) => {
+    const mode = st.screen.name === 'gridm' && st.screen.mode;
+    if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
+    if (mode === 'get') return; // Holen orders on the click (part 2a, task 3)
+    botOf(st, ui, viewer, st.make?.bot);
+    st.make = {...st.make, item: data.item};
+    st.screen = {name: mode === 'craft' ? 'craftm' : 'smeltm'};
+  },
+  craftgo: (st, data, ui, viewer) => {
+    const make = st.make, bot = oneBot(ui, viewer, {bot: make?.bot});
+    if (!make?.item) return ui.flash(st, 'Erst ein Item wählen');
+    const o = craftOrder(make, ui.api.snapshots().find((s) => s.name === bot) || {}, !!data.shift);
+    const b = jobs.build(o.key, {who: bot, item: o.item, n: o.n}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+    done(ui.api.submit(viewer, {bots: b.bots, type: b.type, args: b.args, replace: b.replace}));
+    st.screen = {name: 'botm', bot};
+    ui.flash(st, `${bot}: ${b.say}`, true);
   },
   pickblock: (st, data, ui, viewer) => { formOf(st, ui, viewer); setBlock(st, data.block); st.screen = {name: 'shiftm'}; },
   botpick: (st, data, ui, viewer) => { formOf(st, ui, viewer); st.screen = {name: 'botpick'}; },
@@ -435,7 +474,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, ctx: st.ctx, flash: st.flash, form: st.form, recent: st.recent});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
@@ -506,4 +545,4 @@ function stopTargets(viewerBots, viewer, known) {
   return allowed === '*' ? 'all' : allowed.filter((n) => known.includes(n));
 }
 
-module.exports = {BotUi, ACTIONS, allowedBots, stopTargets, markersOf, placeBots};
+module.exports = {BotUi, ACTIONS, craftOrder, allowedBots, stopTargets, markersOf, placeBots};

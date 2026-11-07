@@ -114,4 +114,42 @@ assert.ok(MENUS.has('ov'));
     assert.ok(m.slots.every((x) => x.slot < 18));
   }
 }
+{ // recipe helper
+  const {recipeGrid} = require('../recipes');
+  assert.deepEqual(recipeGrid('stone_pickaxe').cells, ['cobblestone', 'cobblestone', 'cobblestone', null, 'stick', null, null, 'stick', null]);
+  assert.equal(recipeGrid('stone_pickaxe').per, 1); assert.equal(recipeGrid('oak_planks').per, 4); assert.equal(recipeGrid('bedrock'), null);
+}
+{ // crafting look-alike: grey pane for a missing ingredient, result count and lore from the snapshot inventory
+  const page = (item, inv) => menu({name: 'craftm'}, view({snaps: [{name: 'zed', online: true, inventory: inv}], make: {kind: 'craft', bot: 'zed', item}})).menu;
+  const at = (m, i) => m.slots.find((x) => x.slot === i);
+  let m = page('stone_pickaxe', ['cobblestone x5', 'stick x1']);
+  assert.equal(m.rows, 3); assert.match(m.title, /Herstellen: zed/);
+  assert.equal(at(m, 1).item, 'cobblestone'); assert.equal(at(m, 1).count, 1); assert.ok(!at(m, 1).lore);
+  assert.equal(at(m, 20).item, 'gray_stained_glass_pane'); assert.equal(at(m, 20).name, 'Stock'); assert.match(at(m, 20).lore[0], /^Fehlt: 1\/2/);
+  assert.equal(at(m, 15).item, 'stone_pickaxe'); assert.equal(at(m, 15).count, 1); assert.deepEqual(at(m, 15).lore, ['Zutaten fehlen · der Bot besorgt sie']);
+  assert.deepEqual(at(m, 15).payload, {a: 'craftgo'});
+  m = page('stone_pickaxe', ['cobblestone x5', 'stick x8']);
+  assert.equal(at(m, 15).count, 1); assert.deepEqual(at(m, 15).lore, ['1× möglich · Klick: 1 · Shift: alle']);
+  m = page('oak_planks', ['oak_log x3']);
+  assert.equal(at(m, 15).count, 12); assert.match(at(m, 15).lore[0], /^3× möglich/);
+  m = page(null, []);
+  assert.equal(at(m, 15).item, 'crafting_table'); assert.deepEqual(at(m, 15).payload, {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'});
+  assert.ok(!m.slots.some((x) => [1, 2, 3, 10, 11, 12, 19, 20, 21].includes(x.slot)));
+  for (const x of page('stone_pickaxe', ['stick x1']).slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+}
+{ // item grid modes
+  const jobs = require('../botui-jobs');
+  const g = (mode) => menu({name: 'gridm', mode, tab: undefined, page: 0, back: 'craftm'}, view()).menu;
+  const items = (m) => m.slots.filter((x) => x.payload.a === 'pickitem').map((x) => x.item);
+  const c = g('craft');
+  assert.ok(!items(c).includes('bread')); assert.ok(!c.slots.some((x) => x.payload.tab === 'essen'));
+  for (const i of items(c)) assert.ok(jobs.CRAFTS.includes(i));
+  const gt = menu({name: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'}, view()).menu;
+  assert.deepEqual(items(gt), ['bread']); assert.deepEqual(gt.slots.find((x) => x.payload.a === 'pickitem').lore, ['Klick: 16 holen · Shift: 64']);
+  assert.ok(items(menu({name: 'gridm', mode: 'get', tab: 'rohstoffe', page: 0}, view()).menu).includes('coal'));
+  assert.deepEqual(items(menu({name: 'gridm', mode: 'smelt', tab: 'schmelzgut', page: 0}, view()).menu), jobs.SMELTS);
+  assert.ok(!c.slots.some((x) => x.payload.kind === 'block'));
+  assert.equal(c.slots.find((x) => x.item === 'arrow').payload.a, 'craftm');
+  for (const m of [c, gt, g('smelt')]) for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+}
 console.log('botui-menus ok');

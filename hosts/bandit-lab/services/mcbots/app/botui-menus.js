@@ -4,7 +4,8 @@
 // re-sends a refreshing screen only when its JSON changed.
 const {choiceOf, CHOICES} = require('./idle');
 const {safe} = require('./botui-screens');
-const {germanName, BLOCKS} = require('./botui-jobs');
+const {germanName, BLOCKS, CRAFTS, SMELTS} = require('./botui-jobs');
+const {recipeGrid} = require('./recipes');
 
 // One slot: `payload` comes back as the click's data, `extra` carries count/damage/head/glint/lore.
 const slot = (i, item, name, payload, extra = {}) => ({slot: i, item, name: safe(name, 40), payload, ...extra});
@@ -66,12 +67,15 @@ function idlePage(view, screen) {
   return {type: 'chest', title: `${safe(s.name, 20)}: wenn frei`, rows: 1, slots};
 }
 
+// The snapshot's inventory lines "<name> xN" as [name, count] pairs.
+const invLines = (snap) => (snap.inventory || []).map((l) => /^([a-z0-9_]+) x(\d+)$/.exec(String(l))).filter(Boolean).map((m) => [m[1], Number(m[2])]);
+const haveOf = (snap) => { const o = {}; for (const [n, c] of invLines(snap)) o[n] = (o[n] || 0) + c; return o; };
+
 // The bot's inventory as picture slots, read-only (a click re-opens the same page).
 function inventoryPage(view, screen) {
   const s = snapOf(view, screen.bot), slots = [];
-  for (const line of s.inventory || []) {
-    const m = /^([a-z0-9_]+) x(\d+)$/.exec(String(line));
-    if (m && slots.length < 53) slots.push(slot(slots.length, m[1], `${germanName(m[1])} ×${m[2]}`, {a: 'invm', bot: s.name}, {count: Math.max(1, Math.min(64, Number(m[2])))}));
+  for (const [n, c] of invLines(s)) {
+    if (slots.length < 53) slots.push(slot(slots.length, n, `${germanName(n)} ×${c}`, {a: 'invm', bot: s.name}, {count: Math.max(1, Math.min(64, c))}));
   }
   slots.push(back(53, 'botm', s.name));
   return {type: 'chest', title: `${safe(s.name, 20)}: Inventar`, rows: 6, slots};
@@ -102,14 +106,51 @@ function shiftPage(view) {
     slot(4, 'lime_dye', 'Los!', {a: 'shiftgo'})]};
 }
 
-// Block grid: tab icons on top, the viewer's last picks, then the tab's blocks (13 at most, so one page); bottom row: point at one, back.
-// shortcut: `page` is carried but ignored, no tab has more than 36 blocks; add paging when one does.
+// Item grids: Herstellen (what jobs.CRAFTS can make), Schmelzen (jobs.SMELTS) and Holen (every known item).
+const ITEM_TABS = {werkzeug: ['stone_pickaxe', 'iron_pickaxe', 'iron_sword', 'bucket'], bau: ['oak_planks', 'stick', 'torch', 'chest', 'crafting_table', 'furnace'], essen: ['bread'], rohstoffe: ['coal', 'raw_iron', 'iron_ingot', 'cobblestone', 'oak_log']};
+const ITEM_TAB_ICON = {werkzeug: ['iron_pickaxe', 'Werkzeug'], bau: ['bricks', 'Bau'], essen: ['bread', 'Essen'], rohstoffe: ['iron_ingot', 'Rohstoffe'], schmelzgut: ['furnace', 'Schmelzgut']};
+const craftTabs = Object.fromEntries(Object.entries(ITEM_TABS).map(([t, l]) => [t, l.filter((i) => CRAFTS.includes(i))]).filter(([, l]) => l.length));
+const GRID_MODES = {block: {tabs: TABS, icons: TAB_ICON, pick: 'pickblock', key: 'block'},
+  craft: {tabs: craftTabs, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
+  smelt: {tabs: {schmelzgut: SMELTS}, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
+  get: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'}};
+
+// Grid: tab icons on top, (block mode: the viewer's last picks, then) the tab's entries (13 at most, so one page); bottom row: point at one (block mode), back.
+// shortcut: `page` is carried but ignored, no tab has more than 36 entries; add paging when one does.
 function gridPage(view, screen) {
-  const tab = Object.hasOwn(TABS, screen.tab) ? screen.tab : 'erze';
-  const slots = Object.entries(TAB_ICON).map(([t, [item, label]], i) => slot(i, item, label, {a: 'gridm', tab: t, page: 0}, {glint: t === tab}));
-  [...(view.recent || []), ...TABS[tab]].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: 'pickblock', block: b})));
-  slots.push(slot(52, 'stick', 'Zeig drauf', {a: 'pick', kind: 'block'}), back(53, 'shiftm'));
-  return {type: 'chest', title: 'Welcher Block?', rows: 6, slots};
+  const mode = Object.hasOwn(GRID_MODES, screen.mode) ? screen.mode : 'block', g = GRID_MODES[mode];
+  const tab = Object.hasOwn(g.tabs, screen.tab) ? screen.tab : Object.keys(g.tabs)[0];
+  const slots = Object.keys(g.tabs).map((t, i) => slot(i, g.icons[t][0], g.icons[t][1], {a: 'gridm', mode, tab: t, page: 0, ...(screen.back ? {back: screen.back} : {})}, {glint: t === tab}));
+  [...(mode === 'block' ? view.recent || [] : []), ...g.tabs[tab]].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: g.pick, [g.key]: b}, mode === 'get' ? {lore: ['Klick: 16 holen · Shift: 64']} : {})));
+  if (mode === 'block') slots.push(slot(52, 'stick', 'Zeig drauf', {a: 'pick', kind: 'block'}));
+  const to = screen.back || 'shiftm';
+  slots.push(back(53, to, to === 'botm' ? screen.bot : undefined));
+  return {type: 'chest', title: mode === 'block' ? 'Welcher Block?' : 'Welches Item?', rows: 6, slots};
+}
+
+// Herstellen as a chest that looks like a crafting table: 3x3 at slots 1-3/10-12/19-21, result at 15. A missing ingredient is a grey pane.
+const CELL_SLOT = [1, 2, 3, 10, 11, 12, 19, 20, 21];
+const maxBatches = (grid, have) => {
+  const need = {}; for (const n of grid.cells) if (n) need[n] = (need[n] || 0) + 1;
+  return Math.min(...Object.entries(need).map(([n, c]) => Math.floor((have[n] || 0) / c)));
+};
+function craftPage(view) {
+  const mk = view.make || {}, s = snapOf(view, mk.bot), bot = s.name, grid = mk.item && recipeGrid(mk.item);
+  const slots = [slot(8, 'player_head', bot, {a: 'craftm', bot}, {head: bot}), slot(14, 'arrow', 'ergibt', {a: 'craftm', bot}),
+    slot(17, 'crafting_table', 'Anderes Item…', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}), slot(26, 'arrow', 'Zurück', {a: 'botm', bot})];
+  if (!grid) slots.push(slot(15, 'crafting_table', 'Was herstellen? Klick', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}));
+  else {
+    const have = haveOf(s), need = {};
+    for (const n of grid.cells) if (n) need[n] = (need[n] || 0) + 1;
+    grid.cells.forEach((n, i) => {
+      if (!n) return;
+      const ok = (have[n] || 0) >= need[n];
+      slots.push(ok ? slot(CELL_SLOT[i], n, germanName(n), {a: 'craftm', bot}, {count: 1}) : slot(CELL_SLOT[i], 'gray_stained_glass_pane', germanName(n), {a: 'craftm', bot}, {lore: [`Fehlt: ${have[n] || 0}/${need[n]} · der Bot holt oder macht es selbst`]}));
+    });
+    const b = maxBatches(grid, have);
+    slots.push(slot(15, mk.item, germanName(mk.item), {a: 'craftgo'}, {count: Math.max(1, Math.min(64, b * grid.per)), lore: [b ? `${b}× möglich · Klick: 1 · Shift: alle` : 'Zutaten fehlen · der Bot besorgt sie']}));
+  }
+  return {type: 'chest', title: `Herstellen: ${safe(bot, 20)}`, rows: 3, slots};
 }
 
 // Which bot does it: the viewer's own bots as heads.
@@ -122,8 +163,8 @@ function botPickPage(view) {
 }
 
 // Screens drawn as menus; later tasks add theirs to RENDER.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, botpick: botPickPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, botpick: botPickPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
-module.exports = {MENUS, menu, slot, badgeOf, overview, AMOUNTS, TABS};
+module.exports = {MENUS, menu, slot, badgeOf, overview, AMOUNTS, TABS, haveOf, ITEM_TABS, GRID_MODES, maxBatches};

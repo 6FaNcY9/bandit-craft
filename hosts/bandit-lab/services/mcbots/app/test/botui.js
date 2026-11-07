@@ -490,6 +490,38 @@ async function fake() {
     assert.equal(ui.state('Fancy').screen.name, 'shiftm'); assert.equal(f.of('/menu').at(-1).body.slots[1].item, 'iron_ore');
     end();
   }
+  { // Herstellen: craftm / pickitem / craftgo route to craft or get, guests only their bots
+    const submits = [], snaps = [{name: 'bot1', online: true, job: null, inventory: ['cobblestone x9', 'stick x6']}, {name: 'MisaBot', online: true, job: null, guest: true, inventory: []}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    const flash = (p) => ui.state(p).flash.text;
+    await ev('Fancy', {a: 'craftm'}); assert.equal(ui.state('Fancy').screen.name, 'craftm'); assert.deepEqual(ui.state('Fancy').make, {kind: 'craft', bot: 'bot1', item: null});
+    await ev('Fancy', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'});
+    await ev('Fancy', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Fancy'), 'Fehler: unbekanntes Item'); assert.equal(submits.length, 0);
+    await ev('Fancy', {a: 'pickitem', item: 'bread'}); assert.equal(flash('Fancy'), 'Fehler: unbekanntes Item');
+    await ev('Fancy', {a: 'pickitem', item: 'stone_pickaxe'});
+    assert.equal(ui.state('Fancy').make.item, 'stone_pickaxe'); assert.equal(ui.state('Fancy').screen.name, 'craftm');
+    await ev('Fancy', {a: 'craftm'}); assert.equal(ui.state('Fancy').make.item, 'stone_pickaxe'); // same bot keeps the item
+    await ev('Fancy', {a: 'craftgo'});
+    assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'craft', args: {item: 'stone_pickaxe', count: 1}, replace: false});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'}); assert.match(flash('Fancy'), /^bot1: /);
+    await ev('Fancy', {a: 'craftm'}); await ev('Fancy', {a: 'craftgo', shift: true});
+    assert.equal(submits.at(-1).type, 'craft'); assert.equal(submits.at(-1).args.count, 3); // 9 cobblestone, 6 stick: 3 batches
+    snaps[0].inventory = ['cobblestone x9', 'stick x1'];
+    await ev('Fancy', {a: 'craftm'}); await ev('Fancy', {a: 'craftgo'});
+    assert.equal(submits.at(-1).type, 'get'); assert.equal(submits.at(-1).args.item, 'stone_pickaxe');
+    const n = submits.length;
+    await ev('Midari', {a: 'craftm', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
+    await ev('Midari', {a: 'craftgo', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
+    await ev('Midari', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Midari'), 'Fehler: unbekanntes Item');
+    await ev('Midari', {a: 'craftm'}); assert.equal(ui.state('Midari').make.bot, 'MisaBot');
+    await ev('Midari', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}); await ev('Midari', {a: 'pickitem', item: 'bucket'}); await ev('Midari', {a: 'craftgo'});
+    assert.equal(submits.at(-1).bots[0], 'MisaBot'); assert.equal(submits.length, n + 1);
+    const {craftOrder} = require('../botui');
+    assert.deepEqual(craftOrder({kind: 'craft', bot: 'x', item: 'oak_planks'}, {inventory: ['oak_log x3']}, true), {key: 'craft', item: 'oak_planks', n: 12});
+    end();
+  }
   { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
     const set = [], store = {MisaBot: null};
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];
