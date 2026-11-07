@@ -522,6 +522,20 @@ async function fake() {
     assert.deepEqual(craftOrder({kind: 'craft', bot: 'x', item: 'oak_planks'}, {inventory: ['oak_log x3']}, true), {key: 'craft', item: 'oak_planks', n: 12});
     end();
   }
+  { // fix round 1: gridm without a prior craftm names a real bot; a smelt pick never reaches craftgo's recipe
+    const submits = [], snaps = [{name: 'bot1', online: true, job: null, inventory: ['cobblestone x9', 'stick x6']}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
+    const {ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    await ev('Fancy', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'});
+    await ev('Fancy', {a: 'pickitem', item: 'stone_pickaxe'}); await ev('Fancy', {a: 'craftgo'});
+    assert.deepEqual(ui.state('Fancy').make, {kind: 'craft', bot: 'bot1', item: 'stone_pickaxe'});
+    assert.ok(submits.length === 1 && submits[0].bots[0] === 'bot1');
+    await ev('Fancy', {a: 'gridm', mode: 'smelt', tab: 'schmelzgut', page: 0, back: 'smeltm'});
+    await ev('Fancy', {a: 'pickitem', item: 'raw_iron'}); await ev('Fancy', {a: 'craftgo'});
+    assert.equal(submits.length, 1); assert.doesNotMatch(ui.state('Fancy').flash.text, /Cannot read|undefined/);
+    end();
+  }
   { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
     const set = [], store = {MisaBot: null};
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];

@@ -141,13 +141,13 @@ const ACTIONS = {
     const mode = st.screen.name === 'gridm' && st.screen.mode;
     if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
     if (mode === 'get') return; // Holen orders on the click (part 2a, task 3)
-    botOf(st, ui, viewer, st.make?.bot);
-    st.make = {...st.make, item: data.item};
+    const bot = botOf(st, ui, viewer, st.make?.bot);
+    st.make = {kind: mode, bot, item: data.item};
     st.screen = {name: mode === 'craft' ? 'craftm' : 'smeltm'};
   },
   craftgo: (st, data, ui, viewer) => {
     const make = st.make, bot = oneBot(ui, viewer, {bot: make?.bot});
-    if (!make?.item) return ui.flash(st, 'Erst ein Item wählen');
+    if (make?.kind !== 'craft' || !make.item) return ui.flash(st, 'Erst ein Item wählen');
     const o = craftOrder(make, ui.api.snapshots().find((s) => s.name === bot) || {}, !!data.shift);
     const b = jobs.build(o.key, {who: bot, item: o.item, n: o.n}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
     done(ui.api.submit(viewer, {bots: b.bots, type: b.type, args: b.args, replace: b.replace}));

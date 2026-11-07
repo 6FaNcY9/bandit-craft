@@ -136,7 +136,7 @@ const maxBatches = (grid, have) => {
 };
 function craftPage(view) {
   const mk = view.make || {}, s = snapOf(view, mk.bot), bot = s.name, grid = mk.item && recipeGrid(mk.item);
-  const slots = [slot(8, 'player_head', bot, {a: 'craftm', bot}, {head: bot}), slot(14, 'arrow', 'ergibt', {a: 'craftm', bot}),
+  const slots = [...(bot ? [slot(8, 'player_head', bot, {a: 'craftm', bot}, {head: bot})] : []), slot(14, 'arrow', 'ergibt', {a: 'craftm', bot}),
     slot(17, 'crafting_table', 'Anderes Item…', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}), slot(26, 'arrow', 'Zurück', {a: 'botm', bot})];
   if (!grid) slots.push(slot(15, 'crafting_table', 'Was herstellen? Klick', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}));
   else {
@@ -150,7 +150,7 @@ function craftPage(view) {
     const b = maxBatches(grid, have);
     slots.push(slot(15, mk.item, germanName(mk.item), {a: 'craftgo'}, {count: Math.max(1, Math.min(64, b * grid.per)), lore: [b ? `${b}× möglich · Klick: 1 · Shift: alle` : 'Zutaten fehlen · der Bot besorgt sie']}));
   }
-  return {type: 'chest', title: `Herstellen: ${safe(bot, 20)}`, rows: 3, slots};
+  return {type: 'chest', title: bot ? `Herstellen: ${safe(bot, 20)}` : "Herstellen", rows: 3, slots};
 }
 
 // Which bot does it: the viewer's own bots as heads.

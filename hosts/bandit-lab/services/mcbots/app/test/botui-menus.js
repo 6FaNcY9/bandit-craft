@@ -135,6 +135,7 @@ assert.ok(MENUS.has('ov'));
   m = page(null, []);
   assert.equal(at(m, 15).item, 'crafting_table'); assert.deepEqual(at(m, 15).payload, {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'});
   assert.ok(!m.slots.some((x) => [1, 2, 3, 10, 11, 12, 19, 20, 21].includes(x.slot)));
+  assert.ok(!menu({name: 'craftm'}, view({make: undefined})).menu.slots.some((x) => x.head === undefined && x.item === 'player_head' || String(x.name) === 'undefined'));
   for (const x of page('stone_pickaxe', ['stick x1']).slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }
 { // item grid modes
