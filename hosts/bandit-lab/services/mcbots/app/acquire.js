@@ -68,6 +68,14 @@ function recipeParts(data, r) {
   return Object.keys(ingredients).length ? {per: r.result?.count || 1, ingredients, table: needsTable(r)} : null;
 }
 
+// Blocks that grow only in another dimension: exploring this one never finds them (MisaBot planned a trip for crimson stems
+// in the overworld because she held one crimson plank, 2026-11-07). Overworld rarities (magma, soul sand) are not listed.
+const DIMENSION_ONLY = {
+  the_nether: /^((crimson|warped)_(stem|hyphae|nylium)|netherrack|nether_(quartz|gold)_ore|ancient_debris|glowstone|(nether|warped)_wart_block|shroomlight|soul_soil)$/,
+  the_end: /^(end_stone|chorus_(plant|flower))$/,
+};
+const otherDimension = (block, dim) => Object.entries(DIMENSION_ONLY).some(([d, re]) => d !== dim && re.test(block));
+
 const chestKey = (s, item) => `chest:${s.at.x},${s.at.y},${s.at.z}:${item}`;
 
 // world: {
@@ -112,7 +120,7 @@ function plan(goal, world) {
       if (!canMine(block) || hard < 0) continue; // bedrock and the like
       if (block === item && recipes(item).length) continue; // a block that is crafted and drops itself was placed: planks, wool
       const tools = toolsFor(block), dist = nearOf('block', block);
-      if (dist === null && world.seenOnly) continue;
+      if (dist === null && (world.seenOnly || world.elsewhere?.(block))) continue;
       const record = learned(`mine:${block}`);
       const each = typeof record?.each === 'number' ? record.each : DIG_S * hard + STEP_S + (dist === null ? EXPLORE_S : dist / SPEED) / 8;
       // The tool counts once a plan (keep()), not per block: here only whether one can be had at all.
@@ -322,4 +330,4 @@ function summary(node) {
   return `${time}${work.join(', ') || 'all in hand'}${then ? `; then ${then}` : ''}`;
 }
 
-module.exports = {plan, nextStep, explain, summary, yieldOf, lootIndex};
+module.exports = {otherDimension, plan,nextStep, explain, summary, yieldOf, lootIndex};

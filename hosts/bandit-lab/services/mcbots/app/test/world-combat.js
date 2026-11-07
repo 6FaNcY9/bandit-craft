@@ -40,6 +40,12 @@ const O = require('../odds');
   assert.ok(nodes(p.node).some((n) => n.via === 'mine' && n.block === 'stone'), A.explain(p.node));
   // Planks are crafted, never dug out of a house next door (a crafted block that drops itself was placed).
   assert.ok(!nodes(p.node).some((n) => n.via === 'mine' && n.block === 'oak_planks'));
+  // Nothing in sight and one crimson plank in hand: no trip to explore for crimson stems in the overworld (MisaBot, 2026-11-07).
+  const far = {data, have: {crimson_planks: 1, stick: 2}, stores: [], blockNear: () => null, mobNear: () => null, elsewhere: (b) => A.otherDimension(b, 'overworld')};
+  const q = A.plan({item: 'wooden_pickaxe', count: 1}, far);
+  assert.ok(!nodes(q.node).some((n) => n.via === 'mine' && /^(crimson|warped)_/.test(n.block)), A.explain(q.node));
+  assert.ok(nodes(q.node).some((n) => n.via === 'mine' && /_log$/.test(n.block)), A.explain(q.node));
+  assert.ok(A.otherDimension('netherrack', 'overworld') && !A.otherDimension('netherrack', 'the_nether') && !A.otherDimension('oak_log', 'overworld'));
   assert.match(A.summary(p.node), /^~\d+ s: mine \d+ oak_log, mine 3 stone; then \d+ crafts$/);
   // A known chest beats digging; a way that failed lately is left out.
   p = A.plan({item: 'cobblestone', count: 20}, world({stores: [{at: {x: 1, y: 64, z: 2}, dist: 8, stock: {cobblestone: 64}}]}));

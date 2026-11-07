@@ -3088,6 +3088,7 @@ function acquireWorld(r) {
       return e ? e.position.distanceTo(me) : null;
     },
     canMine: (b) => !r.farmChests && !BUILT_RE.test(b) && !PLACED_RE.test(b), // a road's job goes to the next farm instead
+    elsewhere: (b) => acquire.otherDimension(b, normDim(bot.game?.dimension)),
     canKill: (m) => !r.farmChests && Object.hasOwn(huntJob.ANIMALS, m),
     stationNear: (name) => /^(crafting_table|furnace)$/.test(name) && !!craftingLib.nearBlock(bot, name),
     failed: new Set(r.acquireFailed.keys()),
