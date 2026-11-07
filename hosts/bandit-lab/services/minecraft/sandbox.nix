@@ -16,6 +16,8 @@ in {
         description = "Generate the sandbox Minecraft RCON password and its environment file";
         before = ["minecraft-server-sandbox.service"];
         requiredBy = ["minecraft-server-sandbox.service"];
+        # Active and Required= by the sandbox server and mcbots-seed: a restart on deploy would cascade to them.
+        restartIfChanged = false;
         path = [pkgs.coreutils];
         serviceConfig = {
           Type = "oneshot";
