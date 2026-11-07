@@ -1122,6 +1122,8 @@ function safeMovements(bot, areas, runner = null) {
   // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
   const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
   mv.exclusionAreasPlace = [veto, lid];
+  // An unloaded cell is the library's stand-in without a position: it threw here and took the hub down (2026-11-07). Never there.
+  for (const k of ['exclusionAreasBreak', 'exclusionAreasPlace']) mv[k] = mv[k].map((f) => (blk) => (blk?.position ? f(blk) : 100));
   const spawner = bot.registry.blocksByName.spawner?.id;
   if (spawner !== undefined) mv.blocksCantBreak.add(spawner); // not on the way either (see digAt)
   // A landing block without a position (a cell the pathfinder could not read) threw in getMoveDropDown and took the
@@ -2732,6 +2734,13 @@ async function collect(r, job, matching, count, what) {
       if (job.type !== 'shift' && !job.noFar && (job.t.farHops || 0) < farsearch.FAR_TOTAL && (!far || far.hops < farsearch.FAR_HOPS)) {
         if (isNight(bot) && r.combat && !r.combat.fit()) { // an unfit bot does not set out in the dark: shelter, then look again
           await waitSafe(r, job, me.x, me.z, me.y);
+          // No hole (protected ground, nothing for a lid): wait on the clock. A bare `continue` spun without yielding,
+          // the worker's keepalive starved and MisaBot and EM_Trader timed out for hours (2026-11-07).
+          while (isNight(bot) && !r.combat.fit()) {
+            guard(job);
+            job.t.doing = 'night: waiting for the morning before searching farther';
+            await sleep(5000);
+          }
           continue;
         }
         if (await farHop(r, job, what, far ??= {hops: 0, tried: [], dir: -1, fails: 0, start: {x: me.x, z: me.z}}, !ore)) continue;

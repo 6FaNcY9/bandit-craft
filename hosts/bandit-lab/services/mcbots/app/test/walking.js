@@ -157,6 +157,10 @@ const assert = require('node:assert');
   assert.ok(require('node:fs').readFileSync(require.resolve('mineflayer-pathfinder'), 'utf8').includes('/_door$|_fence_gate$/.test(block.name)'), 'the path goes through the middle of a door');
   assert.deepStrictEqual(at(4, 64), [false, true], 'open gate: walk through');
   assert.deepStrictEqual(at(5, 64), [true, false], 'closed gate: click it');
+  // An unloaded cell reaches the exclusions as the library's stand-in without a position: it threw and took the hub down (2026-11-07).
+  const ghost = {physical: false, safe: false, replaceable: false};
+  assert.ok(mv.exclusionPlace(ghost) >= 100, 'no placing into an unloaded cell');
+  assert.ok(mv.exclusionBreak(ghost) >= 100, 'nor digging it');
 })();
 
 (async () => { // chase: "No path" to a player below widens the fall once, and a way missing for 30 s ends the job with a reason (2026-11-01)
