@@ -552,6 +552,13 @@ async function fake() {
     assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: inv}), {key: 'smelt', item: 'raw_iron', n: 8});
     assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: ['raw_iron x20']}), {key: 'get', item: 'iron_ingot', n: 8});
     assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: ['raw_iron x3', 'coal x3']}), {key: 'get', item: 'iron_ingot', n: 8});
+    assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: ['raw_iron x200', 'coal x3']}, true), {key: 'smelt', item: 'raw_iron', n: 64});
+    assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: ['raw_iron x20']}, true), {key: 'get', item: 'iron_ingot', n: 20});
+    const m = submits.length; // a craft make is no smelt; a stale make for another owner's bot is refused
+    ui.state('Fancy').make = {kind: 'craft', bot: 'bot1', item: 'raw_iron'};
+    await ev('Fancy', {a: 'smeltgo'}); assert.equal(submits.length, m);
+    ui.state('Midari').make = {kind: 'smelt', bot: 'bot1', item: 'raw_iron'};
+    await ev('Midari', {a: 'smeltgo'}); assert.match(flash('Midari'), /^Fehler:/); assert.equal(submits.length, m);
     end();
   }
   { // fix round 1: gridm without a prior craftm names a real bot; a smelt pick never reaches craftgo's recipe
