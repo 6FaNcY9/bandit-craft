@@ -32,13 +32,18 @@ say() {
 }
 
 # countdown SECONDS EXTRA: one tick per second, shows SECONDS+EXTRA left; returns 1 when Enter skips
+eof=
 countdown() {
-  local left=$1 t
+  local left=$1 t rc
   while ((left > 0)); do
     t=$((left + $2))
-    if [[ -t 0 ]]; then
+    if [[ -t 0 && -z $eof ]]; then
       printf '\r  Neustart in %d:%02d   Enter = jetzt   Ctrl-C = abbrechen ' $((t / 60)) $((t % 60)) >&2
-      if read -r -t 1 _; then return 1; fi
+      rc=0
+      read -r -t 1 _ || rc=$?
+      ((rc == 0)) && return 1
+      # rc > 128 is the 1 s timeout; anything else is EOF (hung-up tty): stop reading, keep counting
+      ((rc > 128)) || { eof=1; nap 1; }
     else
       nap 1
     fi
@@ -52,6 +57,8 @@ skip() {
   exit 0
 }
 
+# drop Enter presses typed during the earlier deploy steps, so only a fresh Enter skips
+if [[ -t 0 ]]; then while read -r -t 0 _; do read -r _ || break; done; fi
 say "Server restart in 5 minutes: $reason"
 countdown $((4 * m)) "$m" || skip
 say "Server restart in 1 minute"
