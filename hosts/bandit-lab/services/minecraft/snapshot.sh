@@ -6,9 +6,8 @@
 # live, auto-saving world is NOT consistent). With the server stopped the
 # copy is simply cold and consistent.
 #
-# Backend: MC_UNIT set = a nix-minecraft server (systemd unit, console FIFO
-# MC_CONSOLE); unset = the Docker container MC_CONTAINER.
-# MC_MACHINE set (with MC_UNIT) = that server runs inside the nspawn container of
+# Backend: the nix-minecraft server MC_UNIT (systemd unit, console FIFO MC_CONSOLE).
+# MC_MACHINE set = that server runs inside the nspawn container of
 # this name: the unit and its journal are asked through -M, and the console FIFO is
 # reached through the container's root (/proc/<leader>/root), all from the host.
 #
@@ -18,9 +17,8 @@
 set -euo pipefail
 
 dest=${1:?usage: minecraft-snapshot DEST}
-data=${MC_DATA:-/srv/containers/minecraft/data}
-unit=${MC_UNIT-}
-container=${MC_CONTAINER:-minecraft}
+data=${MC_DATA:-/srv/minecraft/paper}
+unit=${MC_UNIT:-minecraft-server-paper}
 machine=${MC_MACHINE-}
 fifo=${MC_CONSOLE:-/run/minecraft/paper.stdin}
 in_machine=()
@@ -31,13 +29,8 @@ if [ -n "$machine" ]; then
   [ -n "$leader" ] && fifo=/proc/$leader/root$fifo
 fi
 
-if [ -n "$unit" ]; then
-  console() { printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null; }
-  saved_since() { journalctl "${in_machine[@]}" -u "$unit" --since "@$1" -o cat 2>&1 | grep -q "Saved the game"; }
-else
-  console() { docker exec --user 1000 "$container" mc-send-to-console "$1" >/dev/null; }
-  saved_since() { docker logs --since "$1" "$container" 2>&1 | grep -q "Saved the game"; }
-fi
+console() { printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null; }
+saved_since() { journalctl "${in_machine[@]}" -u "$unit" --since "@$1" -o cat 2>&1 | grep -q "Saved the game"; }
 
 # One snapshot at a time: a second run's save-on would re-enable autosave
 # while the first is still copying.
@@ -61,38 +54,28 @@ resume() {
 }
 trap resume EXIT
 
-# Fail closed: only "no such container" (or an inactive/failed unit) means
-# cold; anything else must not be mistaken for a stopped server (that would
-# copy a live world).
-if [ -n "$unit" ]; then
-  state=$(systemctl "${in_machine[@]}" is-active "$unit" 2>&1) || true
-  # A container that does not exist as a machine is as cold as a stopped unit; any other
-  # answer than "running" must not be mistaken for that.
-  if [ -n "$machine" ]; then
-    if mstate=$(machinectl show "$machine" -p State --value 2>&1); then
-      [ "$mstate" = running ] || state="machine $machine is $mstate"
-    elif grep -q 'No machine' <<<"$mstate"; then
-      state=inactive
-    else
-      state="machinectl: $mstate"
-    fi
+# Fail closed: only an inactive/failed unit means cold; anything else must
+# not be mistaken for a stopped server (that would copy a live world).
+state=$(systemctl "${in_machine[@]}" is-active "$unit" 2>&1) || true
+# A container that does not exist as a machine is as cold as a stopped unit; any other
+# answer than "running" must not be mistaken for that.
+if [ -n "$machine" ]; then
+  if mstate=$(machinectl show "$machine" -p State --value 2>&1); then
+    [ "$mstate" = running ] || state="machine $machine is $mstate"
+  elif grep -q 'No machine' <<<"$mstate"; then
+    state=inactive
+  else
+    state="machinectl: $mstate"
   fi
-  case $state in
-    active) running=true ;;
-    inactive | failed) running=false ;;
-    *)
-      echo "cannot tell whether $unit runs: $state" >&2
-      exit 1
-      ;;
-  esac
-elif state=$(docker inspect --format '{{.State.Running}}' "$container" 2>&1); then
-  running=$state
-elif grep -q 'No such object' <<<"$state"; then
-  running=false
-else
-  echo "cannot query docker for $container: $state" >&2
-  exit 1
 fi
+case $state in
+  active) running=true ;;
+  inactive | failed) running=false ;;
+  *)
+    echo "cannot tell whether $unit runs: $state" >&2
+    exit 1
+    ;;
+esac
 if [ "$running" = true ]; then
   since=$(date +%s)
   console save-off

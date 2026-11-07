@@ -55,58 +55,17 @@
 
   mapPort = "8100";
 
-  # Velocity proxy in front of Paper (docs/runbooks/minecraft/PROXY.md). The jar
-  # is hash-pinned here and handed to itzg/mc-proxy as TYPE=CUSTOM, so nothing is
-  # downloaded at start. BotGate is compiled against that same jar.
-  velocityJar = pkgs.fetchurl {
-    url = "https://fill-data.papermc.io/v1/objects/b4e3164df5377346854dc6cb9e6a78022b1946ff69e89676313f5f6f1c6f0fb3/velocity-3.5.1-615.jar";
-    hash = "sha256-tOMWTfU3c0aFTcbLnmp4AisZRv9p6JZ2MT9fbxxvD7M=";
-  };
-  inherit (import ./velocity-plugins.nix {inherit pkgs;}) botgate veloauthJar veloauthConfig;
-
   # Dedicated /29 for in-lab Mineflayer bots (containers join `mcbots`, connect
   # to velocity:25565). Docker's pools hand out 172.17-31.x.x/16 and then
   # 192.168.x.x; 10.250.77.0/29 collides with none of them nor with the other
   # lab networks. The gateway takes .1, velocity .2 and up to 4 bots remain.
   mcbotsSubnet = "10.250.77.0/29";
 
-  # Sources allowed to skip Mojang authentication for bot1..bot99. Never the
-  # `minecraft` network, the default bridge or the lab's own tailnet address.
-  botgateSources = "${repoConfig.lab.workstationTailscaleIp}/32,${mcbotsSubnet}";
-
   velocityPatch = import ./velocity-patch.nix {inherit pkgs;};
-
-  velocityToml = pkgs.writeText "velocity.toml" ''
-    config-version = "2.8"
-    bind = "0.0.0.0:25565"
-    # Mojang authentication for everyone; BotGate flips single logins offline.
-    # VeloAuth decides per connection: Mojang auth for premium names, its own
-    # /register + /login for everyone else.
-    online-mode = false
-    player-info-forwarding-mode = "modern"
-    ping-passthrough = "ALL"
-
-    [servers]
-    main = "minecraft:25565"
-    # The bots' sandbox world (sandbox.nix): players reach it with /server sandbox; the bots connect
-    # with the virtual host sandbox.bots and land there directly, never on main.
-    sandbox = "minecraft-sandbox:25565"
-    try = ["main"]
-
-    [forced-hosts]
-    "sandbox.bots" = ["sandbox"]
-
-    # Players come from Docker/Tailscale, not from a PROXY-protocol balancer.
-    [advanced]
-    haproxy-protocol = false
-  '';
 in {
   systemd = {
-    # Match the container's minecraft UID/GID so Paper can read player saves.
     tmpfiles.rules = [
-      "d /srv/containers/minecraft/data 0750 1000 1000 -"
-      "d /srv/containers/velocity 0750 1000 1000 -"
-      "d /srv/containers/velocity/plugins 0750 1000 1000 -"
+      # The Docker-era backups; minecraft-backup still writes its archives here.
       "d /srv/containers/minecraft/backups 0750 root root -"
     ];
 
@@ -132,14 +91,14 @@ in {
         };
       };
 
-      # Stage the pinned panel/map and seed the panel-owned plugins before the
-      # container starts. Runs as root on the host; the container only sees plain
-      # files (a nix-store symlink would not resolve inside it). Ownership rules
-      # and the one-time seed are documented in stage.sh.
+      # Stage the pinned panel/map and seed the panel-owned plugins into the cold Docker data directory.
+      # Ownership rules and the one-time seed are documented in stage.sh.
+      # shortcut: nothing starts this unit any more (the Docker container that required it is gone) and
+      # the nix-minecraft servers do not use it; it stays so the running unit keeps its state on the
+      # deploy that removed the Docker stack. Delete it with stage.sh once the cold copy is gone.
       minecraft-plugins = {
         description = "Stage Minecraft panel, map and one-time plugin seed";
-        before = ["docker-minecraft.service"];
-        requiredBy = ["docker-minecraft.service"];
+        restartIfChanged = false; # dormant: a deploy must not re-run the staging
         environment = {
           STAGE_BLUEMAP = blueMap;
           STAGE_BLUEMAP_VERSION = blueMapVersion;
@@ -197,13 +156,12 @@ in {
         '';
       };
 
-      # RCON password: random, made once on this host (root-only), handed to the
-      # Minecraft container and the dashboard (mcbots-seed) as environment files.
-      # Delete /var/lib/minecraft-rcon/password and restart both to rotate it.
+      # RCON password for the Docker container, made once on this host (root-only). The nix-minecraft
+      # server and mcbots-seed read the sops secret minecraft-rcon-password instead.
+      # shortcut: dormant like minecraft-plugins (no consumer left); delete it with /var/lib/minecraft-rcon.
       minecraft-rcon-seed = {
         description = "Generate the Minecraft RCON password and its environment file";
-        before = ["docker-minecraft.service"];
-        requiredBy = ["docker-minecraft.service"];
+        restartIfChanged = false;
         path = [pkgs.coreutils];
         serviceConfig = {
           Type = "oneshot";
@@ -214,75 +172,6 @@ in {
           install -d -m 0700 /var/lib/minecraft-rcon /run/minecraft-rcon
           [ -s /var/lib/minecraft-rcon/password ] || head -c 32 /dev/urandom | sha256sum | cut -c1-64 > /var/lib/minecraft-rcon/password
           printf 'RCON_PASSWORD=%s\n' "$(cat /var/lib/minecraft-rcon/password)" > /run/minecraft-rcon/rcon.env
-        '';
-      };
-
-      # The tailnet address must exist before Docker can publish on it (now the
-      # proxy's job, see docker-velocity). tailscaled being "started" does not
-      # guarantee the address is assigned yet, so retry indefinitely instead of
-      # giving up after the default start limit.
-      # Restart=always: a Stop from the panel (or a clean exit) brings the server
-      # back; `systemctl stop docker-minecraft` stays the way to keep it down.
-      # preStart re-runs the network unit's ensure script: docker-prune (weekly, and as a
-      # catch-up right at boot after downtime) deletes a network no running container is on,
-      # while the oneshot stays "active" and never re-creates it (2026-10-28 outage).
-      docker-minecraft = {
-        after = ["docker-network-minecraft.service"];
-        requires = ["docker-network-minecraft.service"];
-        preStart = "${config.systemd.services.docker-network-minecraft.serviceConfig.ExecStart}";
-        unitConfig.StartLimitIntervalSec = 0;
-        serviceConfig = {
-          Restart = lib.mkForce "always";
-          RestartSec = "10s";
-        };
-      };
-
-      # The proxy owns the tailnet game port, so it carries the tailscaled
-      # retry pattern above. It starts after Paper (the backend must resolve).
-      docker-velocity = {
-        after = ["tailscaled.service" "docker-network-minecraft.service" "docker-network-mcbots.service" "docker-minecraft.service"];
-        wants = ["tailscaled.service"];
-        requires = ["docker-network-minecraft.service" "docker-network-mcbots.service"];
-        preStart = lib.concatMapStrings (n: "${config.systemd.services.${n}.serviceConfig.ExecStart}\n") ["docker-network-minecraft" "docker-network-mcbots"]; # see docker-minecraft
-        unitConfig.StartLimitIntervalSec = 0;
-        serviceConfig = {
-          Restart = lib.mkForce "always";
-          RestartSec = "10s";
-          SuccessExitStatus = 143; # Velocity exits 143 on docker stop; "failed" here makes lab-update roll the cutover back
-        };
-      };
-
-      # Plugins that resolve Maven libraries at start (Citizens, Jarvis) fail to
-      # load when the container briefly gets "Network is unreachable" right
-      # after start (seen 3 of ~8 starts on 2026-10-08; host shows no network
-      # event, cause not found). One automatic restart recovers it.
-      # ponytail: retry-once workaround; replace once the startup egress fault
-      # is understood.
-      minecraft-plugin-check = {
-        description = "Restart Minecraft once if a plugin failed to load at start";
-        after = ["docker-minecraft.service"];
-        wantedBy = ["docker-minecraft.service"];
-        path = [pkgs.systemd pkgs.coreutils pkgs.gnugrep];
-        serviceConfig = {
-          # simple: never blocks a deploy while it waits for the server.
-          Type = "simple";
-        };
-        script = ''
-          since=$(systemctl show -p ActiveEnterTimestamp --value docker-minecraft.service)
-          log() { journalctl -u docker-minecraft.service --since "$since" --no-pager -o cat; }
-          for _ in $(seq 60); do
-            log | grep -q 'Done (' && break
-            sleep 5
-          done
-          log | grep -q 'Could not load plugin' || exit 0
-          marker=/run/minecraft-plugin-retry
-          if [ -e "$marker" ] && [ $(( $(date +%s) - $(stat -c %Y "$marker") )) -lt 900 ]; then
-            echo "A plugin failed to load again; not retrying within 15 minutes" >&2
-            exit 0
-          fi
-          touch "$marker"
-          echo "A plugin failed to load; restarting Minecraft once" >&2
-          systemctl restart --no-block docker-minecraft.service
         '';
       };
 
@@ -325,11 +214,6 @@ in {
       # snapshot at 04:30.
       minecraft-backup = {
         description = "Consistent Minecraft backup (flush, snapshot, verify, prune)";
-        # The snapshot reads the nix-minecraft server; its default backend is the (stopped) Docker container.
-        environment = {
-          MC_UNIT = "minecraft-server-paper";
-          MC_DATA = "/srv/minecraft/paper";
-        };
         serviceConfig = {
           Type = "oneshot";
           ExecStart = "${scripts.backup}/bin/minecraft-backup";
@@ -354,126 +238,5 @@ in {
   # and Paper (patched into paper-global.yml). Declared here so only bandit-lab
   # decrypts it. The key `minecraft-velocity-secret` must exist in
   # secrets/lab.yaml (docs/runbooks/minecraft/PROXY.md) before this is deployed.
-  sops = {
-    secrets."minecraft-velocity-secret".mode = "0400";
-    templates."minecraft-velocity.env" = {
-      mode = "0400";
-      # Docker reads environment files when a container is created (a manual
-      # start for rollback). No restartUnits: a start job for a Docker game unit
-      # in a switch conflicts with minecraft-cutover and fails the transaction.
-      content = ''
-        VELOCITY_FORWARDING_SECRET=${config.sops.placeholder."minecraft-velocity-secret"}
-        CFG_VELOCITY_SECRET=${config.sops.placeholder."minecraft-velocity-secret"}
-      '';
-    };
-  };
-
-  # Minecraft Java server (Paper) for ~12 players. Hard-capped at 4 CPU cores
-  # and 12 GiB so it can never starve Traefik/PostgreSQL & co. — the lab
-  # (i9-14900HX, 62 GiB) barely notices it. Not proxied through Traefik:
-  # Minecraft is a raw TCP protocol. Paper publishes no game port at all: it is
-  # reachable only from the Velocity proxy over the `minecraft` Docker network
-  # (modern forwarding, shared secret), which is what lets Paper run with
-  # online-mode=false without being joinable by anyone else.
-  # The container has no docker.sock, no privileges and a single mount; its
-  # plugins cannot reach the host.
-  virtualisation.oci-containers.containers.minecraft = {
-    autoStart = false; # rollback only since the phase 5.5 cutover (CUTOVER-5.5.md); removal is phase 5.6
-    # java25 tag: Minecraft 26.1+ refuses to start on anything older.
-    image = "itzg/minecraft-server@sha256:769a826c340586e9d483a0eb6437b8e2c3611aea6a115ff072a2fe372d43e2be"; # java25
-    # itzg rewrites every server.properties key that has an environment
-    # variable here on each start, so only keys Nix must own are listed
-    # (max-players: capacity is sized against the resource cap; ops: admin
-    # identity). Everything else in server.properties belongs to the panel.
-    environment = {
-      EULA = "TRUE";
-      # Paper over vanilla: same gameplay, much better tick performance.
-      TYPE = "PAPER";
-      VERSION = "26.2";
-      # Without a pin itzg downloads the newest Paper build on every start.
-      # Bump deliberately, after a backup (docs/runbooks/minecraft/PANEL.md).
-      PAPER_BUILD = "130";
-      TZ = config.time.timeZone;
-      # 12 GiB heap (Xms = Xmx) + Aikar GC flags = no GC stutter; container
-      # cap below leaves headroom for off-heap/metaspace. Raised from 8/12 GiB for
-      # seven bots beside the players (owner 2026-10-19: 9.7 of 12 GiB used with four).
-      MEMORY = "12G";
-      USE_AIKAR_FLAGS = "true";
-      MAX_PLAYERS = "16";
-      OPS = "fancy8869";
-      # Authentication happens at the proxy (Mojang, or BotGate for bots); the
-      # Velocity forwarding secret is what keeps everyone else out of Paper.
-      ONLINE_MODE = "FALSE";
-      PATCH_DEFINITIONS = "/data/nix-patches";
-      # RCON for the bots dashboard's Server panel (mcbots/app/admin.js): port 25575 is
-      # never published, only containers on the `minecraft` network reach it, and the
-      # password (RCON_PASSWORD) comes from the generated env file below, not from here.
-      CREATE_CONSOLE_IN_PIPE = "true";
-      ENABLE_RCON = "true";
-    };
-    environmentFiles = [
-      config.sops.templates."minecraft-velocity.env".path
-      "/run/minecraft-rcon/rcon.env"
-    ];
-    # The map listens on loopback only; tailscale serve (above) is their
-    # sole network path. The game port is published by the proxy, not here.
-    # Simple Voice Chat (UDP 24454) talks to the client directly: its client
-    # dials the address it joined the game on (the proxy's tailnet address).
-    ports = [
-      "127.0.0.1:${mapPort}:8100"
-      "${repoConfig.lab.tailscaleIp}:24454:24454/udp"
-    ];
-    volumes = ["/srv/containers/minecraft/data:/data"];
-    extraOptions = [
-      "--network=minecraft"
-      "--memory=16g"
-      "--cpus=6"
-      # Room for a full world save on SIGTERM (docker's default is 10 s).
-      "--stop-timeout=60"
-    ];
-  };
-
-  # Velocity 3.5.1 proxy (itzg/mc-proxy, Java 21, TYPE=CUSTOM with the
-  # hash-pinned jar from Nix). Game port bound to the tailnet address (decision
-  # D6, 2026-10-06): Docker-published ports bypass the NixOS firewall, so the
-  # bind address is the only access control; players join over Tailscale.
-  # Runs as uid 1000 (not root) with no privileges and no docker.sock. Mojang
-  # authentication stays on for everyone except bot1..bot99 from BotGate's
-  # allowlisted sources. velocity.toml is re-synced from Nix on every start;
-  # the BotGate jar is mounted directly (the image's /plugins copy only
-  # replaces older files, and Nix store files all carry epoch mtimes).
-  virtualisation.oci-containers.containers.velocity = {
-    autoStart = false; # rollback only, like minecraft above
-    image = "itzg/mc-proxy@sha256:4bc904ca87ce92a1d6dc4948aaca3e026b770a7fe2bcfead0b099412239ba210"; # java21
-    environment = {
-      TYPE = "CUSTOM";
-      CUSTOM_FAMILY = "velocity";
-      BUNGEE_JAR_FILE = "/opt/velocity.jar";
-      SYNC_SKIP_NEWER_IN_DESTINATION = "false";
-      MEMORY = "512M";
-      TZ = config.time.timeZone;
-      BOTGATE_SOURCES = botgateSources;
-      # The image health check pings 25577 unless told the port Velocity binds.
-      SERVER_PORT = "25565";
-    };
-    environmentFiles = [config.sops.templates."minecraft-velocity.env".path];
-    ports = ["${repoConfig.lab.tailscaleIp}:25565:25565"];
-    volumes = [
-      "/srv/containers/velocity:/server"
-      "${velocityToml}:/config/velocity.toml:ro"
-      "${velocityJar}:/opt/velocity.jar:ro"
-      "${botgate}:/server/plugins/botgate.jar:ro"
-      "${veloauthJar}:/server/plugins/veloauth.jar:ro"
-      "${veloauthConfig}:/config/plugins/veloauth/config.yml:ro"
-    ];
-    extraOptions = [
-      "--network=minecraft"
-      # Fixed address: the mcbots container pins `velocity` to it (it is also on
-      # the minecraft network, where BotGate would refuse the source).
-      "--network=name=mcbots,ip=10.250.77.2"
-      "--user=1000:1000"
-      "--memory=1g"
-      "--cpus=1"
-    ];
-  };
+  sops.secrets."minecraft-velocity-secret".mode = "0400";
 }

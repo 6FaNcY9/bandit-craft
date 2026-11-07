@@ -13,7 +13,7 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
   `flake.lock` and the owner deploys (`lab-apply` on the laptop, fingerprint).
 - Modules expect two module arguments from bandit-nix: `repoConfig` (its `lib/repository.nix`: lab
   and laptop tailnet addresses, `mkDockerNetwork`, ports) and `inputs`. Secrets are declared by name
-  (`sops.secrets."mcbots-worker-token"`, `sops.templates."minecraft-velocity.env"`, `<pc>-tunnel-key`)
+  (`sops.secrets."mcbots-worker-token"`, `sops.secrets."minecraft-velocity-secret"`, `<pc>-tunnel-key`)
   and live encrypted in bandit-nix's `secrets/`. Contract checks over the composed lab
   (`lab-minecraft`, `lab-mcbots`, `lab-surface`, `local-privilege`) stay in bandit-nix.
 - The paths kept their bandit-nix layout (`hosts/bandit-lab/services/...`, `tools/...`) so the split
