@@ -226,6 +226,12 @@ Chest and hopper windows with item icons replace the text dialogs as the main su
 - Pointing: `Zeig drauf` (grid) and `Kiste merken` / Wohin close the menu and take the viewer's next staff right click as the answer (60 s,
   `PICK_MS`; actionbar hint; wrong target = flash, pick stays). A plugin restart ends a live pick.
 - Staff right click on a chest → `chestm` (heads of the viewer's bots → `setchest`).
+- Part 2a (2026-11-07): bot page crafting table Herstellen… (`craftm`, a chest look-alike: the 3×3 recipe, missing ingredients as grey
+  panes, result click = 1 batch, shift = all; `craft` when the inventory covers it, else `get`), furnace Schmelzen… (`smeltm`, a real
+  `MenuType.FURNACE` view: input, fuel, output preview; output click = 8, shift = all; `smelt` with input and fuel, else `get` of the
+  result), chest minecart Holen… (`gridm` mode `get`: click = 16, shift = 64, for the page's bot). Sneak + staff right click on a crafting
+  table or a furnace/blast furnace/smoker opens `craftm` / `smeltm`; a plain right click still uses the block. Recipe-book clicks on our
+  views are cancelled (Paper `PlayerRecipeBookClickEvent`).
 - Menu items cannot be taken; the viewer is the Bukkit player, orders pass the same `VALIDATE`/`resolveBots` checks as before.
 
 ## Phone notifications

@@ -13,3 +13,5 @@ Tried 2026-11-06 on the botui stand (Paper 26.2) with `MenuType.X.builder().titl
   from the real player inventory into the grid, which a click handler does not see. Untested; avoid CRAFTING, FURNACE has the same
   recipe book on the client but its placement also goes through a server request, so verify with a real client before relying on it.
 - Holder: all three are plain `InventoryView`s, not `MenuHolder`s, so a menu check must key on the view or a tracked set.
+
+- Shipped 2026-11-07 (part 2a): FURNACE as `/menu` type `furnace`, open menus tracked per player; recipe-book clicks on our views cancelled via Paper `PlayerRecipeBookClickEvent` (in-game check still open).

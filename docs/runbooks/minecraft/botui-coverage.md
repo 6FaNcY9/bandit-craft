@@ -23,6 +23,8 @@ Dialogs stay for number input, text, confirmations and everything marked "still 
 - `mine`, `shift`, `shiftlogs`: covered by the hopper window `shiftm` with grid `gridm` and point-to-pick; staff on a minable block opens it pre-filled.
 - `setchest`: covered by `botm` "Kiste merken" (point at a chest) and `chestm` (staff on a chest).
 - `schematic`: `botm` "Bauen…" opens the old job dialog (still a dialog).
-- `goto`, `tidy`, `stock`, `withdraw`, `get`, `craft`, `smelt`, `hunt`, `wheatfarm`, `rearm`, `homebed`, `graves`, `help`, `produce`,
+- `get`, `craft`, `smelt`: covered by `botm` Holen… (`gridm` mode get), Herstellen… (`craftm`) and Schmelzen… (`smeltm`); staff (sneak) on a
+  crafting table or furnace opens the window.
+- `goto`, `tidy`, `stock`, `withdraw`, `hunt`, `wheatfarm`, `rearm`, `homebed`, `graves`, `help`, `produce`,
   `lightspawner`: still a dialog (staff right click on a block/entity, or "Alle Befehle (alt)").
 - `excavate`, `clear`, `shaft`, `light`, `seal` (area jobs from two corners): still a dialog.
