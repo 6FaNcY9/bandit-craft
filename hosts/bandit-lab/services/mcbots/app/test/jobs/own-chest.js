@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 // The bot's own chest: `lagern`, the keep list, and a full inventory depositing there instead of tossing junk.
 module.exports = async () => {
-  const {JOBS, VALIDATE, upkeep} = require('../../bots');
+  const {JOBS, VALIDATE, upkeep, chestAway} = require('../../bots');
   const {Vec3} = require('vec3');
   const FOODS = {bread: {}};
   // chests: 'x,y,z' -> {name, room (free item count), items}; the bot starts at 0,64,0 and the walk log records every goto.
@@ -71,6 +71,14 @@ module.exports = async () => {
   x = rig({carried, chests: here, prefs: {chest, keep: {dirt: 10}}});
   await JOBS.deposit(x.r, job('deposit', chest));
   assert.equal(x.left().dirt, 10);
+
+  // a chest with no way to it is remembered (as withdraw does), so the idle shift does not gather for it again
+  x = rig({carried, chests: here, prefs: {chest, keep: {}}});
+  x.r.bot.pathfinder.goto = async () => { throw new Error('No path'); };
+  await assert.rejects(JOBS.deposit(x.r, job('deposit', {own: true})), /could not reach 3 64 0/);
+  assert.ok(chestAway(x.r, chest), 'remembered');
+  assert.ok(!chestAway(x.r, {x: 4, y: 64, z: 0}), 'a new chest is tried at once');
+  assert.ok(!chestAway(x.r, chest, Date.now() + 30 * 60000), 'tried again after 30 min');
 
   // no own chest
   x = rig({carried, chests: here, prefs: {chest: null, keep: {}}});

@@ -53,6 +53,8 @@
     assert.deepEqual(resolveIdle(own, {chest: c1, guest: true, supplyChest: sup}).chest, c1);
     assert.deepEqual(resolveIdle(own, {guest: false, supplyChest: sup}).chest, sup);
     assert.throws(() => resolveIdle(own, {guest: true, supplyChest: sup}), /^Error: no chest$/);
+    assert.throws(() => resolveIdle(own, {chest: c1, away: (c) => c.x === 1}), /^Error: chest unreachable$/);
+    assert.deepEqual(resolveIdle(own, {chest: c1, away: () => false}).chest, c1);
     assert.deepEqual(resolveIdle(choiceOf('baumfarm'), {treefarmZone: box}).zone, box);
     assert.throws(() => resolveIdle(choiceOf('baumfarm'), {}), /Baumfarm/);
     assert.deepEqual(resolveIdle(choiceOf('wache'), {mark: c1}), {where: 'mark', radius: 16, at: c1});

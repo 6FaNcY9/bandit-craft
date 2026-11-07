@@ -40,13 +40,14 @@ class IdleStore {
 
 const NO_CHEST = 'no chest';
 // choice -> the values its botui-jobs entry needs; throws a short refusal when a spot is missing.
-// ctx: chest (the bot's own pref), guest, supplyChest, treefarmZone (a box), mark.
-function resolveIdle(choice, {chest, guest, supplyChest, treefarmZone, mark}) {
+// ctx: chest (the bot's own pref), away (chest -> bool: no way to it lately), guest, supplyChest, treefarmZone (a box), mark.
+function resolveIdle(choice, {chest, guest, supplyChest, treefarmZone, mark, away}) {
   const d = choice.data, v = {...d}, pt = (p) => ({x: p.x, y: p.y, z: p.z});
   if (d.chest === 'own') {
     v.chest = chest || (guest ? null : supplyChest);
     if (!v.chest) throw new Error(NO_CHEST);
     v.chest = pt(v.chest);
+    if (away?.(v.chest)) throw new Error('chest unreachable'); // deposits there failed lately: no gathering for it
   }
   if (d.zone === 'first') {
     if (!treefarmZone) throw new Error('keine Baumfarm-Zone');

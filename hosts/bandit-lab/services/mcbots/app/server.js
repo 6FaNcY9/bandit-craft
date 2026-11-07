@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {WebSocketServer} = require('ws');
 const {loadConfig} = require('./config');
-const {RESUME_WINDOW_MS, BotRunner, keptOf, VALIDATE, projectMaterials, SCHEMATIC_DIR} = require('./bots');
+const {RESUME_WINDOW_MS, BotRunner, keptOf, VALIDATE, projectMaterials, SCHEMATIC_DIR, chestAway} = require('./bots');
 const buildLib = require('./build');
 const schematicLib = require('./schematic');
 const {WorldModel, startBlueMap} = require('./world');
@@ -287,7 +287,7 @@ function ground(viewer, bot, type, args) {
 function idleJob(bot, choice) {
   const guest = cfg.guestBots.includes(bot); // a guest's farm is one on its own ground
   const r = runners.get(bot), zone = places.list.find((p) => p.kind === 'treefarm' && p.box && !(guest && misa.groundRule(cfg.protectedAreas, bot, 'treefarm', p.box)));
-  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest, guest, supplyChest, treefarmZone: zone?.box, mark: choice.mark});
+  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest, guest, supplyChest, treefarmZone: zone?.box, mark: choice.mark, away: (c) => chestAway(r, c)});
   return {type: ORDER_JOBS[choice.key].type, args: ORDER_JOBS[choice.key].args(v, {})};
 }
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.

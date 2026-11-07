@@ -42,6 +42,7 @@ const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
 const WATCH_MS = 5000, STILL_MS = 30000;
 const UNREACHABLE_CHEST_MS = 30 * 60000;
+const chestAway = (r, c, now = Date.now()) => now - (r.unreachableChests?.get(`${c.x},${c.y},${c.z}`) ?? -Infinity) < UNREACHABLE_CHEST_MS;
 const CHAT_TYPES = new Set(['chat.type.text', '<%s> %s']);
 const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers to you: %s']);
 const BACKOFF_START = 5000;
@@ -3515,7 +3516,7 @@ const JOBS = {
     if (own && !r.prefs?.chest) throw new Error('keine Kiste zugewiesen');
     const target = own ? r.prefs.chest : job.args; // not written into job.args: the job may be shown or resumed
     const {x, y, z} = target;
-    await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, target)} to deposit`});
+    await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, target)} to deposit`}).catch((e) => { if (own && /^could not reach/.test(e.message)) (r.unreachableChests ||= new Map()).set(layout.keyOf(target), Date.now()); throw e; });
     job.t.doing = `depositing at ${place(r, target)}`;
     const Vec3 = require('vec3').Vec3;
     const block = bot.blockAt(new Vec3(x, y, z));
@@ -4191,4 +4192,4 @@ const JOBS = {
   },
 };
 
-module.exports = {RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList};
+module.exports = {RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, WIDER, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, TOOL_RE, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
