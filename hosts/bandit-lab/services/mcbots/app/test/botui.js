@@ -545,7 +545,7 @@ async function fake() {
     assert.equal(submits.at(-1).type, 'get'); assert.equal(submits.at(-1).args.item, 'stone_pickaxe');
     const n = submits.length;
     await ev('Midari', {a: 'craftm', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
-    await ev('Midari', {a: 'craftgo', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
+    await ev('Midari', {a: 'craftgo', bot: 'bot1'}); assert.equal(flash('Midari'), 'Erst ein Item wählen'); assert.equal(submits.length, n);
     await ev('Midari', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Midari'), 'Fehler: unbekanntes Item');
     await ev('Midari', {a: 'craftm'}); assert.equal(ui.state('Midari').make.bot, 'MisaBot');
     await ev('Midari', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}); await ev('Midari', {a: 'pickitem', item: 'bucket'}); await ev('Midari', {a: 'craftgo'});
@@ -576,7 +576,7 @@ async function fake() {
     await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'}); await ev('Fancy', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Fancy'), 'Fehler: unbekanntes Item');
     const n = submits.length;
     await ev('Midari', {a: 'smeltm', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
-    await ev('Midari', {a: 'smeltgo', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
+    await ev('Midari', {a: 'smeltgo', bot: 'bot1'}); assert.equal(flash('Midari'), 'Erst Schmelzgut wählen');
     await ev('Midari', {a: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'}); await ev('Midari', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Midari'), 'Fehler: unbekanntes Item');
     await ev('Midari', {a: 'pickitem', item: 'bread'}); assert.equal(submits.length, n + 1); assert.equal(submits.at(-1).bots[0], 'MisaBot');
     const {smeltOrder} = require('../botui'), inv = ['raw_iron x20', 'coal x3'];

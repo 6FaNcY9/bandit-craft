@@ -165,14 +165,16 @@ const ACTIONS = {
     st.screen = {name: 'smeltm'};
   },
   craftgo: (st, data, ui, viewer) => {
-    const make = st.make, bot = oneBot(ui, viewer, {bot: make?.bot});
+    const make = st.make;
     if (make?.kind !== 'craft' || !make.item) return ui.flash(st, 'Erst ein Item wählen');
+    const bot = oneBot(ui, viewer, {bot: make.bot});
     const o = craftOrder(make, ui.api.snapshots().find((s) => s.name === bot) || {}, !!data.shift);
     order(st, ui, viewer, bot, o.key, o);
   },
   smeltgo: (st, data, ui, viewer) => {
-    const make = st.make, bot = oneBot(ui, viewer, {bot: make?.bot});
+    const make = st.make;
     if (make?.kind !== 'smelt' || !menus.SMELT_RESULT[make.item]) return ui.flash(st, 'Erst Schmelzgut wählen');
+    const bot = oneBot(ui, viewer, {bot: make.bot});
     const o = smeltOrder(make, ui.api.snapshots().find((s) => s.name === bot) || {}, !!data.shift);
     order(st, ui, viewer, bot, o.key, o);
   },

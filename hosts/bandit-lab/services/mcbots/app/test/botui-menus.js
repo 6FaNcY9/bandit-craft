@@ -122,6 +122,9 @@ assert.ok(MENUS.has('ov'));
 { // recipe helper
   const {recipeGrid} = require('../recipes');
   assert.deepEqual(recipeGrid('stone_pickaxe').cells, ['cobblestone', 'cobblestone', 'cobblestone', null, 'stick', null, null, 'stick', null]);
+  // oak planks and coal, not the cherry planks and charcoal minecraft-data lists first
+  assert.equal(recipeGrid('stick').cells.find(Boolean), 'oak_planks'); assert.ok(recipeGrid('torch').cells.includes('coal'));
+  assert.deepEqual(require('../botui').craftOrder({item: 'stick'}, {inventory: ['oak_planks x64']}, true).key, 'craft');
   assert.equal(recipeGrid('stone_pickaxe').per, 1); assert.equal(recipeGrid('oak_planks').per, 4); assert.equal(recipeGrid('bedrock'), null);
 }
 { // crafting look-alike: grey pane for a missing ingredient, result count and lore from the snapshot inventory

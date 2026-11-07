@@ -144,11 +144,11 @@ function rawUnknown(items, {version = '26.1', have = {}} = {}) {
   return out;
 }
 
-// The first recipe of an item (skipping the deepslate/blackstone tool variants, which minecraft-data lists first) as 9 crafting cells (item name or null): shaped ones keep their top-left anchored position,
+// The first recipe of an item (skipping the deepslate/blackstone, non-oak plank and charcoal variants, which minecraft-data lists first) as 9 crafting cells (item name or null): shaped ones keep their top-left anchored position,
 // shapeless ones fill from cell 0. `per` is the result count of one batch. null when the item has no recipe.
 function recipeGrid(item, version = '26.1') {
   const data = mcData(version), id = data.itemsByName[item]?.id, all = (id != null && data.recipes[id]) || [];
-  const r = all.find((x) => !cells(x).some((i) => /^(cobbled_deepslate|blackstone)$/.test(data.items[i].name))) || all[0];
+  const r = all.find((x) => !cells(x).some((i) => /^(cobbled_deepslate|blackstone|charcoal|(?!oak_)[a-z_]+_planks)$/.test(data.items[i].name))) || all[0];
   if (!r) return null;
   const name = (i) => (i == null ? null : data.items[i].name), out = Array(9).fill(null);
   if (r.inShape) r.inShape.forEach((row, y) => row.forEach((i, x) => { out[y * 3 + x] = name(i); }));
