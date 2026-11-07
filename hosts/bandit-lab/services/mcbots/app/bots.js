@@ -35,7 +35,7 @@ const sealJob = require('./seal');
 const owner = require('./owner');
 const {loadPrefs, savePrefs} = require('./prefs');
 const misa = require('./misa');
-const {aliveStep, safeCell, shore} = require('./alive');
+const {aliveStep, safeCell, shore, wet} = require('./alive');
 
 const NAME_RE = /^(bot[0-9]{1,2}|MisaBot|EM_Trader)$/; // BotGate's pattern (Velocity plugin), case as written in both
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
@@ -629,12 +629,15 @@ class BotRunner {
           const p = bot.entity.position;
           // Left idle in water it sinks, surfaces for air and sinks again for ever: MisaBot bobbed at 262 61 -10 for
           // an hour (2026-11-07). After 5 s it walks out onto the nearest dry cell, a search every 15 s at most.
-          if (bot.blockAt(p.floored())?.name !== 'water') wetSince = 0;
+          // Wet as the air check counts it: at 262 61 -10 the feet stood in an ocean floor's plants, never "water" (2026-11-07).
+          if (!wet(bot.blockAt(p.floored()))) wetSince = 0;
           else if (!wetSince) wetSince = Date.now();
           else if (Date.now() - wetSince > 5000) {
             busyUntil = Date.now() + 15000;
-            const land = shore(bot);
-            if (land) bot.pathfinder.goto(new goals.GoalBlock(land.position.x, land.position.y + 1, land.position.z)).catch(() => {});
+            const land = shore(bot), at = `${Math.floor(p.x)} ${Math.floor(p.y)} ${Math.floor(p.z)}`;
+            if (!land) return void this.log(this.name, `idle in water at ${at}: no dry land within 32`);
+            this.log(this.name, `idle in water at ${at}: walking out to ${land.position.x} ${land.position.y + 1} ${land.position.z}`);
+            bot.pathfinder.goto(new goals.GoalBlock(land.position.x, land.position.y + 1, land.position.z)).catch((e) => this.log(this.name, `could not leave the water: ${e.message}`));
             return;
           }
           const players = Object.values(bot.players).filter((q) => q.username !== bot.username && q.entity).map((q) => ({name: q.username, uuid: q.uuid, ...q.entity.position})); // other bots are not told apart

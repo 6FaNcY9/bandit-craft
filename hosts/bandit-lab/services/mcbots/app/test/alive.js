@@ -38,4 +38,10 @@ assert.equal(safeCell(stone, air, null), false);
     findBlock: ({matching, useExtraInfo}) => cells.map((v) => bot.blockAt(v)).find((b) => matching(b) && useExtraInfo(b)) || null};
   assert.deepEqual(shore(bot).position, new Vec3(3, 62, 0));
 }
+{ // wet: an ocean floor's plants and a waterlogged block count, dry ground does not
+  const {wet} = require('../alive');
+  for (const name of ['water', 'seagrass', 'tall_seagrass', 'kelp_plant', 'bubble_column']) assert.equal(wet({name}), true, name);
+  assert.equal(wet({name: 'oak_stairs', getProperties: () => ({waterlogged: true})}), true);
+  assert.equal(wet({name: 'grass_block'}), false); assert.equal(wet(null), false);
+}
 console.log('alive ok');

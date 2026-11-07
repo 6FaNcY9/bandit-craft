@@ -4,6 +4,7 @@
 // pathfinder (retreat / creeper back-off); `epoch` then changes so the running
 // job knows to re-issue its goal, and `busy` makes jobs wait until calm.
 const {goals} = require('mineflayer-pathfinder');
+const {wet: isWet} = require('./alive');
 const {mobLocation, isHostile, shouldFight, normDim, insideAreas, NOTABLE_BLOCKS} = require('./world');
 const {CONTAINER} = require('./build');
 const {DEFAULTS} = require('./settings');
@@ -265,7 +266,7 @@ class Combat {
     // grave (main server 2026-10-17). Nothing in the bots watched the air.
     // Only with its head in water, and its own air (bots.js ownAir): mineflayer's oxygenLevel is any entity's.
     const eye = bot.blockAt?.(bot.entity.position.offset(0, 1.62, 0));
-    const wet = /^(water|bubble_column|kelp|kelp_plant|seagrass|tall_seagrass)$/.test(eye?.name || '') || eye?.getProperties?.().waterlogged === true;
+    const wet = isWet(eye);
     const air = wet ? bot.ownAir ?? bot.oxygenLevel ?? 20 : 20;
     // Done by its own air, not by the first breath: else a job takes it back under with next to none left.
     if (this.mode === 'air' && (wet ? air : bot.ownAir ?? 20) >= 18) this.release();
