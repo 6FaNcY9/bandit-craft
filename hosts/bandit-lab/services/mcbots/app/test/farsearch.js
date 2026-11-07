@@ -57,6 +57,13 @@ const first = (async () => {
     const r2 = mk();
     await assert.rejects(JOBS.get(r2, job()));
     assert.ok(r2.acquireFailed.size > 0 && learned.some(([, v]) => v.ok === false), 'a real failure is still learned');
+    // Blocks it could not walk to: this bot tries another way, the fleet does not learn the way as failed
+    learned.length = 0;
+    JOBS.mine = async () => { throw new Error('could not reach -25 63 -78: no progress for 30 s'); };
+    const r3 = mk();
+    await assert.rejects(JOBS.get(r3, job()));
+    assert.ok(r3.acquireFailed.size > 0, 'this bot tries another way');
+    assert.ok(!learned.some(([k, v]) => k.startsWith('mine:') && v.ok === false), 'no fleet-wide way failure');
   } finally { JOBS.mine = old; }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
 

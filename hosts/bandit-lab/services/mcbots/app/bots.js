@@ -3149,7 +3149,9 @@ async function getItem(r, job) {
       // Nothing free in reach (and, now, far) is no failure of the way: learning it would drop the way fleet-wide and the
       // retry would end at once with "no way to get" (Misa's spruce_log, 2026-11-06). The far text reaches the order.
       if (step.via === 'mine' && /^no free .* within/.test(e.message)) throw e;
-      try { r.world?.learn?.(step.key, {ok: false, secs: (Date.now() - started) / 1000}); } catch {}
+      // Blocks it could not walk to are the spots' failure (learned as reach:), not the way's: 18 of MisaBot's walks
+      // blocked mine:coal_ore and deepslate_coal_ore for every bot for a day (2026-11-07). This bot still tries another way.
+      if (!(step.via === 'mine' && /^could not reach/.test(e.message))) try { r.world?.learn?.(step.key, {ok: false, secs: (Date.now() - started) / 1000}); } catch {}
       const fails = (job.fails ||= new Map()).set(step.key, (job.fails.get(step.key) || 0) + 1).get(step.key);
       const out = !/^(craft|smelt):/.test(step.key) || fails >= 2;
       if (out) r.acquireFailed.set(step.key, Date.now() + ACQUIRE_FAIL_MS);
