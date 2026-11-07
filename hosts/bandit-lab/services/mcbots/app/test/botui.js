@@ -510,9 +510,16 @@ async function fake() {
     await ev('Fancy', {a: 'botm', bot: 'bot2'});
     await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'bot2'}); ui.state('Fancy').lastBot = 'bot1';
     await ev('Fancy', {a: 'pickitem', item: 'stone_pickaxe'}); assert.equal(submits.at(-1).bots[0], 'bot2');
+    // a tab click and Zurück keep the page's bot
+    await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'bot2'}); ui.state('Fancy').lastBot = 'bot1';
+    const tabs = last().slots.filter((s) => s.payload?.a === 'gridm');
+    assert.ok(tabs.length && tabs.every((s) => s.payload.bot === 'bot2'));
+    assert.equal(last().slots.find((s) => s.slot === 53).payload.bot, 'bot2');
+    await ev('Fancy', tabs.find((s) => s.payload.tab === 'essen').payload);
+    await ev('Fancy', {a: 'pickitem', item: 'bread'}); assert.equal(submits.at(-1).bots[0], 'bot2');
     const n = submits.length;
     await ev('Midari', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
-    await ev('Midari', {a: 'pickitem', item: 'stone_pickaxe'}); assert.ok(submits.slice(n).every((j) => j.bots[0] === 'MisaBot'));
+    await ev('Midari', {a: 'pickitem', item: 'stone_pickaxe'}); assert.equal(submits.length, n); // the refused grid never opened: nothing goes out
     end();
   }
   { // Herstellen: craftm / pickitem / craftgo route to craft or get, guests only their bots
