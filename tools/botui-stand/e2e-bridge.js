@@ -165,7 +165,6 @@ function sampleDialog(size) {
   // menus: a chest and a hopper of display items; every click and drag is cancelled, only slots with a payload report
   const menuBody = (o) => ({player: 'Viewer', type: 'chest', title: 'Test', slots: [{slot: 4, item: 'iron_ore', name: 'Eisen', lore: ['a', 'b'], payload: {a: 'x', n: 1}}], ...o});
   const mpost = async (o) => (await post('/menu', menuBody(o))).json();
-  assert.equal((await post('/menu', menuBody({type: 'furnace'}))).status, 400);
   assert.equal((await post('/menu', menuBody({slots: [{slot: 27, item: 'stone', name: 'x', payload: {}}]}))).status, 400);
   assert.equal((await post('/menu', menuBody({player: 'Nobody'}))).status, 400);
   assert.equal((await mpost({})).ok, true);
@@ -224,6 +223,38 @@ function sampleDialog(size) {
   await waitFor(() => c.win.items.length === 5 + 36 && nameAt(c, 4) === 'stone');
   c.closeWindow(c.win.id);
   await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+  // furnace: a real FURNACE view, slots 0 input / 1 fuel / 2 output; nothing moves, only payload clicks report
+  const fslots = (n) => [{slot: 0, item: 'raw_iron', name: 'Roheisen', payload: {a: 'in'}}, {slot: 1, item: 'coal', name: 'Kohle', payload: {a: 'fuel'}}, {slot: 2, item: 'iron_ingot', name: 'Eisenbarren', count: n, payload: {a: 'out'}}];
+  assert.equal((await post('/menu', menuBody({type: 'furnace', slots: [{slot: 3, item: 'stone', name: 'x', payload: {}}]}))).status, 400);
+  assert.equal((await mpost({type: 'furnace', title: 'Ofen', slots: fslots(8)})).ok, true);
+  await waitFor(() => c.win.type === 14 && // menu type id 14 = furnace
+     nameAt(c, 2) === 'iron_ingot');
+  assert.equal(c.win.items.length, 3 + 36);
+  const finv = JSON.stringify(c.inv);
+  c.clickWindow(2, 0, 0);
+  assert.deepEqual((await waitEvent((e) => e.type === 'click' && e.player === 'Viewer')).data, {a: 'out', shift: false});
+  c.clickWindow(2, 0, 1);
+  assert.deepEqual((await waitEvent((e) => e.type === 'click' && e.player === 'Viewer')).data, {a: 'out', shift: true});
+  c.clickWindow(0, 0, 2); // number key onto the input
+  c.clickWindow(1, 0, 5); // drag over the fuel
+  c.clickWindow(30, 0, 1); // shift-click the player's own hotbar slot 0
+  await assertNoEvent((e) => e.type === 'click' || e.type === 'closed', 1500);
+  assert.equal(JSON.stringify(c.inv), finv);
+  const fw = c.windows.length;
+  assert.equal((await mpost({type: 'furnace', title: 'Ofen', slots: fslots(16)})).ok, true);
+  await waitFor(() => c.win.items[2] && c.win.items[2].itemCount === 16);
+  assert.equal(c.windows.length, fw);
+  await assertNoEvent((e) => e.type === 'closed', 500);
+  // a chest replaces the furnace without a close; the client close is one closed, and a refresh is refused
+  assert.equal((await mpost({})).ok, true);
+  await waitFor(() => c.win.items.length === 27 + 36 && nameAt(c, 4) === 'iron_ore');
+  await assertNoEvent((e) => e.type === 'closed', 1000);
+  assert.equal((await mpost({type: 'furnace', title: 'Ofen', slots: fslots(8)})).ok, true);
+  await waitFor(() => c.win.items.length === 3 + 36);
+  c.closeWindow(c.win.id);
+  await waitEvent((e) => e.type === 'closed' && e.player === 'Viewer');
+  await assertNoEvent((e) => e.type === 'closed', 500);
+  assert.deepEqual(await mpost({type: 'furnace', title: 'Ofen', slots: fslots(8), refresh: true}), {ok: false, feedback: 'closed'});
   // /close takes an open menu away too, quietly (no closed event: the hub asked for it)
   assert.equal((await mpost({})).ok, true);
   await waitFor(() => c.win.id !== 0 && nameAt(c, 4) === 'iron_ore');

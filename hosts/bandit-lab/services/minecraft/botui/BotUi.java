@@ -2,6 +2,7 @@ package botui;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.destroystokyo.paper.event.player.PlayerRecipeBookClickEvent;
 import io.papermc.paper.connection.PlayerGameConnection;
 import io.papermc.paper.event.player.PlayerCustomClickEvent;
 import java.io.IOException;
@@ -65,11 +66,14 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.MenuType;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.inventory.view.FurnaceView;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.RayTraceResult;
@@ -333,12 +337,20 @@ public class BotUi extends JavaPlugin implements Listener {
   private final Map<UUID, JSONObject> pending = new ConcurrentHashMap<>(); // a menu waiting for the next tick behind a cleared dialog
   private final Set<UUID> switching = ConcurrentHashMap.newKeySet(); // menus the plugin closes itself: no "closed" event
 
-  private static MenuHolder menuOf(Player p) {
-    return p.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder h ? h : null;
+  private final Map<UUID, MenuHolder> menus = new ConcurrentHashMap<>(); // the menu each player has open: a furnace view has no holder to mark it
+
+  private MenuHolder menuOf(Player p) {
+    return menuOf(p.getOpenInventory());
+  }
+
+  private MenuHolder menuOf(InventoryView v) {
+    MenuHolder h = menus.get(v.getPlayer().getUniqueId());
+    return h != null && h.inv == v.getTopInventory() ? h : null;
   }
 
   private boolean closeMenu(Player p) {
     if (menuOf(p) == null) return false;
+    menus.remove(p.getUniqueId());
     switching.add(p.getUniqueId());
     try {
       p.closeInventory();
@@ -389,13 +401,14 @@ public class BotUi extends JavaPlugin implements Listener {
   /** Validated /menu body: update the open menu in place, or open a new one (replacing another menu is a switch, no "closed"). */
   private void applyMenu(Player p, JSONObject b) {
     String type = str(b, "type"), title = str(b, "title");
-    boolean hopper = "hopper".equals(type);
-    int rows = hopper ? 1 : b.get("rows") == null ? 3 : ((Number) b.get("rows")).intValue();
+    boolean hopper = "hopper".equals(type), furnace = "furnace".equals(type);
+    int rows = hopper ? 1 : furnace ? 0 : b.get("rows") == null ? 3 : ((Number) b.get("rows")).intValue();
     int size = hopper ? 5 : rows * 9;
     MenuHolder cur = menuOf(p);
     boolean same = cur != null && cur.type.equals(type) && cur.rows == rows && cur.title.equals(title);
     MenuHolder h = same ? cur : new MenuHolder(type, rows, title);
-    Inventory inv = same ? cur.inv : hopper ? Bukkit.createInventory(h, InventoryType.HOPPER, Component.text(title)) : Bukkit.createInventory(h, size, Component.text(title));
+    FurnaceView fv = furnace && !same ? MenuType.FURNACE.builder().title(Component.text(title)).build(p) : null;
+    Inventory inv = same ? cur.inv : furnace ? fv.getTopInventory() : hopper ? Bukkit.createInventory(h, InventoryType.HOPPER, Component.text(title)) : Bukkit.createInventory(h, size, Component.text(title));
     h.inv = inv;
     inv.clear();
     Map<Integer, JSONObject> payloads = new HashMap<>();
@@ -407,9 +420,11 @@ public class BotUi extends JavaPlugin implements Listener {
     }
     h.payloads = payloads;
     if (same) return;
+    menus.put(p.getUniqueId(), h);
     switching.add(p.getUniqueId());
     try {
-      p.openInventory(inv);
+      if (fv != null) p.openInventory(fv);
+      else p.openInventory(inv);
     } finally {
       switching.remove(p.getUniqueId());
     }
@@ -417,10 +432,10 @@ public class BotUi extends JavaPlugin implements Listener {
 
   private void menu(HttpExchange x, JSONObject b) throws Exception {
     String name = str(b, "player"), type = str(b, "type"), title = str(b, "title");
-    boolean hopper = "hopper".equals(type);
-    int rows = hopper ? 1 : b.get("rows") == null ? 3 : whole(b.get("rows"), 1, 6) ? ((Number) b.get("rows")).intValue() : 0;
-    int size = hopper ? 5 : rows * 9;
-    boolean good = name != null && NAME.matcher(name).matches() && (hopper || "chest".equals(type)) && rows > 0 && textOk(title, 128) && b.get("slots") instanceof JSONArray;
+    boolean hopper = "hopper".equals(type), furnace = "furnace".equals(type);
+    int rows = hopper ? 1 : furnace ? 3 : b.get("rows") == null ? 3 : whole(b.get("rows"), 1, 6) ? ((Number) b.get("rows")).intValue() : 0;
+    int size = hopper ? 5 : furnace ? 3 : rows * 9;
+    boolean good = name != null && NAME.matcher(name).matches() && (hopper || furnace || "chest".equals(type)) && rows > 0 && textOk(title, 128) && b.get("slots") instanceof JSONArray;
     if (good) {
       for (Object o : (JSONArray) b.get("slots")) {
         good = o instanceof JSONObject s && whole(s.get("slot"), 0, size - 1) && textOk(s.get("item"), 64) && textOk(s.get("name"), 256)
@@ -479,7 +494,8 @@ public class BotUi extends JavaPlugin implements Listener {
   // A menu shows display items: nothing may ever move, in either half of the view. Handled even when another plugin cancelled first.
   @EventHandler(priority = EventPriority.HIGHEST)
   public void onMenuClick(InventoryClickEvent e) {
-    if (!(e.getView().getTopInventory().getHolder(false) instanceof MenuHolder h)) return;
+    MenuHolder h = menuOf(e.getView());
+    if (h == null) return;
     e.setCancelled(true);
     ClickType t = e.getClick();
     if (e.getClickedInventory() != e.getView().getTopInventory()) return;
@@ -493,17 +509,24 @@ public class BotUi extends JavaPlugin implements Listener {
 
   @EventHandler(priority = EventPriority.HIGHEST)
   public void onMenuCreative(InventoryCreativeEvent e) {
-    if (e.getView().getTopInventory().getHolder(false) instanceof MenuHolder) e.setCancelled(true);
+    if (menuOf(e.getView()) != null) e.setCancelled(true);
   }
 
   @EventHandler(priority = EventPriority.HIGHEST)
   public void onMenuDrag(InventoryDragEvent e) {
-    if (e.getView().getTopInventory().getHolder(false) instanceof MenuHolder) e.setCancelled(true);
+    if (menuOf(e.getView()) != null) e.setCancelled(true);
+  }
+
+  @EventHandler(priority = EventPriority.HIGHEST)
+  public void onRecipeBook(PlayerRecipeBookClickEvent e) {
+    if (menuOf(e.getPlayer()) != null) e.setCancelled(true);
   }
 
   @EventHandler(priority = EventPriority.MONITOR)
   public void onMenuClose(InventoryCloseEvent e) {
-    if (!(e.getInventory().getHolder() instanceof MenuHolder) || !(e.getPlayer() instanceof Player p)) return;
+    MenuHolder h = menuOf(e.getView());
+    if (h == null || !(e.getPlayer() instanceof Player p)) return;
+    menus.remove(p.getUniqueId(), h);
     if (switching.contains(p.getUniqueId()) || e.getReason() == InventoryCloseEvent.Reason.DISCONNECT) return; // OPEN_NEW from anything but our own switch is another plugin's
     emit("closed", p, null);
   }
