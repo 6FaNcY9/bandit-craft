@@ -154,7 +154,7 @@ const ACTIONS = {
   pickitem: (st, data, ui, viewer) => {
     const mode = st.screen.name === 'gridm' && st.screen.mode;
     if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
-    const bot = botOf(st, ui, viewer, st.make?.bot);
+    const bot = botOf(st, ui, viewer, mode === 'get' ? st.screen.bot ?? st.make?.bot : st.make?.bot); // Holen from the bot page carries its bot on the grid
     if (mode === 'get') return order(st, ui, viewer, bot, 'get', {item: data.item, n: data.shift ? 64 : 16});
     st.make = {kind: mode, bot, item: data.item};
     st.screen = {name: mode === 'craft' ? 'craftm' : 'smeltm'};
@@ -455,6 +455,7 @@ class BotUi {
       if (st.pick && st.pick.until < this.now()) st.pick = null; // expired: dropped, this open is handled normally
       if (st.pick) { if (!await this.consumePick(st, viewer, g)) return; }
       else if (mineBot) st.screen = {name: 'botm', bot: who};
+      else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm'};
       // a set corner A keeps the next open on the area steps
       else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(g.block)) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }

@@ -39,7 +39,7 @@ const snapOf = (view, name) => view.snaps.find((s) => s.name === name) || {name,
 const back = (i, a, bot) => slot(i, 'arrow', 'Zurück', {a, ...(bot ? {bot} : {})});
 
 // The running job type -> the slot that started it (Abbauen and Bauen have no badge slot to light up here).
-const GLINT = {follow: 'lead', goto: 'ender_pearl', guard: 'iron_sword', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling'};
+const GLINT = {follow: 'lead', goto: 'ender_pearl', guard: 'iron_sword', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart'};
 
 // One bot, 3 rows: head with its state, orders, then Wenn frei / Inventar / Zurück.
 function botPage(view, screen) {
@@ -52,8 +52,10 @@ function botPage(view, screen) {
     slot(0, 'player_head', bot, {a: 'botm', bot}, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
     go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'), go(4, 'iron_sword', 'Bewach diesen Ort', 'guardhere'),
     go(5, 'chest', 'Einlagern', 'deposit'), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
-    go(12, 'iron_axe', 'Holz holen', 'chop'), slot(14, 'bricks', 'Bauen…', {a: 'job', key: 'schematic', bot}), go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
-    slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type)}),
+    slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type)}), go(11, 'iron_axe', 'Holz holen', 'chop'),
+    slot(12, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(13, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
+    slot(14, 'bricks', 'Bauen…', {a: 'job', key: 'schematic', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
+    go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
     slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), back(26, 'ov')]};
 }
 

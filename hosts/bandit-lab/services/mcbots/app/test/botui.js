@@ -490,6 +490,31 @@ async function fake() {
     assert.equal(ui.state('Fancy').screen.name, 'shiftm'); assert.equal(f.of('/menu').at(-1).body.slots[1].item, 'iron_ore');
     end();
   }
+  { // staff on a crafting table or furnace; Holen from the bot page orders for that bot
+    const submits = [], snaps = [{name: 'bot1', online: true, job: null, inventory: []}, {name: 'bot2', online: true, job: null, inventory: []}, {name: 'MisaBot', online: true, job: null, guest: true, inventory: []}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    const open = (player, gaze) => ui.handle({type: 'open', player, gaze});
+    const last = () => f.of('/menu').at(-1).body;
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'crafting_table'});
+    assert.match(last().title, /^Herstellen:/); assert.equal(ui.state('Fancy').screen.name, 'craftm');
+    for (const block of ['furnace', 'blast_furnace', 'smoker']) { await open('Fancy', {x: 1, y: 2, z: 3, block}); assert.equal(last().type, 'furnace'); assert.match(last().title, /^Schmelzen:/); }
+    await open('Midari', {x: 1, y: 2, z: 3, block: 'furnace'}); assert.equal(last().title, 'Schmelzen: MisaBot');
+    await open('Midari', {x: 1, y: 2, z: 3, block: 'crafting_table'}); assert.equal(last().title, 'Herstellen: MisaBot');
+    // a live pick still wins over a furnace gaze
+    await ev('Fancy', {a: 'pick', kind: 'chest'}); const menus = f.of('/menu').length;
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'furnace'});
+    await until(() => f.of('/actionbar').at(-1)?.body.text === 'Das ist keine Kiste', 'keine Kiste'); assert.equal(f.of('/menu').length, menus); assert.ok(ui.state('Fancy').pick);
+    // Holen on the bot page orders for the page's bot, not the last one used; a guest cannot name bot1
+    await ev('Fancy', {a: 'botm', bot: 'bot2'});
+    await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'bot2'}); ui.state('Fancy').lastBot = 'bot1';
+    await ev('Fancy', {a: 'pickitem', item: 'stone_pickaxe'}); assert.equal(submits.at(-1).bots[0], 'bot2');
+    const n = submits.length;
+    await ev('Midari', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'pickitem', item: 'stone_pickaxe'}); assert.ok(submits.slice(n).every((j) => j.bots[0] === 'MisaBot'));
+    end();
+  }
   { // Herstellen: craftm / pickitem / craftgo route to craft or get, guests only their bots
     const submits = [], snaps = [{name: 'bot1', online: true, job: null, inventory: ['cobblestone x9', 'stick x6']}, {name: 'MisaBot', online: true, job: null, guest: true, inventory: []}];
     const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
