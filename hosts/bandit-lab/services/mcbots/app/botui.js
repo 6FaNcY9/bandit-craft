@@ -48,6 +48,20 @@ function craftOrder(make, snap, shift = false) {
   return {key: b >= want ? 'craft' : 'get', item: make.item, n: Math.min(64, want * grid.per)};
 }
 
+// What the output click of the furnace orders: `smelt` when the bot carries n of the input and any fuel, else `get` of the result (it fetches both).
+function smeltOrder(make, snap, shift = false) {
+  const have = menus.haveOf(snap), n = shift ? Math.min(64, Math.max(1, have[make.item] || 0)) : 8;
+  return have[make.item] >= n && menus.fuelOf(have) ? {key: 'smelt', item: make.item, n} : {key: 'get', item: menus.SMELT_RESULT[make.item], n};
+}
+
+// Build, submit, flash and go back to the bot page: the tail every window order shares.
+function order(st, ui, viewer, bot, key, o) {
+  const b = jobs.build(key, {who: bot, item: o.item, n: o.n}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+  done(ui.api.submit(viewer, {bots: b.bots, type: b.type, args: b.args, replace: b.replace}));
+  st.screen = {name: 'botm', bot};
+  ui.flash(st, `${bot}: ${b.say}`, true);
+}
+
 const PICK_MS = 60000;
 // The viewer's Abbauen form: kept between screens, a new bot brings its own chest (the bot's, else the supply chest).
 // The bot a screen is about: the payload's (rights checked), else the viewer's last one, else their first.
@@ -140,19 +154,27 @@ const ACTIONS = {
   pickitem: (st, data, ui, viewer) => {
     const mode = st.screen.name === 'gridm' && st.screen.mode;
     if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
-    if (mode === 'get') return; // Holen orders on the click (part 2a, task 3)
     const bot = botOf(st, ui, viewer, st.make?.bot);
+    if (mode === 'get') return order(st, ui, viewer, bot, 'get', {item: data.item, n: data.shift ? 64 : 16});
     st.make = {kind: mode, bot, item: data.item};
     st.screen = {name: mode === 'craft' ? 'craftm' : 'smeltm'};
+  },
+  smeltm: (st, data, ui, viewer) => {
+    const bot = botOf(st, ui, viewer, data.bot);
+    st.make = {kind: 'smelt', bot, item: st.make?.kind === 'smelt' && st.make.bot === bot ? st.make.item : null};
+    st.screen = {name: 'smeltm'};
   },
   craftgo: (st, data, ui, viewer) => {
     const make = st.make, bot = oneBot(ui, viewer, {bot: make?.bot});
     if (make?.kind !== 'craft' || !make.item) return ui.flash(st, 'Erst ein Item wählen');
     const o = craftOrder(make, ui.api.snapshots().find((s) => s.name === bot) || {}, !!data.shift);
-    const b = jobs.build(o.key, {who: bot, item: o.item, n: o.n}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
-    done(ui.api.submit(viewer, {bots: b.bots, type: b.type, args: b.args, replace: b.replace}));
-    st.screen = {name: 'botm', bot};
-    ui.flash(st, `${bot}: ${b.say}`, true);
+    order(st, ui, viewer, bot, o.key, o);
+  },
+  smeltgo: (st, data, ui, viewer) => {
+    const make = st.make, bot = oneBot(ui, viewer, {bot: make?.bot});
+    if (make?.kind !== 'smelt' || !menus.SMELT_RESULT[make.item]) return ui.flash(st, 'Erst Schmelzgut wählen');
+    const o = smeltOrder(make, ui.api.snapshots().find((s) => s.name === bot) || {}, !!data.shift);
+    order(st, ui, viewer, bot, o.key, o);
   },
   pickblock: (st, data, ui, viewer) => { formOf(st, ui, viewer); setBlock(st, data.block); st.screen = {name: 'shiftm'}; },
   botpick: (st, data, ui, viewer) => { formOf(st, ui, viewer); st.screen = {name: 'botpick'}; },
@@ -545,4 +567,4 @@ function stopTargets(viewerBots, viewer, known) {
   return allowed === '*' ? 'all' : allowed.filter((n) => known.includes(n));
 }
 
-module.exports = {BotUi, ACTIONS, craftOrder, allowedBots, stopTargets, markersOf, placeBots};
+module.exports = {BotUi, ACTIONS, craftOrder, smeltOrder, allowedBots, stopTargets, markersOf, placeBots};

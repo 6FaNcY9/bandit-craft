@@ -522,6 +522,38 @@ async function fake() {
     assert.deepEqual(craftOrder({kind: 'craft', bot: 'x', item: 'oak_planks'}, {inventory: ['oak_log x3']}, true), {key: 'craft', item: 'oak_planks', n: 12});
     end();
   }
+  { // Schmelzen and Holen: smeltm / smeltgo / pickitem in get mode, guests only their bots
+    const submits = [], snaps = [{name: 'bot1', online: true, job: null, inventory: ['raw_iron x20', 'coal x3']}, {name: 'MisaBot', online: true, job: null, guest: true, inventory: []}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    const flash = (p) => ui.state(p).flash.text;
+    await ev('Fancy', {a: 'smeltm'}); assert.deepEqual(ui.state('Fancy').make, {kind: 'smelt', bot: 'bot1', item: null});
+    assert.equal(f.of('/menu').at(-1).body.type, 'furnace');
+    await ev('Fancy', {a: 'smeltgo'}); assert.equal(flash('Fancy'), 'Erst Schmelzgut wählen'); assert.equal(submits.length, 0);
+    await ev('Fancy', {a: 'gridm', mode: 'smelt', tab: 'schmelzgut', page: 0, back: 'smeltm'});
+    await ev('Fancy', {a: 'pickitem', item: 'raw_iron'}); assert.equal(ui.state('Fancy').screen.name, 'smeltm');
+    await ev('Fancy', {a: 'smeltgo'});
+    assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'smelt', args: {item: 'raw_iron', count: 8}, replace: false});
+    await ev('Fancy', {a: 'smeltm'}); await ev('Fancy', {a: 'smeltgo', shift: true}); assert.equal(submits.at(-1).args.count, 20);
+    await ev('Fancy', {a: 'craftgo'}); assert.equal(submits.length, 2); // a smelt window is no craft
+    await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'});
+    await ev('Fancy', {a: 'pickitem', item: 'bread'}); assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'get', args: {item: 'bread', count: 16}, replace: false});
+    assert.equal(ui.state('Fancy').screen.name, 'botm');
+    await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'}); await ev('Fancy', {a: 'pickitem', item: 'bread', shift: true}); assert.equal(submits.at(-1).args.count, 64);
+    await ev('Fancy', {a: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'}); await ev('Fancy', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Fancy'), 'Fehler: unbekanntes Item');
+    const n = submits.length;
+    await ev('Midari', {a: 'smeltm', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
+    await ev('Midari', {a: 'smeltgo', bot: 'bot1'}); assert.match(flash('Midari'), /^Fehler:/);
+    await ev('Midari', {a: 'gridm', mode: 'get', tab: 'essen', page: 0, back: 'botm'}); await ev('Midari', {a: 'pickitem', item: 'bedrock'}); assert.equal(flash('Midari'), 'Fehler: unbekanntes Item');
+    await ev('Midari', {a: 'pickitem', item: 'bread'}); assert.equal(submits.length, n + 1); assert.equal(submits.at(-1).bots[0], 'MisaBot');
+    const {smeltOrder} = require('../botui'), inv = ['raw_iron x20', 'coal x3'];
+    assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: inv}, true), {key: 'smelt', item: 'raw_iron', n: 20});
+    assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: inv}), {key: 'smelt', item: 'raw_iron', n: 8});
+    assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: ['raw_iron x20']}), {key: 'get', item: 'iron_ingot', n: 8});
+    assert.deepEqual(smeltOrder({item: 'raw_iron'}, {inventory: ['raw_iron x3', 'coal x3']}), {key: 'get', item: 'iron_ingot', n: 8});
+    end();
+  }
   { // fix round 1: gridm without a prior craftm names a real bot; a smelt pick never reaches craftgo's recipe
     const submits = [], snaps = [{name: 'bot1', online: true, job: null, inventory: ['cobblestone x9', 'stick x6']}];
     const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};

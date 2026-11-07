@@ -154,3 +154,15 @@ assert.ok(MENUS.has('ov'));
   for (const m of [c, gt, g('smelt')]) for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }
 console.log('botui-menus ok');
+{ // furnace window: input, fuel, output preview
+  const page = (item, inv) => menu({name: 'smeltm'}, view({snaps: [{name: 'zed', online: true, inventory: inv}], make: {kind: 'smelt', bot: 'zed', item}})).menu;
+  const at = (m, i) => m.slots.find((x) => x.slot === i);
+  let m = page('raw_iron', ['raw_iron x20', 'coal x3']);
+  assert.equal(m.type, 'furnace'); assert.match(m.title, /Schmelzen: zed/);
+  assert.equal(at(m, 0).item, 'raw_iron'); assert.equal(at(m, 0).count, 20); assert.equal(at(m, 1).item, 'coal');
+  assert.equal(at(m, 2).item, 'iron_ingot'); assert.equal(at(m, 2).count, 20); assert.deepEqual(at(m, 2).payload, {a: 'smeltgo'});
+  m = page('raw_iron', ['raw_iron x20']); assert.equal(at(m, 1).item, 'gray_stained_glass_pane');
+  m = page(null, ['coal x3']); assert.ok(!at(m, 2)); assert.equal(at(m, 0).item, 'stick');
+  m = page('bedrock', []); assert.ok(!at(m, 2)); assert.ok(!JSON.stringify(m).includes('undefined'));
+  assert.ok(!JSON.stringify(menu({name: 'smeltm'}, view({make: undefined})).menu).includes('undefined'));
+}

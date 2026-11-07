@@ -5,7 +5,8 @@
 const {choiceOf, CHOICES} = require('./idle');
 const {safe} = require('./botui-screens');
 const {germanName, BLOCKS, CRAFTS, SMELTS} = require('./botui-jobs');
-const {recipeGrid} = require('./recipes');
+const {recipeGrid, SMELT} = require('./recipes');
+const {FUELS} = require('./crafting');
 
 // One slot: `payload` comes back as the click's data, `extra` carries count/damage/head/glint/lore.
 const slot = (i, item, name, payload, extra = {}) => ({slot: i, item, name: safe(name, 40), payload, ...extra});
@@ -153,6 +154,18 @@ function craftPage(view) {
   return {type: 'chest', title: bot ? `Herstellen: ${safe(bot, 20)}` : "Herstellen", rows: 3, slots};
 }
 
+// Schmelzen as the real furnace window: input, fuel and an output preview. The flame is not animated.
+const SMELT_RESULT = Object.fromEntries(Object.entries(SMELT).map(([out, inp]) => [inp, out]));
+const fuelOf = (have) => FUELS.find((f) => have[f] > 0) || null;
+function smeltPage(view) {
+  const mk = view.make || {}, s = snapOf(view, mk.bot), bot = s.name, have = haveOf(s), input = SMELT_RESULT[mk.item] && mk.item, fuel = fuelOf(have);
+  const pick = {a: 'gridm', mode: 'smelt', tab: 'schmelzgut', page: 0, back: 'smeltm'}, n = input && Math.min(64, have[input]);
+  const slots = [input ? slot(0, input, germanName(input), pick, {count: n || 1, lore: ['Klick: anderes Schmelzgut']}) : slot(0, 'stick', 'Was schmelzen? Klick', pick),
+    fuel ? slot(1, fuel, germanName(fuel), {a: 'smeltm', bot}, {lore: [`Brennstoff: ${germanName(fuel)}`]}) : slot(1, 'gray_stained_glass_pane', 'Kein Brennstoff dabei · der Bot besorgt ihn', {a: 'smeltm', bot})];
+  if (input) slots.push(slot(2, SMELT_RESULT[input], germanName(SMELT_RESULT[input]), {a: 'smeltgo'}, {count: n || 8, lore: ['Klick: 8 · Shift: alles was er hat']}));
+  return {type: 'furnace', title: bot ? `Schmelzen: ${safe(bot, 20)}` : 'Schmelzen', slots};
+}
+
 // Which bot does it: the viewer's own bots as heads.
 function botPickPage(view) {
   const rows = Math.min(6, Math.ceil((view.snaps.length + 1) / 9)), last = rows * 9 - 1;
@@ -163,8 +176,8 @@ function botPickPage(view) {
 }
 
 // Screens drawn as menus; later tasks add theirs to RENDER.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, botpick: botPickPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
-module.exports = {MENUS, menu, slot, badgeOf, overview, AMOUNTS, TABS, haveOf, ITEM_TABS, GRID_MODES, maxBatches};
+module.exports = {MENUS, menu, slot, badgeOf, overview, AMOUNTS, TABS, haveOf, ITEM_TABS, GRID_MODES, maxBatches, SMELT_RESULT, fuelOf};
