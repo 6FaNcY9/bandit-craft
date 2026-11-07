@@ -971,6 +971,7 @@ public class BotUi extends JavaPlugin implements Listener {
   public void onQuit(PlayerQuitEvent e) {
     open.remove(e.getPlayer().getUniqueId());
     pending.remove(e.getPlayer().getUniqueId());
+    menus.remove(e.getPlayer().getUniqueId());
     outlines.remove(e.getPlayer().getUniqueId());
     map.quit(e.getPlayer());
     lastMapClick.remove(e.getPlayer().getUniqueId());
