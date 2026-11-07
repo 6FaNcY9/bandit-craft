@@ -35,7 +35,7 @@ const sealJob = require('./seal');
 const owner = require('./owner');
 const {loadPrefs, savePrefs} = require('./prefs');
 const misa = require('./misa');
-const {aliveStep, safeCell} = require('./alive');
+const {aliveStep, safeCell, shore} = require('./alive');
 
 const NAME_RE = /^(bot[0-9]{1,2}|MisaBot|EM_Trader)$/; // BotGate's pattern (Velocity plugin), case as written in both
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
@@ -622,11 +622,21 @@ class BotRunner {
     if (process.env.HUMAN_LOOK === '1') bot.once('spawn', () => require('./humanlook').install(bot, {fighting: () => !!this.combat?.busy})); // off until the sandbox shows no scenario gets worse (2026-10-20)
     // Idle servants look alive (alive.js). Not with humanlook, which owns the head then.
     if (process.env.HUMAN_LOOK !== '1') bot.once('spawn', () => {
-      let aliveState = {}, busyUntil = 0;
+      let aliveState = {}, busyUntil = 0, wetSince = 0;
       const timer = setInterval(() => {
         try {
           if (Date.now() < busyUntil || !this.online || this.dead || this.current || this.queue.length || this.combat?.busy || (this.inShelter() && isNight(bot)) || bot.currentWindow || !bot.entity) return;
           const p = bot.entity.position;
+          // Left idle in water it sinks, surfaces for air and sinks again for ever: MisaBot bobbed at 262 61 -10 for
+          // an hour (2026-11-07). After 5 s it walks out onto the nearest dry cell, a search every 15 s at most.
+          if (bot.blockAt(p.floored())?.name !== 'water') wetSince = 0;
+          else if (!wetSince) wetSince = Date.now();
+          else if (Date.now() - wetSince > 5000) {
+            busyUntil = Date.now() + 15000;
+            const land = shore(bot);
+            if (land) bot.pathfinder.goto(new goals.GoalBlock(land.position.x, land.position.y + 1, land.position.z)).catch(() => {});
+            return;
+          }
           const players = Object.values(bot.players).filter((q) => q.username !== bot.username && q.entity).map((q) => ({name: q.username, uuid: q.uuid, ...q.entity.position})); // other bots are not told apart
           const r = aliveStep({me: p, players, owners: this.ownerUuids, now: Date.now(), state: aliveState});
           aliveState = r.state;

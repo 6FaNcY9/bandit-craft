@@ -30,4 +30,8 @@ const HARM = /fire|pressure_plate|tripwire|cactus|magma|campfire|sweet_berry|cob
 const safeCell = (floor, feet, head) => floor?.boundingBox === 'block' && feet?.boundingBox === 'empty' && head?.boundingBox === 'empty'
   && ![floor, feet, head].some((b) => /^(water|lava)$/.test(b.name) || HARM.test(b.name));
 
-module.exports = {aliveStep, safeCell};
+// The nearest dry cell to stand on (its floor block, or null) for an idle bot left in water.
+const shore = (bot, range = 32) => bot.findBlock({matching: (b) => b.boundingBox === 'block', maxDistance: range,
+  useExtraInfo: (b) => safeCell(b, bot.blockAt(b.position.offset(0, 1, 0)), bot.blockAt(b.position.offset(0, 2, 0)))});
+
+module.exports = {aliveStep, safeCell, shore};

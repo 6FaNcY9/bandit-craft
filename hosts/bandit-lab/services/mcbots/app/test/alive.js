@@ -29,4 +29,13 @@ assert.equal(safeCell(B('water', 'empty'), air, air), false);
 assert.equal(safeCell(stone, B('stone_pressure_plate', 'empty'), air), false);
 assert.equal(safeCell(B('magma_block', 'block'), air, air), false);
 assert.equal(safeCell(stone, air, null), false);
+{ // shore: the dry floor next to the water, never the sea floor
+  const {shore} = require('../alive'), {Vec3} = require('vec3');
+  const water = B('water', 'empty'), at = (v) => (v.y >= 63 ? air : v.x >= 3 && v.y <= 63 ? (v.y === 63 ? air : stone) : v.y <= 59 ? stone : water);
+  const cells = [];
+  for (let x = 0; x <= 4; x++) for (let y = 58; y <= 64; y++) cells.push(new Vec3(x, y, 0));
+  const bot = {blockAt: (v) => ({...at(v), position: v}),
+    findBlock: ({matching, useExtraInfo}) => cells.map((v) => bot.blockAt(v)).find((b) => matching(b) && useExtraInfo(b)) || null};
+  assert.deepEqual(shore(bot).position, new Vec3(3, 62, 0));
+}
 console.log('alive ok');
