@@ -73,6 +73,7 @@ function cleanSnapshot(s) {
     queue: list(s.queue, 20, (q) => str(q, 160)),
     queueIds: list(s.queueIds, 20, int),
     inventory: list(s.inventory, 80, (q) => str(q, 60)),
+    awayChests: list(s.awayChests, 20, (q) => str(q, 40)),
     inventoryKinds: int(s.inventoryKinds),
     armour: list(s.armour, 4, (a) => optStr(a, 48)),
     lastError: str(s.lastError, 300),

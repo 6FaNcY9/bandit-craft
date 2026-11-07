@@ -1,4 +1,4 @@
-;'use strict';
+'use strict';
 // Misa's bots (spec 2026-10-29-misa-bots): the "@bot" exemption of protected areas and the building orders' corners.
 // A protected area is [x1, z1, x2, z2, y1, y2, bots]; bots (optional, y1/y2 null for a plain box) are the bots that
 // may work inside it. A runner holds only the areas that do not name it (forBot), so the existing consumers

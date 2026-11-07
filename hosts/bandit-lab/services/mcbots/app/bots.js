@@ -42,7 +42,11 @@ const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
 const WATCH_MS = 5000, STILL_MS = 30000;
 const UNREACHABLE_CHEST_MS = 30 * 60000;
-const chestAway = (r, c, now = Date.now()) => now - (r.unreachableChests?.get(`${c.x},${c.y},${c.z}`) ?? -Infinity) < UNREACHABLE_CHEST_MS;
+// A RemoteRunner (hub side) has no map of its own: it reads the worker's snapshot (awayChests).
+const chestAway = (r, c, now = Date.now()) => {
+  const k = `${c.x},${c.y},${c.z}`;
+  return r.unreachableChests ? now - (r.unreachableChests.get(k) ?? -Infinity) < UNREACHABLE_CHEST_MS : !!r.snap?.awayChests?.includes(k);
+};
 const CHAT_TYPES = new Set(['chat.type.text', '<%s> %s']);
 const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers to you: %s']);
 const BACKOFF_START = 5000;
@@ -533,6 +537,7 @@ class BotRunner {
   setChest(bot, player, spot, trusted) {
     const c = this.ownChest(bot, player, spot, trusted);
     savePrefs(this.prefsFile, this.name, {chest: c}); this.prefs.chest = c;
+    this.unreachableChests?.delete(`${c.x},${c.y},${c.z}`); // a chest set again (path cleared) is tried at once
     return c;
   }
 
@@ -1007,6 +1012,7 @@ class BotRunner {
       tool: this.tool(),
       freeSlots: this.online ? b.inventory.emptySlotCount() : null,
       chest: this.prefs?.chest ?? null, // the bot's own chest (prefs), for the bot screen
+      awayChests: [...(this.unreachableChests || [])].filter(([, t]) => Date.now() - t < UNREACHABLE_CHEST_MS).map(([k]) => k), // for the hub's chestAway
       queue: this.queue.map(label),
       queueIds: this.queue.map((j) => j.id),
       inventory: top.map(([n, c]) => `${n} x${c}`),

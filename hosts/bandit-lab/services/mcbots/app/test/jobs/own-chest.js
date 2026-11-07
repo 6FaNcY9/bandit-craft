@@ -79,6 +79,9 @@ module.exports = async () => {
   assert.ok(chestAway(x.r, chest), 'remembered');
   assert.ok(!chestAway(x.r, {x: 4, y: 64, z: 0}), 'a new chest is tried at once');
   assert.ok(!chestAway(x.r, chest, Date.now() + 30 * 60000), 'tried again after 30 min');
+  // the hub sees a worker's bot (RemoteRunner) only through its snapshot
+  assert.ok(chestAway({snap: {awayChests: ['3,64,0']}}, chest), 'remote: remembered');
+  assert.ok(!chestAway({snap: {}}, chest), 'remote: nothing marked');
 
   // no own chest
   x = rig({carried, chests: here, prefs: {chest: null, keep: {}}});
