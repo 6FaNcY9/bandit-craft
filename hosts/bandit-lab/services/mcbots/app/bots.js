@@ -599,16 +599,8 @@ class BotRunner {
     this.bindOwner(bot);
     require('./blocklog').watchBlocks(bot, this.name, (c) => this.world.noteChange?.(c));
     bot.once('spawn', () => guardDigs(this, bot)); // bot.dig exists only once the plugins loaded
-    if (process.env.LOOK_STATS_FILE) bot.once('spawn', () => { // sandbox only: yaw change per tick, windows of 2 s, last 600
-      const {Sampler} = require('./humanlook'), smp = new Sampler(), wins = [];
-      bot.on('physicsTick', () => smp.tick(bot.entity?.yaw, !!this.combat?.busy));
-      const timer = setInterval(() => { wins.push(smp.flush()); wins.splice(0, wins.length - 600); try { require('fs').writeFileSync(process.env.LOOK_STATS_FILE, JSON.stringify(wins)); } catch {} }, 2000);
-      timer.unref();
-      bot.once('end', () => clearInterval(timer));
-    });
-    if (process.env.HUMAN_LOOK === '1') bot.once('spawn', () => require('./humanlook').install(bot, {fighting: () => !!this.combat?.busy})); // off until the sandbox shows no scenario gets worse (2026-10-20)
-    // Idle servants look alive (alive.js). Not with humanlook, which owns the head then.
-    if (process.env.HUMAN_LOOK !== '1') bot.once('spawn', () => {
+    // Idle servants look alive (alive.js).
+    bot.once('spawn', () => {
       let aliveState = {}, busyUntil = 0, wetSince = 0;
       const timer = setInterval(() => {
         try {

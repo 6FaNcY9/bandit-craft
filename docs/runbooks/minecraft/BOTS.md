@@ -204,7 +204,6 @@ Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/super
 - Alive (`app/alive.js`): an idle bot (no job, empty queue, not fighting, sheltering, dead or in a window) looks at the nearest player
   within 8 blocks every 250 ms, bows (500 ms sneak) once per approach to an owner within 3 blocks, steps one block aside from a player
   within 0.8 blocks onto a safe cell (no water, lava, fire, plates, tripwire, magma, cactus, campfire, berries, cobweb, powder snow).
-  Off when `HUMAN_LOOK=1`.
 - Movement counters (`app/counters.js`): bot screen `Wege/h: n Rücksetzer · n kein Weg · n fest` (per hour). Movement course in the
   sandbox: `tools/mcbots-parkour/`, results in `docs/runbooks/minecraft/movement-check.md`.
 
