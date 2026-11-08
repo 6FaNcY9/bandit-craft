@@ -979,6 +979,7 @@ public class BotUi extends JavaPlugin implements Listener {
     outlines.remove(e.getPlayer().getUniqueId());
     map.quit(e.getPlayer());
     lastMapClick.remove(e.getPlayer().getUniqueId());
+    lastStaffLog.remove(e.getPlayer().getUniqueId());
     emit("quit", e.getPlayer(), null);
   }
 
