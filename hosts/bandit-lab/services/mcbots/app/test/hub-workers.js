@@ -155,6 +155,9 @@ const {BotRunner} = require('../bots');
   assert.strictEqual(r.activity(), 'starting the next job');
   r.enqueue('remove', {id: 7});
   assert.deepStrictEqual(r.snapshot().queueIds, [8]); // a running job is not removed, queued ones are
+  r.queue = Array.from({length: 32}, (_, i) => ({id: 100 + i, type: 'chop', args: {count: 1}}));
+  assert.throws(() => r.enqueue('chop', {count: 2}), /Warteschlange voll/, 'a full queue refuses more');
+  assert.doesNotThrow(() => r.enqueue('remove', {id: 100}));
   r.queue = [];
   r.current = {id: 9, type: 'mine', args: {block: 'stone', count: 8}, progress: '2/8', startedAt: Date.now() - 5000, t: {doing: 'mining stone 2/8 near 1 2 3', done: 2, total: 8}};
   let sn = r.snapshot();
@@ -189,4 +192,7 @@ const {BotRunner} = require('../bots');
   rr.conn = {ws: {send: (m) => sent.push(JSON.parse(m))}};
   rr.enqueue('remove', {id: '12'});
   assert.deepStrictEqual(sent[0], {t: 'job', bot: 'bot5', type: 'remove', args: {id: 12}, replace: false});
+  rr.snap = {...rr.snap, queue: Array(32).fill('chop')};
+  assert.throws(() => rr.enqueue('chop', {count: 1}), /Warteschlange voll/);
+  assert.doesNotThrow(() => rr.enqueue('stop'));
 }

@@ -38,6 +38,7 @@ const misa = require('./misa');
 const {aliveStep, safeCell, shore, wet} = require('./alive');
 
 const NAME_RE = /^(bot[0-9]{1,2}|MisaBot|EM_Trader)$/; // BotGate's pattern (Velocity plugin), case as written in both
+const MAX_QUEUE = 32; // queued jobs per bot; more is refused ('Warteschlange voll')
 const LOGIN_GAP_MS = 4500; // Velocity rate-limits logins
 const GOTO_TIMEOUT_MS = 90000;
 const WATCH_MS = 5000, STILL_MS = 30000;
@@ -827,6 +828,7 @@ class BotRunner {
     // A run just cancelled by this very order (replace) is no duplicate: the same farm ordered again stopped and
     // then dropped, and the bot stood idle (sandbox, 2026-10-16).
     if (AREA_JOBS.has(type) && ((same(this.current) && !this.current.cancelled) || this.queue.some(same))) return;
+    if (this.queue.length >= MAX_QUEUE) throw new Error('Warteschlange voll');
     if (first) {
       const was = this.current && !this.current.cancelled ? this.current : null;
       this.cancel();
@@ -4201,4 +4203,4 @@ const JOBS = {
   },
 };
 
-module.exports = {RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {MAX_QUEUE, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};

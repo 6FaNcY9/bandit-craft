@@ -14,7 +14,7 @@
 const crypto = require('node:crypto');
 const http = require('node:http');
 const {WebSocketServer} = require('ws');
-const {NAME_RE, VALIDATE, KEEP, tailFrom} = require('./bots');
+const {MAX_QUEUE, NAME_RE, VALIDATE, KEEP, tailFrom} = require('./bots');
 const {clean: cleanEvent} = require('./events');
 
 const PROTOCOL = 1;
@@ -234,6 +234,7 @@ class RemoteRunner {
     else if (type !== 'stop') {
       if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
       clean = VALIDATE[type](args || {});
+      if (replace !== true && this.snap.queue.length >= MAX_QUEUE) throw new Error('Warteschlange voll');
     }
     this.conn.ws.send(JSON.stringify({t: 'job', bot: this.name, type, args: clean, replace: replace === true && type !== 'setchest', ...(first === true ? {first: true} : {})}));
   }
