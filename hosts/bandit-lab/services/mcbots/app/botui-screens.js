@@ -308,7 +308,7 @@ function upload(view, sc) {
 
 // A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
 const SCREENS = {lage, upload, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
-const REFRESHING = new Set(['lage', 'bot', 'ov']);
+const REFRESHING = new Set(['lage', 'bot', 'ov', 'botm']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 
 module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK, ZOOMS};

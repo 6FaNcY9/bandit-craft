@@ -22,6 +22,7 @@ Dialogs stay for number input, text, confirmations and everything marked "still 
 - `guard`: covered by `botm` "Bewach diesen Ort" (guards the spot the viewer stands at); other guard options are still a dialog.
 - `mine`, `shift`, `shiftlogs`: covered by the hopper window `shiftm` with grid `gridm` and point-to-pick; staff on a minable block opens it pre-filled.
 - `setchest`: covered by `botm` "Kiste merken" (point at a chest) and `chestm` (staff on a chest).
+- Resume of a stopped project (`/api/project` resume): covered by `botm` "Weiter" (shown only while the bot has a paused project; same rights and ground checks as the dashboard).
 - `schematic`: `botm` "Bauen…" opens the old job dialog (still a dialog).
 - `get`, `craft`, `smelt`: covered by `botm` Holen… (`gridm` mode get), Herstellen… (`craftm`) and Schmelzen… (`smeltm`); staff (sneak) on a
   crafting table or furnace opens the window.

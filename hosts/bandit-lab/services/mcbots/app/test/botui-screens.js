@@ -139,7 +139,7 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.deepEqual(a, b); assert.deepEqual(bot(mk(), 'bot1'), bot(mk({health: 19.6}, {runningS: 739}), 'bot1'));
   assert.notDeepEqual(a, lage(mk({}, {progress: '6/64'})));
 }
-assert.deepEqual([...REFRESHING], ['lage', 'bot', 'ov']);
+assert.deepEqual([...REFRESHING], ['lage', 'bot', 'ov', 'botm']);
 assert.equal(render({name: 'stopall'}, view()).exit_action.action.payload.a, 'lage');
 assert.equal(text(render({name: 'nonsense'}, view({snaps: []})).title), 'Kommandostand');
 assert.equal(safe('a§cb\u0007c\n d', 99), 'a b c d'.replace('a b', 'ab')); // colour code stripped, control chars become spaces

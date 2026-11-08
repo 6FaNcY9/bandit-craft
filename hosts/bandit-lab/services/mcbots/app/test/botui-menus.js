@@ -37,6 +37,14 @@ assert.ok(MENUS.has('ov'));
   for (const x of s) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
 }
+{ // badges for the order types the bot page starts; Weiter only for a paused project
+  const b = (type) => slots(view({snaps: [{name: 'zed', online: true, health: 20, job: {type}}]})).filter((x) => !x.head && x.slot < 45).map((x) => x.item);
+  for (const [t, i] of [['craft', 'crafting_table'], ['smelt', 'furnace'], ['get', 'chest_minecart'], ['schematic', 'bricks'], ['goto', 'ender_pearl']]) assert.deepEqual(b(t), [i], t);
+  const page = (projects) => menu({name: 'botm', bot: 'zed'}, view({projects})).menu.slots;
+  assert.ok(!page({}).some((x) => x.name === 'Weiter')); assert.ok(!page({zed: {paused: false}}).some((x) => x.name === 'Weiter'));
+  const w = page({zed: {paused: true}}).find((x) => x.name === 'Weiter');
+  assert.deepEqual(w.payload, {a: 'resume', bot: 'zed'}); assert.ok(Object.hasOwn(ACTIONS, 'resume'));
+}
 { // bot page: head lore, glint on the running job, Abbauen and Kiste merken slots, every payload a real action
   const bv = (s, o = {}) => view({snaps: [s], ...o});
   const page = (s, o) => menu({name: 'botm', bot: s.name}, bv(s, o)).menu;

@@ -278,6 +278,14 @@ function presence(viewer, type) {
     if (lines.length) ingame.tell(viewer, lines);
   }
 }
+// Queues a bot's last project again (/api/project resume and the in-game Weiter button).
+function resumeProject(bot) {
+  const r = runners.get(bot), p = projects.get(bot);
+  if (!r) throw new Error('unknown bot');
+  if (!p) throw new Error('no project to resume');
+  r.enqueue(p.type, p.args);
+  projects.note(bot, p.type, p.args);
+}
 // Rights: Misa's bots use only ground that PROTECTED_AREAS names for them; the owner may do everything (misa.groundRule).
 function ground(viewer, bot, type, args) {
   const bad = cfg.viewerBots[viewer] !== '*' && cfg.guestBots.includes(bot) && misa.groundRule(cfg.protectedAreas, bot, type, args);
@@ -300,6 +308,9 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
   api: {
     presence,
     snapshots: placedBots,
+    projects: () => projects.view(),
+    groundOk: (viewer, bot, type, args) => { try { ground(viewer, bot, type, args); return true; } catch { return false; } },
+    resume: (viewer, bot) => { const p = projects.get(bot); if (p) ground(viewer, bot, p.type, p.args); resumeProject(bot); },
     markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
     submit: (viewer, {bots, type, args, replace}) => {
       for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
@@ -856,13 +867,9 @@ const server = http.createServer(async (req, res) => {
     try {
       const {bot, action} = await readJson(req);
       const r = runners.get(bot);
-      const p = projects.get(bot);
       if (!r) throw new Error('unknown bot');
-      if (action === 'resume') {
-        if (!p) throw new Error('no project to resume');
-        r.enqueue(p.type, p.args);
-        projects.note(bot, p.type, p.args);
-      } else if (action === 'pause' || action === 'stop') {
+      if (action === 'resume') resumeProject(bot);
+      else if (action === 'pause' || action === 'stop') {
         const s = r.snapshot();
         if (PROJECTS.has(s.job?.type)) {
           r.enqueue('stop'); // clears the queue too

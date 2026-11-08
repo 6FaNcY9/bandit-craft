@@ -66,20 +66,25 @@ const PICK_MS = 60000;
 // The viewer's Abbauen form: kept between screens, a new bot brings its own chest (the bot's, else the supply chest).
 // The bot a screen is about: the payload's (rights checked), else the viewer's last one, else their first.
 function botOf(st, ui, viewer, bot) {
-  bot = bot !== undefined ? oneBot(ui, viewer, {bot}) : st.lastBot || ui.api.snapshots().find((s) => ui.viewerBots[viewer] === '*' || ui.viewerBots[viewer].includes(s.name))?.name;
+  const mine = ui.api.snapshots().filter((s) => ui.viewerBots[viewer] === '*' || ui.viewerBots[viewer].includes(s.name));
+  bot = bot !== undefined ? oneBot(ui, viewer, {bot}) : st.lastBot || (mine.find((s) => s.online && !s.sandbox) || mine[0])?.name;
   if (!bot) throw new Error('kein Bot');
   return st.lastBot = bot;
 }
+// The owner's supply chest is no default for a guest's bots.
+const supplyFor = (ui, viewer) => ui.viewerBots[viewer] === '*' ? jobs.supplyOf(ui.api.keeper) : null;
 function formOf(st, ui, viewer, bot) {
   const prev = st.form;
   bot = botOf(st, ui, viewer, bot || prev?.bot);
   if (!prev || prev.bot !== bot) {
-    const c = ui.api.snapshots().find((s) => s.name === bot)?.chest || jobs.supplyOf(ui.api.keeper);
+    const c = ui.api.snapshots().find((s) => s.name === bot)?.chest || supplyFor(ui, viewer);
     st.form = {bot, block: prev?.block ?? null, amount: prev?.amount ?? 'inf', chest: c ? {x: c.x, y: c.y, z: c.z} : null};
   }
   return st.form;
 }
+const oreOf = (b) => String(b).replace(/^deepslate_(.+_ore)$/, '$1'); // mine covers the deepslate variants of an ore
 function setBlock(st, block) {
+  block = oreOf(block);
   if (!jobs.BLOCKS.includes(block)) throw new Error('unbekannter Block');
   st.form.block = block;
   st.recent = [block, ...(st.recent || []).filter((b) => b !== block)].slice(0, 4);
@@ -105,12 +110,12 @@ const ACTIONS = {
     const places = ui.api.places(), snap = ui.api.snapshots().find((s) => s.name === bot);
     let extra = {};
     if (data.job === 'deposit') {
-      const c = snap?.chest || jobs.supplyOf(ui.api.keeper);
+      const c = snap?.chest || supplyFor(ui, viewer);
       if (!c) return ui.flash(st, 'Erst eine Kiste merken');
       extra = {x: c.x, y: c.y, z: c.z};
     } else if (data.job === 'treefarm') {
-      const z = places.find((p) => p.kind === 'treefarm' && p.box);
-      if (!z) return ui.flash(st, 'Keine Baumfarm eingerichtet');
+      const farms = places.filter((p) => p.kind === 'treefarm' && p.box), z = farms.find((p) => !ui.api.groundOk || ui.api.groundOk(viewer, bot, 'treefarm', p.box));
+      if (!z) return ui.flash(st, farms.length ? 'Keine Baumfarm auf deinem Gelände' : 'Keine Baumfarm eingerichtet');
       extra = {zone: z.name};
     }
     const o = jobs.build(spec.key, {who: bot, ...spec.data, ...extra}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places, snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
@@ -233,6 +238,11 @@ const ACTIONS = {
     const bot = oneBot(ui, viewer, data);
     done(ui.api.submit(viewer, {bots: [bot], type: 'stop', args: {}}));
     ui.flash(st, `${bot}: gestoppt`, true);
+  },
+  resume: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    ui.api.resume(viewer, bot);
+    ui.flash(st, `${bot}: weiter`, true);
   },
   new: (st, data, ui, viewer) => { st.screen = {name: 'auftrag', ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})}; },
   job: (st, data, ui, viewer) => {
@@ -460,7 +470,7 @@ class BotUi {
       else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm'};
       // a set corner A keeps the next open on the area steps
-      else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(g.block)) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
+      else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else st.screen = {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'ov'};
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
@@ -482,7 +492,7 @@ class BotUi {
 
   // The staff's right click while a pick is live is the answer. false: wrong target, flash only, the pick stays and no menu opens.
   async consumePick(st, viewer, g) {
-    const {kind, bot} = st.pick, ok = g && !g.entity && (kind === 'chest' ? jobs.isChest(g.block) : jobs.BLOCKS.includes(g.block));
+    const {kind, bot} = st.pick, ok = g && !g.entity && (kind === 'chest' ? jobs.isChest(g.block) : jobs.BLOCKS.includes(oreOf(g.block)));
     if (!ok) { this.flash(st, kind === 'chest' ? 'Das ist keine Kiste' : 'Das ist kein passender Block'); return false; }
     st.pick = null;
     try {
@@ -499,7 +509,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }

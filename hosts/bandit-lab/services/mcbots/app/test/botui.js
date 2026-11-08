@@ -742,5 +742,53 @@ async function fake() {
     await ui.handle({type: 'mapclick', player: 'Stranger'}); assert.equal(ui.state('Stranger'), undefined);
     end();
   }
+  { // review fixes: guest ground for Baumfarm, no supply chest for guests, in-game resume, default bot, deepslate ore
+    const submits = [], resumes = [];
+    const snaps = [{name: 'sbx', online: true, sandbox: true, job: null}, {name: 'off', online: false, job: null}, {name: 'bot1', online: true, job: null}, {name: 'MisaBot', online: true, job: null, guest: true}];
+    const box = (x) => ({x1: x, y1: 60, z1: 0, x2: x + 5, y2: 80, z2: 5});
+    const places = [{name: 'ownfarm', kind: 'treefarm', box: box(0)}, {name: 'misafarm', kind: 'treefarm', box: box(200)}];
+    const paused = {bot1: {type: 'mine', paused: true}, MisaBot: {type: 'mine', paused: true}};
+    const api = {snapshots: () => snaps, places: () => places, schematics: async () => [], submit: (v, j) => { submits.push([v, j]); return {ok: true, unreached: []}; },
+      keeper: {state: () => ({chest: {x: 5, y: 5, z: 5}})}, idle: {get: () => null, set: () => ({})}, projects: () => paused,
+      groundOk: (v, b, type, a) => v === 'Fancy' || a.x1 >= 200, resume: (v, b) => resumes.push([v, b])};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    // D1: the guest's farm is one on its own ground
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'treefarm'});
+    assert.equal(submits.at(-1)[1].args.x1, 0);
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'treefarm'});
+    assert.equal(submits.at(-1)[1].args.x1, 200);
+    const n1 = submits.length, misafarm = places.pop();
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'treefarm'});
+    assert.equal(submits.length, n1); assert.match(ui.state('Midari').flash.text, /Baumfarm/);
+    places.push(misafarm);
+    // D2: the guest never falls back to the owner's supply chest
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'deposit'});
+    assert.equal(submits.length, n1); assert.equal(ui.state('Midari').flash.text, 'Erst eine Kiste merken');
+    await ev('Midari', {a: 'shiftm', bot: 'MisaBot'});
+    assert.equal(ui.state('Midari').form.chest, null);
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'deposit'});
+    assert.deepEqual(submits.at(-1)[1].args, {x: 5, y: 5, z: 5});
+    // D3: Weiter shows for a paused project and resumes through the hub, with rights
+    await ev('Fancy', {a: 'botm', bot: 'bot1'});
+    const weiter = f.of('/menu').at(-1).body.slots.find((x) => x.name === 'Weiter');
+    assert.deepEqual(weiter.payload, {a: 'resume', bot: 'bot1'});
+    await ev('Fancy', weiter.payload);
+    assert.deepEqual(resumes.at(-1), ['Fancy', 'bot1']);
+    await ev('Midari', {a: 'resume', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(resumes.length, 1);
+    await ev('Midari', {a: 'resume', bot: 'MisaBot'});
+    assert.deepEqual(resumes.at(-1), ['Midari', 'MisaBot']);
+    // D7: the default bot is the first online, non-sandbox one the viewer may order
+    await ev('Fancy', {a: 'shiftm'});
+    assert.equal(ui.state('Fancy').form.bot, 'bot1');
+    // D8: deepslate ore variants count as their ore
+    await ev('Fancy', {a: 'shiftm', block: 'deepslate_iron_ore'});
+    assert.equal(ui.state('Fancy').form.block, 'iron_ore');
+    await ev('Fancy', {a: 'pick', kind: 'block'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: {x: 1, y: 2, z: 3, block: 'deepslate_diamond_ore'}});
+    assert.equal(ui.state('Fancy').form.block, 'diamond_ore');
+    end();
+  }
   console.log('botui ok');
 })().catch((e) => { console.error(e); process.exit(1); });
