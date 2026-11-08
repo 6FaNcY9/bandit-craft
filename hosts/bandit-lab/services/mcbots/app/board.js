@@ -34,7 +34,7 @@ class Board {
     Object.assign(this, {file, now, locked});
     this.data = {seq: 0, jobs: []};
     if (file && fs.existsSync(file)) {
-      this.data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      try { this.data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { console.error(`board: ${file} unreadable, starting empty: ${e.message}`); }
       // The restart stopped every bot: their parts are free again.
       for (const p of this.parts()) if (p.state === 'claimed') Object.assign(p, {state: 'open', claim: null});
     }

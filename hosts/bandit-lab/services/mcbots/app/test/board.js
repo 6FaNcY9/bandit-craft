@@ -201,3 +201,11 @@ const path = require('node:path');
     child.kill('SIGKILL');
   }
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// ---- a corrupt board.json starts empty instead of crashing the hub ----
+{
+  const {Board} = require('../board');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'board-bad-')), 'board.json');
+  fs.writeFileSync(file, '{"seq": 3, "jobs": [');
+  assert.deepStrictEqual(new Board({file}).data, {seq: 0, jobs: []});
+}
