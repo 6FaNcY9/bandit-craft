@@ -1,0 +1,26 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const {pruneStores} = require('../prune');
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prune-'));
+const w = (f, o) => fs.writeFileSync(path.join(dir, f), typeof o === 'string' ? o : JSON.stringify(o));
+const r = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+w('projects.json', {bot1: {type: 'shaft'}, bot4: {type: 'shaft'}, MisaBot: {type: 'build'}});
+w('settings.json', {bot18: {defend: false}, bot2: {defend: false}});
+w('idle.json', {bot1: {id: 'holz'}});
+w('prefs.json', 'not json{');
+const roster = new Set(['bot1', 'bot2', 'MisaBot']);
+pruneStores(dir, roster);
+assert.deepEqual(Object.keys(r('projects.json')), ['bot1', 'MisaBot'], 'retired bots dropped, live entries untouched');
+assert.deepEqual(r('projects.json').bot1, {type: 'shaft'});
+assert.deepEqual(Object.keys(r('settings.json')), ['bot2']);
+assert.equal(fs.readFileSync(path.join(dir, 'prefs.json'), 'utf8'), 'not json{', 'an unreadable file is left alone');
+assert.ok(!fs.existsSync(path.join(dir, 'roles.json')), 'a missing file stays missing');
+assert.ok(!fs.readdirSync(dir).some((f) => f.endsWith('.tmp')));
+const before = fs.statSync(path.join(dir, 'idle.json')).mtimeMs;
+pruneStores(dir, roster);
+assert.equal(fs.statSync(path.join(dir, 'idle.json')).mtimeMs, before, 'nothing to drop: no rewrite');
+console.log('prune ok');
