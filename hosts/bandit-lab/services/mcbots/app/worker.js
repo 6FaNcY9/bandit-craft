@@ -25,4 +25,5 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-process.on('unhandledRejection', (e) => log('worker', `unhandled rejection: ${e?.stack || e}`)); // mineflayer's openVillager leaks a timeout rejection (windowOpen, 2026-11-03): log it, never die with every bot
+const rejected = require('./counters').rejectionReporter((text) => client.outEvents.push({bot: cfg.names[0], kind: 'alert', text}));
+process.on('unhandledRejection', (e) => { log('worker', `unhandled rejection: ${e?.stack || e}`); rejected(); }); // mineflayer's openVillager leaks a timeout rejection (windowOpen, 2026-11-03): log it, never die with every bot

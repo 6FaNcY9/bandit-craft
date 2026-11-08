@@ -19,4 +19,16 @@ class HourCounter {
   }
 }
 
-module.exports = {HourCounter};
+// Count unhandled rejections; report() hears about them at most once per 10 minutes (with the count since the last notice).
+function rejectionReporter(report, now = Date.now) {
+  let last = -Infinity, unreported = 0;
+  return () => {
+    unreported++;
+    if (now() - last < 600000) return;
+    last = now();
+    report(`unhandled rejection (${unreported} since the last notice, see the log)`);
+    unreported = 0;
+  };
+}
+
+module.exports = {HourCounter, rejectionReporter};
