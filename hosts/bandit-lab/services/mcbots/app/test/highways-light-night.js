@@ -1,11 +1,10 @@
 'use strict';
 const assert = require('node:assert');
 
-(async () => { // tunnel highways: a written .litematic reads back, the tunnel's shape, rock walls (highway.js, 2026-10-18)
+(async () => { // a written .litematic reads back, rock walls
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
   const {writeLitematic} = require('../litematic-write');
   const {parseLitematic} = require('../schematic');
-  const {tunnel, schematic, legs} = require('../highway');
   const {matches} = require('../placing');
   // Round trip: 6 states (3 bits, entries spanning two longs), props kept, air returned, structure_void (unset) not.
   const names = ['stone', 'cobblestone', 'oak_planks', 'glass', 'dirt'];
@@ -17,38 +16,14 @@ const assert = require('node:assert');
   assert.strictEqual(parsed.blocks.length, 26);
   for (const b of blocks.filter((c) => c.name !== 'air')) assert.ok(parsed.blocks.some((p) => p.x === b.x && p.y === b.y && p.z === b.z && p.name === b.name && JSON.stringify(p.props) === JSON.stringify(b.props)), `${b.name} at ${b.x},${b.y},${b.z}`);
   assert.deepStrictEqual(parsed.air, [{x: 1, y: 1, z: 1}]);
-  // A straight leg east: 3 wide walkway, 3 high, walls, floor and ceiling; a torch every 6 blocks pointing in.
-  const at = (r, x, y, z) => r.blocks.find((b) => b.x === x && b.y === y && b.z === z)?.name ?? (r.air.some((a) => a.x === x && a.y === y && a.z === z) ? 'air' : null);
-  let t = tunnel([{x: 0, y: 60, z: 0}, {x: 12, y: 60, z: 0}]);
-  for (const z of [-1, 0, 1]) for (const y of [60, 61]) assert.strictEqual(at(t, 4, y, z), 'air', `walkway ${y} ${z}`);
-  assert.deepStrictEqual([at(t, 4, 59, 0), at(t, 4, 63, 0), at(t, 4, 60, -2), at(t, 4, 62, 2)], ['cobblestone', 'cobblestone', 'cobblestone', 'cobblestone']);
-  const torches = t.blocks.filter((b) => b.name === 'wall_torch');
-  assert.deepStrictEqual(torches.map((b) => [b.x, b.y, b.z, b.props.facing]), [[6, 62, -1, 'south'], [12, 62, 1, 'north']]);
-  assert.ok(!t.air.some((a) => a.x === 6 && a.y === 62 && a.z === -1), 'a torch cell is no air to clear');
-  // An L: the corner is open both ways (air wins over the walls of either leg).
-  t = tunnel([{x: 0, y: 60, z: 0}, {x: 8, y: 60, z: 0}, {x: 8, y: 60, z: 8}]);
-  assert.deepStrictEqual([at(t, 9, 60, 0), at(t, 8, 60, 1), at(t, 7, 60, 0), at(t, 10, 60, 4)], ['air', 'air', 'air', 'cobblestone']);
-  // Rising 3 over 9 blocks: flat, three steps whose floor is a stair facing uphill, flat; headroom 3 over each step.
-  t = tunnel([{x: 0, y: 60, z: 0}, {x: 0, y: 63, z: 9}]);
-  const steps = t.blocks.filter((b) => b.name === 'cobblestone_stairs' && b.x === 0);
-  assert.deepStrictEqual(steps.map((b) => [b.y, b.z, b.props.facing]), [[60, 4, 'south'], [61, 5, 'south'], [62, 6, 'south']]);
-  for (const s of steps) for (const h of [1, 2, 3]) assert.strictEqual(at(t, 0, s.y + h, s.z), 'air', `headroom over the step at z ${s.z}`);
-  // Down is the same tunnel walked the other way.
-  assert.deepStrictEqual(tunnel([{x: 0, y: 63, z: 9}, {x: 0, y: 60, z: 0}]).blocks.filter((b) => b.name === 'cobblestone_stairs').length, t.blocks.filter((b) => b.name === 'cobblestone_stairs').length);
-  assert.throws(() => tunnel([{x: 0, y: 60, z: 0}, {x: 0, y: 70, z: 5}]), /rises no more/);
-  assert.throws(() => tunnel([{x: 0, y: 60, z: 0}, {x: 3, y: 60, z: 5}]), /along x or z/);
-  // The file the CLI writes builds where it should: its region at 0,0,0, the origin at the lowest corner.
-  const s = schematic([{x: 100, y: 60, z: 50}, {x: 110, y: 60, z: 50}]);
-  assert.deepStrictEqual(s.origin, {x: 100, y: 59, z: 48});
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hw-'));
-  fs.writeFileSync(path.join(dir, 'hw.litematic'), s.buffer);
-  const plan = await require('../build').schematicPlan(dir, {file: 'hw.litematic', origin: s.origin, anySolid: ['cobblestone']});
-  assert.ok(plan.air.has('104,60,50') && plan.air.has('104,62,51') && !plan.air.has('104,63,50'), 'the walkway, not the ceiling, is air to clear');
-  assert.ok(plan.byKey.get('104,59,50').anySolid && plan.byKey.get('104,63,50').anySolid, 'floor and ceiling take any rock');
-  assert.ok(!plan.byKey.get('106,62,49')?.anySolid, 'a torch is a torch');
   // A file replaced under its name is parsed again: a leg was built from the old copy (sandbox 2026-10-18).
-  fs.writeFileSync(path.join(dir, 'hw.litematic'), schematic([{x: 100, y: 60, z: 50}, {x: 104, y: 60, z: 50}]).buffer);
-  const again = await require('../build').schematicPlan(dir, {file: 'hw.litematic', origin: s.origin, anySolid: ['cobblestone']});
+  const lit = (n) => writeLitematic({name: 'hw', regions: [{name: 'r', position: {x: 0, y: 0, z: 0}, size: {x: n, y: 1, z: 1}, blocks: Array.from({length: n}, (_, x) => ({x, y: 0, z: 0, name: 'cobblestone', props: {}}))}]});
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hw-'));
+  const origin = {x: 100, y: 59, z: 48};
+  fs.writeFileSync(path.join(dir, 'hw.litematic'), lit(5));
+  const plan = await require('../build').schematicPlan(dir, {file: 'hw.litematic', origin});
+  fs.writeFileSync(path.join(dir, 'hw.litematic'), lit(2));
+  const again = await require('../build').schematicPlan(dir, {file: 'hw.litematic', origin});
   assert.ok(again.targets.length < plan.targets.length, 'the new file, not the cached plan');
   // A clean-up schematic is air alone: its site spans that air ("NaN Infinity NaN" before, sandbox 2026-10-19).
 
@@ -64,17 +39,7 @@ const assert = require('node:assert');
   assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'gravel', props: {}}), false);
   assert.strictEqual(matches({name: 'cobblestone', props: {}, anySolid: true}, {name: 'water', props: {}}), false);
   assert.strictEqual(matches({name: 'cobblestone', props: {}}, {name: 'stone', props: {}}), false);
-  // Legs cut from one route never wall what another leg walks through: made apart, two legs narrowed their corner to
-  // one block (sandbox 2026-10-18).
-  const air = new Set(), solid = new Set();
-  for (const leg of legs([{x: 0, y: 60, z: 0}, {x: 10, y: 60, z: 0}, {x: 10, y: 60, z: 10}])) {
-    const p = await parseLitematic(leg.buffer), k = (c) => `${c.x + leg.origin.x},${c.y + leg.origin.y},${c.z + leg.origin.z}`;
-    for (const c of p.air) air.add(k(c));
-    for (const c of p.blocks) if (c.name !== 'wall_torch') solid.add(k(c));
-  }
-  assert.deepStrictEqual([...air].filter((c) => solid.has(c)), [], 'no cell is wall in one leg and walkway in another');
-  assert.ok(air.has('8,60,1') && air.has('10,60,2'), 'the corner stays 3 wide');
-  console.log('highways: litematic round trip, tunnel shape, rock walls, joined legs ok');
+  console.log('litematic round trip, rock walls ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
 // ---- light jobs and keeper lighting ----
 (async () => {

@@ -10,7 +10,7 @@ module.exports = async () => {
     assert.deepStrictEqual(HB.slotSpot(6), {x: -266, y: 58, z: -213, facing: 'north'}, 'room 1 ends at x -266');
     assert.deepStrictEqual(HB.slotSpot(7), {x: -272, y: 58, z: -205, facing: 'north'}, 'the 8th goes to room 2');
     assert.strictEqual(new Set(Array.from({length: HB.SLOTS}, (_, i) => JSON.stringify(HB.slotSpot(i)))).size, HB.SLOTS, 'every slot differs');
-    assert.deepStrictEqual(HB.CREW.map((n) => HB.homeSpot(n, {}).x), [-272, -271, -270, -269, -268, -267, -266], 'the crew gets seven different x');
+    assert.deepStrictEqual(HB.CREW.map((n) => HB.homeSpot(n, {}).x), [-272, -271, -270], 'the crew gets different x');
     assert.deepStrictEqual(HB.homeSpot('bot3', {slot: 8}), HB.slotSpot(8), 'an explicit slot wins');
     assert.deepStrictEqual(HB.homeSpot('bot3', {x: 1, y: 60, z: 2}), {x: 1, y: 60, z: 2, facing: 'north'});
     assert.throws(() => HB.homeSpot('bot99', {}), /no bed slot/);

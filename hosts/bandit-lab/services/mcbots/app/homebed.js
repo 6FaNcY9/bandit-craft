@@ -13,8 +13,8 @@ const {bedCells, bedCheck, standable, woolColour} = require('./hunt');
 // (z -205) the same way. One slot per x, seven per room.
 const ROOM = {x: -272, y: 58, z: -213, width: 7, step: 8};
 const SLOTS = ROOM.width * 2;
-// Who sleeps where when a job names no slot (the lab crew; bot10 sits in the Nether).
-const CREW = ['bot1', 'bot2', 'bot3', 'bot4', 'bot16', 'bot17', 'bot18'];
+// Who sleeps where when a job names no slot (the other bots pass a slot or x, y, z).
+const CREW = ['bot1', 'bot2', 'bot3'];
 // Look direction (mineflayer yaw: 0 faces -z) that makes the server turn the bed that way.
 const YAW = {north: 0, west: Math.PI / 2, south: Math.PI, east: -Math.PI / 2};
 

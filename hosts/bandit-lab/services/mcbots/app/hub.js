@@ -284,10 +284,6 @@ class Hub {
     return who;
   }
 
-  tokenOk(header) {
-    return !!this.auth(header);
-  }
-
   throttled() {
     const t = this.now();
     this.fails = this.fails.filter((x) => t - x < 60000);
