@@ -214,7 +214,7 @@ Chest and hopper windows with item icons replace the text dialogs as the main su
 `app/botui-menus.js`, routes in `app/botui.js`). The staff now goes into the hand.
 
 - Open: `/bots` or staff left click → overview `ov` (a head per bot with a health bar, a badge for its job, bottom row Alle: Stopp, Alle: Komm,
-  Karte, Bauplan hochladen, `Alle Befehle (alt)` = the old dialogs). Staff right click on a bot, or a head → bot page `botm`.
+  Karte, Bauplan hochladen, Einstellungen). Staff right click on a bot, or a head → bot page `botm`.
 - Bot page icons: lead Folg mir, ender pearl Komm her, sword Bewach diesen Ort, chest Einlagern, barrier Stopp, pickaxe Abbauen…, axe Holz holen,
   bricks Bauen…, sapling Baumfarm, clock Wenn frei… (`idlem`), hopper Kiste merken, barrel Inventar (`invm`), arrow Zurück. A glint marks the active job.
 - Shift window `shiftm` (hopper, staff right click on a minable block opens it pre-filled): five slots Wer → Was → Wie viel (16/64/256/∞) → Wohin → Los.
@@ -228,6 +228,13 @@ Chest and hopper windows with item icons replace the text dialogs as the main su
   result), chest minecart Holen… (`gridm` mode `get`: click = 16, shift = 64, for the page's bot). Sneak + staff right click on a crafting
   table or a furnace/blast furnace/smoker opens `craftm` / `smeltm`; a plain right click still uses the block. Recipe-book clicks on our
   views are cancelled (Paper `PlayerRecipeBookClickEvent`).
+- Part 2b (2026-11-08): marks (sneak + staff on the ground = spot, again elsewhere = area; one store per viewer, 6 h), Mehr… and
+  Bewachen…/Hingehen… on the bot page, chest jobs (`chestjobs`, staff on a chest), staff on an animal (`huntm`), wheat or a spawner (`whom`),
+  schematic grid `schemm` and the Platzieren ghost (blue `BlockDisplay` box follows the gaze, sneak + click rotates, click sets; plugin
+  `/outline ghost/follow`, restart Paper), Bauen / Material sammeln (`buildm`), Bereich (`aream`: Ausheben, Abbauen, Schacht, Ausleuchten,
+  Versiegeln; no ore mining from an area), Verzaubern (`enchm`, a fake table, bots do not grind XP), Karte (`kartem`) and Einstellungen
+  (`zielm`) as menus. Dialogs left: `stopall`, `upload`, `ziele` sliders; any other saved screen name falls back to `ov`.
+  Ledger: `botui-coverage.md`; test guides `docs/guides/{owner,misa}-test.de.html`.
 - Menu items cannot be taken; the viewer is the Bukkit player, orders pass the same `VALIDATE`/`resolveBots` checks as before.
 
 ## Phone notifications

@@ -67,23 +67,24 @@
 <table class="t">
   <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
   <tr><td>C1</td><td>Stell dich an die freie Stelle. Schau auf den Boden, dort, wo die <b>Ecke</b> des Bauwerks hin soll</td><td>–</td></tr>
-  <tr><td>C2</td><td>bot19s Seite → Ziegel (<b>Bauen…</b>)</td><td>Ein Fenster „Bauen“ mit: Bauplan, Wohin, Drehung, Wer, Wann.</td></tr>
-  <tr><td>C3</td><td>Bauplan = <code>plaza</code>, Wohin = <b>Worauf du schaust</b> (mit den Koordinaten aus C1), Drehung = 0°, Wer = bot19, Wann = <b>Jetzt</b>, dann <b>Senden</b></td><td>Eine kurze Meldung von bot19. Er holt Material aus der Vorratskiste und fängt an. Der Platz ist 16 × 16 groß und hat 332 Blöcke.</td></tr>
-  <tr><td>C4</td><td>Im Menü „Bots“ die Maus über bot19 halten, ein paar Minuten zusehen</td><td>Unter seinem Kopf ist ein Ziegel-Symbol, im Text steht der Fortschritt. Er arbeitet die Schichten von unten nach oben ab.</td></tr>
-  <tr><td>C5</td><td>Mittendrin: Barriere (<b>Stopp</b>) auf seiner Seite</td><td>Er hört auf. Der grüne <b>Weiter</b>-Knopf erscheint.</td></tr>
-  <tr><td>C6</td><td><b>Weiter</b> klicken</td><td>Er baut weiter, wo er aufgehört hat. Fertige Blöcke setzt er nicht noch einmal.</td></tr>
-  <tr><td>C7</td><td>Warten, bis er fertig ist</td><td>Der Platz steht vollständig. Danach ist bot19 frei (oder macht, was bei „Wenn frei“ steht).</td></tr>
-  <tr><td>C8</td><td>Fehlt ihm Material: im Text unter seinem Kopf nachsehen</td><td>Dort steht, worauf er wartet („waiting: …“). Das ist kein Fehler, sondern ein Hinweis, was in die Vorratskiste muss.</td></tr>
+  <tr><td>C2</td><td>bot19s Seite → Ziegel (<b>Bauen…</b>)</td><td>Ein Fenster mit allen Bauplänen als Bild (neueste zuerst, deine zuletzt benutzten vorn). Jedes zeigt Größe und „eigener Plan“ oder „geteilt“.</td></tr>
+  <tr><td>C3</td><td>Den Plan <code>plaza</code> anklicken, dann <b>Platzieren</b></td><td>Ein <b>blauer Geisterkasten</b> in der Größe des Plans folgt deinem Blick. Über der Hotbar steht eine Zeile dazu.</td></tr>
+  <tr><td>C4</td><td><b>Schleichen + Klick</b>, dann ein normaler <b>Klick</b> auf die Ecke aus C1</td><td>Schleichen + Klick dreht den Kasten um 90°. Der Klick setzt ihn, danach öffnet sich das Bau-Menü.</td></tr>
+  <tr><td>C5</td><td>Alternativ zu C3/C4: <b>Markierte Stelle</b> (vorher Schleichen + Stab auf den Boden), <b>Wo ich stehe</b> oder <b>Gespeicherte Orte</b></td><td>Es geht ohne Geist direkt weiter zum Bau-Menü.</td></tr>
+  <tr><td>C6</td><td>Im Bau-Menü: <b>Bauen</b>. Kopf = wer (bot19), Uhr = <b>Jetzt</b> (oder <b>Danach</b>), Drehung 0 / 90 / 180 / 270</td><td>Eine kurze Meldung von bot19. Er holt Material aus der Vorratskiste und fängt an. Der Platz ist 16 × 16 groß und hat 332 Blöcke.</td></tr>
+  <tr><td>C7</td><td>Im Menü „Bots“ die Maus über bot19 halten, ein paar Minuten zusehen</td><td>Unter seinem Kopf ist ein Ziegel-Symbol, im Text steht der Fortschritt. Er arbeitet die Schichten von unten nach oben ab.</td></tr>
+  <tr><td>C8</td><td>Mittendrin: Barriere (<b>Stopp</b>) auf seiner Seite, dann der grüne <b>Weiter</b>-Knopf</td><td>Er hört auf, mit „Weiter“ baut er dort weiter, wo er aufgehört hat. Fertige Blöcke setzt er nicht noch einmal.</td></tr>
+  <tr><td>C9</td><td>Fehlt ihm Material: im Text unter seinem Kopf nachsehen</td><td>Dort steht, worauf er wartet („waiting: …“). Das ist kein Fehler, sondern ein Hinweis, was in die Vorratskiste muss.</td></tr>
 </table>
 
 <h2>D. Bauen: eigener Bauplan und Material</h2>
 <table class="t">
   <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
   <tr><td>D1</td><td>Menü „Bots“ → Buch und Feder (<b>Bauplan hochladen</b>) → <b>Seite öffnen</b>. Eine kleine <code>.litematic</code>-Datei hochladen</td><td>Der Browser bestätigt das Hochladen. Im Spiel kommt eine Chatzeile, dass der Plan da ist.</td></tr>
-  <tr><td>D2</td><td>Wieder Bauen… öffnen</td><td>Dein Plan steht in der Liste unter „Bauplan“.</td></tr>
-  <tr><td>D3</td><td>Menü „Bots“ → Buch (<b>Alle Befehle (alt)</b>) → Neuer Auftrag → <b>Material für Bauplan</b>. Dein Plan, dieselbe Ecke wie später, Kiste = eine leere Kiste, Wer = bot2</td><td>bot2 sammelt alles, was der Plan braucht, und legt es in die Kiste.</td></tr>
-  <tr><td>D4</td><td>Wenn die Kiste voll ist: deinen Plan mit <b>Bauen…</b> an dieser Ecke bauen lassen (Wer = bot2 oder „Alle meine Bots“)</td><td>Die Bots bauen ihn aus dem gesammelten Material.</td></tr>
-  <tr><td>D5</td><td>Optional: dasselbe mit Drehung 90°</td><td>Das Bauwerk steht um 90° gedreht an derselben Ecke.</td></tr>
+  <tr><td>D2</td><td>Wieder Ziegel (<b>Bauen…</b>) öffnen</td><td>Dein Plan steht als „eigener Plan“ im Fenster, ganz vorn.</td></tr>
+  <tr><td>D3</td><td>Deinen Plan anklicken → <b>Platzieren</b> (dieselbe Ecke wie später) → im Bau-Menü <b>Material sammeln</b>, Kopf = bot2</td><td>bot2 sammelt alles, was der Plan braucht, und legt es in seine Kiste.</td></tr>
+  <tr><td>D4</td><td>Wenn die Kiste voll ist: denselben Plan an derselben Ecke, im Bau-Menü <b>Bauen</b> (Kopf = bot2)</td><td>Er baut ihn aus dem gesammelten Material.</td></tr>
+  <tr><td>D5</td><td>Optional: dasselbe mit Drehung 90 (Schleichen + Klick beim Geist oder die Drehung im Bau-Menü)</td><td>Das Bauwerk steht um 90° gedreht an derselben Ecke.</td></tr>
 </table>
 
 <h2>E. Misas Rechte (kurz prüfen, wenn sie online ist)</h2>
@@ -94,11 +95,25 @@
   <tr><td>E3</td><td>MisaBot → <b>Baumfarm</b></td><td>Er geht zu einer Baumfarm auf ihrem Gelände, oder sie sieht „Keine Baumfarm auf deinem Gelände“.</td></tr>
 </table>
 
+<h2>F. Bereich und Zaubertisch</h2>
+<div class="box"><b>Markieren:</b> <b>Schleichen + Rechtsklick</b> mit dem Stab auf den Boden merkt eine <b>Stelle</b>. Nochmal Schleichen + Klick woanders (innerhalb einer Minute) macht daraus einen <b>Bereich</b>. Die Markierung gilt für Bauen, Bereichsarbeiten, Hingehen und Bewachen, bleibt sechs Stunden und ist pro Spieler getrennt.</div>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>F1</td><td>Schleichen + Stab auf den Boden, dann nochmal woanders</td><td>„Stelle gemerkt“, dann „Bereich gemerkt“ mit der Größe. Ein blauer Kasten zeigt den Bereich.</td></tr>
+  <tr><td>F2</td><td>bot2s Seite → <b>Mehr…</b> → <b>Bereich…</b> → <b>Markierter Bereich</b></td><td>Fünf Arbeiten: Ausheben, Abbauen, Schacht, Ausleuchten, Versiegeln. Eine, die für die Größe nicht geht, ist grau und sagt warum.</td></tr>
+  <tr><td>F3</td><td><b>Ausheben</b>, Kopf = bot2, Uhr = Danach</td><td>bot2 gräbt den Bereich aus. Ohne Bereich zeigt „Zwei Ecken zeigen“ auf zwei Blöcke.</td></tr>
+  <tr><td>F4</td><td>Zaubertisch: Stab auf einen Zaubertisch (oder bot2s Seite → <b>Verzaubern…</b>)</td><td>Ein Fenster mit Werkzeug, Lapis und drei Büchern (Stufe 1 bis 3).</td></tr>
+  <tr><td>F5</td><td>Werkzeug, dann Stufe 1 klicken</td><td>bot2 läuft zum Zaubertisch. Hat er zu wenig Erfahrung oder Lapis, steht der Grund auf Deutsch im Text und das Werkzeug ist wieder bei ihm.</td></tr>
+  <tr><td>F6</td><td>Schleichen + Stab auf eine Kiste → Kopf → <b>Entnehmen…</b> → Kohle</td><td>Der Bot holt 16 Kohle aus genau dieser Kiste.</td></tr>
+  <tr><td>F7</td><td>Menü „Bots“ → <b>Karte</b> und <b>Einstellungen</b> (Komparator)</td><td>Sechs Zoom-Karten mit Köpfen. Einstellungen: Daueraufträge, Seitenleiste, Ziele (Zahlen), Handelskisten.</td></tr>
+</table>
+
 <h2>Was noch nicht im Menü ist</h2>
 <ul>
-  <li><b>Einen Bereich markieren</b> (ausheben, ebnen, beleuchten) und den <b>Zaubertisch</b>: Das kommt als Nächstes (Teil 2b). Bis dahin geht es über „Alle Befehle (alt)“.</li>
   <li><b>Handel auf Knopfdruck</b> für EM_Trader: Er handelt nur nach Zeitplan.</li>
   <li>Den Bauplan hochladen geht nur über den Browser-Link. Minecraft kann ohne Mods keine Dateien schicken.</li>
+  <li><b>Erz aus einem markierten Bereich</b> abbauen: bewusst nicht im Menü (deine Entscheidung), das Trichter-Fenster bleibt wie es ist. Kommt später, falls du es willst.</li>
+  <li><b>Meldungen</b> (ungelesen) und <b>Essen</b> (Brot-Knopf): Dafür gibt es noch keinen Auftrag und keinen Speicher.</li>
 </ul>
 
 <div class="box"><b>Wenn etwas hängt:</b> Auf der Seite des Bots die Barriere (Stopp) drücken, Nummer und Uhrzeit notieren, weitermachen. Mit „Weiter“ geht ein gestopptes Projekt danach wieder los.</div>
