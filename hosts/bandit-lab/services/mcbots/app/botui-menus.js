@@ -39,7 +39,7 @@ const snapOf = (view, name) => view.snaps.find((s) => s.name === name) || {name,
 const back = (i, a, bot) => slot(i, 'arrow', 'Zurück', {a, ...(bot ? {bot} : {})});
 
 // The running job type -> the slot that started it (Abbauen and Bauen have no badge slot to light up here).
-const GLINT = {follow: 'lead', goto: 'ender_pearl', guard: 'iron_sword', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart'};
+const GLINT = {follow: 'lead', goto: 'ender_eye', guard: 'iron_sword', enchant: 'enchanting_table', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart'};
 
 // One bot, 3 rows: head with its state, orders, then Wenn frei / Inventar / Zurück.
 function botPage(view, screen) {
@@ -51,12 +51,44 @@ function botPage(view, screen) {
   return {type: 'chest', title: safe(bot, 30), rows: 3, slots: [
     slot(0, 'player_head', bot, {a: 'botm', bot}, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
     go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'), go(4, 'iron_sword', 'Bewach diesen Ort', 'guardhere'),
-    go(5, 'chest', 'Einlagern', 'deposit'), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
+    go(5, 'chest', 'Einlagern', 'deposit'), slot(6, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
     slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type)}), go(11, 'iron_axe', 'Holz holen', 'chop'),
     slot(12, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(13, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
     slot(14, 'bricks', 'Bauen…', {a: 'job', key: 'schematic', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
     go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
-    slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), back(26, 'ov')]};
+    slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), slot(25, 'book', 'Mehr…', {a: 'morem', bot}), back(26, 'ov')]};
+}
+
+// Mehr…: the rarer orders and Hingehen….
+function morePage(view, screen) {
+  const s = snapOf(view, screen.bot), bot = s.name;
+  const go = (i, item, name, job, lore) => slot(i, item, name, {a: 'go', bot, job}, lore ? {lore: [lore]} : {});
+  return {type: 'chest', title: `${safe(bot, 20)}: mehr`, rows: 1, slots: [
+    slot(0, 'ender_eye', 'Hingehen…', {a: 'placem', mode: 'goto', bot}, {glint: GLINT[s.job?.type] === 'ender_eye'}),
+    go(1, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste'), go(2, 'red_bed', 'Heim', 'homebed'), go(3, 'bone', 'Gräber holen', 'graves'), go(4, 'totem_of_undying', 'Helfen', 'help'),
+    back(8, 'botm', bot)]};
+}
+
+// Bewachen…: four radii; click guards where the viewer stands, Shift where they look, the marked spot has its own slot.
+function guardPage(view, screen) {
+  const bot = snapOf(view, screen.bot).name;
+  const slots = [8, 16, 32, 48].map((radius, i) => slot(i, 'iron_sword', `Radius ${radius}`, {a: 'guardgo', bot, radius}, {count: radius, lore: ['Klick: wo du stehst · Shift: worauf du schaust']}));
+  if (view.mark?.spot) slots.push(slot(5, 'red_banner', 'Markierte Stelle', {a: 'guardgo', bot, radius: 16, mark: 1}, {lore: [`${view.mark.spot.x} ${view.mark.spot.y} ${view.mark.spot.z}`]}));
+  slots.push(back(8, 'botm', bot));
+  return {type: 'chest', title: `${safe(bot, 20)}: bewachen`, rows: 1, slots};
+}
+
+const PLACE_ICON = {supply: 'chest', site: 'bricks', home: 'red_bed', afk: 'clock', chest: 'barrel', storage: 'chest', shaft: 'iron_pickaxe', treefarm: 'oak_sapling', wheat: 'wheat', base: 'white_banner'};
+// Wohin?: where I look / stand / the marked spot, then the saved places (never the protected ones).
+function placePage(view, screen) {
+  const {mode, bot} = screen, pay = (where) => ({a: 'placego', mode, bot, where}), spot = view.mark?.spot, slots = [];
+  if (view.ctx?.gaze) slots.push(slot(0, 'grass_block', 'Worauf du schaust', pay('gaze')));
+  slots.push(slot(1, 'compass', 'Wo ich stehe', pay('pos')));
+  if (spot) slots.push(slot(2, 'red_banner', `Markierte Stelle ${spot.x} ${spot.y} ${spot.z}`, pay('mark')));
+  (view.places || []).filter((p) => p.kind !== 'protected').sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 40)
+    .forEach((p, i) => slots.push(slot(9 + i, PLACE_ICON[p.kind] || 'oak_sign', p.name, pay(`place:${p.name}`), {lore: [`${p.x} ${p.y} ${p.z}`]})));
+  slots.push(back(53, mode === 'build' ? 'schemm' : 'botm', bot));
+  return {type: 'chest', title: 'Wohin?', rows: 6, slots};
 }
 
 // "Wenn frei": one slot per choice the viewer may pick; the keeper only for the owner's own bots.
@@ -104,9 +136,16 @@ function shiftPage(view) {
   return {type: 'hopper', title: 'Abbauen', slots: [
     slot(0, 'player_head', f.bot, {a: 'botpick'}, {head: f.bot, lore: ['Klick: anderer Bot']}),
     f.block ? slot(1, f.block, germanName(f.block), {a: 'gridm', tab: 'erze', page: 0}, {lore: ['Klick: aussuchen']}) : slot(1, 'stick', 'Was? Klick: aussuchen', {a: 'gridm', tab: 'erze', page: 0}),
-    slot(2, amount === 16 || amount === 64 ? f.block || 'paper' : 'paper', amount === 'inf' ? '∞ immer weiter' : String(amount), {a: 'amount'}, {count: amount === 16 || amount === 64 ? amount : 1, lore: ['Klick: Menge ändern']}),
+    slot(2, amount === 16 || amount === 64 ? f.block || 'paper' : 'paper', amount === 'inf' ? '∞ immer weiter' : String(amount), {a: 'amountm'}, {count: amount === 16 || amount === 64 ? amount : 1, lore: ['Klick: Menge wählen']}),
     f.chest ? slot(3, 'barrel', `Wohin: ${f.chest.x} ${f.chest.y} ${f.chest.z}`, {a: 'pick', kind: 'chest'}, {lore: ['Klick: andere Kiste zeigen']}) : slot(3, 'barrier', 'Keine Kiste – klick und zeig auf eine', {a: 'pick', kind: 'chest'}),
     slot(4, 'lime_dye', 'Los!', {a: 'shiftgo'})]};
+}
+
+// Wie viel?: one slot per amount.
+function amountPage(view) {
+  const slots = AMOUNTS.map((a, i) => slot(i, 'paper', a === 'inf' ? '∞ immer weiter' : String(a), {a: 'setamount', amount: a}, {count: a === 16 || a === 64 ? a : 1, glint: view.form?.amount === a}));
+  slots.push(back(8, 'shiftm'));
+  return {type: 'chest', title: 'Wie viel?', rows: 1, slots};
 }
 
 // Item grids: Herstellen (what jobs.CRAFTS can make), Schmelzen (jobs.SMELTS) and Holen (every known item).
@@ -169,16 +208,17 @@ function smeltPage(view) {
 }
 
 // Which bot does it: the viewer's own bots as heads.
-function botPickPage(view) {
+function botPickPage(view, screen = {}) {
   const rows = Math.min(6, Math.ceil((view.snaps.length + 1) / 9)), last = rows * 9 - 1;
   const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, last)
-    .map((s, i) => slot(i, 'player_head', s.name, {a: 'setbot', bot: s.name}, {head: s.name, glint: view.form?.bot === s.name}));
-  slots.push(back(last, 'shiftm'));
+    .map((s, i) => slot(i, 'player_head', s.name, {a: 'setbot', bot: s.name, ...(screen.back ? {back: screen.back} : {})}, {head: s.name, glint: view.form?.bot === s.name}));
+  const to = screen.back || 'shiftm';
+  slots.push(back(last, to, to === 'botm' ? screen.bot : undefined));
   return {type: 'chest', title: 'Welcher Bot?', rows, slots};
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

@@ -439,8 +439,10 @@ async function fake() {
     assert.equal(f.of('/menu').at(-1).body.type, 'hopper');
     await ev('Midari', {a: 'shiftm', bot: 'MisaBot'});
     assert.equal(ui.state('Midari').form.chest, null);
-    const amounts = []; for (let i = 0; i < 4; i++) { await ev('Fancy', {a: 'amount'}); amounts.push(ui.state('Fancy').form.amount); }
-    assert.deepEqual(amounts, [16, 64, 256, 'inf']);
+    const amounts = []; for (const amount of [16, 64, 256, 'inf']) { await ev('Fancy', {a: 'setamount', amount}); amounts.push(ui.state('Fancy').form.amount); }
+    assert.deepEqual(amounts, [16, 64, 256, 'inf']); assert.equal(ui.state('Fancy').screen.name, 'shiftm');
+    await ev('Fancy', {a: 'setamount', amount: 7}); assert.match(ui.state('Fancy').flash.text, /^Fehler: unbekannte Menge/); assert.equal(ui.state('Fancy').form.amount, 'inf');
+    await ev('Fancy', {a: 'amountm'}); assert.equal(f.of('/menu').at(-1).body.title, 'Wie viel?');
     await ev('Fancy', {a: 'pickblock', block: 'bedrock'});
     assert.match(ui.state('Fancy').flash.text, /unbekannter Block/);
     await ev('Midari', {a: 'setbot', bot: 'bot1'});
@@ -788,6 +790,73 @@ async function fake() {
     await ev('Fancy', {a: 'pick', kind: 'block'});
     await ui.handle({type: 'open', player: 'Fancy', gaze: {x: 1, y: 2, z: 3, block: 'deepslate_diamond_ore'}});
     assert.equal(ui.state('Fancy').form.block, 'diamond_ore');
+    end();
+  }
+  { // part 2b task 1: Bewachen, Hingehen, marks, amounts, Ausrüsten; the guest is held to her own bots and ground()
+    const submits = [], snaps = [{name: 'bot1', online: true, health: 20, job: null}, {name: 'MisaBot', online: true, health: 10, job: null, guest: true}];
+    const places = [{name: 'Basis', kind: 'base', x: 1, y: 64, z: 2, dim: 'overworld'}, {name: 'geheim', kind: 'protected', x: 5, y: 5, z: 5}];
+    let chest = null;
+    const api = {snapshots: () => snaps, places: () => places, schematics: async () => [], keeper: {state: () => ({chest})},
+      submit: (v, j) => { if (v === 'Midari' && j.args.x === 8) throw new Error('Fremdes Gelände'); submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const {MARK_MS, markOf} = require('../botui');
+    const ev = (player, data, extra = {}) => ui.handle({type: 'click', player, data, pos: [0, 64, 0], dim: 'overworld', ...extra});
+    const sneak = (player, x, y, z, extra = {}) => ui.handle({type: 'open', player, sneak: true, pos: [0, 64, 0], dim: 'overworld', gaze: {x, y, z, block: 'stone'}, ...extra});
+    const bars = () => f.of('/actionbar').map((c) => c.body.text);
+    await ev('Fancy', {a: 'morem', bot: 'bot1'}); assert.deepEqual(ui.state('Fancy').screen, {name: 'morem', bot: 'bot1'});
+    await ev('Fancy', {a: 'guardm', bot: 'bot1'}); assert.equal(ui.state('Fancy').screen.name, 'guardm');
+    await ev('Fancy', {a: 'guardgo', bot: 'bot1', radius: 32});
+    assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'guard', args: {x: 0, y: 64, z: 0, radius: 32}, replace: false});
+    await ev('Fancy', {a: 'guardgo', bot: 'bot1', radius: 16, shift: true}, {gaze: {x: 3, y: 70, z: 4, block: 'stone'}});
+    assert.deepEqual(submits.at(-1).args, {x: 3, y: 70, z: 4, radius: 16});
+    const n = submits.length;
+    await ev('Fancy', {a: 'guardgo', bot: 'bot1', radius: 5}); assert.match(ui.state('Fancy').flash.text, /^Fehler: unbekannter Radius/);
+    await ev('Fancy', {a: 'guardgo', bot: 'bot1', radius: 16, mark: 1}); assert.equal(ui.state('Fancy').flash.text, 'Keine Stelle markiert');
+    await ev('Midari', {a: 'guardgo', bot: 'bot1', radius: 16}); assert.match(ui.state('Midari').flash.text, /^Fehler: nicht dein Bot/);
+    await ev('Midari', {a: 'guardm', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'morem', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'placem', mode: 'goto', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'pos'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'go', bot: 'bot1', job: 'goto', x: 1, y: 2, z: 3}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'botpick', back: 'botm'}); await ev('Midari', {a: 'setbot', bot: 'bot1', back: 'botm'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    assert.equal(submits.length, n);
+    await ev('Fancy', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'pos'});
+    assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'goto', args: {x: 0, y: 64, z: 0}, replace: false});
+    await ev('Fancy', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'place:Basis'});
+    assert.deepEqual(submits.at(-1).args, {x: 1, y: 64, z: 2});
+    await ev('Fancy', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'place:geheim'}); assert.match(ui.state('Fancy').flash.text, /^Fehler: Ziel nicht gefunden/);
+    await ev('Fancy', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'mark'}); assert.equal(ui.state('Fancy').flash.text, 'Keine Stelle markiert');
+    // marks: two sneak clicks = spot then area, ghost outline, no menu; the guest marks but ground() refuses her order
+    const menus = f.of('/menu').length, shows = f.of('/show').length;
+    await sneak('Midari', 5, 64, 5);
+    assert.match(bars().at(-1), /^Stelle gemerkt: 5 64 5/); assert.deepEqual(f.of('/outline').at(-1).body, {player: 'Midari', box: {x1: 5, y1: 64, z1: 5, x2: 5, y2: 64, z2: 5}, ghost: true});
+    t += 1000;
+    await sneak('Midari', 8, 66, 9);
+    assert.equal(bars().at(-1), 'Bereich gemerkt: 4 × 3 × 5'); assert.deepEqual(f.of('/outline').at(-1).body.box, {x1: 5, y1: 64, z1: 5, x2: 8, y2: 66, z2: 9});
+    assert.equal(f.of('/menu').length, menus); assert.equal(f.of('/show').length, shows);
+    assert.equal(markOf(ui, 'Fancy').spot, null);
+    await sneak('Midari', 8, 70, 8); // a third click starts over
+    await ev('Midari', {a: 'placego', mode: 'goto', bot: 'MisaBot', where: 'mark'});
+    assert.equal(ui.state('Midari').flash.text, 'Fehler: Fremdes Gelände');
+    assert.deepEqual(ui.state('Midari').flash.ok, false);
+    t += MARK_MS + 1;
+    assert.deepEqual(markOf(ui, 'Midari'), {spot: null, area: null});
+    await sneak('Fancy', 1, 2, 3, {dim: 'overworld'}); t += 1000; await sneak('Fancy', 4, 5, 6, {dim: 'the_nether'});
+    assert.equal(bars().at(-1), 'Ecken in verschiedenen Welten');
+    // amounts feed shiftgo
+    await ev('Fancy', {a: 'shiftm'}); await ev('Fancy', {a: 'pickblock', block: 'iron_ore'});
+    await ev('Fancy', {a: 'setamount', amount: 256}); await ev('Fancy', {a: 'shiftgo'});
+    assert.deepEqual(submits.at(-1).args, {block: 'iron_ore', count: 256});
+    // generic bot picker: back goes to the asking screen, bots/forms follow
+    await ev('Fancy', {a: 'botpick', back: 'botm'}); assert.deepEqual(ui.state('Fancy').screen, {name: 'botpick', back: 'botm', bot: ui.state('Fancy').lastBot});
+    await ev('Fancy', {a: 'setbot', bot: 'bot1', back: 'botm'}); assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'});
+    await ev('Fancy', {a: 'botpick', back: 'nope'}); assert.match(ui.state('Fancy').flash.text, /Zurück-Knopf/);
+    // Ausrüsten: the owner's supply chest only
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'rearm'}); assert.match(ui.state('Fancy').flash.text, /^Fehler: keine Vorratskiste/);
+    chest = {x: 7, y: 8, z: 9};
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'rearm'}); assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'rearm', args: {x: 7, y: 8, z: 9}, replace: false});
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'rearm'}); assert.match(ui.state('Midari').flash.text, /^Fehler:/);
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'goto', x: 4, y: 65, z: 6}); assert.deepEqual(submits.at(-1).args, {x: 4, y: 65, z: 6});
     end();
   }
   console.log('botui ok');

@@ -169,6 +169,41 @@ assert.ok(MENUS.has('ov'));
   assert.equal(c.slots.find((x) => x.item === 'arrow').payload.a, 'craftm');
   for (const m of [c, gt, g('smelt')]) for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }
+{ // part 2b task 1: Mehr, Bewachen, Hingehen, Wie viel, generic bot picker
+  const pg = (name, o = {}, extra = {}) => menu({name, bot: 'zed', ...extra}, view(o)).menu;
+  const at = (m, i) => m.slots.find((x) => x.slot === i);
+  const b = pg('botm');
+  assert.deepEqual([at(b, 6).item, at(b, 6).payload, at(b, 25).item, at(b, 25).payload], ['shield', {a: 'guardm', bot: 'zed'}, 'book', {a: 'morem', bot: 'zed'}]);
+  const more = pg('morem');
+  assert.equal(more.rows, 1); assert.match(more.title, /zed: mehr/);
+  assert.deepEqual(more.slots.filter((x) => x.slot < 5).map((x) => x.payload.a), ['placem', 'go', 'go', 'go', 'go']);
+  assert.deepEqual(at(more, 0).payload, {a: 'placem', mode: 'goto', bot: 'zed'}); assert.deepEqual(at(more, 1).lore, ['aus der Vorratskiste']);
+  assert.deepEqual(at(more, 8).payload, {a: 'botm', bot: 'zed'});
+  const guard = pg('guardm');
+  assert.deepEqual([0, 1, 2, 3].map((i) => at(guard, i).count), [8, 16, 32, 48]); assert.deepEqual(at(guard, 2).payload, {a: 'guardgo', bot: 'zed', radius: 32});
+  assert.ok(!at(guard, 5));
+  const gm = at(pg('guardm', {mark: {spot: {x: 1, y: 2, z: 3}}}), 5);
+  assert.deepEqual(gm.payload, {a: 'guardgo', bot: 'zed', radius: 16, mark: 1}); assert.equal(gm.item, 'red_banner');
+  const places = [{name: 'Basis', kind: 'base', x: 1, y: 64, z: 2}, {name: 'geheim', kind: 'protected', x: 9, y: 9, z: 9}, {name: 'Apfel', kind: 'weird', x: 0, y: 1, z: 2}];
+  const pl = pg('placem', {places, ctx: {gaze: {x: 1, y: 1, z: 1}}}, {mode: 'goto'});
+  assert.equal(pl.rows, 6); assert.equal(pl.title, 'Wohin?');
+  assert.deepEqual(pl.slots.filter((x) => x.slot >= 9 && x.slot < 53).map((x) => [x.name, x.item, x.payload.where]), [['Apfel', 'oak_sign', 'place:Apfel'], ['Basis', 'white_banner', 'place:Basis']]);
+  assert.deepEqual(at(pl, 9).lore, ['0 1 2']); assert.deepEqual(at(pl, 0).payload, {a: 'placego', mode: 'goto', bot: 'zed', where: 'gaze'});
+  assert.ok(!at(pl, 2)); assert.deepEqual(at(pl, 53).payload, {a: 'botm', bot: 'zed'});
+  assert.ok(!at(pg('placem', {places}, {mode: 'goto'}), 0));
+  assert.equal(at(pg('placem', {places, mark: {spot: {x: 1, y: 2, z: 3}}}, {mode: 'goto'}), 2).name, 'Markierte Stelle 1 2 3');
+  const am = pg('amountm', {form: {bot: 'zed', amount: 'inf'}});
+  assert.deepEqual(am.slots.slice(0, 4).map((x) => [x.name, x.count, !!x.glint]), [['16', 16, false], ['64', 64, false], ['256', 1, false], ['∞ immer weiter', 1, true]]);
+  assert.deepEqual(at(am, 2).payload, {a: 'setamount', amount: 256}); assert.deepEqual(at(am, 8).payload, {a: 'shiftm'});
+  assert.deepEqual(menu({name: 'shiftm'}, view({form: {bot: 'zed', block: null, amount: 16}})).menu.slots[2].payload, {a: 'amountm'});
+  const bp = menu({name: 'botpick', back: 'botm', bot: 'zed'}, view()).menu;
+  assert.deepEqual(bp.slots.find((x) => x.head === 'zed').payload, {a: 'setbot', bot: 'zed', back: 'botm'}); assert.deepEqual(bp.slots.at(-1).payload, {a: 'botm', bot: 'zed'});
+  for (const m of [more, guard, pg('guardm', {mark: {spot: {x: 1, y: 2, z: 3}}}), pl, am, bp, b]) for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+  // a guest sees only her bot's pages
+  const gv = view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, snaps: snaps.filter((x) => x.name === 'MisaBot')});
+  assert.deepEqual(menu({name: 'botpick', back: 'botm', bot: 'MisaBot'}, gv).menu.slots.filter((x) => x.head).map((x) => x.head), ['MisaBot']);
+  assert.equal(JSON.stringify(menu({name: 'botm', bot: 'MisaBot'}, gv)), JSON.stringify(menu({name: 'botm', bot: 'MisaBot'}, gv)));
+}
 console.log('botui-menus ok');
 { // furnace window: input, fuel, output preview
   const page = (item, inv) => menu({name: 'smeltm'}, view({snaps: [{name: 'zed', online: true, inventory: inv}], make: {kind: 'smelt', bot: 'zed', item}})).menu;

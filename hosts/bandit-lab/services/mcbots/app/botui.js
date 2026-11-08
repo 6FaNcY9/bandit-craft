@@ -24,7 +24,7 @@ const traderOf = (ui, viewer, data) => {
 const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichbar'); };
 
 const box = (p, q) => ({x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)});
-const outline = (ui, viewer, b) => ui.call('/outline', {player: viewer, box: b}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
+const outline = (ui, viewer, b, ghost = false) => ui.call('/outline', {player: viewer, box: b, ...(ghost ? {ghost: true} : {})}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
 const clearSel = async (st, ui, viewer) => { st.sel = {a: null, b: null, dim: null}; await outline(ui, viewer, null); };
 
 // Where a bot plays, for the screens and orders: with the hub in sandbox mode (MC_VHOST) all but guests and MAIN_BOTS are there.
@@ -39,9 +39,33 @@ function markersOf(snaps, allowed) {
 
 // `go` jobs of the bot page: the botui-jobs key and the fixed fields (deposit and treefarm fill theirs in).
 const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data: {}}, guardhere: {key: 'guard', data: {where: 'pos', radius: 16}},
-  deposit: {key: 'deposit', data: {}}, chop: {key: 'chop', data: {n: 64}}, treefarm: {key: 'treefarm', data: {}}};
+  deposit: {key: 'deposit', data: {}}, chop: {key: 'chop', data: {n: 64}}, treefarm: {key: 'treefarm', data: {}},
+  rearm: {key: 'rearm', data: {}}, homebed: {key: 'homebed', data: {}}, graves: {key: 'graves', data: {}}, help: {key: 'help', data: {}},
+  goto: {key: 'goto', data: {}, loc: true}, wheatfarm: {key: 'wheatfarm', data: {}}, lightspawner: {key: 'lightspawner', data: {}, loc: true},
+  stock: {key: 'stock', data: {}, loc: true}, tidy: {key: 'tidy', data: {radius: 16}, loc: true}};
+// loc: the order takes x/y/z from the payload (jobs.presetOf bounds-checks them).
 
 const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'botm'];
+const PICK_BACK = [...GRID_BACK, 'huntm', 'buildm', 'aream', 'enchm'];
+const RADII = [8, 16, 32, 48];
+
+// The viewer's marked spot / area (set by Shift + staff click), kept on the hub across quits, dropped after MARK_MS.
+const MARK_MS = 6 * 3600 * 1000;
+function markOf(ui, viewer) {
+  const m = ui.marks.get(viewer);
+  if (m && ui.now() - m.at > MARK_MS) ui.marks.delete(viewer);
+  const k = ui.marks.get(viewer);
+  return {spot: k?.spot || null, area: k?.area || null};
+}
+// First call: a spot. A second within PICK_MS turns it into an area (spot -> corner a). null: the corners are in different worlds.
+function setMark(ui, viewer, g, dim) {
+  const prev = markOf(ui, viewer), spot = {x: g.x, y: g.y, z: g.z, dim}, at = ui.now();
+  if (prev.spot && !prev.area && at - ui.marks.get(viewer).at <= PICK_MS) {
+    if (jobs.dimOf(prev.spot.dim) !== jobs.dimOf(dim)) return null;
+    ui.marks.set(viewer, {spot: prev.spot, area: {a: prev.spot, b: spot}, at});
+  } else ui.marks.set(viewer, {spot, area: null, at});
+  return ui.marks.get(viewer);
+}
 // What the result click of the crafting window orders: `craft` when the bot carries every ingredient of that many batches, else `get` (it resolves chains).
 function craftOrder(make, snap, shift = false) {
   const grid = recipeGrid(make.item), have = menus.haveOf(snap), b = menus.maxBatches(grid, have), want = shift ? Math.max(1, b) : 1;
@@ -63,6 +87,12 @@ function order(st, ui, viewer, bot, key, o) {
 }
 
 const PICK_MS = 60000;
+// One order from a menu: build (rights, validation), submit (ground), flash. `data` is the job's fields.
+function orderAt(st, ui, viewer, bot, key, data) {
+  const o = jobs.build(key, {who: bot, ...data}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+  done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+  ui.flash(st, `${bot}: ${o.say}`, true);
+}
 // The viewer's Abbauen form: kept between screens, a new bot brings its own chest (the bot's, else the supply chest).
 // The bot a screen is about: the payload's (rights checked), else the viewer's last one, else their first.
 function botOf(st, ui, viewer, bot) {
@@ -113,12 +143,13 @@ const ACTIONS = {
       const c = snap?.chest || supplyFor(ui, viewer);
       if (!c) return ui.flash(st, 'Erst eine Kiste merken');
       extra = {x: c.x, y: c.y, z: c.z};
-    } else if (data.job === 'treefarm') {
-      const farms = places.filter((p) => p.kind === 'treefarm' && p.box), z = farms.find((p) => !ui.api.groundOk || ui.api.groundOk(viewer, bot, 'treefarm', p.box));
-      if (!z) return ui.flash(st, farms.length ? 'Keine Baumfarm auf deinem Gelände' : 'Keine Baumfarm eingerichtet');
+    } else if (data.job === 'treefarm' || data.job === 'wheatfarm') {
+      const [kind, label] = data.job === 'treefarm' ? ['treefarm', 'Baumfarm'] : ['wheat', 'Weizenfarm'];
+      const farms = places.filter((p) => p.kind === kind && p.box), z = farms.find((p) => !ui.api.groundOk || ui.api.groundOk(viewer, bot, data.job, p.box));
+      if (!z) return ui.flash(st, farms.length ? `Keine ${label} auf deinem Gelände` : `Keine ${label} eingerichtet`);
       extra = {zone: z.name};
-    }
-    const o = jobs.build(spec.key, {who: bot, ...spec.data, ...extra}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places, snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+    } else if (spec.loc) extra = Object.fromEntries(['x', 'y', 'z'].filter((k) => data[k] !== undefined).map((k) => [k, data[k]]));
+    const o = jobs.build(spec.key, {who: bot, ...spec.data, ...extra}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places, snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
     done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
     ui.flash(st, `${bot}: ${o.say}`, true);
   },
@@ -138,10 +169,40 @@ const ACTIONS = {
     if (data.block !== undefined) setBlock(st, data.block);
     st.screen = {name: 'shiftm'};
   },
-  amount: (st, data, ui, viewer) => {
-    const f = formOf(st, ui, viewer);
-    f.amount = menus.AMOUNTS[(menus.AMOUNTS.indexOf(f.amount) + 1) % menus.AMOUNTS.length];
+  amountm: (st, data, ui, viewer) => { formOf(st, ui, viewer); st.screen = {name: 'amountm'}; },
+  setamount: (st, data, ui, viewer) => {
+    if (!menus.AMOUNTS.includes(data.amount)) throw new Error('unbekannte Menge');
+    formOf(st, ui, viewer).amount = data.amount;
     st.screen = {name: 'shiftm'};
+  },
+  morem: (st, data, ui, viewer) => { st.screen = {name: 'morem', bot: oneBot(ui, viewer, data)}; },
+  guardm: (st, data, ui, viewer) => { st.screen = {name: 'guardm', bot: oneBot(ui, viewer, data)}; },
+  // Bewachen: Shift looks, the mark slot uses the stored spot, else where the viewer stands.
+  guardgo: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    st.screen = {name: 'botm', bot};
+    if (!RADII.includes(data.radius)) throw new Error('unbekannter Radius');
+    if (data.mark) {
+      const spot = markOf(ui, viewer).spot;
+      if (!spot) return ui.flash(st, 'Keine Stelle markiert');
+      return orderAt(st, ui, viewer, bot, 'guard', {radius: data.radius, x: spot.x, y: spot.y, z: spot.z});
+    }
+    orderAt(st, ui, viewer, bot, 'guard', {radius: data.radius, where: data.shift ? 'gaze' : 'pos'});
+  },
+  placem: (st, data, ui, viewer) => {
+    if (data.mode !== 'goto' && data.mode !== 'build') throw new Error('unbekannter Modus');
+    st.screen = {name: 'placem', mode: data.mode, bot: oneBot(ui, viewer, data)};
+  },
+  // Hingehen: gaze, position, the stored mark or a saved place (build mode follows with the plan menus).
+  placego: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data), where = String(data.where);
+    if (data.mode !== 'goto') throw new Error('unbekannter Modus');
+    if (!/^(gaze|pos|mark|place:.+)$/.test(where)) throw new Error('unbekanntes Ziel');
+    st.screen = {name: 'botm', bot};
+    if (where !== 'mark') return orderAt(st, ui, viewer, bot, 'goto', {where});
+    const spot = markOf(ui, viewer).spot;
+    if (!spot) return ui.flash(st, 'Keine Stelle markiert');
+    orderAt(st, ui, viewer, bot, 'goto', {x: spot.x, y: spot.y, z: spot.z});
   },
   // Herstellen window: st.make is the viewer's craft in the making; the same bot keeps its item.
   craftm: (st, data, ui, viewer) => {
@@ -184,8 +245,19 @@ const ACTIONS = {
     order(st, ui, viewer, bot, o.key, o);
   },
   pickblock: (st, data, ui, viewer) => { formOf(st, ui, viewer); setBlock(st, data.block); st.screen = {name: 'shiftm'}; },
-  botpick: (st, data, ui, viewer) => { formOf(st, ui, viewer); st.screen = {name: 'botpick'}; },
-  setbot: (st, data, ui, viewer) => { formOf(st, ui, viewer, oneBot(ui, viewer, data)); st.screen = {name: 'shiftm'}; },
+  botpick: (st, data, ui, viewer) => {
+    if (data.back !== undefined && !PICK_BACK.includes(data.back)) throw new Error('unbekannter Zurück-Knopf');
+    formOf(st, ui, viewer);
+    st.screen = {name: 'botpick', ...(data.back ? {back: data.back, ...(data.back === 'botm' ? {bot: st.lastBot} : {})} : {})};
+  },
+  // Back to the screen that asked: the shift form keeps its own bot, the others follow lastBot and the bot their state carries.
+  setbot: (st, data, ui, viewer) => {
+    if (data.back !== undefined && !PICK_BACK.includes(data.back)) throw new Error('unbekannter Zurück-Knopf');
+    if (!data.back || data.back === 'shiftm') { formOf(st, ui, viewer, oneBot(ui, viewer, data)); st.screen = {name: 'shiftm'}; return; }
+    const bot = botOf(st, ui, viewer, data.bot);
+    for (const k of ['build', 'hunt', 'area', 'make']) if (st[k]) st[k].bot = bot;
+    st.screen = {name: data.back, ...(data.back === 'botm' ? {bot} : {})};
+  },
   pick: async (st, data, ui, viewer) => {
     if (data.kind !== 'block' && data.kind !== 'chest') throw new Error('unbekannte Auswahl');
     const bot = data.bot !== undefined ? oneBot(ui, viewer, data) : undefined;
@@ -373,7 +445,7 @@ const ACTIONS = {
 class BotUi {
   constructor({url, token, viewerBots, api, log, now = Date.now, fetch = globalThis.fetch, refreshMs = 5000, idleLimitMs = 600000, retryMs = 2000, screens = require('./botui-screens')}) {
     Object.assign(this, {url, token, viewerBots, api, log, now, fetch, refreshMs, idleLimitMs, retryMs, screens,
-      states: new Map(), since: 0, boot: null, pushed: false, down: false, running: false, ticking: false, ac: new AbortController()});
+      states: new Map(), marks: new Map(), since: 0, boot: null, pushed: false, down: false, running: false, ticking: false, ac: new AbortController()});
   }
 
   start() {
@@ -463,6 +535,7 @@ class BotUi {
       else if (mineBot) st.screen = {name: 'botm', bot: who};
       else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm'};
+      else if (e.sneak === true && g && !g.entity) { await this.markAt(st, viewer, g, e.dim); return; }
       // a set corner A keeps the next open on the area steps
       else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else st.screen = {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'ov'};
@@ -484,6 +557,16 @@ class BotUi {
     }
   }
 
+  // Shift + staff click on a block: first a spot, then (within a minute) an area; no menu opens.
+  async markAt(st, viewer, g, dim) {
+    const bar = (text) => this.call('/actionbar', {player: viewer, text}).catch((err) => this.log(`botui ${viewer}: actionbar: ${err.message}`));
+    const m = setMark(this, viewer, g, dim);
+    if (!m) return bar('Ecken in verschiedenen Welten');
+    const {a, b} = m.area || {a: m.spot, b: m.spot};
+    await outline(this, viewer, box(a, b), true);
+    await bar(m.area ? `Bereich gemerkt: ${Math.abs(a.x - b.x) + 1} × ${Math.abs(a.y - b.y) + 1} × ${Math.abs(a.z - b.z) + 1}` : `Stelle gemerkt: ${g.x} ${g.y} ${g.z} · Schleichen+Klick nochmal = Bereich bis dort`);
+  }
+
   // The staff's right click while a pick is live is the answer. false: wrong target, flash only, the pick stays and no menu opens.
   async consumePick(st, viewer, g) {
     const {kind, bot} = st.pick, ok = g && !g.entity && (kind === 'chest' ? jobs.isChest(g.block) : jobs.BLOCKS.includes(oreOf(g.block)));
@@ -503,7 +586,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent, places: this.api.places(), mark: markOf(this, viewer)});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
@@ -574,4 +657,4 @@ function stopTargets(viewerBots, viewer, known) {
   return allowed === '*' ? 'all' : allowed.filter((n) => known.includes(n));
 }
 
-module.exports = {BotUi, ACTIONS, craftOrder, smeltOrder, allowedBots, stopTargets, markersOf, placeBots};
+module.exports = {BotUi, ACTIONS, MARK_MS, markOf, craftOrder, smeltOrder, allowedBots, stopTargets, markersOf, placeBots};
