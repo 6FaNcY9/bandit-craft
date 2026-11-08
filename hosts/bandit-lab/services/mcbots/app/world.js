@@ -56,6 +56,7 @@ function stairRing(x1, z1, x2, z2) {
   return ring;
 }
 
+const EXPERIENCE_MAX = 2000;
 const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-?\d+,-?\d+:[a-z_]{1,48}|reach:[a-z_]{1,24}:-?\d+,-?\d+,-?\d+)$/;
 // A block no walk reaches waits longer each time, 5 min doubling up to 2 h: a coal ore in a cave at -208 44 -169 cost
 // three bots 90 s every 5 min all night (main server 2026-10-20). The wait is shared (experience key reach:), kept 4 h.
@@ -115,7 +116,7 @@ class WorldModel {
     else { r.fail++; r.streak++; r.lastFail = this.now(); }
     r.t = this.now();
     if (r.ok + r.fail > 40) { r.ok = Math.floor(r.ok / 2); r.fail = Math.floor(r.fail / 2); r.secs = Math.floor(r.secs / 2); r.units = Math.floor(r.units / 2); }
-    this.experience.set(key, r);
+    this.keepExperience(key, r);
     if (this.experienceFile && !this.experienceTimer) {
       this.experienceTimer = setTimeout(() => {
         this.experienceTimer = null;
@@ -138,7 +139,14 @@ class WorldModel {
 
   // A record as the hub has it (hubclient.js): taken over whole, nothing learned twice.
   noteExperience(key, v) {
-    if (EXPERIENCE_KEY.test(key) && validExperience(v)) this.experience.set(key, {ok: v.ok, fail: v.fail, streak: v.streak, secs: v.secs, units: v.units, lastFail: v.lastFail, t: v.t});
+    if (EXPERIENCE_KEY.test(key) && validExperience(v)) this.keepExperience(key, {ok: v.ok, fail: v.fail, streak: v.streak, secs: v.secs, units: v.units, lastFail: v.lastFail, t: v.t});
+  }
+
+  // Most recently learned last; past EXPERIENCE_MAX the oldest go (the map is persisted and would grow with every chest and spot).
+  keepExperience(key, r) {
+    this.experience.delete(key);
+    this.experience.set(key, r);
+    while (this.experience.size > EXPERIENCE_MAX) this.experience.delete(this.experience.keys().next().value);
   }
 
   persistExperience(file) {

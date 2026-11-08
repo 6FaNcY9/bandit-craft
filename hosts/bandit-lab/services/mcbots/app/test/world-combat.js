@@ -382,6 +382,13 @@ assert.throws(() => wm.learn('chest:1,2.5,3:stone', {ok: true}), /invalid experi
 assert.throws(() => wm.learn('craft:stone', {ok: true, secs: Infinity}), /invalid experience/);
 for (let i = 0; i < 39; i++) wm.learn('mine:stone', {ok: false});
 assert.ok(wm.experience.get('mine:stone').ok + wm.experience.get('mine:stone').fail <= 40);
+{ // the experience map is capped at 2000 keys, least recently learned first
+  const cap = new W.WorldModel();
+  for (let i = 0; i < 2000; i++) cap.learn(`chest:${i},0,0:stone`, {ok: true});
+  cap.learn('chest:0,0,0:stone', {ok: false});
+  cap.learn('mine:new', {ok: true});
+  assert.deepStrictEqual([cap.experience.size, cap.learned('chest:0,0,0:stone') !== null, cap.learned('chest:1,0,0:stone'), cap.learned('mine:new') !== null], [2000, true, null, true]);
+}
 wm.setPlayers(W.parsePlayers(bm, 'the_nether'));
 assert.strictEqual(wm.player('steve').dim, 'the_nether');
 wm.postNeed('bot2', 'hopper', 9, {x: -356, y: 72, z: -191}, 'waiting for material');
