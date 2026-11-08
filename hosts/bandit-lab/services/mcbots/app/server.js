@@ -33,7 +33,6 @@ const {Crews} = require('./crews');
 const agentauth = require('./agentauth');
 const voxels = require('./voxels');
 let voxelBusy = false; // one /api/voxels read at a time
-const {Slayer} = require('./slayer');
 const {Admin, queued} = require('./admin');
 const uploadsLib = require('./uploads');
 
@@ -142,7 +141,6 @@ const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of 
 // What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
 // they never push job events out of the 200-entry event log.
 const decisions = new EventLog();
-const slayer = new Slayer({url: cfg.slayerUrl, cmd: cfg.slayerStatusCmd, decisions});
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
 const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
@@ -661,7 +659,6 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/api/events') return json(200, {lastId: events.lastId, events: events.since(Number(url.searchParams.get('since')) || 0)});
   if (req.method === 'GET' && url.pathname === '/api/decisions') return json(200, {lastId: decisions.lastId, events: decisions.since(Number(url.searchParams.get('since')) || 0)});
-  if (req.method === 'GET' && url.pathname === '/api/slayer') return json(200, slayer.view());
   if (req.method === 'POST' && url.pathname === '/api/decision') {
     if (!agent) return json(403, {error: 'forbidden'}); // only the agent service reports decisions
     try {
@@ -1043,7 +1040,6 @@ const alertTick = setInterval(() => {
   }
 }, 5000);
 
-slayer.start();
 server.listen(cfg.port, cfg.host, () => {
   log('dashboard', `listening on ${cfg.host}:${cfg.port} (${cfg.allowed.length ? `tailscale logins: ${cfg.allowed.join(',')}` : 'local only'})`);
   for (const r of runners.values()) r.start();
@@ -1059,7 +1055,6 @@ function shutdown() {
   clearInterval(keeperTick);
   clearInterval(alertTick);
   clearInterval(evictTick);
-  slayer.stop();
   clearInterval(blocklogTimer);
   blocklog.flush();
   stopBlueMap();

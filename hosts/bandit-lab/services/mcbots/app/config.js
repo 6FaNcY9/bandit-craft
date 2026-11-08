@@ -106,7 +106,6 @@ function loadConfig(env = process.env) {
   // Worker bots (other processes, via the hub) are not in BOT_NAMES, so only the name is checked.
   const strangers = agentBots.filter((b) => !NAME_RE.test(b));
   if (strangers.length) throw new Error(`AGENT_BOTS must be bot names: ${strangers.join(', ')}`);
-  // The gaming PC's llama-server through the lab tunnel (slayer.js); unset = no card.
   const overlap = planRoster.filter((n) => agentBots.includes(n));
   if (planEnable && overlap.length) throw new Error(`PLAN_ROSTER must not contain agent bots: ${overlap.join(', ')}`);
   // The job board (board.js) owns these bots: no agent, plan or keeper hands them work (spike 2026-10-23).
@@ -125,9 +124,6 @@ function loadConfig(env = process.env) {
   const mainBots = list(env.MAIN_BOTS);
   const mainBad = mainBots.filter((n) => !NAME_RE.test(n) || agentBots.includes(n) || boardBots.includes(n) || planRoster.includes(n) || guestBots.includes(n));
   if (mainBad.length) throw new Error(`MAIN_BOTS must be bot names outside AGENT_BOTS, BOARD_BOTS, PLAN_ROSTER and GUEST_BOTS: ${mainBad.join(', ')}`);
-  const slayerUrl = (env.SLAYER_URL || '').replace(/\/+$/, '');
-  if (slayerUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(slayerUrl)) throw new Error('SLAYER_URL must be http://host:port');
-  const slayerStatusCmd = require('./slayer').parseCmd(env.SLAYER_STATUS_CMD);
   // Server administration over RCON (admin.js): host on the internal Docker network, password from the environment file.
   const rconHost = (env.RCON_HOST || '').trim(), rconPassword = env.RCON_PASSWORD || '', rconPort = Number(env.RCON_PORT || 25575);
   if (rconHost && !/^[\w.-]{1,64}$/.test(rconHost)) throw new Error('RCON_HOST must be a host name');
@@ -193,7 +189,6 @@ function loadConfig(env = process.env) {
     mainBots,
     tradeHalls,
     tradeSchedule,
-    slayerUrl,
     rcon: rconHost ? {host: rconHost, port: rconPort, password: rconPassword} : null,
     sandboxRcon: sbHost ? {host: sbHost, port: sbPort, password: sbPassword} : null,
     rescueSpot,
@@ -201,7 +196,6 @@ function loadConfig(env = process.env) {
     viewerBots,
     botuiUrl,
     uploadBase,
-    slayerStatusCmd,
     workerPort,
     workerHost: env.WORKER_HOST || '127.0.0.1',
     hostLabel: (env.HOST_LABEL || require('node:os').hostname()).slice(0, 40),
