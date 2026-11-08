@@ -1028,8 +1028,11 @@ async function fake() {
     await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'pick', kind: 'area'}); await open('Fancy', g(0, 64, 0)); await open('Fancy', g(40, 90, 40));
     assert.equal(menus().at(-1).title, 'Bereich: 41 × 27 × 41'); assert.match(menus().at(-1).slots.find((x) => x.slot === 9).lore[0], /^zu groß/);
     await ev('Fancy', {a: 'areago', key: 'excavate'}); assert.match(ui.state('Fancy').flash.text, /^Fehler:/); assert.ok(ui.state('Fancy').sel.b);
+    // a selection left open (Escape) does not take over the staff: stone still opens Abbauen
+    await open('Fancy', g(7, 64, 7)); assert.equal(menus().at(-1).title, 'Abbauen');
     await ev('Fancy', {a: 'areaclear'}); assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').sel.a, null);
     // marked area: from the mark store, in this world only
+    delete ui.state('Fancy').area; await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.equal(menus().at(-1).title, 'Bereich wählen'); // forged: no aream before
     await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.equal(ui.state('Fancy').flash.text, 'Kein Bereich markiert');
     ui.marks.set('Fancy', {spot: null, area: {a: {x: 1, y: 64, z: 1, dim: 'overworld'}, b: {x: 3, y: 65, z: 2, dim: 'overworld'}}, at: t});
     await ev('Fancy', {a: 'areafrom', from: 'mark'}, {dim: 'the_nether'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: Markierung ist in einer anderen Welt'); assert.equal(ui.state('Fancy').sel.a, null);

@@ -200,6 +200,7 @@ const ACTIONS = {
   },
   areafrom: async (st, data, ui, viewer) => {
     if (data.from !== 'mark') throw new Error('unbekannte Quelle');
+    st.area ||= {bot: botOf(st, ui, viewer), when: 'next'}; // a forged click without aream first must not break the render
     st.screen = {name: 'aream'};
     const m = markOf(ui, viewer).area;
     if (!m) return ui.flash(st, 'Kein Bereich markiert');
@@ -594,6 +595,7 @@ class BotUi {
         if (r.boot !== this.boot) { // first contact skips the backlog; after a plugin restart ids start over
           this.pushed = this.boot === null;
           if (this.boot !== null) for (const st of this.states.values()) { st.open = false; st.pick = null; } // the plugin lost its tracking and will not say `closed`
+          else for (const v of Object.keys(this.viewerBots)) outline(this, v, null); // a restarted hub forgot its picks: no ghost may outlive them
           this.since = this.boot === null ? r.last : 0;
           this.boot = r.boot;
           continue;
@@ -652,7 +654,7 @@ class BotUi {
       else if (g && !g.entity && /wheat|farmland/.test(g.block)) st.screen = {name: 'whom', job: 'wheatfarm'};
       else if (g && !g.entity && /spawner/.test(g.block)) st.screen = {name: 'whom', job: 'lightspawner', at: {x: g.x, y: g.y, z: g.z}};
       else if (e.sneak === true && g && !g.entity) { await this.markAt(st, viewer, g, e.dim); return; }
-      else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
+      else if (g && !g.entity && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else st.screen = {name: 'ov'};
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
