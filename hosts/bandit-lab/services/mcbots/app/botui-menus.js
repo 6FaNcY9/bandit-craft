@@ -6,6 +6,7 @@ const {choiceOf, CHOICES} = require('./idle');
 const {safe} = require('./botui-screens');
 const {germanName, BLOCKS, CRAFTS, SMELTS, JOBS, areaJobs, dims} = require('./botui-jobs');
 const {recipeGrid, SMELT} = require('./recipes');
+const {ENCHANTABLE} = require('./bots');
 const {FUELS} = require('./crafting');
 const itemsByName = require('minecraft-data')('26.1').itemsByName;
 
@@ -56,7 +57,7 @@ function botPage(view, screen) {
     slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Klick: Block abbauen', 'Shift: Bereich']}), go(11, 'iron_axe', 'Holz holen', 'chop'),
     slot(12, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(13, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
     slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
-    go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
+    go(16, 'oak_sapling', 'Baumfarm', 'treefarm'), slot(17, 'enchanting_table', 'Verzaubern…', {a: 'enchm', bot}, {glint: s.job?.type === 'enchant'}),
     slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), slot(25, 'book', 'Mehr…', {a: 'morem', bot}), back(26, 'ov')]};
 }
 
@@ -187,7 +188,12 @@ const GRID_MODES = {block: {tabs: TABS, icons: TAB_ICON, pick: 'pickblock', key:
   craft: {tabs: craftTabs, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
   smelt: {tabs: {schmelzgut: SMELTS}, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
   get: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
-  withdraw: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'}};
+  withdraw: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
+  enchant: {tabs: {dabei: []}, icons: {dabei: ['enchanted_book', 'Dabei']}, pick: 'pickitem', key: 'item'}};
+const PREF = ['netherite', 'diamond', 'iron', 'stone', 'wooden'], KIND = ['pickaxe', 'sword', 'axe', 'shovel'];
+const rank = (n) => { const m = /^(\w+?)_(\w+)$/.exec(n) || []; const a = PREF.indexOf(m[1]), k = KIND.indexOf(m[2]); return (a < 0 ? 9 : a) * 10 + (k < 0 ? 9 : k); };
+const enchantables = (have) => Object.keys(have).filter((n) => ENCHANTABLE.test(n));
+const bestTool = (have) => enchantables(have).sort((a, b) => rank(a) - rank(b))[0] || null;
 
 // Grid: tab icons on top, (block mode: the viewer's last picks, then) the tab's entries (13 at most, so one page); bottom row: point at one (block mode), back.
 // shortcut: `page` is carried but ignored, no tab has more than 36 entries; add paging when one does.
@@ -195,7 +201,9 @@ function gridPage(view, screen) {
   const mode = Object.hasOwn(GRID_MODES, screen.mode) ? screen.mode : 'block', g = GRID_MODES[mode];
   const tab = Object.hasOwn(g.tabs, screen.tab) ? screen.tab : Object.keys(g.tabs)[0];
   const slots = Object.keys(g.tabs).map((t, i) => slot(i, g.icons[t][0], g.icons[t][1], {a: 'gridm', mode, tab: t, page: 0, ...(screen.back ? {back: screen.back} : {}), ...(screen.bot ? {bot: screen.bot} : {})}, {glint: t === tab}));
-  [...(mode === 'block' ? view.recent || [] : []), ...g.tabs[tab]].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: g.pick, [g.key]: b}, mode === 'get' ? {lore: ['Klick: 16 holen · Shift: 64']} : mode === 'withdraw' ? {lore: ['Klick: 16 · Shift: 64']} : {})));
+  const own = mode === 'enchant' ? enchantables(haveOf(snapOf(view, view.make?.bot))) : null;
+  if (own && !own.length) slots.push(slot(22, 'barrier', 'Nichts zum Verzaubern dabei', {a: 'enchm', bot: view.make?.bot}));
+  [...(mode === 'block' ? view.recent || [] : []), ...(own || g.tabs[tab])].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: g.pick, [g.key]: b}, mode === 'get' ? {lore: ['Klick: 16 holen · Shift: 64']} : mode === 'withdraw' ? {lore: ['Klick: 16 · Shift: 64']} : {})));
   if (mode === 'block') slots.push(slot(52, 'stick', 'Zeig drauf', {a: 'pick', kind: 'block'}));
   const to = screen.back || 'shiftm';
   slots.push(back(53, to, to === 'botm' || to === 'chestjobs' ? screen.bot : undefined));
@@ -237,6 +245,19 @@ function smeltPage(view) {
     fuel ? slot(1, fuel, germanName(fuel), {a: 'smeltm', bot}, {lore: [`Brennstoff: ${germanName(fuel)}`]}) : slot(1, 'gray_stained_glass_pane', 'Kein Brennstoff dabei · der Bot besorgt ihn', {a: 'smeltm', bot})];
   if (input) slots.push(slot(2, SMELT_RESULT[input], germanName(SMELT_RESULT[input]), {a: 'smeltgo'}, {count: n || 8, lore: ['Klick: 8 · Shift: alles was er hat']}));
   return {type: 'furnace', title: bot ? `Schmelzen: ${safe(bot, 20)}` : 'Schmelzen', slots};
+}
+
+// Verzaubern as a chest that looks like the table: item, lapis, three offers. Level n costs n lapis.
+function enchPage(view) {
+  const mk = view.make || {}, s = snapOf(view, mk.bot), bot = s.name, have = haveOf(s);
+  const item = mk.item && have[mk.item] && ENCHANTABLE.test(mk.item) ? mk.item : bestTool(have), lapis = have.lapis_lazuli || 0;
+  const pick = {a: 'gridm', mode: 'enchant', tab: 'dabei', page: 0, back: 'enchm'};
+  const slots = [slot(8, 'player_head', bot, {a: 'enchm', bot}, {head: bot}),
+    item ? slot(10, item, germanName(item), pick, {lore: ['Klick: anderes Item']}) : slot(10, 'barrier', 'Kein Werkzeug dabei', {a: 'enchm', bot}),
+    lapis ? slot(11, 'lapis_lazuli', germanName('lapis_lazuli'), {a: 'enchm', bot}, {count: Math.min(64, lapis)}) : slot(11, 'gray_stained_glass_pane', 'Kein Lapis dabei · der Bot holt es', {a: 'enchm', bot}),
+    back(26, 'botm', bot)];
+  if (item) for (const n of [1, 2, 3]) slots.push(slot(13 + n, 'enchanted_book', `Stufe ${n}`, {a: 'enchgo', level: n}, {count: n, lore: [`${n} Lapis`, 'bestes Angebot dieser Stufe']}));
+  return {type: 'chest', title: bot ? `Verzaubern: ${safe(bot, 20)}` : 'Verzaubern', rows: 3, slots};
 }
 
 // Which bot does it: the viewer's own bots as heads.
@@ -327,8 +348,8 @@ function kartePage(view) {
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, zielm: zielPage, kartem: kartePage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, enchm: enchPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, zielm: zielPage, kartem: kartePage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
-module.exports = {MENUS, ZOOMS, menu, slot, overview, AMOUNTS, haveOf, GRID_MODES, maxBatches, SMELT_RESULT, fuelOf};
+module.exports = {MENUS, ZOOMS, menu, slot, overview, AMOUNTS, haveOf, GRID_MODES, bestTool, enchantables, maxBatches, SMELT_RESULT, fuelOf};

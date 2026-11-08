@@ -574,6 +574,7 @@ async function fake() {
     for (const block of ['furnace', 'blast_furnace', 'smoker']) { await open('Fancy', {x: 1, y: 2, z: 3, block}); assert.equal(last().type, 'furnace'); assert.match(last().title, /^Schmelzen:/); }
     await open('Midari', {x: 1, y: 2, z: 3, block: 'furnace'}); assert.equal(last().title, 'Schmelzen: MisaBot');
     await open('Midari', {x: 1, y: 2, z: 3, block: 'crafting_table'}); assert.equal(last().title, 'Herstellen: MisaBot');
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'enchanting_table'}); assert.equal(last().title, 'Verzaubern: bot1');
     // a live pick still wins over a furnace gaze
     await ev('Fancy', {a: 'pick', kind: 'chest'}); const menus = f.of('/menu').length;
     await open('Fancy', {x: 1, y: 2, z: 3, block: 'furnace'});
@@ -632,6 +633,21 @@ async function fake() {
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const ev = (player, data) => ui.handle({type: 'click', player, data});
     const flash = (p) => ui.state(p).flash.text;
+    { // Verzaubern: bestTool default, level orders, bad level, foreign item, guest
+      snaps[0].inventory.push('iron_pickaxe x1', 'lapis_lazuli x3', 'stone_pickaxe x1');
+      await ev('Fancy', {a: 'enchm', bot: 'bot1'}); assert.deepEqual(ui.state('Fancy').make, {kind: 'enchant', bot: 'bot1', item: 'iron_pickaxe'});
+      await ev('Fancy', {a: 'enchgo', level: 3});
+      assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'enchant', args: {item: 'iron_pickaxe', level: 3}, replace: false});
+      const n = submits.length;
+      await ev('Fancy', {a: 'enchm', bot: 'bot1'}); await ev('Fancy', {a: 'enchgo', level: 4}); assert.match(flash('Fancy'), /^Fehler:/); assert.equal(submits.length, n);
+      await ev('Fancy', {a: 'gridm', mode: 'enchant', tab: 'dabei', page: 0, back: 'enchm'});
+      await ev('Fancy', {a: 'pickitem', item: 'cobblestone'}); assert.equal(flash('Fancy'), 'Fehler: unbekanntes Item');
+      await ev('Fancy', {a: 'pickitem', item: 'diamond_pickaxe'}); assert.equal(flash('Fancy'), 'Fehler: unbekanntes Item'); // not in the inventory
+      await ev('Fancy', {a: 'pickitem', item: 'stone_pickaxe'}); assert.equal(ui.state('Fancy').make.item, 'stone_pickaxe'); assert.equal(ui.state('Fancy').screen.name, 'enchm');
+      await ev('Midari', {a: 'enchm', bot: 'bot1'}); assert.equal(flash('Midari'), 'Fehler: nicht dein Bot');
+      await ev('Midari', {a: 'enchgo', level: 1}); assert.equal(submits.length, n);
+      snaps[0].inventory.length = 2; submits.length = 0;
+    }
     await ev('Fancy', {a: 'smeltm'}); assert.deepEqual(ui.state('Fancy').make, {kind: 'smelt', bot: 'bot1', item: null});
     assert.equal(f.of('/menu').at(-1).body.type, 'furnace');
     await ev('Fancy', {a: 'smeltgo'}); assert.equal(flash('Fancy'), 'Erst Schmelzgut wählen'); assert.equal(submits.length, 0);

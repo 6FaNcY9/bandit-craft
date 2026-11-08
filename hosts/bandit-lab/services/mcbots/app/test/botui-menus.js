@@ -59,6 +59,7 @@ assert.ok(MENUS.has('ov'));
   assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 10).glint, true);
   assert.deepEqual(s.find((x) => x.slot === 12).payload, {a: 'craftm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 12).item, 'crafting_table');
   assert.deepEqual(s.find((x) => x.slot === 13).payload, {a: 'smeltm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 13).item, 'furnace');
+  assert.deepEqual(s.find((x) => x.slot === 17).payload, {a: 'enchm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 17).item, 'enchanting_table');
   assert.deepEqual(s.find((x) => x.slot === 15).payload, {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 15).item, 'chest_minecart');
   assert.deepEqual(s.find((x) => x.slot === 11).payload, {a: 'go', bot: 'zed', job: 'chop'}); assert.equal(s.find((x) => x.slot === 14).item, 'bricks'); assert.equal(s.find((x) => x.slot === 16).item, 'oak_sapling');
   for (const [type, slot] of [['craft', 12], ['smelt', 13], ['get', 15]]) assert.deepEqual(page({...chopper, job: {type}}).slots.filter((x) => x.glint).map((x) => x.slot), [slot]);
@@ -235,6 +236,23 @@ assert.ok(MENUS.has('ov'));
   assert.equal(JSON.stringify(menu({name: 'botm', bot: 'MisaBot'}, gv)), JSON.stringify(menu({name: 'botm', bot: 'MisaBot'}, gv)));
 }
 console.log('botui-menus ok');
+{ // Verzaubern window and its item grid
+  const page = (inv, item) => menu({name: 'enchm'}, view({snaps: [{name: 'zed', online: true, inventory: inv}], make: {kind: 'enchant', bot: 'zed', item}})).menu;
+  const at = (m, i) => m.slots.find((x) => x.slot === i);
+  let m = page(['iron_pickaxe x1', 'lapis_lazuli x3'], null);
+  assert.equal(m.rows, 3); assert.equal(m.title, 'Verzaubern: zed');
+  assert.equal(at(m, 10).item, 'iron_pickaxe'); assert.deepEqual(at(m, 10).payload, {a: 'gridm', mode: 'enchant', tab: 'dabei', page: 0, back: 'enchm'});
+  assert.equal(at(m, 11).item, 'lapis_lazuli'); assert.equal(at(m, 11).count, 3);
+  for (const n of [1, 2, 3]) { assert.equal(at(m, 13 + n).item, 'enchanted_book'); assert.deepEqual(at(m, 13 + n).payload, {a: 'enchgo', level: n}); }
+  assert.deepEqual(at(m, 26).payload, {a: 'botm', bot: 'zed'});
+  m = page(['iron_pickaxe x1', 'diamond_sword x1'], 'iron_pickaxe'); assert.equal(at(m, 10).item, 'iron_pickaxe');
+  m = page(['iron_pickaxe x1'], null); assert.equal(at(m, 11).item, 'gray_stained_glass_pane');
+  m = page(['lapis_lazuli x3', 'cobblestone x9'], null); assert.equal(at(m, 10).item, 'barrier'); assert.ok(!m.slots.some((x) => x.item === 'enchanted_book'));
+  const g = (inv) => menu({name: 'gridm', mode: 'enchant', tab: 'dabei', page: 0, back: 'enchm'}, view({snaps: [{name: 'zed', online: true, inventory: inv}], make: {kind: 'enchant', bot: 'zed', item: null}})).menu;
+  assert.deepEqual(g(['iron_pickaxe x1', 'cobblestone x9', 'bow x1', 'book x1']).slots.filter((x) => x.slot >= 9 && x.slot < 52).map((x) => x.item).sort(), ['bow', 'iron_pickaxe']);
+  assert.equal(g(['cobblestone x9']).slots.find((x) => x.slot === 22).item, 'barrier');
+  assert.ok(!JSON.stringify(menu({name: 'enchm'}, view({make: undefined})).menu).includes('undefined'));
+}
 { // furnace window: input, fuel, output preview
   const page = (item, inv) => menu({name: 'smeltm'}, view({snaps: [{name: 'zed', online: true, inventory: inv}], make: {kind: 'smelt', bot: 'zed', item}})).menu;
   const at = (m, i) => m.slots.find((x) => x.slot === i);

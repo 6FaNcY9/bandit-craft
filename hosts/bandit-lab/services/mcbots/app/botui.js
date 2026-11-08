@@ -52,7 +52,7 @@ const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data:
   stock: {key: 'stock', data: {}, loc: true}, tidy: {key: 'tidy', data: {radius: 16}, loc: true}};
 // loc: the order takes x/y/z from the payload (jobs.presetOf bounds-checks them).
 
-const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'botm', 'chestjobs'];
+const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'enchm', 'botm', 'chestjobs'];
 const PICK_BACK = [...GRID_BACK, 'huntm', 'buildm', 'aream', 'enchm'];
 const RADII = [8, 16, 32, 48];
 
@@ -312,6 +312,19 @@ const ACTIONS = {
     st.make = {kind: 'craft', bot, item: st.make?.kind === 'craft' && st.make.bot === bot ? st.make.item : null};
     st.screen = {name: 'craftm'};
   },
+  enchm: (st, data, ui, viewer) => {
+    const bot = botOf(st, ui, viewer, data.bot), have = menus.haveOf(ui.api.snapshots().find((s) => s.name === bot) || {});
+    const kept = st.make?.kind === 'enchant' && st.make.bot === bot && have[st.make.item] ? st.make.item : null;
+    st.make = {kind: 'enchant', bot, item: kept || menus.bestTool(have)};
+    st.screen = {name: 'enchm'};
+  },
+  enchgo: (st, data, ui, viewer) => {
+    const make = st.make;
+    if (make?.kind !== 'enchant' || !make.item) return ui.flash(st, 'Erst ein Item wählen');
+    if (![1, 2, 3].includes(data.level)) throw new Error('unbekannte Stufe');
+    const bot = oneBot(ui, viewer, {bot: make.bot});
+    order(st, ui, viewer, bot, 'enchant', {item: make.item, n: data.level});
+  },
   gridm: (st, data, ui, viewer) => {
     const mode = data.mode === undefined ? 'block' : data.mode;
     if (!Object.hasOwn(menus.GRID_MODES, mode)) throw new Error('unbekannter Modus');
@@ -346,6 +359,12 @@ const ACTIONS = {
   },
   pickitem: (st, data, ui, viewer) => {
     const mode = st.screen.name === 'gridm' && st.screen.mode;
+    if (mode === 'enchant') {
+      const bot = botOf(st, ui, viewer, st.make?.bot);
+      if (!menus.enchantables(menus.haveOf(ui.api.snapshots().find((s) => s.name === bot) || {})).includes(data.item)) throw new Error('unbekanntes Item');
+      st.make = {kind: 'enchant', bot, item: data.item};
+      return void (st.screen = {name: 'enchm'});
+    }
     if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
     if (mode === 'withdraw') {
       const bot = oneBot(ui, viewer, {bot: st.screen.bot}), at = st.screen.at;
@@ -672,7 +691,7 @@ class BotUi {
       }
       if (st.pick) { if (!await this.consumePick(st, viewer, g, e.sneak === true)) return; }
       else if (mineBot) st.screen = {name: 'botm', bot: who};
-      else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
+      else if (g && !g.entity && (g.block === 'crafting_table' || g.block === 'enchanting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[{crafting_table: 'craftm', enchanting_table: 'enchm'}[g.block] || 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm', at: {x: g.x, y: g.y, z: g.z}};
       else if (g?.entity && /^(cow|sheep|pig|chicken)$/.test(g.entity.type)) { try { st.hunt = {animal: g.entity.type, at: {x: g.entity.x, y: g.entity.y, z: g.entity.z}, bot: botOf(st, this, viewer)}; st.screen = {name: 'huntm'}; } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && /wheat|farmland/.test(g.block)) st.screen = {name: 'whom', job: 'wheatfarm'};
