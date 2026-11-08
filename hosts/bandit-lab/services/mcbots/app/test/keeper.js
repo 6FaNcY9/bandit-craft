@@ -184,12 +184,6 @@ const {WorldModel} = require('../world');
   assert.strictEqual(k.state().quotas[1].want, 4096, 'a refused value changes nothing');
   k.setEnabled(true);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).wants, {logs: 200, coal: 4096}, 'toggling keeps the quotas');
-  { // while the plan borrows, state() says so and still lists the configured quotas
-    const b = mk(); b.quotas = [['planonly', 5]];
-    assert.deepStrictEqual([b.state().borrowed, b.state().configured.map((q) => q.item)], [true, ['logs', 'coal']]);
-    assert.throws(() => b.setWant('planonly', 6), /unknown/);
-    assert.strictEqual(mk().state().borrowed, false);
-  }
   fs.writeFileSync(file, JSON.stringify({enabled: true})); // the old format
   const old = mk();
   assert.strictEqual(old.enabled, true); assert.deepStrictEqual(old.state().quotas.map((q) => q.want), [64, 32]);

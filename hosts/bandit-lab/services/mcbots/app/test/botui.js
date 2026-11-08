@@ -656,21 +656,21 @@ async function fake() {
     const keeper = {enabled: false, state() { return {available: true, enabled: this.enabled, quotas: [{item: 'logs', want: 64, have: 1}]}; }, setEnabled(on) { this.enabled = on; calls.push(['enabled', on]); },
       setWant(item, n) { if (item !== 'logs') throw new Error('unknown quota item: ' + item); calls.push(['want', item, n]); }};
     const traderChests = {add: (...a) => chests.push(['add', ...a]), remove: (...a) => chests.push(['remove', ...a]), list: () => ({sticks: [], stores: []})};
-    const api = {snapshots: () => [{name: 'bot1', online: true}, {name: 'MisaBot', online: true}], places: () => [], schematics: async () => [], keeper, plan: {enabled: false, setEnabled: (on) => calls.push(['plan', on])},
+    const api = {snapshots: () => [{name: 'bot1', online: true}, {name: 'MisaBot', online: true}], places: () => [], schematics: async () => [], keeper,
       traderChests, traders: () => ['MisaBot'], sidebar: (v, on) => calls.push(['sidebar', v, on])};
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
     await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await click('Fancy', {a: 'ziele'});
     assert.equal(ui.state('Fancy').screen.name, 'ziele');
-    await click('Fancy', {a: 'keeper', on: 1}); await click('Fancy', {a: 'plan', on: 1}); await click('Fancy', {a: 'sidebar', on: 0});
-    assert.deepEqual(calls, [['enabled', true], ['plan', true], ['sidebar', 'Fancy', false]]);
+    await click('Fancy', {a: 'keeper', on: 1}); await click('Fancy', {a: 'sidebar', on: 0});
+    assert.deepEqual(calls, [['enabled', true], ['sidebar', 'Fancy', false]]);
     calls.length = 0;
     await click('Fancy', {a: 'saveziele', want_logs: 99.6});
     assert.deepEqual(calls, [['want', 'logs', 100]]); assert.match(ui.state('Fancy').flash.text, /gespeichert/);
     await click('Fancy', {a: 'saveziele', want_gold: 5}); assert.match(ui.state('Fancy').flash.text, /ungültiges Ziel: gold/);
     calls.length = 0;
-    for (const a of ['keeper', 'plan', 'saveziele']) { await click('Midari', {a, on: 1, want_logs: 5}); assert.match(ui.state('Midari').flash.text, /Besitzer/); }
+    for (const a of ['keeper', 'saveziele']) { await click('Midari', {a, on: 1, want_logs: 5}); assert.match(ui.state('Midari').flash.text, /Besitzer/); }
     await click('Midari', {a: 'sidebar', on: 1}); assert.deepEqual(calls, [['sidebar', 'Midari', true]]);
     // trader chests: the position is the gazed chest
     const gaze = {x: 7, y: 8, z: 9, block: 'chest'};

@@ -20,7 +20,6 @@ const {TradeSchedule} = require('./tradeschedule');
 const {TraderChests} = require('./traderchests');
 const {Board} = require('./board');
 const scenarioRun = require('./scenario-run');
-const {Plan} = require('./plan');
 const planConfig = require('./plan-config');
 const {botView} = require('./view');
 const {scanAround} = require('./scan');
@@ -137,7 +136,7 @@ const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of 
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
 const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
-const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
+const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
 const runners = new Map(cfg.names.map((n) => [n, new BotRunner(n, {host: cfg.mcHost, port: cfg.mcPort, log, world, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, loginSeed: cfg.loginSeed, hostLabel: cfg.hostLabel, ownerUuids: cfg.ownerUuids, onEvent: (b, k, t) => events.add(b, k, t)})]));
 const settings = new Settings(process.env.STATE_DIR || '');
@@ -161,7 +160,7 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length || cfg.planEnable ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots]}) : null;
+const keeper = cfg.keeperQuotas.length ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots]}) : null;
 // Scheduled trading (TRADE_SCHEDULE): a guest's trader works its hall in set time windows; nothing without a configured hall.
 // Chests set in game replace the configured ones of that bot; cfg.tradeHalls is edited in place, so runners and the schedule follow.
 const traderChests = new TraderChests({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'trader-chests.json') : null, halls: cfg.tradeHalls, log: (m) => log('trade', m), onChange: () => hub?.sendTradeHalls()});
@@ -174,7 +173,7 @@ let scenarioRunning = false;
 // Map markers: the first 'supply' place is the supply chest for every bot, the
 // hub's workers and the keeper; the first 'site' place is where the keeper works.
 const places = new Places(process.env.STATE_DIR || '');
-usePlaces(places); // zones: plan-config and the job validators read them from here
+usePlaces(places); // zones: plan-config (the base geometry) and the job validators read them from here
 places.seed(planConfig.seedZones()); // first start only
 // Block log (blocklog.js): who built or destroyed what where, exported for the BlueMap overlay.
 const blocklog = new BlockLog({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'blocklog.jsonl') : null, areas: () => areaBoxes(places.list, process.env.BLOCKLOG_AREA)});
@@ -195,7 +194,6 @@ function stopAll() {
   toResume = {};
   const keeperOff = !!keeper?.enabled;
   if (keeperOff) keeper.setEnabled(false);
-  if (plan?.enabled) plan.setEnabled(false); // it would hand the idle bots new work; this also returns the keeper
   board?.pauseAll(); // the board too: no part goes out again until the owner resumes the job
   idleStopAll = true;
   return keeperOff;
@@ -329,7 +327,6 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
       },
     },
     get keeper() { return keeper; },
-    get plan() { return plan; },
     traderChests,
     // Bots that trade: scheduled ones, guests (they get their first chest here) and those with a hall of their own.
     traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...cfg.guestBots, ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
@@ -340,7 +337,7 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     sidebar: (viewer, on) => mainConsole?.([on ? `team join mcbots ${viewer}` : `team leave ${viewer}`]),
   }}) : null;
 if (botui) botui.start();
-const supplyStock = () => (supplyChest ? world.stockAt(supplyChest) : world.stock); // the supply chest's numbers, not the plan's base chest's
+const supplyStock = () => (supplyChest ? world.stockAt(supplyChest) : world.stock); // the supply chest's numbers, not the base chest's
 const staticAreas = cfg.protectedAreas.slice();
 function applyPlaces() {
   // 'protected' zones join PROTECTED_AREAS in place: runners and the hub hold this very array.
@@ -357,9 +354,6 @@ function applyPlaces() {
   }
 }
 applyPlaces();
-// The plan (R7): available only with PLAN_ENABLE; whether it is switched on, and what it has done, is kept in plan.json.
-const plan = cfg.planEnable ? new Plan({runners, world, keeper, places, events, objectives: planConfig.OBJECTIVES, roster: cfg.planRoster, chest: planConfig.BASE.chest, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'plan.json') : null, log}) : null;
-
 // Long jobs survive a restart (deploys restart the container): every 5 s the
 // running and queued shift/guard/mine/chop jobs go to STATE_DIR/jobs.json and
 // are queued again at start; a mine/chop keeps only what is left of its count.
@@ -435,7 +429,7 @@ const sameOrigin = (req) => {
     return false;
   }
 };
-const state = () => ({now: Date.now(), lastEventId: events.lastId, keeper: keeper?.state() || null, plan: plan?.state() || null, bots: [...runners.values()].map((r) => ({...r.snapshot(), settings: settings.get(r.name)})), world: world.snapshot(), protectedAreas: cfg.protectedAreas, supplyChest, places: places.list, projects: projects.view(), chest: supplyStock() && {warnings: chestWarnings(supplyStock().items, supplyStock().free)}});
+const state = () => ({now: Date.now(), lastEventId: events.lastId, keeper: keeper?.state() || null, bots: [...runners.values()].map((r) => ({...r.snapshot(), settings: settings.get(r.name)})), world: world.snapshot(), protectedAreas: cfg.protectedAreas, supplyChest, places: places.list, projects: projects.view(), chest: supplyStock() && {warnings: chestWarnings(supplyStock().items, supplyStock().free)}});
 
 // A schematic upload: the raw .litematic, at most 4 MB.
 function readBytes(req, max = 4 * 1024 * 1024) {
@@ -597,10 +591,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'});
     return res.end(three);
   }
-  // The 3D map's presets (the plan's areas) and the bots an order may go to; no secrets.
+  // The 3D map's presets (the zones); no secrets.
   if (req.method === 'GET' && url.pathname === '/api/areas') {
     const zones = places.list.filter((p) => p.box);
-    return json(200, {areas: Object.fromEntries(zones.map((p) => [p.name, p.box])), zones, roster: cfg.planRoster || [], protectedAreas: cfg.protectedAreas});
+    return json(200, {areas: Object.fromEntries(zones.map((p) => [p.name, p.box])), zones, protectedAreas: cfg.protectedAreas});
   }
   // Blocks of a box for the dashboard's 3D map, read from the bot nearest to its centre whose chunks are
   // loaded. Only bots of this process are readable: a worker's
@@ -724,22 +718,6 @@ const server = http.createServer(async (req, res) => {
       keeper.setEnabled(enabled);
       broadcast();
       return json(200, keeper.state());
-    } catch (e) {
-      return json(400, {error: e.message});
-    }
-  }
-  if (req.method === 'GET' && url.pathname === '/api/plan') return json(200, plan ? plan.state() : {available: false});
-  if (req.method === 'POST' && url.pathname === '/api/plan') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
-    try {
-      if (!plan) throw new Error('the plan is not configured (needs PLAN_ENABLE and PLAN_ROSTER)');
-      const {enabled, skip, retry} = await readJson(req);
-      if (typeof enabled === 'boolean') plan.setEnabled(enabled);
-      else if (typeof skip === 'string') plan.skip(skip);
-      else if (typeof retry === 'string') plan.retry(retry);
-      else throw new Error('send enabled (true/false), skip (an objective id) or retry (an objective id)');
-      broadcast();
-      return json(200, plan.state());
     } catch (e) {
       return json(400, {error: e.message});
     }
@@ -916,14 +894,9 @@ function boardTick() {
 }
 const keeperTick = setInterval(() => {
   try {
-    if (board) boardTick(); // before the plan and the keeper, though they never take board bots
+    if (board) boardTick(); // before the keeper, though it never takes board bots
   } catch (e) {
     log('board', `error: ${e.message}`);
-  }
-  try {
-    plan?.tick(); // before the keeper: a borrowed keeper starts with the plan's quotas
-  } catch (e) {
-    log('plan', `error: ${e.message}`);
   }
   try {
     tradeSchedule?.tick();

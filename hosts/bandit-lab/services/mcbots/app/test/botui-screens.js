@@ -154,24 +154,21 @@ console.log('botui-screens ok');
   const {ziele} = require('../botui-screens');
   const keeper = {state: () => ({available: true, enabled: true, quotas: [{item: 'logs', want: 64, have: 10}, {item: 'coal', want: 100, have: null}, {item: 'torch', want: 2000, have: 5}]})};
   const traderChests = {list: (b) => (b === 'MisaBot' ? {sticks: [{x: 1, y: 2, z: 3}], stores: []} : {sticks: [], stores: [{x: 4, y: 5, z: 6}]})};
-  const v = view({keeper, plan: {enabled: false}, traders: ['MisaBot', 'EM_Trader'], traderChests});
+  const v = view({keeper, traders: ['MisaBot', 'EM_Trader'], traderChests});
   const d = render({name: 'ziele'}, v);
   assert.deepEqual(d.inputs.map((i) => [i.key, i.end, i.initial]), [['want_logs', 256, 64], ['want_coal', 400, 100], ['want_torch', 4096, 2000]]);
   assert.ok(d.inputs.every((i) => i.type === 'minecraft:number_range' && i.start === 0 && i.step === 1));
   assert.ok(!REFRESHING.has('ziele'), 'an input screen never refreshes');
-  assert.deepEqual(d.actions.filter((a) => ['keeper', 'plan'].includes(a.action.payload?.a)).map((a) => [a.action.payload.a, a.action.payload.on]), [['keeper', 0], ['plan', 1]]);
+  assert.deepEqual(d.actions.filter((a) => a.action.payload?.a === 'keeper').map((a) => [a.action.payload.a, a.action.payload.on]), [['keeper', 0]]);
   assert.equal(d.actions.find((a) => a.label.text === 'Speichern').action.additions.a, 'saveziele');
   assert.deepEqual(d.actions.filter((a) => a.action.payload?.a === 'trader_del').map((a) => a.action.payload), [{a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 1, y: 2, z: 3}, {a: 'trader_del', bot: 'EM_Trader', kind: 'stores', x: 4, y: 5, z: 6}]);
-  const m = JSON.parse(JSON.stringify(render({name: 'ziele'}, view({keeper, plan: {enabled: true}, owner: false, allowed: ['MisaBot'], traders: ['MisaBot', 'EM_Trader'], traderChests}))));
-  assert.equal(m.inputs, undefined); assert.ok(!JSON.stringify(m).includes('keeper') && !JSON.stringify(m).includes('"plan"') && !JSON.stringify(m).includes('saveziele'));
+  const m = JSON.parse(JSON.stringify(render({name: 'ziele'}, view({keeper, owner: false, allowed: ['MisaBot'], traders: ['MisaBot', 'EM_Trader'], traderChests}))));
+  assert.equal(m.inputs, undefined); assert.ok(!JSON.stringify(m).includes('keeper') && !JSON.stringify(m).includes('saveziele'));
   assert.deepEqual(m.actions.filter((a) => a.action.payload?.a === 'trader_del').map((a) => a.action.payload.bot), ['MisaBot']);
   assert.ok(m.actions.some((a) => a.action.payload?.a === 'sidebar'));
-  assert.ok(!render({name: 'ziele'}, view({keeper, traders: [], traderChests})).actions.some((a) => a.action.payload?.a === 'plan'), 'no plan configured: no plan toggle');
-  { // borrowed by the plan: the configured numbers, a note; initial never above end
-    const b = render({name: 'ziele'}, view({keeper: {state: () => ({available: true, enabled: true, borrowed: true, quotas: [{item: 'planonly', want: 5, have: 0}], configured: [{item: 'logs', want: 64, have: 1}, {item: 'big', want: 9999, have: 1}]})}, traders: []}));
+  { // the configured numbers; initial never above end
+    const b = render({name: 'ziele'}, view({keeper: {state: () => ({available: true, enabled: true, quotas: [{item: 'planonly', want: 5, have: 0}], configured: [{item: 'logs', want: 64, have: 1}, {item: 'big', want: 9999, have: 1}]})}, traders: []}));
     assert.deepEqual(b.inputs.map((i) => [i.key, i.end, i.initial]), [['want_logs', 256, 64], ['want_big', 4096, 4096]]);
-    assert.match(JSON.stringify(b.body), /Der Plan nutzt/);
-    assert.doesNotMatch(JSON.stringify(render({name: 'ziele'}, v).body), /Der Plan nutzt/);
   }
   // the chest context offers Handelskiste buttons only for traders the viewer may command
   const gaze = {x: 7, y: 8, z: 9, block: 'chest'};

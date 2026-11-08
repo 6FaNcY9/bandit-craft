@@ -5,15 +5,11 @@ module.exports = async () => {
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
     const W = require('../../wheatfarm');
     const {Vec3} = require('vec3');
-    const {OBJECTIVES, BASE} = require('../../plan-config');
     assert.deepStrictEqual(VALIDATE.wheatfarm({x1: 8, z1: 0, x2: 0, z2: 8}), {x1: 0, z1: 0, x2: 8, z2: 8}, 'corners in any order');
     for (const bad of [{x1: 0, z1: 0, x2: 9, z2: 5}, {x1: 0, z1: 0, x2: 5}, {x1: 'a', z1: 0, x2: 5, z2: 5}, {x1: 0.5, z1: 0, x2: 5, z2: 5}]) assert.throws(() => VALIDATE.wheatfarm(bad), JSON.stringify(bad));
     assert.ok(VALIDATE.wheatfarm({x1: 0, z1: 0, x2: 8, z2: 8}), '9 x 9 is the limit');
     assert.deepStrictEqual(VALIDATE.wheatfarm({x1: 0, z1: 0, x2: 1, z2: 1, y: 201}), {x1: 0, z1: 0, x2: 1, z2: 1, y: 201}, 'optional ground level');
     assert.throws(() => VALIDATE.wheatfarm({x1: 0, z1: 0, x2: 1, z2: 1, y: 'a'}), /y/);
-    const wf = OBJECTIVES.find((o) => o.id === 'wheat-farm');
-    assert.deepStrictEqual([wf.needs, wf.onBlocked, wf.roles[0].jobs[0]], [['stock-basics'], 'skip', ['wheatfarm', BASE.wheat]]);
-    assert.deepStrictEqual(OBJECTIVES.map((o) => o.id).slice(5, 7), ['tree-farm', 'wheat-farm']);
     assert.strictEqual(W.wheatAge({getProperties: () => ({age: 7})}), 7);
     assert.strictEqual(W.wheatAge({metadata: 3}), 3, 'metadata is the age when there is no property reader');
     assert.ok(Number.isNaN(W.wheatAge({})));

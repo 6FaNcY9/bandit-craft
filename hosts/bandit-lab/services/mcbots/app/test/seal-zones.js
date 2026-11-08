@@ -143,7 +143,6 @@ const {VALIDATE} = require('../bots');
   assert.deepStrictEqual(pc.BASE.shaft, was, 'seeded zones equal the shipped geometry');
   fresh.set({...fresh.zone('shaft'), box: {x1: -300, x2: -290, z1: -10, z2: 0, y1: -59, y2: 80}});
   assert.deepStrictEqual(pc.BASE.shaft, {x1: -300, z1: -10, x2: -290, z2: 0}, 'moving the zone moves the work');
-  assert.strictEqual(pc.OBJECTIVES.find((o) => o.id === 'shaft-to-ore').roles[0].jobs[0][1].x1, -300);
   assert.ok(P.inZone('storage', -260, 59, -217) && !P.inZone('storage', -260, 70, -217));
   // jobs take zone: "<name>"
   assert.deepStrictEqual(VALIDATE.treefarm({zone: 'Tree farm'}), {x1: -262, z1: -238, x2: -248, z2: -224});
@@ -152,7 +151,6 @@ const {VALIDATE} = require('../bots');
   assert.throws(() => VALIDATE.wheatfarm({zone: 'Nope'}), /no zone called Nope/);
   P.use(null);
   assert.deepStrictEqual(pc.BASE.shaft, was, 'no zones: the shipped geometry');
-  assert.ok(pc.OBJECTIVES.some((o) => o.id === 'file-storage' && o.needs.includes('storage-room')));
   // layout: 56 distinct double-chest cells in 10 contiguous category runs
   assert.strictEqual(L.SLOTS.length, 56);
   assert.strictEqual(new Set(L.SLOTS.map(L.keyOf)).size, 56);

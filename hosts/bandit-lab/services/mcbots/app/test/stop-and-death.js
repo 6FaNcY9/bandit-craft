@@ -392,7 +392,7 @@ const {BotRunner} = require('../bots');
     const port = await freePort();
     const wport = await freePort();
     const child = spawn(process.execPath, [path.join(APP, 'server.js')], {
-      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: dir, SUPPLY_CHEST: '1,64,1', KEEPER_QUOTAS: 'logs:64', PLAN_ENABLE: '1', PLAN_ROSTER: 'bot1', WORKER_PORT: String(wport), WORKER_TOKEN: TOKEN, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
+      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: dir, SUPPLY_CHEST: '1,64,1', KEEPER_QUOTAS: 'logs:64', WORKER_PORT: String(wport), WORKER_TOKEN: TOKEN, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     await new Promise((res, rej) => {
@@ -423,10 +423,6 @@ const {BotRunner} = require('../bots');
       if (pth === '/') assert.ok(!/<[^>]*\sstyle="/.test(html), 'no style attributes on the new page');
     }
     assert.strictEqual((await (await a.call('/api/keeper', {enabled: true})).json()).enabled, true);
-    assert.strictEqual((await a.get('/api/state')).plan.enabled, false, 'the plan is available but off');
-    assert.strictEqual((await a.call('/api/plan', {skip: 'nope'})).status, 400);
-    assert.strictEqual((await a.call('/api/plan', {})).status, 400);
-    assert.strictEqual((await (await a.call('/api/plan', {enabled: true})).json()).enabled, true);
     const wk = await new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${a.wport}/worker`, {headers: {Authorization: `Bearer ${TOKEN}`}}); ws.on('open', () => res(ws)); ws.on('error', rej); });
     wk.send(JSON.stringify({t: 'hello', v: 1, host: 'laptop', bots: ['bot5']}));
     for (let i = 0; i < 100 && !(await a.get('/api/state')).bots.some((b) => b.name === 'bot5'); i++) await new Promise((r) => setTimeout(r, 50));
@@ -440,7 +436,6 @@ const {BotRunner} = require('../bots');
     assert.deepStrictEqual(body.unreached, ['bot5'], 'the absent worker is reported, not claimed as stopped');
     assert.deepStrictEqual(saved(dirA), {}, 'persisted before the answer: nothing can come back');
     assert.strictEqual((await a.get('/api/state')).keeper.enabled, false);
-    assert.strictEqual((await a.get('/api/plan')).enabled, false, 'Stop all switches the plan off too');
   } finally {
     await a.stop();
   }

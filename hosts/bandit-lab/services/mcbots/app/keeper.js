@@ -25,7 +25,7 @@ const KINDS = {
   logs: (n) => n.endsWith('_log'),
   coal: (n) => n === 'coal' || n === 'charcoal',
 };
-// A bot the keeper (and the plan) may give work: online, alive, no job, nothing queued.
+// A bot the keeper may give work: online, alive, no job, nothing queued.
 const idle = (s) => !!s && s.online && !s.dead && !s.job && !s.queue.length;
 const matcher = (key) => KINDS[key] || ((n) => n === key);
 const have = (items, key) => Object.entries(items || {}).filter(([n]) => matcher(key)(n)).reduce((s, [, c]) => s + c, 0);
@@ -92,7 +92,7 @@ class Keeper {
     this.world = world;
     this.chest = chest; // {x,y,z} of the supply chest, or null: nothing to keep
     this.quotas = quotas; // [[item, want]]
-    this.configured = quotas; // the plan swaps this.quotas while it borrows the keeper; setWant and the file only ever touch these
+    this.configured = quotas; // setWant and the file only ever touch these
     this.site = site;
     this.places = places;
     this.events = events;
@@ -292,7 +292,6 @@ class Keeper {
       site: this.site,
       stockAgeS: stock ? Math.round((t - stock.t) / 1000) : null,
       stockBy: stock?.by || null,
-      borrowed: this.quotas !== this.configured, // the plan runs its own quotas meanwhile
       configured: this.configured.map(([item, want]) => ({item, want, have: stock ? have(stock.items, item) : null})),
       quotas: this.quotas.map(([item, want]) => {
         const w = this.work.get(item);

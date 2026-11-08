@@ -3,7 +3,14 @@
 // bots claim. Heartbeat, progress and outcome come from the status snapshots the hub already has; a part whose
 // bot goes quiet reopens with its progress kept, so another bot takes over. Pure apart from its JSON file.
 const fs = require('node:fs');
-const {strip} = require('./plan');
+
+// Strip i of n of a box {x1,x2,...} cut along `axis`: disjoint and covering, the first strips one wider.
+function strip(args, axis, i, n) {
+  const lo = args[`${axis}1`], w = args[`${axis}2`] - lo + 1;
+  const base = Math.floor(w / n), extra = w % n;
+  const start = lo + i * base + Math.min(i, extra);
+  return {...args, [`${axis}1`]: start, [`${axis}2`]: start + base + (i < extra ? 1 : 0) - 1};
+}
 
 const SLICE = 4; // a slice is at most this wide: one bot keeps one place, claims stay few
 const CLAIM_MS = 45000; // a claim without a heartbeat this long goes back to open

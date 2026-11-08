@@ -22,11 +22,10 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
 { // config: proxies, the job board's, guest and main bots, in-game viewers; the owner's order loop
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', TRUSTED_PROXIES: '10.250.77.1, 172.22.0.1'}).trustedProxies, ['10.250.77.1', '172.22.0.1']);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', TRUSTED_PROXIES: 'evil.example'}), /IP addresses/);
-  // the job board's bots: names, and never the plan's
+  // the job board's bots: names
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'bot2, bot19'}).boardBots, ['bot2', 'bot19']);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).boardBots, [], 'no BOARD_BOTS: no board');
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'steve'}), /BOARD_BOTS must be bot names/);
-  assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PLAN_ENABLE: '1', PLAN_ROSTER: 'bot2', BOARD_BOTS: 'bot2'}), /plan bots: bot2/);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', GUEST_BOTS: 'MisaBot,bot23'}).guestBots, ['MisaBot', 'bot23']);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'bot2', GUEST_BOTS: 'bot2'}), /GUEST_BOTS must be bot names outside/);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).mainBots, []);

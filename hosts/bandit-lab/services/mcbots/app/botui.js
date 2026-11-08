@@ -326,17 +326,11 @@ const ACTIONS = {
     st.mapState.center = data.me ? null : oneBot(ui, viewer, data);
     await ui.pushMap(viewer, st);
   },
-  // The toggles flip a server-side switch: owner only for keeper and plan, the sidebar is each viewer's own.
+  // The toggles flip a server-side switch: owner only for the keeper, the sidebar is each viewer's own.
   keeper: (st, data, ui, viewer) => {
     ownerOnly(ui, viewer);
     if (!ui.api.keeper) throw new Error('keine Daueraufträge eingerichtet');
     ui.api.keeper.setEnabled(on(data));
-    st.screen = {name: 'ziele'};
-  },
-  plan: (st, data, ui, viewer) => {
-    ownerOnly(ui, viewer);
-    if (!ui.api.plan) throw new Error('kein Plan eingerichtet');
-    ui.api.plan.setEnabled(on(data));
     st.screen = {name: 'ziele'};
   },
   sidebar: (st, data, ui, viewer) => {
@@ -510,7 +504,7 @@ class BotUi {
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
     if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent});
-    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, plan: this.api.plan, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
+    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
 

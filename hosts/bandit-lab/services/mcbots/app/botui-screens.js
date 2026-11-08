@@ -257,7 +257,7 @@ function jobScreen(view, sc) {
   return dialog(job.label, body, [send, button(txt('Zurück'), 'new', sc.bot ? {bot: sc.bot} : {})], CLOSE, 2, inputs);
 }
 
-// --- Ziele: owner-only keeper, plan and quota sliders; the sidebar and the trader chests of the viewer's bots
+// --- Ziele: owner-only keeper and quota sliders; the sidebar and the trader chests of the viewer's bots
 function ziele(view) {
   const body = [], actions = [], inputs = [];
   let k = null;
@@ -265,14 +265,11 @@ function ziele(view) {
     try { k = view.keeper?.state(); } catch { /* shown as not configured */ }
     const toggle = (label, enabled, a) => button(txt(`${label}: ${enabled ? 'an' : 'aus'}`, enabled ? 'green' : 'gray'), a, {on: enabled ? 0 : 1}, lines([[enabled ? 'Klick schaltet aus' : 'Klick schaltet ein']]));
     if (k?.available) actions.push(toggle('Daueraufträge', k.enabled, 'keeper'));
-    if (view.plan) actions.push(toggle('Plan', !!view.plan.enabled, 'plan'));
-    // Always the configured quotas: while the plan borrows the keeper, state().quotas are the plan's.
     for (const q of k?.configured || k?.quotas || []) {
       const end = Math.min(4096, Math.max(64, q.want * 4));
       inputs.push(slider('want_' + q.item, `${safe(q.item, 24)}${q.have !== null ? ' (da: ' + q.have + ')' : ''}`, 0, end, 1, Math.min(end, q.want)));
     }
     if (inputs.length) body.push(line(txt('Ziele pro Rohstoff in der Vorratskiste', 'white')));
-    if (k?.borrowed) body.push(line(txt('Der Plan nutzt die Daueraufträge gerade; neue Zahlen gelten danach.', 'yellow')));
     if (k?.available && view.snaps.some((s) => s.sandbox)) body.push(line(txt('Daueraufträge laufen in der Sandbox, nicht in deiner Welt', 'yellow')));
   }
   actions.push(button(txt('Seitenleiste an'), 'sidebar', {on: 1}), button(txt('Seitenleiste aus'), 'sidebar', {on: 0}));

@@ -73,14 +73,6 @@ function loadConfig(env = process.env) {
     if (n.length !== 3 || n.some((v) => !Number.isInteger(v))) throw new Error('KEEPER_SITE must be x,y,z');
     keeperSite = {x: n[0], y: n[1], z: n[2]};
   }
-  // The plan (plan.js): PLAN_ENABLE makes it available (it still starts switched off), PLAN_ROSTER names
-  // the bots it may task.
-  const planEnable = !!env.PLAN_ENABLE && !/^(0|false|no)$/i.test(env.PLAN_ENABLE);
-  const planRoster = list(env.PLAN_ROSTER);
-  if (planEnable && !planRoster.length) throw new Error('PLAN_ENABLE needs PLAN_ROSTER (comma list of bot names)');
-  const planBad = planRoster.filter((n) => !NAME_RE.test(n));
-  if (planBad.length) throw new Error(`PLAN_ROSTER must be bot names: ${planBad.join(', ')}`);
-  if (new Set(planRoster).size !== planRoster.length) throw new Error('duplicate PLAN_ROSTER name');
   const loginSeed = env.BOT_PASSWORD_SEED || localSeed(env);
   // Optional hub for remote workers (laptop bots): a second listener that only
   // accepts the WebSocket on /worker, guarded by a bearer token.
@@ -97,22 +89,20 @@ function loadConfig(env = process.env) {
     if (!/^[\w.-]{1,40}$/.test(label) || !names.length || names.some((n) => !NAME_RE.test(n))) throw new Error(`HUB_WORKERS entry "${part}" must be label=bot2,bot3`);
     hubWorkers[label] = names;
   }
-  // The job board (board.js) owns these bots: no plan or keeper hands them work (spike 2026-10-23).
+  // The job board (board.js) owns these bots: the keeper hands them no work (spike 2026-10-23).
   const boardBots = list(env.BOARD_BOTS);
   const boardBad = boardBots.filter((n) => !NAME_RE.test(n));
   if (boardBad.length) throw new Error(`BOARD_BOTS must be bot names: ${boardBad.join(', ')}`);
-  const boardTaken = boardBots.filter((n) => planEnable && planRoster.includes(n));
-  if (boardTaken.length) throw new Error(`BOARD_BOTS must not contain plan bots: ${boardTaken.join(', ')}`);
-  // Another player's bots (guest bot, 2026-10-29): only their in-game orders move them, so no keeper, board, plan
+  // Another player's bots (guest bot, 2026-10-29): only their in-game orders move them, so no keeper, board
   // or help job, and the owner's supply chest is not theirs.
   const guestBots = list(env.GUEST_BOTS);
-  const guestBad = guestBots.filter((n) => !NAME_RE.test(n) || boardBots.includes(n) || planRoster.includes(n));
-  if (guestBad.length) throw new Error(`GUEST_BOTS must be bot names outside BOARD_BOTS and PLAN_ROSTER: ${guestBad.join(', ')}`);
+  const guestBad = guestBots.filter((n) => !NAME_RE.test(n) || boardBots.includes(n));
+  if (guestBad.length) throw new Error(`GUEST_BOTS must be bot names outside BOARD_BOTS: ${guestBad.join(', ')}`);
   // The owner's bots on the real server while the other helpers stay in the sandbox (owner 2026-11-04): they move on
-  // orders only, so no keeper, board, plan or help job; unlike a guest they use the supply chest.
+  // orders only, so no keeper, board or help job; unlike a guest they use the supply chest.
   const mainBots = list(env.MAIN_BOTS);
-  const mainBad = mainBots.filter((n) => !NAME_RE.test(n) || boardBots.includes(n) || planRoster.includes(n) || guestBots.includes(n));
-  if (mainBad.length) throw new Error(`MAIN_BOTS must be bot names outside BOARD_BOTS, PLAN_ROSTER and GUEST_BOTS: ${mainBad.join(', ')}`);
+  const mainBad = mainBots.filter((n) => !NAME_RE.test(n) || boardBots.includes(n) || guestBots.includes(n));
+  if (mainBad.length) throw new Error(`MAIN_BOTS must be bot names outside BOARD_BOTS and GUEST_BOTS: ${mainBad.join(', ')}`);
   // Server administration over RCON (admin.js): host on the internal Docker network, password from the environment file.
   const rconHost = (env.RCON_HOST || '').trim(), rconPassword = env.RCON_PASSWORD || '', rconPort = Number(env.RCON_PORT || 25575);
   if (rconHost && !/^[\w.-]{1,64}$/.test(rconHost)) throw new Error('RCON_HOST must be a host name');
@@ -165,8 +155,6 @@ function loadConfig(env = process.env) {
     supplyChest,
     keeperQuotas,
     keeperSite,
-    planEnable,
-    planRoster,
     loginSeed,
     bluemapUrl: bluemapUrl.replace(/\/+$/, ''),
     workerToken,
