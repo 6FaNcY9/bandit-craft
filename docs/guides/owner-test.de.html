@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Bot-Test für dich</title>
+<style>
+  @page { size: A4; margin: 14mm 16mm 15mm; }
+  :root { --ink: #1d2433; --mute: #5b6475; --line: #d9dde5; --accent: #2f6f4f; --soft: #eef5f0; --warn: #8a4b12; --warnbg: #fbf1e6; }
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.4; margin: 0; background: #fff; }
+  h1 { font-size: 22pt; margin: 0 0 2mm; letter-spacing: -0.01em; }
+  h2 { font-size: 13.5pt; margin: 5.5mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1.5px solid var(--accent); break-after: avoid; }
+  h3 { font-size: 11pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  .lead { color: var(--mute); font-size: 11pt; margin-bottom: 5mm; }
+  code, .cmd { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 9.5pt; background: #f1f3f6; border: 1px solid var(--line); border-radius: 3px; padding: 0.2mm 1.2mm; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; margin: 1mm 0 3mm; }
+  tr { break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; padding: 1.6mm 2mm; border-bottom: 1px solid var(--line); }
+  th { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mute); border-bottom: 1.5px solid var(--ink); }
+  td:first-child { width: 38%; }
+  .box { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--soft); border-radius: 4px; padding: 3mm 4mm; margin: 2mm 0 4mm; break-inside: avoid; }
+  .warn { border-left-color: var(--warn); background: var(--warnbg); }
+  ol, ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1.2mm; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 2mm 0 2mm; }
+  .card { border: 1px solid var(--line); border-radius: 4px; padding: 3mm 4mm; break-inside: avoid; }
+  .card h3 { margin-top: 0; }
+  .small { font-size: 9pt; color: var(--mute); }
+  .t td:first-child { width: 7%; font-weight: 700; color: var(--accent); }
+  .t td:nth-child(2) { width: 45%; }
+  .ok { color: var(--mute); }
+</style>
+</head>
+<body>
+
+<h1>Bot-Test: Menüs und Bauen</h1>
+<p class="lead">Für dich als Besitzer: alle Bots, alle Menüs und ein Bauplan von Anfang bis Ende. Dauer: etwa 45 Minuten. Mach den Test nach dem Deploy (<code>sh ~/next-deploy.sh</code>).</p>
+
+<div class="box"><b>Notier dir nur, was anders war</b> als in der rechten Spalte: die <b>Nummer</b>, die <b>Uhrzeit</b> und, wenn möglich, einen Screenshot (F2). Alles andere steht im Server-Log.</div>
+
+<h2>A. Start und Übersicht</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>A1</td><td><code>/zauberstab</code>, dann <b>Linksklick</b> in die Luft</td><td>Menü „Bots“ mit <b>allen acht</b> Köpfen (bot1, bot2, bot3, bot19, bot20, bot21, MisaBot, EM_Trader).</td></tr>
+  <tr><td>A2</td><td>Maus über einen Kopf, 10 Sekunden warten</td><td>Was der Bot tut, Herzen und Essen. Das Menü aktualisiert sich von selbst. Ein arbeitender Bot hat unten ein kleines Symbol (z. B. Werkbank, Ofen, Ziegel).</td></tr>
+  <tr><td>A3</td><td>Unten: Enderperle (<b>Alle: Komm zu mir</b>), danach Barriere (<b>Alle: Stopp</b>)</td><td>Bei Stopp kommt erst eine Rückfrage. Nach „Ja, alle stoppen“ bleiben alle stehen.</td></tr>
+  <tr><td>A4</td><td>Kopf von <b>bot19</b> anklicken</td><td>Die Bot-Seite. Oben: Leine, Enderperle, Schwert, Kiste, Barriere. Mitte: Spitzhacke, Axt, Werkbank, Ofen, Ziegel (<b>Bauen…</b>), Güterlore, Setzling. Unten: Uhr, Trichter, Fass, Pfeil.</td></tr>
+  <tr><td>A5</td><td>bot19 hat seine Baumfarm gestoppt (A3). Auf seiner Seite nachsehen</td><td>Neben der Barriere ist ein <b>grüner Farbstoff „Weiter“</b>. Ein Klick darauf: „bot19: weiter“, er geht wieder zur Baumfarm. Danach ist der Knopf weg.</td></tr>
+</table>
+
+<h2>B. Die Bot-Seite im Schnelldurchlauf (mit bot19)</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>B1</td><td>Leine (<b>Folg mir</b>), ein Stück laufen, dann Barriere</td><td>Er folgt dir, die Leine glitzert. Nach Stopp bleibt er stehen.</td></tr>
+  <tr><td>B2</td><td>Schleichen + Rechtsklick mit dem Stab auf eine Kiste, dann bot19 wählen</td><td>„bot19: Kiste x y z“. Auf seiner Seite steht „Kiste: x y z“.</td></tr>
+  <tr><td>B3</td><td>Spitzhacke (<b>Abbauen…</b>): Was = Bruchstein, Wie viel = 16, Los!</td><td>Nach ein paar Minuten liegen 16 Bruchstein in seiner Kiste.</td></tr>
+  <tr><td>B4</td><td>Rechtsklick mit dem Stab auf ein <b>Tiefenschiefer-Eisenerz</b></td><td>Das Abbauen-Fenster geht auf, unter „Was“ steht Eisenerz. Mit Pfeil zurück.</td></tr>
+  <tr><td>B5</td><td>Werkbank (<b>Herstellen…</b>) → Steinspitzhacke, dann rechts aufs Ergebnis</td><td>Er stellt sie her. Was ihm fehlt, holt er zuerst.</td></tr>
+  <tr><td>B6</td><td>Ofen (<b>Schmelzen…</b>) → Roheisen, dann rechts aufs Ergebnis</td><td>Er schmilzt im echten Ofenfenster. Ein Klick aufs grüne Rezeptbuch legt <b>nichts</b> aus deinem Inventar hinein.</td></tr>
+  <tr><td>B7</td><td>Güterlore (<b>Holen…</b>) → Reiter Essen → Brot (Shift-Klick)</td><td>Er holt 64 Brot.</td></tr>
+  <tr><td>B8</td><td>Uhr (<b>Wenn frei…</b>) → Baumfarm. Dann Stopp und 1–2 Minuten warten</td><td>Er fängt von selbst wieder an. Danach wieder auf „Nichts“ stellen, wenn du willst.</td></tr>
+</table>
+
+<h2>C. Bauen: ein kleiner Bauplan</h2>
+<div class="box warn"><b>Wichtig:</b> Der Bot baut den Plan genau so, wie er ist. Was im Weg steht, baut er ab. Such dir eine <b>freie, flache Stelle</b> ohne Kisten oder Gebäude, mit etwa 20 × 20 Blöcken Platz.</div>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>C1</td><td>Stell dich an die freie Stelle. Schau auf den Boden, dort, wo die <b>Ecke</b> des Bauwerks hin soll</td><td>–</td></tr>
+  <tr><td>C2</td><td>bot19s Seite → Ziegel (<b>Bauen…</b>)</td><td>Ein Fenster „Bauen“ mit: Bauplan, Wohin, Drehung, Wer, Wann.</td></tr>
+  <tr><td>C3</td><td>Bauplan = <code>plaza</code>, Wohin = <b>Worauf du schaust</b> (mit den Koordinaten aus C1), Drehung = 0°, Wer = bot19, Wann = <b>Jetzt</b>, dann <b>Senden</b></td><td>Eine kurze Meldung von bot19. Er holt Material aus der Vorratskiste und fängt an. Der Platz ist 16 × 16 groß und hat 332 Blöcke.</td></tr>
+  <tr><td>C4</td><td>Im Menü „Bots“ die Maus über bot19 halten, ein paar Minuten zusehen</td><td>Unter seinem Kopf ist ein Ziegel-Symbol, im Text steht der Fortschritt. Er arbeitet die Schichten von unten nach oben ab.</td></tr>
+  <tr><td>C5</td><td>Mittendrin: Barriere (<b>Stopp</b>) auf seiner Seite</td><td>Er hört auf. Der grüne <b>Weiter</b>-Knopf erscheint.</td></tr>
+  <tr><td>C6</td><td><b>Weiter</b> klicken</td><td>Er baut weiter, wo er aufgehört hat. Fertige Blöcke setzt er nicht noch einmal.</td></tr>
+  <tr><td>C7</td><td>Warten, bis er fertig ist</td><td>Der Platz steht vollständig. Danach ist bot19 frei (oder macht, was bei „Wenn frei“ steht).</td></tr>
+  <tr><td>C8</td><td>Fehlt ihm Material: im Text unter seinem Kopf nachsehen</td><td>Dort steht, worauf er wartet („waiting: …“). Das ist kein Fehler, sondern ein Hinweis, was in die Vorratskiste muss.</td></tr>
+</table>
+
+<h2>D. Bauen: eigener Bauplan und Material</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Du machst</th><th>Das sollte passieren</th></tr>
+  <tr><td>D1</td><td>Menü „Bots“ → Buch und Feder (<b>Bauplan hochladen</b>) → <b>Seite öffnen</b>. Eine kleine <code>.litematic</code>-Datei hochladen</td><td>Der Browser bestätigt das Hochladen. Im Spiel kommt eine Chatzeile, dass der Plan da ist.</td></tr>
+  <tr><td>D2</td><td>Wieder Bauen… öffnen</td><td>Dein Plan steht in der Liste unter „Bauplan“.</td></tr>
+  <tr><td>D3</td><td>Menü „Bots“ → Buch (<b>Alle Befehle (alt)</b>) → Neuer Auftrag → <b>Material für Bauplan</b>. Dein Plan, dieselbe Ecke wie später, Kiste = eine leere Kiste, Wer = bot2</td><td>bot2 sammelt alles, was der Plan braucht, und legt es in die Kiste.</td></tr>
+  <tr><td>D4</td><td>Wenn die Kiste voll ist: deinen Plan mit <b>Bauen…</b> an dieser Ecke bauen lassen (Wer = bot2 oder „Alle meine Bots“)</td><td>Die Bots bauen ihn aus dem gesammelten Material.</td></tr>
+  <tr><td>D5</td><td>Optional: dasselbe mit Drehung 90°</td><td>Das Bauwerk steht um 90° gedreht an derselben Ecke.</td></tr>
+</table>
+
+<h2>E. Misas Rechte (kurz prüfen, wenn sie online ist)</h2>
+<table class="t">
+  <tr><th>Nr.</th><th>Misa macht</th><th>Das sollte passieren</th></tr>
+  <tr><td>E1</td><td>Linksklick mit dem Stab</td><td>Sie sieht <b>nur</b> MisaBot und EM_Trader.</td></tr>
+  <tr><td>E2</td><td>MisaBot ohne gemerkte Kiste → <b>Einlagern</b></td><td>„Erst eine Kiste merken“. MisaBot läuft <b>nicht</b> zu deiner Vorratskiste.</td></tr>
+  <tr><td>E3</td><td>MisaBot → <b>Baumfarm</b></td><td>Er geht zu einer Baumfarm auf ihrem Gelände, oder sie sieht „Keine Baumfarm auf deinem Gelände“.</td></tr>
+</table>
+
+<h2>Was noch nicht im Menü ist</h2>
+<ul>
+  <li><b>Einen Bereich markieren</b> (ausheben, ebnen, beleuchten) und den <b>Zaubertisch</b>: Das kommt als Nächstes (Teil 2b). Bis dahin geht es über „Alle Befehle (alt)“.</li>
+  <li><b>Handel auf Knopfdruck</b> für EM_Trader: Er handelt nur nach Zeitplan.</li>
+  <li>Den Bauplan hochladen geht nur über den Browser-Link. Minecraft kann ohne Mods keine Dateien schicken.</li>
+</ul>
+
+<div class="box"><b>Wenn etwas hängt:</b> Auf der Seite des Bots die Barriere (Stopp) drücken, Nummer und Uhrzeit notieren, weitermachen. Mit „Weiter“ geht ein gestopptes Projekt danach wieder los.</div>
+
+</body>
+</html>
