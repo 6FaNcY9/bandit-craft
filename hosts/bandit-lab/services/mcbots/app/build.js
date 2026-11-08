@@ -450,7 +450,7 @@ async function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', 
       const filledFile = path.join(dir, `.filled-${file}-${origin.x},${origin.y},${origin.z}-${rotation}-${mirror}.json`);
       const readFilled = () => { try { return JSON.parse(fs.readFileSync(filledFile, 'utf8')); } catch { return []; } };
       const filled = new Set(readFilled());
-      const saveFilled = () => { try { fs.writeFileSync(filledFile, JSON.stringify([...new Set([...readFilled(), ...filled])])); } catch {} };
+      const saveFilled = () => { try { fs.writeFileSync(`${filledFile}.tmp`, JSON.stringify([...new Set([...readFilled(), ...filled])])); fs.renameSync(`${filledFile}.tmp`, filledFile); } catch {} };
       // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
       // both for the whole crew, until the end
       const air = airCells.map(keyOf);

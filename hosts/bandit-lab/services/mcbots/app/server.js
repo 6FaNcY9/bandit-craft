@@ -47,7 +47,7 @@ const SESSION = Date.now().toString(36);
 // later (orderloop.orderOutcome). Kept across restarts.
 const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
 const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
-const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
+const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(`${ordersFile}.tmp`, JSON.stringify(Object.fromEntries(ownerOrders))); fs.renameSync(`${ordersFile}.tmp`, ordersFile); } catch {} };
 const misa = require('./misa');
 const idleLib = require('./idle'), {JOBS: ORDER_JOBS} = require('./botui-jobs');
 const idleStore = new idleLib.IdleStore(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'idle.json') : null);
@@ -536,7 +536,8 @@ const server = http.createServer(async (req, res) => {
       const bytes = await readBytes(req);
       const s = await schematicLib.parseLitematic(bytes); // refuse anything that is not a litematic
       fs.mkdirSync(SCHEMATIC_DIR, {recursive: true});
-      fs.writeFileSync(path.join(SCHEMATIC_DIR, file), bytes);
+      fs.writeFileSync(path.join(SCHEMATIC_DIR, `${file}.tmp`), bytes);
+      fs.renameSync(path.join(SCHEMATIC_DIR, `${file}.tmp`), path.join(SCHEMATIC_DIR, file));
       events.add('dashboard', 'info', `schematic ${file} uploaded (${s.blocks.length} blocks)`);
       return json(200, {file, blocks: s.blocks.length, size: s.size});
     } catch (e) {
