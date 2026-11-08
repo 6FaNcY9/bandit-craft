@@ -45,4 +45,4 @@ function odds({health, weapon: w, armour: a, threats}) {
   }
   return {secs: time, loss, fight: loss < health - KEEP};
 }
-module.exports = {MOBS, weapon, armour, taken, odds, NIGHT, KEEP, MELEE_HITS, RANGED_HITS};
+module.exports = {weapon, armour, taken, odds, NIGHT, KEEP};

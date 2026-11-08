@@ -55,4 +55,4 @@ class Rescue {
   }
 }
 
-module.exports = {Rescue, STRANDED, STUCK_MS};
+module.exports = {Rescue, STUCK_MS};

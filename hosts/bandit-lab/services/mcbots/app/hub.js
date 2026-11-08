@@ -610,4 +610,4 @@ function createWorkerServer(hub) {
   return server;
 }
 
-module.exports = {workerToken, Hub, RemoteRunner, createWorkerServer, cleanSnapshot, cleanDebug, PROTOCOL, KEY_RE, FORGET_MS, cleanPng, cleanScan};
+module.exports = {workerToken, Hub, RemoteRunner, createWorkerServer, cleanSnapshot, PROTOCOL, FORGET_MS, cleanPng, cleanScan};

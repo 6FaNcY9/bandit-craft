@@ -89,4 +89,4 @@ const sync = (gen) => (...a) => { const g = gen(...a); for (;;) { const r = g.ne
 const async_ = (gen) => async (...a) => { const g = gen(...a); for (;;) { const r = g.next(); if (r.done) return r.value; await new Promise(setImmediate); } };
 const collect = sync(collectGen), surface = sync(surfaceGen), collectAsync = async_(collectGen), surfaceAsync = async_(surfaceGen);
 
-module.exports = {collectAsync, surfaceAsync, MAX_SIDE, MAX_HIGH, MAX_CELLS, MAX_SURF, SEE, parseBox, collect, parseSurface, surface};
+module.exports = {collectAsync, surfaceAsync, MAX_SIDE, MAX_CELLS, parseBox, collect, parseSurface, surface};

@@ -182,4 +182,4 @@ function makeHomebed({goNear, guard, sleep, goals, crafting, run, at, digAt, NAT
   return {homebed};
 }
 
-module.exports = {ROOM, SLOTS, CREW, YAW, searchRing, slotSpot, homeSpot, bedNeeds, makeHomebed};
+module.exports = {SLOTS, CREW, YAW, searchRing, slotSpot, homeSpot, bedNeeds, makeHomebed};

@@ -315,4 +315,4 @@ function parseQuotas(text) {
   return out;
 }
 
-module.exports = {Keeper, parseQuotas, PLANS, have, idle, MAX_BOTS, IDLE_MS, COOLDOWN_MS, STOCK_MAX_AGE_MS};
+module.exports = {Keeper, parseQuotas, PLANS, have, idle, IDLE_MS, COOLDOWN_MS, STOCK_MAX_AGE_MS};

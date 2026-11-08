@@ -20,4 +20,4 @@ function gearPlan(ingots, owned) {
 // Ingots every missing piece needs together.
 const ingotsWanted = (owned) => gearPlan(Infinity, owned).reduce((n, item) => n + COST[item], 0);
 
-module.exports = {gearPlan, ingotsWanted, COST};
+module.exports = {gearPlan, ingotsWanted};

@@ -221,4 +221,4 @@ function makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at}) {
   return {hunt, bed};
 }
 
-module.exports = {ANIMALS, FACING, MEAT, foodAnimal, huntTarget, huntTargets, bedCells, bedCheck, standable, woolColour, makeHunt};
+module.exports = {ANIMALS, FACING, MEAT, foodAnimal, huntTarget, bedCells, bedCheck, standable, woolColour, makeHunt};

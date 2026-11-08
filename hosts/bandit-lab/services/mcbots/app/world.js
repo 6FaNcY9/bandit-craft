@@ -354,4 +354,4 @@ function startBlueMap(world, baseUrl, log, fetchFn = fetch) {
   return () => clearInterval(timer);
 }
 
-module.exports = {backoff, CLAIM_TTL_MS, stairRing, WorldModel, startBlueMap, parsePlayers, mobLocation, isHostile, shouldFight, normDim, deadlineMs, insideAreas, NOTABLE_BLOCKS, MAPS, MOB_TTL_MS, MAX_MOBS, MAX_BLOCKS, NO_FIGHT};
+module.exports = {backoff, CLAIM_TTL_MS, stairRing, WorldModel, startBlueMap, parsePlayers, mobLocation, isHostile, shouldFight, normDim, deadlineMs, insideAreas, NOTABLE_BLOCKS, MOB_TTL_MS, MAX_MOBS, MAX_BLOCKS, NO_FIGHT};

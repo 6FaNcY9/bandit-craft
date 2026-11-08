@@ -331,4 +331,4 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
   return {treefarm};
 }
 
-module.exports = {SAPLINGS, farmBox, gridCells, groundY, cellState, treeLogs, scan, pickups, pickSapling, makeTreeFarm};
+module.exports = {farmBox, gridCells, cellState, scan, pickups, pickSapling, makeTreeFarm};

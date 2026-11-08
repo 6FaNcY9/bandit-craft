@@ -183,4 +183,4 @@ class Board {
   }
 }
 
-module.exports = {Board, SLICE, CLAIM_MS, START_MS, MAX_TRIES};
+module.exports = {Board, CLAIM_MS, START_MS};

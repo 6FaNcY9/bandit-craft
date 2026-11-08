@@ -152,4 +152,4 @@ function watchBlocks(bot, name, sink, now = Date.now) {
   });
 }
 
-module.exports = {classify, areaBoxes, BlockLog, aggregate, zonesOf, Exporter, watchBlocks, DEFAULT_AREA};
+module.exports = {classify, areaBoxes, BlockLog, aggregate, Exporter, watchBlocks, DEFAULT_AREA};

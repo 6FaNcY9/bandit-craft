@@ -429,4 +429,4 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
   return {wheatfarm};
 }
 
-module.exports = {withFields, MAX_FIELDS, farmBox, centre, wheatAge, columnTop, hydrated, scan, chooseWork, pickups, breadFrom, shouldDeposit, makeWheatFarm};
+module.exports = {withFields, MAX_FIELDS, farmBox, centre, wheatAge, hydrated, scan, chooseWork, pickups, breadFrom, shouldDeposit, makeWheatFarm};

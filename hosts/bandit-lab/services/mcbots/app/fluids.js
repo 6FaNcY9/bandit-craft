@@ -137,4 +137,4 @@ function waterToAir(nameAt, max = 24) {
   return 0;
 }
 
-module.exports = {waterToAir, missing, aim, refills, fillable, isSource, makeFluids, BUCKET};
+module.exports = {waterToAir, missing, aim, refills, fillable, isSource, makeFluids};

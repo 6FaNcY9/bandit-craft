@@ -246,4 +246,4 @@ function makeSeal({goNear, guard, sleep, goals, withdraw, skipMs = SKIP_MS}) {
   }
 }
 
-module.exports = {scan, standSpot, refFace, validateBox, makeSeal, kindOf, MAX_SIDE, MAX_HEIGHT, MAX_WALLS, MATERIALS};
+module.exports = {scan, standSpot, refFace, validateBox, makeSeal, kindOf, MAX_SIDE, MAX_HEIGHT, MATERIALS};

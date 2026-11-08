@@ -163,4 +163,4 @@ function makeGraves({goNear, guard, sleep, deposit}) {
   return {grave, graves};
 }
 
-module.exports = {click, REACH, FAR, graveCandidates, graveAfterDeath, openGraves, armourPicks, makeGraves};
+module.exports = {click, REACH, graveCandidates, graveAfterDeath, openGraves, armourPicks, makeGraves};

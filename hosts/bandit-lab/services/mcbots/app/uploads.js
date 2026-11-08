@@ -109,4 +109,4 @@ async function handle(req, res, url, deps) {
   }
 }
 
-module.exports = {Uploads, fileName, visible, handle, TTL_MS, MAX_BYTES, MAX_FILES};
+module.exports = {Uploads, fileName, visible, handle, MAX_BYTES};

@@ -61,4 +61,4 @@ class Settings {
   }
 }
 
-module.exports = {Settings, DEFAULTS, LIMITS, clean};
+module.exports = {Settings, DEFAULTS, clean};

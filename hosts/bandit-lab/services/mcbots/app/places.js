@@ -104,4 +104,4 @@ class Places {
   }
 }
 
-module.exports = {Places, KINDS, ZONE_KINDS, clean, use, inZone, zoneBox, zoneNamed, protectedBoxes};
+module.exports = {Places, KINDS, clean, use, inZone, zoneBox, zoneNamed, protectedBoxes};

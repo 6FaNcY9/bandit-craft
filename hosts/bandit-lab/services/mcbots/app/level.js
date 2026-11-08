@@ -214,4 +214,4 @@ function makeLevel({goNear, waitCalm, guard, sleep, digAt, upkeep, NATURAL, stai
   return {level};
 }
 
-module.exports = {DIRS, NAMES, GAP, armPlan, armOrder, makeLevel};
+module.exports = {DIRS, GAP, armPlan, armOrder, makeLevel};

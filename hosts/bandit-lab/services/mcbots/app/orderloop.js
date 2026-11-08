@@ -42,4 +42,4 @@ function deathLoop(times, t) {
 const deathLoopAlert = (bot, order, queued) => `${bot} died ${DEATH_LOOP} times in ${DEATH_WINDOW_MS / 60000} min: ${
   [order && `its ${order.type} order waits ${DEATH_HOLD_MS / 60000} min`, queued && `its ${queued} queued jobs are dropped`].filter(Boolean).join(', ') || 'nothing queued'}`;
 
-module.exports = {deathLoop, deathLoopAlert, DEATH_LOOP, DEATH_WINDOW_MS, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS};
+module.exports = {deathLoop, deathLoopAlert, DEATH_HOLD_MS, ordersToStart, orderOutcome, ORDER_RETRY_MS};
