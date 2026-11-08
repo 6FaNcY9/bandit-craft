@@ -33,10 +33,9 @@
   workerPort = "8096";
   workerServePort = toString repoConfig.lab.mcbotsWorkerServePort;
   ownerUuids = "623c7ee4-71ca-487a-b92a-a4564e43fbb9"; # fancy8869
-  # Few but smart (owner 2026-10-12, docs/specs/2026-10-12-in-game-bot-control.md): only the three
-  # agent bots play; bot4, bot10 and bot16-18 are retired. A Node process uses one core, so bot2 and
-  # bot3 run in a worker container; the dashboard process keeps bot1. New names must be ones VeloAuth
-  # has never seen (see BOT_NAMES below).
+  # Few but smart (owner 2026-10-12, docs/specs/2026-10-12-in-game-bot-control.md). A Node process uses
+  # one core, so every bot but bot1 runs in a worker container; the dashboard process keeps bot1. New
+  # names must be ones VeloAuth has never seen (see BOT_NAMES below).
   workers = {
     mcbots-worker-2 = {
       bots = "bot2,bot3";
@@ -108,7 +107,7 @@ in {
           image = "${image.imageName}:${image.imageTag}";
           imageFile = image;
           environment = {
-            BOT_NAMES = "bot1"; # bot1 an agent bot; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, MisaBot and EM_Trader (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
+            BOT_NAMES = "bot1"; # bot1 runs in the hub process; bot2 and bot3 run in the mcbots-worker-2 container, bot19 in mcbots-worker-3, bot20 and bot21 in mcbots-worker-4, MisaBot and EM_Trader (MidariBread's) in mcbots-worker-5; bot5 is the local test bot. A new name must never have been registered in VeloAuth (local stages used bot5-9, bot11-15, bot50-59)
             MC_HOST = "velocity"; # --add-host below pins the name to the gateway
             MC_PORT = "25565";
             # Only the owner's in-game orders count (owner.js): the sender UUID of a player chat line.

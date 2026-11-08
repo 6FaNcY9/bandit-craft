@@ -356,7 +356,7 @@ applyPlaces();
 // running and queued shift/guard/mine/chop jobs go to STATE_DIR/jobs.json and
 // are queued again at start; a mine/chop keeps only what is left of its count.
 const jobsFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'jobs.json') : null;
-// A worker's bots report their own list (hub.js), so bot16-bot18 survive a hub restart too.
+// A worker's bots report their own list (hub.js), so they survive a hub restart too.
 const keptJobs = () => {
   const out = {};
   for (const r of runners.values()) {

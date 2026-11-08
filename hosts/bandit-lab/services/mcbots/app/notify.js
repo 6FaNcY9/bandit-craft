@@ -64,7 +64,6 @@ class NtfyNotifier {
   event(e) {
     const {bot, kind, text} = e;
     if (kind === 'death') return this.send(bot, 'death', `${bot} ${text}${text.includes(':') ? '' : ': cause unknown'}`, 'high');
-    if (kind === 'alert' && /^solver:/.test(text)) return this.send(bot, 'solver', text, 'high'); // the problem solver gave up on an incident (tools/mcagents/solver.js)
     if (kind === 'alert' && /^highway:/.test(text)) return this.send(bot, 'highway', text, 'high'); // a road stopped and waits for the owner
     if (kind === 'fail') {
       const previous = this.failures.get(bot);

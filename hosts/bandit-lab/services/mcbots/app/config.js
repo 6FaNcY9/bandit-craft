@@ -81,7 +81,7 @@ function loadConfig(env = process.env) {
   if (!!workerToken !== !!workerPort) throw new Error('WORKER_PORT and WORKER_TOKEN (or WORKER_TOKEN_FILE) must be set together');
   if (workerPort && (!Number.isInteger(workerPort) || workerPort === Number(env.DASHBOARD_PORT || 8095))) throw new Error('WORKER_PORT must be a port other than the dashboard port');
   if (workerToken && !/^[\w-]{32,128}$/.test(workerToken)) throw new Error('worker token must be 32..128 characters of [A-Za-z0-9_-]');
-  // The lab's worker containers: "label=bot16,bot17;label2=bot2" - each gets its own hub credential for those names only.
+  // The lab's worker containers: "label=bot2,bot3;label2=bot19" - each gets its own hub credential for those names only.
   const hubWorkers = {};
   for (const part of (env.HUB_WORKERS || '').split(';').map((s) => s.trim()).filter(Boolean)) {
     const [label, list = ''] = part.split('=');
