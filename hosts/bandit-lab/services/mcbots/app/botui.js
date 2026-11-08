@@ -4,10 +4,10 @@
 // a dialog the player closed is never shown again: only a new open or click event may open one.
 const FLASH_MS = 30000;
 
-// One handler per click `data.a`; later tasks add theirs here. (st, data, ui, viewer) -> void, may be async, may throw.
+// One handler per click `data.a`: (st, data, ui, viewer) -> void, may be async, may throw.
 // Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
-const QUICK_LABEL = Object.fromEntries(require('./botui-screens').QUICK);
-const {explain, ZOOMS} = require('./botui-screens');
+const {explain, ZOOMS, QUICK} = require('./botui-screens');
+const QUICK_LABEL = Object.fromEntries(QUICK);
 const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
 const menus = require('./botui-menus');
@@ -188,7 +188,7 @@ const ACTIONS = {
     st.pick = {kind: data.kind, bot, until: ui.now() + PICK_MS};
     st.screen = bot ? {name: 'botm', bot} : {name: 'shiftm'};
     await ACTIONS.close(st, data, ui, viewer);
-    await ui.call('/actionbar', {player: viewer, text: `${data.kind === 'chest' ? 'Schleich und zeig mit dem Stab auf eine Kiste' : 'Zeig mit dem Stab auf einen Block'}`}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
+    await ui.call('/actionbar', {player: viewer, text: data.kind === 'chest' ? 'Schleich und zeig mit dem Stab auf eine Kiste' : 'Zeig mit dem Stab auf einen Block'}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
   },
   shiftgo: (st, data, ui, viewer) => {
     const f = formOf(st, ui, viewer), bot = oneBot(ui, viewer, {bot: f.bot});

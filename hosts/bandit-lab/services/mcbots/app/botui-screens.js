@@ -45,6 +45,7 @@ function dialog(title, body, actions, exit, columns = 2, inputs = []) {
     exit_action: {label: txt(exit.label), action: act(exit.a)}, after_action: 'none', pause: false, can_close_with_escape: true};
 }
 const CLOSE = {label: 'Schließen', a: 'close'};
+const mark = (on) => (on ? 'green' : 'white');
 
 // A job's raw label is "schematic x.litematic at -190 -12 -108 0 none ...": on a button only its name and what it works on.
 const JOB_NAME = {...Object.fromEntries(Object.entries(JOBS).filter(([k, j]) => k === j.type).map(([k, j]) => [k, j.label])), trade: 'Handel', highway: 'Straße'};
@@ -157,7 +158,6 @@ function wennfrei(view, sc) {
   const s = mine(view).find((x) => x.name === sc.bot), n = safe(sc.bot, 16);
   if (!s) return dialog(n, [line(txt('Bot nicht gefunden', 'red')), ...flashLine(view.flash)], [], {label: 'Zur Übersicht', a: 'lage'});
   const cur = view.idle?.get(s.name)?.id;
-  const mark = (on) => (on ? 'green' : 'white');
   const actions = [...CHOICES.filter((c) => c.id !== 'keeper' || !s.guest).map((c) => button(txt(c.label, mark(c.id === cur)), 'idle_set', {bot: s.name, choice: c.id})),
     button(txt('Nichts', mark(!cur)), 'idle_set', {bot: s.name, choice: 'none'}), button(txt('Zurück'), 'bot', {bot: s.name})];
   return dialog(`${n}: wenn frei`, [line(txt('Was soll der Bot tun, wenn er eine Weile frei ist?', 'white')), ...flashLine(view.flash)], actions, CLOSE);
@@ -293,7 +293,6 @@ const ZOOMS = [1, 2, 5, 10, 25, 50];
 function karte(view) {
   const ms = view.mapState || {zoom: 5, center: null};
   const body = [line(txt(`${ms.zoom} ${ms.zoom === 1 ? 'Block' : 'Blöcke'} pro Pixel · Mitte: ${ms.center ? safe(ms.center, 16) : 'du'}`, 'white')), ...flashLine(view.flash)];
-  const mark = (on) => (on ? 'green' : 'white');
   const actions = [...ZOOMS.map((z) => button(txt(`${z} ${z === 1 ? 'Block' : 'Blöcke'} pro Pixel`, mark(z === ms.zoom)), 'zoom', {z})),
     button(txt('Mitte: ich', mark(!ms.center)), 'center', {me: 1}),
     ...mine(view).filter((s) => !s.sandbox).map((s) => button(txt(`Mitte: ${safe(s.name, 16)}`, mark(ms.center === s.name)), 'center', {bot: s.name})),
@@ -301,13 +300,13 @@ function karte(view) {
   return dialog('Bot-Karte', body, actions, CLOSE);
 }
 
-// A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
 // The one-time upload link as a browser button; the URL carries the token, so it is shown nowhere else.
 function upload(view, sc) {
   const body = [line(txt('Öffne die Seite, wähle deine .litematic-Datei aus Litematica (config/litematica/schematics) und lade sie hoch.', 'white')), line(txt('Der Link gilt 10 Minuten und nur für dich.', 'gray')), ...flashLine(view.flash)];
   return dialog('Bauplan hochladen', body, [{label: txt('Seite öffnen', 'aqua'), width: 200, action: {type: 'minecraft:open_url', url: String(sc.url)}}], {label: 'Zurück', a: 'lage'});
 }
 
+// A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
 const SCREENS = {lage, upload, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
 const REFRESHING = new Set(['lage', 'bot', 'ov']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);

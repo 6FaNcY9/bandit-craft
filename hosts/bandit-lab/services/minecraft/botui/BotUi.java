@@ -610,7 +610,7 @@ public class BotUi extends JavaPlugin implements Listener {
       Player p = Bukkit.getPlayerExact(name);
       if (p == null) return null;
       JSONObject o = new JSONObject();
-      String err = viewers.contains(p.getName().toLowerCase(Locale.ROOT)) ? map.give(p) : "Nicht freigeschaltet";
+      String err = isViewer(p) ? map.give(p) : "Nicht freigeschaltet";
       o.put("ok", err == null);
       if (err != null) o.put("error", err);
       return o;
@@ -717,13 +717,17 @@ public class BotUi extends JavaPlugin implements Listener {
     return id.substring(id.indexOf(':') + 1);
   }
 
+  private boolean isViewer(Player p) {
+    return viewers.contains(p.getName().toLowerCase(Locale.ROOT));
+  }
+
   private void onMain(Runnable r) {
     if (Bukkit.isPrimaryThread()) r.run();
     else Bukkit.getScheduler().runTask(this, r);
   }
 
   private void tryOpen(Player p, String type) {
-    if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) {
+    if (!isViewer(p)) {
       p.sendMessage(Component.text("Nicht freigeschaltet"));
     } else if (System.currentTimeMillis() - lastPoll > HUB_TIMEOUT_MS) {
       p.sendMessage(Component.text("Hub nicht erreichbar"));
@@ -736,7 +740,7 @@ public class BotUi extends JavaPlugin implements Listener {
   public boolean onCommand(CommandSender s, Command c, String label, String[] args) {
     if (!(s instanceof Player p)) return true;
     if (!c.getName().equals("zauberstab")) tryOpen(p, "lage"); // /bots is the overview; the staff and Shift + F open what they point at
-    else if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) p.sendMessage(Component.text("Nicht freigeschaltet"));
+    else if (!isViewer(p)) p.sendMessage(Component.text("Nicht freigeschaltet"));
     else {
       PlayerInventory inv = p.getInventory();
       int slot = inv.getHeldItemSlot();
@@ -759,7 +763,7 @@ public class BotUi extends JavaPlugin implements Listener {
 
   /** Why a click with this hand does not count as a staff click, or null when it does (main-hand staff, or off-hand staff with none in the main hand). */
   private String staffReject(Player p, EquipmentSlot hand) {
-    if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) return "not viewer";
+    if (!isViewer(p)) return "not viewer";
     ItemStack main = p.getInventory().getItemInMainHand();
     if (hand == EquipmentSlot.HAND) return isStaff(main) ? null : "no staff in main hand (" + main.getType() + ", tagged=" + isStaff(main) + ")";
     return hand == EquipmentSlot.OFF_HAND && !isStaff(main) && isStaff(p.getInventory().getItemInOffHand()) ? null : "offhand";
@@ -797,7 +801,7 @@ public class BotUi extends JavaPlugin implements Listener {
   @EventHandler
   public void onSwap(PlayerSwapHandItemsEvent e) {
     Player p = e.getPlayer();
-    if (p.isSneaking() && viewers.contains(p.getName().toLowerCase(Locale.ROOT))) {
+    if (p.isSneaking() && isViewer(p)) {
       e.setCancelled(true);
       tryOpen(p, "open");
     }
@@ -831,7 +835,7 @@ public class BotUi extends JavaPlugin implements Listener {
     ItemStack held = p.getInventory().getItemInMainHand();
     if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
     boolean isMap = e.getHand() == EquipmentSlot.HAND && map.isMap(held);
-    String why = isMap && viewers.contains(p.getName().toLowerCase(Locale.ROOT)) ? null : staffReject(p, e.getHand());
+    String why = isMap && isViewer(p) ? null : staffReject(p, e.getHand());
     if (why != null) {
       if (holdsStick(p, e.getHand())) staffLog(p, e.getAction(), e.getHand(), "ignored: " + why);
       return;
@@ -850,7 +854,7 @@ public class BotUi extends JavaPlugin implements Listener {
   @EventHandler
   public void onJoin(PlayerJoinEvent e) {
     map.join(e.getPlayer());
-    if (viewers.contains(e.getPlayer().getName().toLowerCase(Locale.ROOT))) emit("join", e.getPlayer(), null);
+    if (isViewer(e.getPlayer())) emit("join", e.getPlayer(), null);
   }
 
   @EventHandler
@@ -858,7 +862,7 @@ public class BotUi extends JavaPlugin implements Listener {
     if (!(e.getCommonConnection() instanceof PlayerGameConnection g) || !e.getIdentifier().namespace().equals("botui")) return;
     Player p = g.getPlayer();
     // A modified client can send these without any dialog; each would raytrace on main and push a real event out of the queue.
-    if (!viewers.contains(p.getName().toLowerCase(Locale.ROOT))) return;
+    if (!isViewer(p)) return;
     JSONObject data = new JSONObject();
     if (e.getTag() != null) {
       String snbt = e.getTag().string();

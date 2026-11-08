@@ -140,7 +140,7 @@ const maxBatches = (grid, have) => {
 function craftPage(view) {
   const mk = view.make || {}, s = snapOf(view, mk.bot), bot = s.name, grid = mk.item && recipeGrid(mk.item);
   const slots = [...(bot ? [slot(8, 'player_head', bot, {a: 'craftm', bot}, {head: bot})] : []), slot(14, 'arrow', 'ergibt', {a: 'craftm', bot}),
-    slot(17, 'crafting_table', 'Anderes Item…', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}), slot(26, 'arrow', 'Zurück', {a: 'botm', bot})];
+    slot(17, 'crafting_table', 'Anderes Item…', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}), back(26, 'botm', bot)];
   if (!grid) slots.push(slot(15, 'crafting_table', 'Was herstellen? Klick', {a: 'gridm', mode: 'craft', tab: 'werkzeug', page: 0, back: 'craftm'}));
   else {
     const have = haveOf(s), need = {};
@@ -177,9 +177,9 @@ function botPickPage(view) {
   return {type: 'chest', title: 'Welcher Bot?', rows, slots};
 }
 
-// Screens drawn as menus; later tasks add theirs to RENDER.
+// Screens drawn as menus.
 const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
-module.exports = {MENUS, menu, slot, badgeOf, overview, AMOUNTS, TABS, haveOf, ITEM_TABS, GRID_MODES, maxBatches, SMELT_RESULT, fuelOf};
+module.exports = {MENUS, menu, slot, overview, AMOUNTS, haveOf, GRID_MODES, maxBatches, SMELT_RESULT, fuelOf};
