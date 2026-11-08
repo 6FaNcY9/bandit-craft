@@ -220,35 +220,54 @@ const assert = require('node:assert');
   await assert.rejects(none.ensurePlanks({bot: {...bot, inventory: {items: () => []}}}, {}, 2), /no logs/);
 })();
 
-(async () => { // enchant: validation, the offer is taken, the item always comes back out
+(async () => { // enchant: validation, the offer is taken, the item always comes back out, never a crafted table
   const {VALIDATE} = require('../bots');
   const {makeEnchant} = require('../enchant');
   assert.deepStrictEqual(VALIDATE.enchant({item: 'iron_pickaxe'}), {item: 'iron_pickaxe', level: 3});
   assert.throws(() => VALIDATE.enchant({item: 'cobblestone'}), /tool, weapon/);
+  assert.throws(() => VALIDATE.enchant({item: 'book'}), /tool, weapon/);
   assert.throws(() => VALIDATE.enchant({item: 'bow', level: 4}), /level/);
   const {EventEmitter} = require('node:events');
-  const setup = ({xp = 30, lapis = 3, offers = [1, 5, 12]} = {}) => {
-    const log = [], asked = [], inv = [{name: 'iron_pickaxe', count: 1}, {name: 'lapis_lazuli', count: lapis}];
+  const {Vec3} = require('vec3');
+  const setup = ({xp = 30, lapis = [3], offers = [1, 5, 12], tableNear = true, hang = false} = {}) => {
+    const log = [], asked = [], inv = [{name: 'iron_pickaxe', count: 1}, ...lapis.map((count) => ({name: 'lapis_lazuli', count}))];
     const table = Object.assign(new EventEmitter(), {
       enchantments: offers.map((level) => ({level})),
-      putTargetItem: async () => log.push('item'), putLapis: async () => log.push('lapis'),
-      enchant: async (i) => log.push('enchant' + i), takeTargetItem: async () => log.push('take'), close: () => log.push('close')});
-    const r = {bot: {inventory: {items: () => inv}, experience: {level: xp}, openEnchantmentTable: async () => table}};
-    const run = makeEnchant({station: async () => ({}), guard() {}, readyMs: 50,
+      putTargetItem: async () => log.push('item'),
+      putLapis: async (s) => { log.push('lapis' + s.count); inv.splice(inv.indexOf(s), 1); },
+      enchant: (i) => (hang ? new Promise(() => {}) : (log.push('enchant' + i), Promise.resolve())),
+      takeTargetItem: async () => log.push('take'), close: () => log.push('close')});
+    const r = {bot: {inventory: {items: () => inv}, experience: {level: xp}, entity: {position: new Vec3(0, 64, 0)}, blockAt: (p) => ({position: p}),
+      openEnchantmentTable: async () => { log.push('open:busy' + r.inventoryBusy); return table; }}};
+    const run = makeEnchant({nearBlock: () => (tableNear ? {position: new Vec3(1, 64, 0)} : null), goNear: async () => {}, guard() {}, readyMs: 50, stepMs: 50,
       count: (bot, n) => inv.filter((i) => i.name === n).reduce((s, i) => s + i.count, 0),
-      getMore: async (rr, j, item, n) => { asked.push([item, n]); inv[1].count += n; }});
-    return {log, asked, go: (level = 3) => run(r, {args: {item: 'iron_pickaxe', level}})};
+      getMore: async (rr, j, item, n) => { asked.push([item, n]); inv.push({name: item, count: n}); }});
+    return {log, asked, r, go: (level = 3) => run(r, {args: {item: 'iron_pickaxe', level}})};
   };
   let s = setup();
   await s.go();
-  assert.deepStrictEqual(s.log, ['item', 'lapis', 'enchant2', 'take', 'close']);
+  assert.deepStrictEqual(s.log, ['open:busy1', 'item', 'lapis3', 'enchant2', 'take', 'close']);
+  assert.strictEqual(s.r.inventoryBusy, 0);
   s = setup({xp: 3});
   await assert.rejects(s.go(), /need level 12, have 3/);
-  assert.deepStrictEqual(s.log, ['item', 'lapis', 'take', 'close']);
-  s = setup({lapis: 1});
+  assert.deepStrictEqual(s.log.slice(-2), ['take', 'close']);
+  s = setup({lapis: [1]});
   await s.go();
   assert.deepStrictEqual(s.asked, [['lapis_lazuli', 2]]);
+  s = setup({lapis: [1, 2]}); // split stacks: both go in
+  await s.go();
+  assert.deepStrictEqual(s.log.filter((l) => l.startsWith('lapis')), ['lapis1', 'lapis2']);
   s = setup({offers: [-1, -1, -1]});
   await assert.rejects(s.go(), /no offers/);
   assert.deepStrictEqual(s.log.slice(-2), ['take', 'close']);
+  s = setup({offers: [0, 0, 0]}); // vanilla's "no offer"
+  await assert.rejects(s.go(), /no offer at level 3/);
+  assert.deepStrictEqual(s.log.slice(-2), ['take', 'close']);
+  s = setup({hang: true}); // the server ignores the click
+  await assert.rejects(s.go(), /did not finish/);
+  assert.deepStrictEqual(s.log.slice(-2), ['take', 'close']);
+  assert.strictEqual(s.r.inventoryBusy, 0);
+  s = setup({tableNear: false});
+  await assert.rejects(s.go(), /no enchanting_table nearby/);
+  assert.deepStrictEqual(s.log, []);
 })();

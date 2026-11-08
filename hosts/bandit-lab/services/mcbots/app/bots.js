@@ -180,7 +180,7 @@ const VALIDATE = {
     return {item, count: num(a.count ?? 1, 1, 64, 'count')};
   },
   enchant: (a) => {
-    if (!/^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$|^book$/.test(a.item || '')) throw new Error('item must be a tool, weapon, armour or book');
+    if (!/^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$/.test(a.item || '')) throw new Error('item must be a tool, weapon or armour');
     return {item: a.item, level: num(a.level ?? 3, 1, 3, 'level')};
   },
   smelt: (a) => {
@@ -4209,7 +4209,7 @@ const JOBS = {
 };
 
 // Lapis comes from the get job (stock, chests), as smelt fetches its input.
-JOBS.enchant = enchantLib.makeEnchant({station: crafting.station, guard, count: crafting.count,
+JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
 module.exports = {MAX_QUEUE, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};

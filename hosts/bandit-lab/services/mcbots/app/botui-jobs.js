@@ -14,7 +14,7 @@ const DE = {
   deepslate: 'Tiefenschiefer', dirt: 'Erde', sand: 'Sand', gravel: 'Kies', wheat: 'Weizen', farmland: 'Ackerboden', coal: 'Kohle', raw_iron: 'Roheisen',
   iron_ingot: 'Eisenbarren', stick: 'Stock', torch: 'Fackel', oak_planks: 'Eichenbretter', bread: 'Brot', iron_pickaxe: 'Eisenspitzhacke',
   stone_pickaxe: 'Steinspitzhacke', iron_sword: 'Eisenschwert', bucket: 'Eimer', crafting_table: 'Werkbank', furnace: 'Ofen',
-  lapis_lazuli: 'Lapislazuli', enchanting_table: 'Zaubertisch', iron_axe: 'Eisenaxt', diamond_pickaxe: 'Diamantspitzhacke', diamond_sword: 'Diamantschwert', book: 'Buch',
+  lapis_lazuli: 'Lapislazuli', enchanting_table: 'Zaubertisch', iron_axe: 'Eisenaxt', diamond_pickaxe: 'Diamantspitzhacke', diamond_sword: 'Diamantschwert',
   cow: 'Kühe', sheep: 'Schafe', pig: 'Schweine', chicken: 'Hühner',
 };
 const germanName = (id) => DE[id] || String(id ?? '').replace(/_/g, ' ');
