@@ -425,6 +425,43 @@ async function fake() {
     assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'setchest', args: {x: 7, y: 8, z: 9}, replace: false}]);
     await ev('Midari', {a: 'chestfor', bot: 'bot1'}, {gaze});
     assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    // chest jobs: the chest is the one the staff click captured, never the payload's
+    await ui.handle({type: 'open', player: 'Midari', gaze});
+    await ev('Midari', {a: 'chestjobs', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'chestjobs', bot: 'MisaBot'}); assert.equal(f.of('/menu').at(-1).body.title, 'MisaBot: diese Kiste');
+    await ev('Midari', {a: 'chestm'}); assert.equal(ui.state('Midari').screen.name, 'chestm'); await ev('Midari', {a: 'chestjobs', bot: 'MisaBot'});
+    await ev('Midari', {a: 'chestjob', bot: 'bot1', job: 'stock'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'chestjob', bot: 'MisaBot', job: 'stock', x: 1, y: 1, z: 1});
+    assert.deepEqual(submits.at(-1)[1].args, {x: 7, y: 8, z: 9});
+    await ev('Midari', {a: 'chestjobs', bot: 'MisaBot'}, {gaze}); // not on the chest screen any more
+    assert.match(ui.state('Midari').flash.text, /Erst eine Kiste anklicken/);
+    await ui.handle({type: 'open', player: 'Midari', gaze});
+    await ev('Midari', {a: 'chestjobs', bot: 'MisaBot'});
+    await ev('Midari', {a: 'gridm', mode: 'withdraw', tab: 'rohstoffe', page: 0, back: 'chestjobs', bot: 'bot1'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'gridm', mode: 'withdraw', tab: 'rohstoffe', page: 0, back: 'chestjobs', bot: 'MisaBot'});
+    await ev('Midari', {a: 'pickitem', item: 'coal', x: 1, y: 1, z: 1});
+    assert.deepEqual(submits.at(-1)[1], {bots: ['MisaBot'], type: 'withdraw', args: {item: 'coal', count: 16, x: 7, y: 8, z: 9}, replace: false});
+    {
+      const g2 = {x: 3, y: 4, z: 5, block: 'chest'};
+      await ui.handle({type: 'open', player: 'Fancy', gaze: g2});
+      assert.equal(f.of('/menu').at(-1).body.title, 'Kiste bei 3 4 5: wer?');
+      await ev('Fancy', {a: 'chestjobs', bot: 'bot1'}); assert.equal(f.of('/menu').at(-1).body.title, 'bot1: diese Kiste');
+      await ev('Fancy', {a: 'chestjob', bot: 'bot1', job: 'stock', x: 9, y: 9, z: 9});
+      assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'stock', args: {x: 3, y: 4, z: 5}, replace: false}]);
+      assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'});
+      await ev('Fancy', {a: 'chestjob', bot: 'bot1', job: 'stock'}); assert.match(ui.state('Fancy').flash.text, /Erst eine Kiste anklicken/);
+      await ui.handle({type: 'open', player: 'Fancy', gaze: g2}); await ev('Fancy', {a: 'chestjobs', bot: 'bot1'});
+      await ev('Fancy', {a: 'chestjob', bot: 'bot1', job: 'tidy'}); assert.deepEqual(submits.at(-1)[1].args, {x: 3, y: 4, z: 5, radius: 16});
+      await ev('Fancy', {a: 'chestjob', bot: 'bot1', job: 'bogus'});
+      await ui.handle({type: 'open', player: 'Fancy', gaze: g2}); await ev('Fancy', {a: 'chestjobs', bot: 'bot1'});
+      await ev('Fancy', {a: 'chestjob', bot: 'bot1', job: 'deposit'}); assert.deepEqual(submits.at(-1)[1], {bots: ['bot1'], type: 'deposit', args: {x: 3, y: 4, z: 5}, replace: false});
+      await ui.handle({type: 'open', player: 'Fancy', gaze: g2}); await ev('Fancy', {a: 'chestjobs', bot: 'bot1'});
+      await ev('Fancy', {a: 'gridm', mode: 'withdraw', tab: 'rohstoffe', page: 0, back: 'chestjobs', bot: 'bot1'});
+      await ev('Fancy', {a: 'chestjobs', bot: 'bot1'}); assert.equal(ui.state('Fancy').screen.name, 'chestjobs'); // grid's back keeps the chest
+      await ev('Fancy', {a: 'gridm', mode: 'withdraw', tab: 'rohstoffe', page: 0, back: 'chestjobs', bot: 'bot1'});
+      await ev('Fancy', {a: 'pickitem', item: 'coal', shift: true, x: 9, y: 9, z: 9});
+      assert.deepEqual(submits.at(-1)[1], {bots: ['bot1'], type: 'withdraw', args: {item: 'coal', count: 64, x: 3, y: 4, z: 5}, replace: false});
+    }
     end();
   }
   { // Abbauen hopper: form defaults, amount cycle, the four shiftgo orders, point-to-pick, expiry, staff on a block

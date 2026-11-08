@@ -116,13 +116,24 @@ function inventoryPage(view, screen) {
   return {type: 'chest', title: `${safe(s.name, 20)}: Inventar`, rows: 6, slots};
 }
 
-// Staff aimed at a chest: pick which of the viewer's bots remembers it.
-function chestPage(view) {
+// Staff aimed at a chest: pick which of the viewer's bots works with it.
+function chestPage(view, screen = {}) {
   const rows = Math.min(6, Math.ceil((view.snaps.length + 1) / 9)), last = rows * 9 - 1;
   const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, last)
-    .map((s, i) => slot(i, 'player_head', s.name, {a: 'chestfor', bot: s.name}, {head: s.name, lore: ['Diese Kiste merken']}));
+    .map((s, i) => slot(i, 'player_head', s.name, {a: 'chestjobs', bot: s.name}, {head: s.name, lore: ['Aufgaben an dieser Kiste']}));
   slots.push(back(last, 'ov'));
-  return {type: 'chest', title: 'Kiste merken für…', rows, slots};
+  return {type: 'chest', title: screen.at ? `Kiste bei ${screen.at.x} ${screen.at.y} ${screen.at.z}: wer?` : 'Kiste: wer?', rows, slots};
+}
+
+// One bot at the clicked chest: remember it, store, take out, count, tidy; a trader bot also files it as a trade chest.
+function chestJobsPage(view, screen) {
+  const bot = screen.bot, job = (j) => ({a: 'chestjob', bot, job: j});
+  const slots = [slot(0, 'hopper', 'Kiste merken', {a: 'chestfor', bot}), slot(1, 'chest', 'Hier einlagern', job('deposit')),
+    slot(2, 'chest_minecart', 'Entnehmen…', {a: 'gridm', mode: 'withdraw', tab: 'werkzeug', page: 0, back: 'chestjobs', bot}),
+    slot(3, 'spyglass', 'Zählen', job('stock')), slot(4, 'brush', 'Hier aufräumen', job('tidy'))];
+  if ((view.traders || []).includes(bot)) slots.push(slot(6, 'stick', 'Handelskiste: Sticks', {a: 'trader_add', bot, kind: 'sticks'}), slot(7, 'emerald', 'Handelskiste: Smaragde', {a: 'trader_add', bot, kind: 'stores'}));
+  slots.push(back(8, 'chestm'));
+  return {type: 'chest', title: `${bot}: diese Kiste`, rows: 1, slots};
 }
 
 // Abbauen: the amount cycle and the block grid's tabs (icon, label, ids; every id is in BLOCKS).
@@ -155,7 +166,8 @@ const craftTabs = Object.fromEntries(Object.entries(ITEM_TABS).map(([t, l]) => [
 const GRID_MODES = {block: {tabs: TABS, icons: TAB_ICON, pick: 'pickblock', key: 'block'},
   craft: {tabs: craftTabs, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
   smelt: {tabs: {schmelzgut: SMELTS}, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
-  get: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'}};
+  get: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'},
+  withdraw: {tabs: ITEM_TABS, icons: ITEM_TAB_ICON, pick: 'pickitem', key: 'item'}};
 
 // Grid: tab icons on top, (block mode: the viewer's last picks, then) the tab's entries (13 at most, so one page); bottom row: point at one (block mode), back.
 // shortcut: `page` is carried but ignored, no tab has more than 36 entries; add paging when one does.
@@ -163,10 +175,10 @@ function gridPage(view, screen) {
   const mode = Object.hasOwn(GRID_MODES, screen.mode) ? screen.mode : 'block', g = GRID_MODES[mode];
   const tab = Object.hasOwn(g.tabs, screen.tab) ? screen.tab : Object.keys(g.tabs)[0];
   const slots = Object.keys(g.tabs).map((t, i) => slot(i, g.icons[t][0], g.icons[t][1], {a: 'gridm', mode, tab: t, page: 0, ...(screen.back ? {back: screen.back} : {}), ...(screen.bot ? {bot: screen.bot} : {})}, {glint: t === tab}));
-  [...(mode === 'block' ? view.recent || [] : []), ...g.tabs[tab]].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: g.pick, [g.key]: b}, mode === 'get' ? {lore: ['Klick: 16 holen · Shift: 64']} : {})));
+  [...(mode === 'block' ? view.recent || [] : []), ...g.tabs[tab]].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: g.pick, [g.key]: b}, mode === 'get' ? {lore: ['Klick: 16 holen · Shift: 64']} : mode === 'withdraw' ? {lore: ['Klick: 16 · Shift: 64']} : {})));
   if (mode === 'block') slots.push(slot(52, 'stick', 'Zeig drauf', {a: 'pick', kind: 'block'}));
   const to = screen.back || 'shiftm';
-  slots.push(back(53, to, to === 'botm' ? screen.bot : undefined));
+  slots.push(back(53, to, to === 'botm' || to === 'chestjobs' ? screen.bot : undefined));
   return {type: 'chest', title: mode === 'block' ? 'Welcher Block?' : 'Welches Item?', rows: 6, slots};
 }
 
@@ -218,7 +230,7 @@ function botPickPage(view, screen = {}) {
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

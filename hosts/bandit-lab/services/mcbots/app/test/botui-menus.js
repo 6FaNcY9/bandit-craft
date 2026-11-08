@@ -87,7 +87,20 @@ assert.ok(MENUS.has('ov'));
 { // chest picker: only the viewer's own bots
   const v = view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, snaps: snaps.filter((x) => x.name === 'MisaBot')});
   const s = menu({name: 'chestm'}, v).menu.slots;
-  assert.deepEqual(s.filter((x) => x.head).map((x) => [x.head, x.payload]), [['MisaBot', {a: 'chestfor', bot: 'MisaBot'}]]);
+  assert.deepEqual(s.filter((x) => x.head).map((x) => [x.head, x.payload]), [['MisaBot', {a: 'chestjobs', bot: 'MisaBot'}]]);
+}
+{ // chest jobs page: five jobs, trader slots only for a trader, withdraw grid lore
+  const page = (o) => menu({name: 'chestjobs', bot: 'zed', at: {x: 3, y: 4, z: 5}}, view(o)).menu;
+  let m = page(); assert.equal(m.rows, 1); assert.equal(m.title, 'zed: diese Kiste');
+  assert.deepEqual(m.slots.map((x) => [x.slot, x.item, x.payload]), [[0, 'hopper', {a: 'chestfor', bot: 'zed'}], [1, 'chest', {a: 'chestjob', bot: 'zed', job: 'deposit'}],
+    [2, 'chest_minecart', {a: 'gridm', mode: 'withdraw', tab: 'werkzeug', page: 0, back: 'chestjobs', bot: 'zed'}], [3, 'spyglass', {a: 'chestjob', bot: 'zed', job: 'stock'}],
+    [4, 'brush', {a: 'chestjob', bot: 'zed', job: 'tidy'}], [8, 'arrow', {a: 'chestm'}]]);
+  m = page({traders: ['zed']}); assert.deepEqual(m.slots.filter((x) => x.slot === 6 || x.slot === 7).map((x) => x.payload), [{a: 'trader_add', bot: 'zed', kind: 'sticks'}, {a: 'trader_add', bot: 'zed', kind: 'stores'}]);
+  for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+  const g = menu({name: 'gridm', mode: 'withdraw', tab: 'essen', back: 'chestjobs', bot: 'zed'}, view()).menu.slots;
+  assert.equal(g.find((x) => x.slot === 9).lore[0], 'Klick: 16 · Shift: 64');
+  assert.deepEqual(g.find((x) => x.slot === 53).payload, {a: 'chestjobs', bot: 'zed'});
+  assert.equal(menu({name: 'chestm', at: {x: 3, y: 4, z: 5}}, view()).menu.title, 'Kiste bei 3 4 5: wer?');
 }
 { // shift hopper: 5 slots, empty form shows the stick and the barrier, a full one the block, amount and chest
   const hop = (form, recent) => menu({name: 'shiftm'}, view({form, recent})).menu;

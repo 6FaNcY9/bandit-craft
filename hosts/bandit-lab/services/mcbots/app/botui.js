@@ -45,7 +45,7 @@ const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data:
   stock: {key: 'stock', data: {}, loc: true}, tidy: {key: 'tidy', data: {radius: 16}, loc: true}};
 // loc: the order takes x/y/z from the payload (jobs.presetOf bounds-checks them).
 
-const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'botm'];
+const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'botm', 'chestjobs'];
 const PICK_BACK = [...GRID_BACK, 'huntm', 'buildm', 'aream', 'enchm'];
 const RADII = [8, 16, 32, 48];
 
@@ -221,11 +221,33 @@ const ACTIONS = {
     if (!Object.hasOwn(menus.GRID_MODES, mode)) throw new Error('unbekannter Modus');
     if (!Object.hasOwn(menus.GRID_MODES[mode].tabs, data.tab)) throw new Error('unbekannter Reiter');
     if (data.back !== undefined && !GRID_BACK.includes(data.back)) throw new Error('unbekannter Zurück-Knopf');
-    st.screen = {name: 'gridm', mode, tab: data.tab, page: 0, ...(data.back ? {back: data.back} : {}), ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})};
+    st.screen = {name: 'gridm', mode, tab: data.tab, page: 0, ...(data.back ? {back: data.back} : {}), ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {}), ...(data.back === 'chestjobs' && st.screen.at ? {at: st.screen.at} : {})};
+  },
+  // The chest is the one the staff click captured (st.screen.at), never a payload's x/y/z.
+  chestjobs: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    if (!st.screen.at) throw new Error('Erst eine Kiste anklicken');
+    st.screen = {name: 'chestjobs', bot, at: st.screen.at};
+  },
+  chestm: (st) => {
+    if (!st.screen.at) throw new Error('Erst eine Kiste anklicken');
+    st.screen = {name: 'chestm', at: st.screen.at};
+  },
+  chestjob: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data), at = st.screen.at;
+    if (st.screen.name !== 'chestjobs' || !['deposit', 'stock', 'tidy'].includes(data.job)) throw new Error('Erst eine Kiste anklicken');
+    orderAt(st, ui, viewer, bot, data.job, {...at, ...(data.job === 'tidy' ? {radius: 16} : {})});
+    st.screen = {name: 'botm', bot};
   },
   pickitem: (st, data, ui, viewer) => {
     const mode = st.screen.name === 'gridm' && st.screen.mode;
     if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
+    if (mode === 'withdraw') {
+      const bot = oneBot(ui, viewer, {bot: st.screen.bot}), at = st.screen.at;
+      if (!at) throw new Error('Erst eine Kiste anklicken');
+      orderAt(st, ui, viewer, bot, 'withdraw', {item: data.item, n: data.shift ? 64 : 16, ...at});
+      return void (st.screen = {name: 'botm', bot});
+    }
     const bot = botOf(st, ui, viewer, mode === 'get' ? st.screen.bot ?? st.make?.bot : st.make?.bot); // Holen from the bot page carries its bot on the grid
     if (mode === 'get') return order(st, ui, viewer, bot, 'get', {item: data.item, n: data.shift ? 64 : 16});
     st.make = {kind: mode, bot, item: data.item};
@@ -432,7 +454,7 @@ const ACTIONS = {
   // The chest is the one the player is looking at: coordinates are never taken from the click.
   trader_add: (st, data, ui, viewer) => {
     const bot = traderOf(ui, viewer, data), g = st.ctx.gaze;
-    st.screen = {name: 'auftrag'};
+    st.screen = {name: 'botm', bot};
     if (!KIND[data.kind]) throw new Error('unbekannte Kiste');
     if (jobs.dimOf(st.ctx.dim) !== 'overworld') return ui.flash(st, 'Nur in der Oberwelt');
     if (!g || !jobs.isChest(g.block)) return ui.flash(st, 'Du schaust keine Kiste an');
@@ -540,7 +562,7 @@ class BotUi {
       if (st.pick) { if (!await this.consumePick(st, viewer, g)) return; }
       else if (mineBot) st.screen = {name: 'botm', bot: who};
       else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
-      else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm'};
+      else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm', at: {x: g.x, y: g.y, z: g.z}};
       else if (e.sneak === true && g && !g.entity) { await this.markAt(st, viewer, g, e.dim); return; }
       // a set corner A keeps the next open on the area steps
       else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
@@ -592,7 +614,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent, places: this.api.places(), mark: markOf(this, viewer)});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent, places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || []});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
