@@ -195,6 +195,7 @@ const path = require('node:path');
     assert.strictEqual((await post('/api/board/jobs/j1', {action: 'resume'})).body.state, 'running');
     assert.deepStrictEqual((await post('/api/sandbox/console', {commands: ['list']})).status, 400, 'no sandbox console here');
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/sandbox/console`, {method: 'POST', headers: {...H, origin: 'http://evil'}, body: '{"commands":["list"]}'})).status, 403, 'origin must match');
+    assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/nothing`, {method: 'POST', headers: {...H, 'content-type': 'text/plain'}, body: 'x'})).status, 403, 'every POST under /api needs a JSON body type, before any route');
     assert.ok(fs.existsSync(path.join(stateDir, 'board.json')));
     console.log('ok');
   } finally {

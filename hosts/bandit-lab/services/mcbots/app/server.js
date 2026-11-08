@@ -524,6 +524,8 @@ const server = http.createServer(async (req, res) => {
     if (req.headers['tailscale-user-login']) log('auth', `refused a Tailscale identity from ${peer(req)} (not a trusted proxy)`);
     return json(403, {error: 'forbidden'});
   }
+  // Every POST under /api: same origin and a JSON body (the schematic upload sends raw bytes and checks its own type).
+  if (req.method === 'POST' && url.pathname.startsWith('/api/') && url.pathname !== '/api/schematic' && (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json'))) return json(403, {error: 'bad origin'});
   if (req.method === 'GET' && url.pathname === '/') return send(200, 'text/html; charset=utf-8', page);
   if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy, LEGACY_CSP);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(200, state());
@@ -693,7 +695,6 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/api/admin/')) {
     const post = req.method === 'POST';
     if (!admin) return json(503, {error: 'server admin is not configured (RCON_HOST, RCON_PASSWORD)'});
-    if (post && (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json'))) return json(403, {error: 'bad origin'});
     try {
       if (req.method === 'GET' && url.pathname === '/api/admin/status') return json(200, await admin.status());
       if (req.method === 'GET' && url.pathname === '/api/admin/query') return json(200, await admin.query(url.searchParams.get('what')));
@@ -709,7 +710,6 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/api/keeper') return json(200, keeper ? keeper.state() : {available: false});
   if (req.method === 'POST' && url.pathname === '/api/keeper') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       if (!keeper) throw new Error('standing orders are not configured (needs SUPPLY_CHEST and KEEPER_QUOTAS)');
       const {enabled} = await readJson(req);
@@ -729,7 +729,6 @@ const server = http.createServer(async (req, res) => {
     return json(200, world.findItems(q).slice(0, 20).map((e) => ({...e, where: e.where.slice(0, 10).map((w) => ({...w, zone: zoneOf(w)}))})));
   }
   if (req.method === 'POST' && url.pathname === '/api/places') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {action, place, name} = await readJson(req);
       if (action === 'set') { const p = places.set(place); events.add('map', 'info', `${p.box ? 'zone' : 'marker'} ${p.name} (${p.kind}) at ${p.x} ${p.y} ${p.z}`); }
@@ -743,7 +742,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === 'POST' && url.pathname === '/api/settings') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {bot, settings: input} = await readJson(req);
       const r = runners.get(bot);
@@ -761,7 +759,6 @@ const server = http.createServer(async (req, res) => {
   }
   // Pause/Stop end a bot's project (the running one, else the queued ones); Resume queues the last one again.
   if (req.method === 'POST' && url.pathname === '/api/project') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {bot, action} = await readJson(req);
       const r = runners.get(bot);
@@ -788,7 +785,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === 'POST' && url.pathname === '/api/job') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const {bots, type, args, replace} = await readJson(req);
       const {saveErr, unreached, keeperOff} = submitJob({bots, type, args, replace});
@@ -800,7 +796,6 @@ const server = http.createServer(async (req, res) => {
   }
   if (board && req.method === 'GET' && url.pathname === '/api/board') return json(200, board.state());
   if (board && req.method === 'POST' && url.pathname.startsWith('/api/board/jobs')) {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
       const body = await readJson(req);
       const id = url.pathname.slice('/api/board/jobs/'.length);
@@ -823,7 +818,6 @@ const server = http.createServer(async (req, res) => {
   // The sandbox console for the laptop tools (tools/mcbots-selftest, -placetest, -scenarios): the Docker
   // `rcon-cli` they used went with the 5.5 cutover. Never the real server's console (cfg.sandboxRcon only).
   if (req.method === 'POST' && url.pathname === '/api/sandbox/console') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     if (!sandboxConsole) return json(400, {error: 'no sandbox console (SANDBOX_RCON_HOST unset)'});
     const {commands} = await readJson(req).catch(() => ({}));
     if (!Array.isArray(commands) || !commands.length || commands.length > 64 || !commands.every((c) => typeof c === 'string' && c.length <= 1400 && !/[\x00-\x1f\x7f]/.test(c))) {

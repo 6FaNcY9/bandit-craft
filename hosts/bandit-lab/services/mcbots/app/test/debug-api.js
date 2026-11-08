@@ -147,7 +147,7 @@ const {BotRunner} = require('../bots');
       assert.deepStrictEqual(b.claims, {granted: 0, refused: 0, timedOut: 0});
       assert.ok(Array.isArray(b.positions) && Array.isArray(b.queue));
     }
-    assert.strictEqual((await fetch(base, {method: 'POST', headers: {'tailscale-user-login': 'a@github'}})).status, 404);
+    assert.strictEqual((await fetch(base, {method: 'POST', headers: {'tailscale-user-login': 'a@github'}})).status, 403);
     // the hub inside the real server: a worker joins, "all" reaches it, and an absent worker never blocks a Stop
     const wport = port + 1 < 65535 ? port + 1 : port - 1;
     const WebSocket = require('ws');
