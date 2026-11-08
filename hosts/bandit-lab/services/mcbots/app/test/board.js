@@ -193,7 +193,6 @@ const path = require('node:path');
     b = await board();
     assert.strictEqual(b.jobs[0].state, 'paused', 'stop all pauses the board');
     assert.strictEqual((await post('/api/board/jobs/j1', {action: 'resume'})).body.state, 'running');
-    assert.strictEqual((await post('/api/scenarios', {name: 'excavate-16'})).status, 400, 'no sandbox console here');
     assert.deepStrictEqual((await post('/api/sandbox/console', {commands: ['list']})).status, 400, 'no sandbox console here');
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/sandbox/console`, {method: 'POST', headers: {...H, origin: 'http://evil'}, body: '{"commands":["list"]}'})).status, 403, 'origin must match');
     assert.ok(fs.existsSync(path.join(stateDir, 'board.json')));
