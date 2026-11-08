@@ -157,7 +157,7 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     assert.deepEqual(ls.slice(0, 7), ['Hierher rufen', 'Hier einlagern', 'Hier entnehmen', 'Hier zählen', 'Als Kiste merken', 'Hierhin gehen', 'Hier bewachen']);
     assert.equal(d.actions[1].label.color ?? d.actions[1].label.extra?.[0]?.color ?? 'gold', 'gold');
     assert.equal(ls.at(-1), 'Zurück'); assert.equal(d.actions.at(-1).action.payload.a, 'lage');
-    assert.ok(ls.includes('Ecke A setzen') && !ls.includes('Raum graben'));
+    assert.ok(ls.includes('Bereich wählen') && !ls.includes('Raum graben'));
     assert.deepEqual(d.actions[1].action.payload, {a: 'job', key: 'deposit', x: -271, y: 66, z: -214});
     assert.equal(text(d.exit_action.label), 'Schließen');
     assert.equal(d.inputs, undefined);
@@ -171,40 +171,17 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     assert.ok(!d.actions.some((a) => /Hier /.test(text(a.label))));
     assert.ok(d.actions.some((a) => text(a.label) === 'Besorgen'));
   }
-  { // corners: A stores the gaze, outlines it and closes; B outlines the box and shows the area jobs; clearsel clears
+  { // the auftrag screen offers Bereich wählen (aream) instead of corner buttons, and the area jobs once both corners are set
     const h = harness();
     await h.ev('lage', 'Fancy');
-    await h.click('Fancy', {a: 'oldmenu'}); // the old dialog is still one click away
-    await h.click('Fancy', {a: 'corner', which: 'a'});
-    assert.deepEqual(h.ui.state('Fancy').sel.a, {x: -271, y: 66, z: -214, dim: 'overworld'});
-    const o1 = h.calls.filter((c) => c.path === '/outline').at(-1).body;
-    assert.deepEqual(o1, {player: 'Fancy', box: {x1: -271, y1: 66, z1: -214, x2: -271, y2: 66, z2: -214}});
-    assert.equal(h.calls.at(-1).path, '/close'); assert.equal(h.ui.state('Fancy').open, false);
-    const shownBefore = h.shown().length;
-    await h.ev('open', 'Fancy', {gaze: {x: -265, y: 70, z: -210, block: 'stone'}}); // the next Shift+F opens step 1
-    assert.equal(h.shown().length, shownBefore + 1);
-    assert.ok(btn(h.last(), 'Ecke B setzen'));
-    await h.click('Fancy', {a: 'corner', which: 'b'}, {gaze: {x: -265, y: 70, z: -210, block: 'stone'}});
+    await h.click('Fancy', {a: 'oldmenu'});
+    await h.click('Fancy', {a: 'new'});
+    assert.equal(btn(h.last(), 'Bereich wählen').action.payload.a, 'aream');
+    h.ui.state('Fancy').sel = {a: {x: -271, y: 66, z: -214, dim: 'overworld'}, b: {x: -265, y: 70, z: -210, dim: 'overworld'}, dim: 'overworld'};
+    await h.click('Fancy', {a: 'new'});
     const d = h.last();
     assert.ok(text(d.body[1].contents).startsWith('Bereich: 7 x 5 x 5'), text(d.body[1].contents));
     assert.ok(btn(d, 'Raum graben') && btn(d, 'Schacht'));
-    assert.deepEqual(h.calls.filter((c) => c.path === '/outline').at(-1).body.box, {x1: -271, y1: 66, z1: -214, x2: -265, y2: 70, z2: -210});
-    await h.click('Fancy', {a: 'clearsel'});
-    assert.deepEqual(h.ui.state('Fancy').sel, {a: null, b: null, dim: null});
-    assert.deepEqual(h.calls.filter((c) => c.path === '/outline').at(-1).body, {player: 'Fancy', box: null});
-  }
-  { // corner without gaze, and in another world
-    const h = harness();
-    await h.ev('open', 'Fancy', {gaze: null});
-    await h.click('Fancy', {a: 'corner', which: 'a'}, {gaze: null});
-    assert.match(flashOf(h.last()) || text(h.ui.state('Fancy').flash.text), /Du schaust auf keinen Block/);
-    assert.equal(h.ui.state('Fancy').sel.a, null);
-    await h.click('Fancy', {a: 'corner', which: 'a'});
-    await h.click('Fancy', {a: 'corner', which: 'b'}, {dim: 'the_nether'});
-    assert.match(h.ui.state('Fancy').flash.text, /Ecken in verschiedenen Welten/);
-    assert.ok(h.ui.state('Fancy').sel.a); assert.equal(h.ui.state('Fancy').sel.b, null);
-    await h.click('Fancy', {a: 'corner', which: 'x'}); // garbage
-    assert.equal(h.ui.state('Fancy').sel.b, null);
   }
   { // step 2 shows only that job's inputs plus Wer and Wann
     const h = harness();
@@ -309,9 +286,8 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
   }
   { // area job sent from the selection clears it and the outline
     const h = harness();
-    await h.click('Fancy', {a: 'corner', which: 'a'});
-    await h.ev('open', 'Fancy', {gaze: {x: -268, y: 68, z: -212, block: 'stone'}});
-    await h.click('Fancy', {a: 'corner', which: 'b'}, {gaze: {x: -268, y: 68, z: -212, block: 'stone'}});
+    await h.click('Fancy', {a: 'aream'});
+    h.ui.state('Fancy').sel = {a: {x: -271, y: 66, z: -214, dim: 'overworld'}, b: {x: -268, y: 68, z: -212, dim: 'overworld'}, dim: 'overworld'};
     await h.click('Fancy', {a: 'send', key: 'excavate', who: 'frei', when: 'next'});
     assert.deepEqual(h.submits[0].args, {x1: -271, y1: 66, z1: -214, x2: -268, y2: 68, z2: -212});
     assert.equal(h.ui.state('Fancy').sel.a, null);
@@ -342,13 +318,13 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
     const n = h.submits.length;
     await h.click('Midari', {...base, a: 'send', key: 'mine', who: 'bot1'}); // never someone else's bot
     assert.equal(h.submits.length, n); assert.match(h.ui.state('Midari').flash.text, /nicht dein Bot|nicht/);
-    await h.click('Midari', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Ecke A setzen'), 'area jobs too');
+    await h.click('Midari', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Bereich wählen'), 'area jobs too');
     await h.click('Midari', {a: 'job', key: 'goto'}); assert.ok(JSON.stringify(h.last()).includes('Vorratskiste'));
     await h.click('Midari', {a: 'stopall'}); assert.match(h.ui.state('Midari').flash.text, /Besitzer/); // server-wide stays the owner's
     // the owner is unchanged: places, supply chest, corners, Bedarf
     await h.ev('click', 'Fancy', {data: {a: 'job', key: 'goto'}});
     const o = JSON.stringify(h.last()); assert.ok(o.includes('Heimatbasis') && o.includes('Vorratskiste'));
-    await h.click('Fancy', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Ecke A setzen'));
+    await h.click('Fancy', {a: 'new'}); assert.ok(JSON.stringify(h.last()).includes('Bereich wählen'));
   }
   { // Als Kiste merken: a chest gaze offers it, stone does not; only the viewer's own bots; flash names the spot
     assert.ok(keys(chestG).includes('setchest')); assert.ok(!keys({...chestG, entity: {type: 'cow', x: 1, y: 2, z: 3}}).includes('setchest'), 'entity aimed: no row'); assert.ok(!keys({x: 1, y: 2, z: 3, block: 'stone'}).includes('setchest'));

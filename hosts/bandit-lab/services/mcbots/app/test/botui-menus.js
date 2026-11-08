@@ -66,6 +66,23 @@ assert.ok(MENUS.has('ov'));
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
   assert.deepEqual(s.find((x) => x.item === 'ender_pearl').payload, {a: 'go', bot: 'zed', job: 'summon'});
 }
+{ // Bereich: without corners only the header slots; with a 3x3x3 box the five jobs; a huge box greys excavate; a marked area adds slot 3
+  const ar = (o = {}) => menu({name: 'aream'}, view({area: {bot: 'zed', when: 'next'}, sel: {}, ...o})).menu;
+  const m0 = ar(), at = (m, i) => m.slots.find((x) => x.slot === i);
+  assert.equal(m0.title, 'Bereich wählen'); assert.equal(m0.rows, 3);
+  assert.deepEqual(m0.slots.map((x) => x.slot), [0, 2, 5, 6, 8, 26]);
+  assert.deepEqual(at(m0, 0).payload, {a: 'botpick', back: 'aream'}); assert.deepEqual(at(m0, 2).payload, {a: 'pick', kind: 'area'}); assert.equal(at(m0, 5).glint, true); assert.ok(!at(m0, 6).glint);
+  assert.deepEqual(at(m0, 6).payload, {a: 'setwhen', when: 'now', screen: 'aream'}); assert.deepEqual(at(m0, 8).payload, {a: 'areaclear'}); assert.deepEqual(at(m0, 26).payload, {a: 'botm', bot: 'zed'});
+  const p = (x, y, z) => ({x, y, z, dim: 'overworld'});
+  const m1 = ar({sel: {a: p(0, 64, 0), b: p(2, 66, 2)}, mark: {area: {a: p(0, 0, 0), b: p(1, 1, 1)}}});
+  assert.equal(m1.title, 'Bereich: 3 × 3 × 3'); assert.deepEqual(at(m1, 3).payload, {a: 'areafrom', from: 'mark'});
+  assert.deepEqual(m1.slots.filter((x) => x.slot >= 9 && x.slot < 26).map((x) => x.payload.a), ['areago', 'areago', 'areago', 'areago', 'areago']);
+  assert.deepEqual(m1.slots.filter((x) => x.slot >= 9 && x.slot < 26).map((x) => x.item), ['diamond_shovel', 'diamond_pickaxe', 'ladder', 'torch', 'stone_bricks']);
+  const m2 = ar({sel: {a: p(0, 64, 0), b: p(39, 93, 39)}});
+  assert.equal(at(m2, 9).item, 'gray_stained_glass_pane'); assert.match(at(m2, 9).lore[0], /^zu groß/); assert.deepEqual(at(m2, 9).payload, {a: 'aream'});
+  for (const x of [...m1.slots, ...m2.slots, ...m0.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+  assert.deepEqual(ar().slots, ar().slots);
+}
 { // Wenn frei: guest bots get no keeper; the active choice glints; Nichts always
   const guest = {name: 'MisaBot', online: true, guest: true}, own = {name: 'zed', online: true};
   const items = (b, idle) => menu({name: 'idlem', bot: b.name}, view({snaps: [b], idle: {get: () => idle}})).menu.slots;

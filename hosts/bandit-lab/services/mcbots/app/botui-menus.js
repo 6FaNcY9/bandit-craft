@@ -4,7 +4,7 @@
 // re-sends a refreshing screen only when its JSON changed.
 const {choiceOf, CHOICES} = require('./idle');
 const {safe} = require('./botui-screens');
-const {germanName, BLOCKS, CRAFTS, SMELTS} = require('./botui-jobs');
+const {germanName, BLOCKS, CRAFTS, SMELTS, JOBS, areaJobs, dims} = require('./botui-jobs');
 const {recipeGrid, SMELT} = require('./recipes');
 const {FUELS} = require('./crafting');
 const itemsByName = require('minecraft-data')('26.1').itemsByName;
@@ -53,7 +53,7 @@ function botPage(view, screen) {
     slot(0, 'player_head', bot, {a: 'botm', bot}, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
     go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'), go(4, 'iron_sword', 'Bewach diesen Ort', 'guardhere'),
     go(5, 'chest', 'Einlagern', 'deposit'), slot(6, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
-    slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type)}), go(11, 'iron_axe', 'Holz holen', 'chop'),
+    slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Klick: Block abbauen', 'Shift: Bereich']}), go(11, 'iron_axe', 'Holz holen', 'chop'),
     slot(12, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(13, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
     slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
     go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
@@ -67,6 +67,7 @@ function morePage(view, screen) {
   return {type: 'chest', title: `${safe(bot, 20)}: mehr`, rows: 1, slots: [
     slot(0, 'ender_eye', 'Hingehen…', {a: 'placem', mode: 'goto', bot}, {glint: GLINT[s.job?.type] === 'ender_eye'}),
     go(1, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste'), go(2, 'red_bed', 'Heim', 'homebed'), go(3, 'bone', 'Gräber holen', 'graves'), go(4, 'totem_of_undying', 'Helfen', 'help'),
+    slot(5, 'diamond_shovel', 'Bereich…', {a: 'aream', bot}),
     back(8, 'botm', bot)]};
 }
 
@@ -278,6 +279,20 @@ function buildPage(view) {
   return {type: 'chest', title: `Bauen: ${safe(b.file.replace(/\.litematic$/, ''), 30)}`, rows: 3, slots};
 }
 
+// Bereich: who, the two corners (staff clicks with a ghost) or the marked area, when; with both corners the area jobs.
+const AREA_ICON = {excavate: 'diamond_shovel', clear: 'diamond_pickaxe', shaft: 'ladder', light: 'torch', seal: 'stone_bricks'};
+function areaPage(view) {
+  const a = view.area, sel = view.sel || {}, size = dims(sel);
+  const slots = [slot(0, 'player_head', a.bot, {a: 'botpick', back: 'aream'}, {head: a.bot, lore: ['Klick: anderer Bot']}),
+    slot(2, 'stick', 'Zwei Ecken zeigen', {a: 'pick', kind: 'area'}, {lore: ['Stab-Klick auf Ecke 1, dann Ecke 2']}),
+    ...(view.mark?.area ? [slot(3, 'red_banner', 'Markierter Bereich', {a: 'areafrom', from: 'mark'})] : []),
+    slot(5, 'clock', 'Danach', {a: 'setwhen', when: 'next', screen: 'aream'}, {glint: a.when === 'next'}), slot(6, 'clock', 'Jetzt (ersetzt die Arbeit)', {a: 'setwhen', when: 'now', screen: 'aream'}, {glint: a.when === 'now'}),
+    slot(8, 'barrier', 'Abbrechen', {a: 'areaclear'}), back(26, 'botm', a.bot)];
+  areaJobs(sel).forEach(({key, ok, why}, i) => slots.push(ok ? slot(9 + i, AREA_ICON[key], JOBS[key].label, {a: 'areago', key})
+    : slot(9 + i, 'gray_stained_glass_pane', JOBS[key].label, {a: 'aream'}, {lore: [safe(why, 40)]})));
+  return {type: 'chest', title: size ? `Bereich: ${size.join(' × ')}` : 'Bereich wählen', rows: 3, slots};
+}
+
 // Einstellungen: keeper and Ziele are the owner's, the sidebar and the trader chests of the viewer's own traders everyone's.
 function zielPage(view) {
   const slots = [];
@@ -312,7 +327,7 @@ function kartePage(view) {
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, zielm: zielPage, kartem: kartePage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, zielm: zielPage, kartem: kartePage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

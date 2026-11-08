@@ -981,6 +981,51 @@ async function fake() {
     const no = outlines().length;
     await ev('Midari', {a: 'buildgo', mode: 'schematic'});
     assert.equal(ui.state('Midari').flash.text, 'Fehler: Fremdes Gelände'); assert.ok(ui.state('Midari').build.at); assert.equal(outlines().length, no);
+    // part 2b task 7: Bereich mode, two staff clicks with a ghost, area jobs, expiry
+    const PICK_MS = 60000, g = (x, y, z) => ({gaze: {x, y, z, block: 'stone'}});
+    await ev('Fancy', {a: 'aream', bot: 'bot1'}); assert.equal(menus().at(-1).title, 'Bereich wählen');
+    await ev('Fancy', {a: 'shiftm', bot: 'bot1', shift: true}); assert.equal(menus().at(-1).title, 'Bereich wählen');
+    await ev('Fancy', {a: 'aream', bot: 'bot1'});
+    const cl = f.of('/close').length, nm0 = menus().length;
+    await ev('Fancy', {a: 'pick', kind: 'area'});
+    assert.equal(f.of('/close').length, cl + 1); assert.equal(f.of('/actionbar').at(-1).body.text, 'Ecke 1 anklicken');
+    await open('Fancy', g(0, 64, 0));
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: {x1: 0, y1: 64, z1: 0, x2: 0, y2: 64, z2: 0}, ghost: true}); assert.equal(menus().length, nm0);
+    assert.equal(f.of('/actionbar').at(-1).body.text, 'Ecke 2 anklicken'); assert.ok(ui.state('Fancy').pick);
+    await open('Fancy', {...g(2, 66, 2), dim: 'the_nether'}); assert.equal(ui.state('Fancy').flash.text, 'Ecken in verschiedenen Welten'); assert.ok(ui.state('Fancy').pick);
+    await open('Fancy', g(2, 66, 2));
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: {x1: 0, y1: 64, z1: 0, x2: 2, y2: 66, z2: 2}, ghost: true});
+    assert.equal(menus().at(-1).title, 'Bereich: 3 × 3 × 3'); assert.equal(ui.state('Fancy').pick, null);
+    await ev('Fancy', {a: 'areago', key: 'mine'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: unbekannter Auftrag');
+    await ev('Fancy', {a: 'setwhen', when: 'now', screen: 'aream'}); assert.equal(ui.state('Fancy').area.when, 'now');
+    const ns = submits.length;
+    await ev('Fancy', {a: 'areago', key: 'excavate'}, g(0, 64, 0));
+    assert.equal(submits.length, ns + 1); assert.equal(submits.at(-1).type, 'excavate'); assert.deepEqual(submits.at(-1).args, {x1: 0, y1: 64, z1: 0, x2: 2, y2: 66, z2: 2}); assert.equal(submits.at(-1).replace, true);
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').sel.a, null); assert.equal(ui.state('Fancy').screen.name, 'botm');
+    // expiry: an unfinished area pick drops its ghost on the next open, which is then handled normally
+    await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'pick', kind: 'area'}); await open('Fancy', g(5, 64, 5));
+    t += PICK_MS + 1;
+    await open('Fancy', {gaze: {x: 0, y: 0, z: 0, block: 'air', entity: {type: 'player', name: 'bot1'}}});
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').pick, null); assert.equal(menus().at(-1).title, 'bot1');
+    // a refused order keeps the selection and the ghost
+    await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'pick', kind: 'area'}); await open('Fancy', g(0, 64, 0)); await open('Fancy', g(40, 90, 40));
+    assert.equal(menus().at(-1).title, 'Bereich: 41 × 27 × 41'); assert.match(menus().at(-1).slots.find((x) => x.slot === 9).lore[0], /^zu groß/);
+    await ev('Fancy', {a: 'areago', key: 'excavate'}); assert.match(ui.state('Fancy').flash.text, /^Fehler:/); assert.ok(ui.state('Fancy').sel.b);
+    await ev('Fancy', {a: 'areaclear'}); assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').sel.a, null);
+    // marked area: from the mark store, in this world only
+    await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.equal(ui.state('Fancy').flash.text, 'Kein Bereich markiert');
+    ui.marks.set('Fancy', {spot: null, area: {a: {x: 1, y: 64, z: 1, dim: 'overworld'}, b: {x: 3, y: 65, z: 2, dim: 'overworld'}}, at: t});
+    await ev('Fancy', {a: 'areafrom', from: 'mark'}, {dim: 'the_nether'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: Markierung ist in einer anderen Welt'); assert.equal(ui.state('Fancy').sel.a, null);
+    await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: {x1: 1, y1: 64, z1: 1, x2: 3, y2: 65, z2: 2}, ghost: true});
+    assert.equal(menus().at(-1).title, 'Bereich: 3 × 2 × 2');
+    await ev('Fancy', {a: 'areaclear'});
+    // guest: only her bots; her order fails in ground(), the ghost stays
+    await ev('Midari', {a: 'aream', bot: 'bot1'}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nicht dein Bot');
+    await ev('Midari', {a: 'shiftm', bot: 'bot1', shift: true}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nicht dein Bot');
+    await ev('Midari', {a: 'shiftm', bot: 'MisaBot', shift: true}); assert.equal(menus().at(-1).title, 'Bereich wählen');
+    await ev('Midari', {a: 'pick', kind: 'area'}); await open('Midari', g(0, 64, 0)); await open('Midari', g(2, 66, 2));
+    const ng = submits.length;
+    await ev('Midari', {a: 'areago', key: 'excavate'}); assert.equal(ui.state('Midari').flash.text, 'Fehler: Fremdes Gelände'); assert.equal(submits.length, ng); assert.ok(ui.state('Midari').sel.b);
     end();
   }
   console.log('botui ok');

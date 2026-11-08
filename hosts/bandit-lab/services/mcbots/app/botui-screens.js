@@ -234,8 +234,7 @@ function auftrag(view, sc) {
   const actions = rows.map(({key, preset}) => key === 'botscreen' ? button(txt(`${safe(preset.bot, 16)} ▸`, 'aqua'), 'botscreen', {bot: preset.bot})
     : button(txt(JOBS[key].here || JOBS[key].label, 'gold'), 'job', withBot({key, ...preset})));
   if (g && isChest(g.block)) for (const t of traders(view)) for (const [kind, label] of [['sticks', 'Sticks'], ['stores', 'Smaragde']]) actions.push(button(txt(`Handelskiste ${label} → ${safe(t, 16)}`, 'gold'), 'trader_add', {bot: t, kind}));
-  actions.push(button(txt(sel.a ? (sel.b ? 'Ecke B neu setzen' : 'Ecke B setzen') : 'Ecke A setzen', 'aqua'), 'corner', {which: sel.a ? 'b' : 'a'}));
-  if (sel.a) actions.push(button(txt('Auswahl löschen', 'aqua'), 'clearsel'));
+  actions.push(button(txt('Bereich wählen', 'aqua'), 'aream', sc.bot ? {bot: sc.bot} : {}));
   for (const {key, ok, why} of areaJobs(sel)) {
     actions.push(ok ? button(txt(JOBS[key].label, 'aqua'), 'job', withBot({key}))
       : {label: txt(JOBS[key].label, 'dark_gray'), width: 200, tooltip: lines([[why, 'red']])}); // no action: the client shows it disabled

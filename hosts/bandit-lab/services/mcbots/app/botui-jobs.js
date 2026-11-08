@@ -260,4 +260,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: key !== 'setchest' && data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, AREA, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

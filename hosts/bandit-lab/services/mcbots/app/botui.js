@@ -31,7 +31,7 @@ const planOf = async (ui, viewer, file) => {
   if (!info) throw new Error('Bauplan nicht gefunden');
   return info;
 };
-const outline = (ui, viewer, b, ghost = false) => ui.call('/outline', {player: viewer, box: b, ...(ghost ? {ghost: true} : {})}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
+const outline = (ui, viewer, b, extra = {}) => ui.call('/outline', {player: viewer, box: b, ...extra}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
 const clearSel = async (st, ui, viewer) => { st.sel = {a: null, b: null, dim: null}; await outline(ui, viewer, null); };
 
 // Where a bot plays, for the screens and orders: with the hub in sandbox mode (MC_VHOST) all but guests and MAIN_BOTS are there.
@@ -183,6 +183,7 @@ const ACTIONS = {
   },
   // Abbauen hopper: st.form is the viewer's order in the making, st.pick the point-at-it mode (see BotUi.consumePick).
   shiftm: (st, data, ui, viewer) => {
+    if (data.shift === true) return ACTIONS.aream(st, data, ui, viewer); // Shift + click on the Abbauen slot: Bereich
     const bot = data.bot !== undefined ? oneBot(ui, viewer, data) : undefined;
     formOf(st, ui, viewer, bot);
     if (data.block !== undefined) setBlock(st, data.block);
@@ -195,6 +196,36 @@ const ACTIONS = {
     st.screen = {name: 'shiftm'};
   },
   morem: (st, data, ui, viewer) => { st.screen = {name: 'morem', bot: oneBot(ui, viewer, data)}; },
+  // Bereich: st.area is who/when, st.sel the two corners (staff clicks, see pick/consumePick) or the marked area.
+  aream: (st, data, ui, viewer) => {
+    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'next'};
+    st.screen = {name: 'aream'};
+  },
+  areafrom: async (st, data, ui, viewer) => {
+    if (data.from !== 'mark') throw new Error('unbekannte Quelle');
+    st.screen = {name: 'aream'};
+    const m = markOf(ui, viewer).area;
+    if (!m) return ui.flash(st, 'Kein Bereich markiert');
+    if (jobs.dimOf(m.a.dim) !== jobs.dimOf(st.ctx.dim) || jobs.dimOf(m.b.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Markierung ist in einer anderen Welt');
+    st.sel = {a: m.a, b: m.b, dim: m.a.dim};
+    await outline(ui, viewer, box(m.a, m.b), {ghost: true});
+  },
+  areago: async (st, data, ui, viewer) => {
+    if (!jobs.AREA.includes(data.key)) throw new Error('unbekannter Auftrag');
+    if (!st.area) throw new Error('Erst einen Bereich wählen');
+    st.screen = {name: 'aream'};
+    if (!st.sel.a || !st.sel.b) return ui.flash(st, 'Erst zwei Ecken wählen');
+    if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Bereich ist in einer anderen Welt');
+    const bot = oneBot(ui, viewer, {bot: st.area.bot});
+    try { // a refusal keeps the selection
+      const o = jobs.build(data.key, {who: bot, when: st.area.when}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+      done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+      await clearSel(st, ui, viewer);
+      st.screen = {name: 'botm', bot};
+      ui.flash(st, `${bot}: ${o.say}`, true);
+    } catch (e) { throw new Error(explain(e.message)); }
+  },
+  areaclear: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = {name: 'botm', bot: botOf(st, ui, viewer)}; },
   guardm: (st, data, ui, viewer) => { st.screen = {name: 'guardm', bot: oneBot(ui, viewer, data)}; },
   // Bewachen: Shift looks, the mark slot uses the stored spot, else where the viewer stands.
   guardgo: (st, data, ui, viewer) => {
@@ -223,7 +254,7 @@ const ACTIONS = {
       st.screen = {name: 'buildm'};
       if (!at) return ui.flash(st, 'Keine Stelle markiert');
       st.build.at = {x: at.x, y: at.y, z: at.z, dim: at.dim};
-      return outline(ui, viewer, schematicBox(await planOf(ui, viewer, st.build.file), st.build.at, st.build.rotation), true);
+      return outline(ui, viewer, schematicBox(await planOf(ui, viewer, st.build.file), st.build.at, st.build.rotation), {ghost: true});
     }
     const bot = oneBot(ui, viewer, data);
     st.screen = {name: 'botm', bot};
@@ -246,13 +277,14 @@ const ACTIONS = {
     if (![0, 90, 180, 270].includes(data.rotation)) throw new Error('Drehung ungültig');
     st.build.rotation = data.rotation;
     st.screen = {name: 'buildm'};
-    if (st.build.at) await outline(ui, viewer, schematicBox(await planOf(ui, viewer, st.build.file), st.build.at, data.rotation), true);
+    if (st.build.at) await outline(ui, viewer, schematicBox(await planOf(ui, viewer, st.build.file), st.build.at, data.rotation), {ghost: true});
   },
   setwhen: (st, data) => {
-    if (!st.build) throw new Error('Erst einen Bauplan wählen');
+    const area = data.screen === 'aream', o = area ? st.area : st.build;
+    if (!o) throw new Error(area ? 'Erst einen Bereich wählen' : 'Erst einen Bauplan wählen');
     if (data.when !== 'next' && data.when !== 'now') throw new Error('unbekannter Zeitpunkt');
-    st.build.when = data.when;
-    st.screen = {name: 'buildm'};
+    o.when = data.when;
+    st.screen = {name: area ? 'aream' : 'buildm'};
   },
   // Bauen / Material sammeln: the order goes through jobs.build and api.submit (ground()); a refusal keeps the selection.
   buildgo: async (st, data, ui, viewer) => {
@@ -360,7 +392,16 @@ const ACTIONS = {
     st.screen = {name: data.back, ...(data.back === 'botm' ? {bot} : {})};
   },
   pick: async (st, data, ui, viewer) => {
-    if (data.kind !== 'block' && data.kind !== 'chest' && data.kind !== 'place') throw new Error('unbekannte Auswahl');
+    if (data.kind !== 'block' && data.kind !== 'chest' && data.kind !== 'place' && data.kind !== 'area') throw new Error('unbekannte Auswahl');
+    if (data.kind === 'area') { // two staff clicks, the ghost box grows with them
+      if (!st.area) throw new Error('Erst einen Bereich wählen');
+      await clearSel(st, ui, viewer);
+      st.pick = {kind: 'area', until: ui.now() + PICK_MS};
+      st.screen = {name: 'aream'};
+      await ACTIONS.close(st, data, ui, viewer);
+      await ui.call('/actionbar', {player: viewer, text: 'Ecke 1 anklicken'}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
+      return;
+    }
     if (data.kind === 'place') { // the ghost follows the staff's gaze (plugin), the next staff click is the origin
       if (!st.build) throw new Error('Erst einen Bauplan wählen');
       st.pick = {kind: 'place', until: ui.now() + PICK_MS};
@@ -452,23 +493,6 @@ const ACTIONS = {
       if (!(st.screen.name === 'job' && st.screen.key === data.key)) st.screen = {name: 'auftrag'};
     }
   },
-  corner: async (st, data, ui, viewer) => {
-    const g = st.ctx.gaze, dim = st.ctx.dim;
-    st.screen = {name: 'auftrag'};
-    if (data.which !== 'a' && data.which !== 'b') throw new Error('unbekannte Ecke');
-    if (!g) return ui.flash(st, 'Du schaust auf keinen Block');
-    const corner = {x: g.x, y: g.y, z: g.z, dim};
-    if (data.which === 'b' && !st.sel.a) return ui.flash(st, 'Erst Ecke A setzen');
-    if (data.which === 'b' && jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(dim)) return ui.flash(st, 'Ecken in verschiedenen Welten');
-    if (data.which === 'a') st.sel = {a: corner, b: null, dim};
-    else st.sel.b = corner;
-    await outline(ui, viewer, st.sel.b ? box(st.sel.a, st.sel.b) : box(corner, corner));
-    if (data.which === 'a') { // a dialog freezes the player: close it so they can walk to the second corner
-      ui.flash(st, `Ecke A gesetzt: ${g.x} ${g.y} ${g.z}`, true);
-      await ACTIONS.close(st, data, ui, viewer);
-    }
-  },
-  clearsel: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = {name: 'auftrag'}; },
   stopall: (st, data, ui, viewer) => { ownerOnly(ui, viewer); st.screen = {name: 'stopall'}; },
   stopall_ok: (st, data, ui, viewer) => {
     ownerOnly(ui, viewer);
@@ -641,7 +665,11 @@ class BotUi {
       const g = e.gaze, allowed = this.viewerBots[viewer], who = g?.entity?.type === 'player' && g.entity.name;
       const mineBot = who && (allowed === '*' ? this.api.snapshots().some((s) => s.name === who) : allowed.includes(who));
       st.lastClick = this.now();
-      if (st.pick && st.pick.until < this.now()) st.pick = null; // expired: dropped, this open is handled normally
+      if (st.pick && st.pick.until < this.now()) { // expired: dropped (a ghost goes with it), this open is handled normally
+        const kind = st.pick.kind;
+        st.pick = null;
+        if (kind === 'place' || kind === 'area') await clearSel(st, this, viewer);
+      }
       if (st.pick) { if (!await this.consumePick(st, viewer, g, e.sneak === true)) return; }
       else if (mineBot) st.screen = {name: 'botm', bot: who};
       else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
@@ -677,20 +705,37 @@ class BotUi {
     const m = setMark(this, viewer, g, dim);
     if (!m) return bar('Ecken in verschiedenen Welten');
     const {a, b} = m.area || {a: m.spot, b: m.spot};
-    await outline(this, viewer, box(a, b), true);
+    await outline(this, viewer, box(a, b), {ghost: true});
     await bar(m.area ? `Bereich gemerkt: ${Math.abs(a.x - b.x) + 1} × ${Math.abs(a.y - b.y) + 1} × ${Math.abs(a.z - b.z) + 1}` : `Stelle gemerkt: ${g.x} ${g.y} ${g.z} · Schleichen+Klick nochmal = Bereich bis dort`);
   }
 
   // The staff's right click while a pick is live is the answer. false: wrong target, flash only, the pick stays and no menu opens.
   async consumePick(st, viewer, g, sneak = false) {
+    if (st.pick.kind === 'area') {
+      if (!g || g.entity || g.block === 'air') { this.flash(st, 'Zeig auf einen Block'); return false; }
+      const c = {x: g.x, y: g.y, z: g.z, dim: st.ctx.dim}, bar = (text) => this.call('/actionbar', {player: viewer, text}).catch((err) => this.log(`botui ${viewer}: actionbar: ${err.message}`));
+      if (!st.sel.a) {
+        st.sel = {a: c, b: null, dim: c.dim};
+        st.pick.until = this.now() + PICK_MS;
+        await outline(this, viewer, box(c, c), {ghost: true});
+        await bar('Ecke 2 anklicken');
+        return false;
+      }
+      if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(c.dim)) { this.flash(st, 'Ecken in verschiedenen Welten'); return false; }
+      st.sel.b = c;
+      st.pick = null;
+      await outline(this, viewer, box(st.sel.a, c), {ghost: true});
+      st.screen = {name: 'aream'};
+      return true;
+    }
     if (st.pick.kind === 'place') {
       if (!g || g.entity || g.block === 'air') { this.flash(st, 'Zeig auf einen Block'); return false; }
       try {
         if (sneak) { st.build.rotation = (st.build.rotation + 90) % 360; await followGhost(st, this, viewer); return false; }
         st.pick = null;
         st.build.at = {x: g.x, y: g.y, z: g.z, dim: st.ctx.dim};
-        await outline(this, viewer, schematicBox(await planOf(this, viewer, st.build.file), st.build.at, st.build.rotation), true);
-      } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
+        await outline(this, viewer, schematicBox(await planOf(this, viewer, st.build.file), st.build.at, st.build.rotation), {ghost: true});
+      } catch (err) { st.pick = null; await clearSel(st, this, viewer); this.flash(st, 'Fehler: ' + err.message); }
       st.screen = {name: 'buildm'};
       return true;
     }
@@ -711,7 +756,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, area: st.area, sel: st.sel, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : (await this.api.schematics(viewer)).map((p) => p.file), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
