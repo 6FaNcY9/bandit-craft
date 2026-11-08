@@ -219,3 +219,36 @@ const assert = require('node:assert');
   const none = makeCrafting({goNear: async () => {}, guard() {}, fetch: async () => {}});
   await assert.rejects(none.ensurePlanks({bot: {...bot, inventory: {items: () => []}}}, {}, 2), /no logs/);
 })();
+
+(async () => { // enchant: validation, the offer is taken, the item always comes back out
+  const {VALIDATE} = require('../bots');
+  const {makeEnchant} = require('../enchant');
+  assert.deepStrictEqual(VALIDATE.enchant({item: 'iron_pickaxe'}), {item: 'iron_pickaxe', level: 3});
+  assert.throws(() => VALIDATE.enchant({item: 'cobblestone'}), /tool, weapon/);
+  assert.throws(() => VALIDATE.enchant({item: 'bow', level: 4}), /level/);
+  const {EventEmitter} = require('node:events');
+  const setup = ({xp = 30, lapis = 3, offers = [1, 5, 12]} = {}) => {
+    const log = [], asked = [], inv = [{name: 'iron_pickaxe', count: 1}, {name: 'lapis_lazuli', count: lapis}];
+    const table = Object.assign(new EventEmitter(), {
+      enchantments: offers.map((level) => ({level})),
+      putTargetItem: async () => log.push('item'), putLapis: async () => log.push('lapis'),
+      enchant: async (i) => log.push('enchant' + i), takeTargetItem: async () => log.push('take'), close: () => log.push('close')});
+    const r = {bot: {inventory: {items: () => inv}, experience: {level: xp}, openEnchantmentTable: async () => table}};
+    const run = makeEnchant({station: async () => ({}), guard() {}, readyMs: 50,
+      count: (bot, n) => inv.filter((i) => i.name === n).reduce((s, i) => s + i.count, 0),
+      getMore: async (rr, j, item, n) => { asked.push([item, n]); inv[1].count += n; }});
+    return {log, asked, go: (level = 3) => run(r, {args: {item: 'iron_pickaxe', level}})};
+  };
+  let s = setup();
+  await s.go();
+  assert.deepStrictEqual(s.log, ['item', 'lapis', 'enchant2', 'take', 'close']);
+  s = setup({xp: 3});
+  await assert.rejects(s.go(), /need level 12, have 3/);
+  assert.deepStrictEqual(s.log, ['item', 'lapis', 'take', 'close']);
+  s = setup({lapis: 1});
+  await s.go();
+  assert.deepStrictEqual(s.asked, [['lapis_lazuli', 2]]);
+  s = setup({offers: [-1, -1, -1]});
+  await assert.rejects(s.go(), /no offers/);
+  assert.deepStrictEqual(s.log.slice(-2), ['take', 'close']);
+})();

@@ -51,7 +51,7 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: chestG, suppl
   const sel = {a: {x: 0, y: 60, z: 0, dim: 'overworld'}, b: {x: 6, y: 62, z: 6, dim: 'overworld'}};
   const values = {block: 'iron_ore', item: 'stick', n: 16, radius: 16, at: {x: 1, y: 64, z: 2}, chest: {x: 1, y: 64, z: 2}, file: 'a.litematic', rotation: 90, zone: box, animal: 'cow'};
   for (const [key, job] of Object.entries(JOBS)) {
-    assert.doesNotThrow(() => VALIDATE[job.type](job.args(values, {sel, supply: {x: 1, y: 2, z: 3}, viewer: 'Midari', pos: [1, 64, 2], dim: 'overworld'})), key);
+    assert.doesNotThrow(() => VALIDATE[job.type](job.args(key === 'enchant' ? {...values, item: 'iron_pickaxe', n: 2} : values, {sel, supply: {x: 1, y: 2, z: 3}, viewer: 'Midari', pos: [1, 64, 2], dim: 'overworld'})), key);
     assert.ok(job.label && typeof job.say(values) === 'string', key);
   }
   assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 64.0}, ctx), {block: 'iron_ore', count: 64});
@@ -346,3 +346,10 @@ const flashOf = (d) => d.body.map((b) => text(b.contents)).find((t) => /^[✔✖
   }
   console.log('botui-jobs ok');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+{ // enchant: item and offer level, German say
+  const env = {ctx: {gaze: null, pos: [1, 64, 2], dim: 'overworld'}, sel: {}, supply: null, places: [], snaps: [{name: 'bot1', online: true}], allowed: '*', schematics: []};
+  const b = build('enchant', {who: 'bot1', item: 'iron_pickaxe', n: 2}, env);
+  assert.equal(b.type, 'enchant'); assert.deepEqual(b.args, {item: 'iron_pickaxe', level: 2});
+  assert.equal(b.say, 'Eisenspitzhacke verzaubern (Stufe 2)');
+}

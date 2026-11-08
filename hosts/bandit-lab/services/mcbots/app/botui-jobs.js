@@ -14,6 +14,7 @@ const DE = {
   deepslate: 'Tiefenschiefer', dirt: 'Erde', sand: 'Sand', gravel: 'Kies', wheat: 'Weizen', farmland: 'Ackerboden', coal: 'Kohle', raw_iron: 'Roheisen',
   iron_ingot: 'Eisenbarren', stick: 'Stock', torch: 'Fackel', oak_planks: 'Eichenbretter', bread: 'Brot', iron_pickaxe: 'Eisenspitzhacke',
   stone_pickaxe: 'Steinspitzhacke', iron_sword: 'Eisenschwert', bucket: 'Eimer', crafting_table: 'Werkbank', furnace: 'Ofen',
+  lapis_lazuli: 'Lapislazuli', enchanting_table: 'Zaubertisch', iron_axe: 'Eisenaxt', diamond_pickaxe: 'Diamantspitzhacke', diamond_sword: 'Diamantschwert', book: 'Buch',
   cow: 'Kühe', sheep: 'Schafe', pig: 'Schweine', chicken: 'Hühner',
 };
 const germanName = (id) => DE[id] || String(id ?? '').replace(/_/g, ' ');
@@ -60,6 +61,7 @@ const JOBS = {
   lightspawner: {label: 'Spawner ausleuchten', type: 'light', loc: true, needs: [where], args: (v) => ({spawner: pt(v.at)}), say: () => 'Spawner ausleuchten'},
   craft: {label: 'Herstellen', type: 'craft', general: true, needs: [item, count(1, 64, 1, 8)], args: (v) => ({item: v.item, count: R(v.n)}), say: (v) => `${germanName(v.item)} herstellen`},
   smelt: {label: 'Schmelzen', type: 'smelt', general: true, needs: [item, count(1, 64, 1, 8)], args: (v) => ({item: v.item, count: R(v.n)}), say: (v) => `${germanName(v.item)} schmelzen`},
+  enchant: {label: 'Verzaubern', type: 'enchant', general: true, needs: [item, count(1, 3, 1, 3)], args: (v) => ({item: v.item, level: R(v.n)}), say: (v) => `${germanName(v.item)} verzaubern (Stufe ${v.n})`},
   schematic: {label: 'Bauen', type: 'schematic', general: true, loc: true, needs: [schematic, where, rotation],
     args: (v, ctx) => ({file: v.file, origin: pt(v.at), rotation: v.rotation, chests: ctx.supply ? [pt(ctx.supply)] : []}), say: (v) => `Bauen ${v.file}`},
   produce: {label: 'Material für Bauplan', type: 'produce', general: true, loc: true, needs: [schematic, where, rotation, chest],

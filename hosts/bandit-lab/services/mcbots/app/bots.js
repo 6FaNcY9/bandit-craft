@@ -179,6 +179,10 @@ const VALIDATE = {
     const item = {planks: 'oak_planks', sticks: 'stick', torches: 'torch', chests: 'chest'}[a.item] || a.item;
     return {item, count: num(a.count ?? 1, 1, 64, 'count')};
   },
+  enchant: (a) => {
+    if (!/^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$|^book$/.test(a.item || '')) throw new Error('item must be a tool, weapon, armour or book');
+    return {item: a.item, level: num(a.level ?? 3, 1, 3, 'level')};
+  },
   smelt: (a) => {
     if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be what goes in, like raw_iron');
     // What the model mixed up on the lab (40 failed smelts, 2026-10-10/11): the result, or an ore that drops its item.
@@ -2868,6 +2872,7 @@ const CHASE_NO_PATH_MS = 30000;
 
 const craftingLib = require('./crafting');
 const crafting = craftingLib.makeCrafting({goNear, guard, fetch: (r, job, item, count) => (r.supplyChest ? JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})) : Promise.resolve())});
+const enchantLib = require('./enchant');
 // A build takes what it lacks from the supply chest (the withdraw job, with the chest's position).
 const buildWithdraw = (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}));
 // ... and gathers the rest itself (mine, chop, smelt jobs as children of the build).
@@ -4202,5 +4207,9 @@ const JOBS = {
     r.bot.chat(job.args.text);
   },
 };
+
+// Lapis comes from the get job (stock, chests), as smelt fetches its input.
+JOBS.enchant = enchantLib.makeEnchant({station: crafting.station, guard, count: crafting.count,
+  getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
 module.exports = {MAX_QUEUE, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
