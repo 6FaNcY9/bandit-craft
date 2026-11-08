@@ -8,9 +8,9 @@ const str = (s) => Buffer.concat([varint(Buffer.byteLength(s)), Buffer.from(s)])
 function connect(username, port = 25599) {
   return new Promise((resolve, reject) => {
     const c = mc.createClient({host: '127.0.0.1', port, username, auth: 'offline', version: '26.1'});
-    const dialogs = [], maps = [], counts = {particles: 0}, inv = [], windows = [], chats = [], win = {id: 0, type: -1, items: [], stateId: 0}; // inv: the player inventory window as the server last sent it
+    const dialogs = [], maps = [], counts = {particles: 0}, displays = new Map(), me = {x: 0, y: 0, z: 0}, inv = [], windows = [], chats = [], win = {id: 0, type: -1, items: [], stateId: 0}; // inv: the player inventory window as the server last sent it
     c.on('error', reject);
-    c.on('position', (p) => c.write('teleport_confirm', {teleportId: p.teleportId})); // else the server ignores our movement
+    c.on('position', (p) => { Object.assign(me, {x: p.x, y: p.y, z: p.z}); c.write('teleport_confirm', {teleportId: p.teleportId}); }); // else the server ignores our movement
     c.on('packet', (data, meta) => {
       if (meta.name === 'show_dialog') dialogs.push(nbt.simplify(data.dialog.data));
       else if (meta.name === 'open_window') { windows.push(data.windowId); Object.assign(win, {id: data.windowId, type: data.inventoryType, items: []}); }
@@ -22,11 +22,14 @@ function connect(username, port = 25599) {
       else if (meta.name === 'window_items' && data.windowId === 0) inv.splice(0, inv.length, ...data.items);
       else if (meta.name === 'set_slot' && data.windowId === 0) inv[data.slot] = data.item;
       else if (meta.name === 'world_particles') counts.particles++;
+      else if (meta.name === 'spawn_entity' && data.type === 15) displays.set(data.entityId, {x: data.x, y: data.y, z: data.z}); // 15 = block_display
+      else if (meta.name === 'entity_destroy') data.entityIds.forEach((i) => displays.delete(i));
+      else if ((meta.name === 'entity_teleport' || meta.name === 'sync_entity_position') && displays.has(data.entityId)) displays.set(data.entityId, {x: data.x, y: data.y, z: data.z});
     });
     c.once('login', () => {
       c.write('player_loaded', {}); // the server ignores movement until the client reports it has loaded
       resolve({
-        dialogs, maps, counts, inv, windows, chats, win,
+        dialogs, maps, counts, displays, me, inv, windows, chats, win,
         // The dialog click packet is written raw: minecraft-data's anonymous-NBT shape makes Paper drop the connection.
         click(id, data) {
           const value = {};

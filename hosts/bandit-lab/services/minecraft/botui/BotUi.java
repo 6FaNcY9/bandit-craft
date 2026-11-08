@@ -40,9 +40,12 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandException;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -77,9 +80,12 @@ import org.bukkit.inventory.view.FurnaceView;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.RayTraceResult;
+import org.bukkit.util.Transformation;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
+import org.joml.AxisAngle4f;
+import org.joml.Vector3f;
 
 /**
  * Bridges dialogs, clicks and gaze between Paper and the bot hub over a loopback HTTP API.
@@ -99,6 +105,11 @@ public class BotUi extends JavaPlugin implements Listener {
   private final Set<String> viewers = ConcurrentHashMap.newKeySet();
   private final Set<UUID> open = ConcurrentHashMap.newKeySet();
   private final Map<UUID, Box> outlines = new ConcurrentHashMap<>();
+  /** The ghost box of a placement or area pick: one block_display per y layer, shown to its player only; follow = box relative to the gazed block, else fixed. */
+  private record Ghost(World world, List<BlockDisplay> layers, double[] follow) {}
+
+  private static final int GHOST_LAYERS = 48;
+  private final Map<UUID, Ghost> ghosts = new HashMap<>(); // main thread only
   private final ArrayDeque<JSONObject> queue = new ArrayDeque<>();
   private final Object lock = new Object();
   private final AtomicLong ids = new AtomicLong();
@@ -153,10 +164,12 @@ public class BotUi extends JavaPlugin implements Listener {
     map.start();
     getServer().getPluginManager().registerEvents(this, this);
     Bukkit.getScheduler().runTaskTimer(this, this::drawOutlines, 10, 10);
+    Bukkit.getScheduler().runTaskTimer(this, this::followGhosts, 5, 5);
   }
 
   @Override
   public void onDisable() {
+    for (UUID id : List.copyOf(ghosts.keySet())) clearGhost(id);
     if (http != null) http.stop(0);
     if (pool != null) pool.shutdownNow();
     if (map != null) map.stop();
@@ -541,30 +554,44 @@ public class BotUi extends JavaPlugin implements Listener {
       reply(x, 400, error("bad box"));
       return;
     }
-    double[] box6 = null;
-    if (b.get("box") != null) {
-      box6 = new double[6];
-      String[] keys = {"x1", "y1", "z1", "x2", "y2", "z2"};
-      for (int i = 0; i < 6; i++) {
-        if (!(b.get("box") instanceof JSONObject o) || !(o.get(keys[i]) instanceof Number n)) {
-          reply(x, 400, error("bad box"));
-          return;
-        }
-        box6[i] = n.doubleValue();
-      }
+    double[] fixed = null;
+    if (b.get("box") != null && (fixed = box6(b.get("box"))) == null) {
+      reply(x, 400, error("bad box"));
+      return;
     }
-    double[] fixed = box6;
+    boolean ghost = Boolean.TRUE.equals(b.get("ghost"));
+    double[] follow = null;
+    if (b.get("follow") != null && (!ghost || (follow = box6(b.get("follow"))) == null)) { // follow needs ghost
+      reply(x, 400, error("bad box"));
+      return;
+    }
+    double[] fol = follow;
+    double[] fix = fixed;
     boolean found = sync(() -> {
       Player p = Bukkit.getPlayerExact(name);
       if (p == null) return false;
-      if (fixed == null) outlines.remove(p.getUniqueId());
+      clearGhost(p.getUniqueId()); // every /outline replaces the previous picture
+      if (fix == null) outlines.remove(p.getUniqueId());
       else outlines.put(p.getUniqueId(), new Box(p.getWorld(),
-          Math.min(fixed[0], fixed[3]), Math.min(fixed[1], fixed[4]), Math.min(fixed[2], fixed[5]),
-          Math.max(fixed[0], fixed[3]) + 1, Math.max(fixed[1], fixed[4]) + 1, Math.max(fixed[2], fixed[5]) + 1));
+          Math.min(fix[0], fix[3]), Math.min(fix[1], fix[4]), Math.min(fix[2], fix[5]),
+          Math.max(fix[0], fix[3]) + 1, Math.max(fix[1], fix[4]) + 1, Math.max(fix[2], fix[5]) + 1));
+      if (ghost && fol != null) spawnGhost(p, p.getWorld(), fol, true);
+      else if (ghost && fix != null) spawnGhost(p, p.getWorld(), fix, false);
       return true;
     });
     if (found) reply(x, 200, ok());
     else reply(x, 400, error("player not online"));
+  }
+
+  /** {x1..z2} as six numbers, or null when anything is missing or not a number. */
+  private static double[] box6(Object o) {
+    double[] r = new double[6];
+    String[] keys = {"x1", "y1", "z1", "x2", "y2", "z2"};
+    for (int i = 0; i < 6; i++) {
+      if (!(o instanceof JSONObject j) || !(j.get(keys[i]) instanceof Number n)) return null;
+      r[i] = n.doubleValue();
+    }
+    return r;
   }
 
   private static final Set<Integer> ZOOMS = Set.of(1, 2, 5, 10, 25, 50);
@@ -702,6 +729,7 @@ public class BotUi extends JavaPlugin implements Listener {
       e.put("pos", pos);
       e.put("dim", p.getWorld().getKey().getKey());
       e.put("yaw", l.getYaw());
+      e.put("sneak", p.isSneaking());
       e.put("gaze", gaze);
       if (data != null) e.put("data", data);
       queue.add(e);
@@ -964,6 +992,7 @@ public class BotUi extends JavaPlugin implements Listener {
 
   @EventHandler
   public void onWorldChange(PlayerChangedWorldEvent e) {
+    clearGhost(e.getPlayer().getUniqueId());
     gone(e.getPlayer());
   }
 
@@ -977,6 +1006,7 @@ public class BotUi extends JavaPlugin implements Listener {
     pending.remove(e.getPlayer().getUniqueId());
     menus.remove(e.getPlayer().getUniqueId());
     outlines.remove(e.getPlayer().getUniqueId());
+    clearGhost(e.getPlayer().getUniqueId());
     map.quit(e.getPlayer());
     lastMapClick.remove(e.getPlayer().getUniqueId());
     lastStaffLog.remove(e.getPlayer().getUniqueId());
@@ -999,6 +1029,56 @@ public class BotUi extends JavaPlugin implements Listener {
       for (double x : xs) for (double z : zs) edge(p, b.world(), x, ys[0], z, x, ys[1], z);
       for (double x : xs) for (double y : ys) edge(p, b.world(), x, y, zs[0], x, y, zs[1]);
     });
+  }
+
+  // ---- ghost ------------------------------------------------------------------------------
+
+  /** A fixed ghost stands on box (inclusive corners); a follow ghost takes box as offsets from the gazed block and is placed by followGhosts. */
+  private void spawnGhost(Player p, World w, double[] box, boolean follow) {
+    double sx = Math.abs(box[3] - box[0]) + 1, sz = Math.abs(box[5] - box[2]) + 1;
+    int n = (int) Math.min(GHOST_LAYERS, Math.abs(box[4] - box[1]) + 1);
+    Location at = follow ? p.getLocation() : new Location(w, Math.min(box[0], box[3]), Math.min(box[1], box[4]), Math.min(box[2], box[5]));
+    List<BlockDisplay> layers = new ArrayList<>();
+    for (int i = 0; i < n; i++) {
+      layers.add(w.spawn(at.clone().add(0, follow ? 0 : i, 0), BlockDisplay.class, e -> {
+        e.setVisibleByDefault(false); // before the first tracking, so nobody else ever sees it
+        e.setPersistent(false);
+        e.setBlock(Material.LIGHT_BLUE_STAINED_GLASS.createBlockData());
+        e.setTransformation(new Transformation(new Vector3f(0, 0, 0), new AxisAngle4f(), new Vector3f((float) sx, 1, (float) sz), new AxisAngle4f()));
+        e.setGlowing(true);
+        e.setBrightness(new Display.Brightness(15, 15));
+      }));
+    }
+    for (BlockDisplay e : layers) p.showEntity(this, e);
+    ghosts.put(p.getUniqueId(), new Ghost(w, layers, follow ? box : null));
+    if (follow) followGhosts();
+  }
+
+  private void clearGhost(UUID id) {
+    Ghost g = ghosts.remove(id);
+    if (g != null) g.layers().forEach(Entity::remove);
+  }
+
+  private void followGhosts() {
+    for (UUID id : List.copyOf(ghosts.keySet())) {
+      Ghost g = ghosts.get(id);
+      if (g.follow() == null) continue;
+      Player p = Bukkit.getPlayer(id);
+      if (p == null || !p.getWorld().equals(g.world())) {
+        clearGhost(id);
+        continue;
+      }
+      Block t = p.getTargetBlockExact(64);
+      double[] f = g.follow();
+      for (int i = 0; i < g.layers().size(); i++) {
+        BlockDisplay e = g.layers().get(i);
+        if (t == null) p.hideEntity(this, e); // no block in sight: nothing to show
+        else {
+          p.showEntity(this, e);
+          e.teleport(new Location(g.world(), t.getX() + Math.min(f[0], f[3]), t.getY() + Math.min(f[1], f[4]) + i, t.getZ() + Math.min(f[2], f[5])));
+        }
+      }
+    }
   }
 
   private static void edge(Player p, World w, double x1, double y1, double z1, double x2, double y2, double z2) {

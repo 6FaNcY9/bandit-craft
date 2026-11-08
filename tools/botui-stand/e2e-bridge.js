@@ -132,6 +132,7 @@ function sampleDialog(size) {
   c.useItem('main_hand', {x: -90, y: 0});
   ev = await waitEvent((e) => e.type === 'open' && e.player === 'Viewer');
   assert.deepEqual(ev.gaze, {x: stone[0], y: stone[1], z: stone[2], block: 'stone'});
+  assert.equal(ev.sneak, false);
   c.leftClick();
   ev = await waitEvent((e) => e.type === 'lage' && e.player === 'Viewer');
   assert.equal(ev.gaze.block, 'stone');
@@ -161,6 +162,34 @@ function sampleDialog(size) {
   const seen = c.counts.particles;
   await sleep(1000);
   assert.equal(c.counts.particles, seen);
+
+  // ghost: one block_display per layer, only for that player; gone on null, on follow it stays near the gazed block, bad follow is refused, quit removes it
+  const nGhost = () => c.displays.size;
+  assert.equal((await (await post('/outline', {player: 'Viewer', box: {...box, y2: b2 + 2}, ghost: true})).json()).ok, true);
+  await waitFor(() => nGhost() === 3);
+  assert.equal((await (await post('/outline', {player: 'Viewer', box: null})).json()).ok, true);
+  await waitFor(() => nGhost() === 0);
+  await c.look(0, 90);
+  await sleep(500);
+  assert.equal((await (await post('/outline', {player: 'Viewer', box: null, ghost: true, follow: {x1: 0, y1: 0, z1: 0, x2: 2, y2: 1, z2: 2}})).json()).ok, true);
+  await waitFor(() => nGhost() === 2);
+  await sleep(300);
+  for (const e of c.displays.values()) assert.ok(Math.abs(e.y - c.me.y) < 4, `ghost near the gazed block: ${e.y} vs ${c.me.y}`);
+  assert.equal((await (await post('/outline', {player: 'Viewer', box: null})).json()).ok, true);
+  await waitFor(() => nGhost() === 0);
+  assert.equal((await post('/outline', {player: 'Viewer', box: null, ghost: true, follow: {x1: 'x', y1: 0, z1: 0, x2: 2, y2: 1, z2: 2}})).status, 400);
+  assert.equal((await post('/outline', {player: 'Viewer', box: null, follow: {x1: 0, y1: 0, z1: 0, x2: 2, y2: 1, z2: 2}})).status, 400); // follow needs ghost
+  await c.look(-90, 0);
+  const gh = await connect('Ghosty');
+  await post('/outline', {player: 'Ghosty', box, ghost: true});
+  await waitFor(() => gh.displays.size === 2);
+  assert.equal(c.displays.size, 0, 'the ghost is visible only to its player');
+  await gh.end();
+  await sleep(500);
+  const gh2 = await connect('Ghosty');
+  await sleep(1500);
+  assert.equal(gh2.displays.size, 0, 'quit removed the ghost');
+  await gh2.end();
 
   // menus: a chest and a hopper of display items; every click and drag is cancelled, only slots with a payload report
   const menuBody = (o) => ({player: 'Viewer', type: 'chest', title: 'Test', slots: [{slot: 4, item: 'iron_ore', name: 'Eisen', lore: ['a', 'b'], payload: {a: 'x', n: 1}}], ...o});
@@ -261,6 +290,13 @@ function sampleDialog(size) {
   assert.equal((await post('/close', {player: 'Viewer'})).status, 200);
   await waitFor(() => c.win.id === 0);
   await assertNoEvent((e) => e.type === 'closed', 1000);
+  c.sneak(true); // sneak rides on the open event
+  await sleep(300);
+  c.useItem('main_hand', {x: -90, y: 0});
+  assert.equal((await waitEvent((e) => e.type === 'open' && e.player === 'Viewer')).sneak, true);
+  c.sneak(false);
+  c.leftClick();
+  await waitFor(() => c.win.id === 0);
   assert.equal((await (await post('/actionbar', {player: 'Viewer', text: 'hi'})).json()).ok, true);
   assert.equal((await post('/actionbar', {player: 'Nobody', text: 'hi'})).status, 400);
 
