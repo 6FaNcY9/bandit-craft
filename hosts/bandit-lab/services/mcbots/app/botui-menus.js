@@ -32,7 +32,7 @@ function overview(view) {
     slot(46, 'ender_pearl', 'Alle: Komm zu mir', {a: 'comeall'}),
     slot(49, 'map', 'Karte', {a: 'karte'}),
     slot(51, 'writable_book', 'Bauplan hochladen', {a: 'upload'}),
-    slot(53, 'book', 'Alle Befehle (alt)', {a: 'oldmenu'}));
+    slot(53, 'comparator', 'Einstellungen', {a: 'zielm'}));
   return {type: 'chest', title: 'Bots', rows: 6, slots};
 }
 
@@ -278,9 +278,42 @@ function buildPage(view) {
   return {type: 'chest', title: `Bauen: ${safe(b.file.replace(/\.litematic$/, ''), 30)}`, rows: 3, slots};
 }
 
+// Einstellungen: keeper and Ziele are the owner's, the sidebar and the trader chests of the viewer's own traders everyone's.
+function zielPage(view) {
+  const slots = [];
+  if (view.owner) {
+    let k = null;
+    try { k = view.keeper?.state(); } catch { /* no keeper slot */ }
+    if (k?.available) slots.push(slot(0, 'clock', `Daueraufträge: ${k.enabled ? 'an' : 'aus'}`, {a: 'keeper', on: !k.enabled}, {glint: !!k.enabled,
+      lore: [k.enabled ? 'Klick schaltet aus' : 'Klick schaltet ein', ...(view.snaps.some((s) => s.sandbox) ? ['Sandbox: läuft nicht in deiner Welt'] : [])]}));
+    if ((k?.configured || k?.quotas || []).length) slots.push(slot(2, 'writable_book', 'Ziele (Zahlen)…', {a: 'ziele'}));
+  }
+  slots.push(slot(4, 'oak_sign', 'Seitenleiste an', {a: 'sidebar', on: 1}), slot(5, 'oak_sign', 'Seitenleiste aus', {a: 'sidebar', on: 0}));
+  const chests = [];
+  for (const t of (view.traders || []).filter((x) => view.allowed === '*' || view.allowed.includes(x))) {
+    const own = view.traderChests?.list(t) || {};
+    for (const [kind, item, label] of [['sticks', 'stick', 'Sticks'], ['stores', 'emerald', 'Smaragde']]) {
+      for (const c of own[kind] || []) chests.push(slot(9 + chests.length, item, `${safe(t, 16)} ${label} ${c.x} ${c.y} ${c.z}`, {a: 'trader_del', bot: t, kind, x: c.x, y: c.y, z: c.z}, {lore: ['Klick: entfernen']}));
+    }
+  }
+  return {type: 'chest', title: 'Einstellungen', rows: 2, slots: [...slots, ...chests.slice(0, 8), back(17, 'ov')]};
+}
+
+// Karte: zoom (blocks per pixel) and centre (me or one of the viewer's bots in this world).
+const ZOOMS = [1, 2, 5, 10, 25, 50];
+function kartePage(view) {
+  const ms = view.mapState || {zoom: 5, center: null};
+  const bots = view.snaps.filter((s) => !s.sandbox).sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 7);
+  return {type: 'chest', title: 'Bot-Karte', rows: 2, slots: [
+    ...ZOOMS.map((z, i) => slot(i, 'map', `${z} ${z === 1 ? 'Block' : 'Blöcke'} pro Pixel`, {a: 'zoom', z}, {count: z, glint: z === ms.zoom})),
+    slot(9, 'player_head', 'Mitte: ich', {a: 'center', me: 1}, {head: view.viewer, glint: !ms.center}),
+    ...bots.map((s, i) => slot(10 + i, 'player_head', s.name, {a: 'center', bot: s.name}, {head: s.name, glint: ms.center === s.name, lore: ['Mitte: ' + safe(s.name, 20)]})),
+    back(17, 'ov')]};
+}
+
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, zielm: zielPage, kartem: kartePage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
-module.exports = {MENUS, menu, slot, overview, AMOUNTS, haveOf, GRID_MODES, maxBatches, SMELT_RESULT, fuelOf};
+module.exports = {MENUS, ZOOMS, menu, slot, overview, AMOUNTS, haveOf, GRID_MODES, maxBatches, SMELT_RESULT, fuelOf};

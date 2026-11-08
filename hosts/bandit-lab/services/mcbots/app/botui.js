@@ -6,7 +6,7 @@ const FLASH_MS = 30000;
 
 // One handler per click `data.a`: (st, data, ui, viewer) -> void, may be async, may throw.
 // Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
-const {explain, ZOOMS, QUICK} = require('./botui-screens');
+const {explain, QUICK} = require('./botui-screens');
 const QUICK_LABEL = Object.fromEntries(QUICK);
 const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
@@ -489,22 +489,23 @@ const ACTIONS = {
     done(ui.api.submit(viewer, {bots: [bot], type: data.job, args}));
     ui.flash(st, `${bot}: ${label} gestartet`, true);
   },
-  ziele: (st) => { st.screen = {name: 'ziele'}; },
+  zielm: (st) => { st.screen = {name: 'zielm'}; },
+  ziele: (st, data, ui, viewer) => { ownerOnly(ui, viewer); st.screen = {name: 'ziele'}; },
   // The plugin moves or creates the viewer's map item; a full inventory comes back as an error and the Lagebild stays.
   karte: async (st, data, ui, viewer) => {
     const r = await ui.call('/map/give', {player: viewer});
     if (!r.ok) { st.screen = {name: 'lage'}; return ui.flash(st, `Keine Karte: ${r.error || 'unbekannter Fehler'}`); }
-    st.screen = {name: 'karte'};
+    st.screen = {name: 'kartem'};
     await ui.pushMap(viewer, st);
   },
   zoom: async (st, data, ui, viewer) => {
-    st.screen = {name: 'karte'};
-    if (!ZOOMS.includes(data.z)) throw new Error('ungültiger Zoom');
+    st.screen = {name: 'kartem'};
+    if (!menus.ZOOMS.includes(data.z)) throw new Error('ungültiger Zoom');
     st.mapState.zoom = data.z;
     await ui.pushMap(viewer, st);
   },
   center: async (st, data, ui, viewer) => {
-    st.screen = {name: 'karte'};
+    st.screen = {name: 'kartem'};
     st.mapState.center = data.me ? null : oneBot(ui, viewer, data);
     await ui.pushMap(viewer, st);
   },
@@ -513,11 +514,11 @@ const ACTIONS = {
     ownerOnly(ui, viewer);
     if (!ui.api.keeper) throw new Error('keine Daueraufträge eingerichtet');
     ui.api.keeper.setEnabled(on(data));
-    st.screen = {name: 'ziele'};
+    st.screen = {name: 'zielm'};
   },
   sidebar: (st, data, ui, viewer) => {
     ui.api.sidebar(viewer, on(data));
-    st.screen = {name: 'ziele'};
+    st.screen = {name: 'zielm'};
     ui.flash(st, on(data) ? 'Seitenleiste an' : 'Seitenleiste aus', true);
   },
   // Dynamic action: the sliders arrive as want_<item>. A bad item or number throws from setWant; earlier ones are already saved.
@@ -545,7 +546,7 @@ const ACTIONS = {
   },
   trader_del: (st, data, ui, viewer) => {
     const bot = traderOf(ui, viewer, data);
-    st.screen = {name: 'ziele'};
+    st.screen = {name: 'zielm'};
     if (!KIND[data.kind]) throw new Error('unbekannte Kiste');
     ui.api.traderChests.remove(bot, data.kind, {x: data.x, y: data.y, z: data.z});
     ui.flash(st, 'Kiste entfernt', true);
@@ -662,7 +663,7 @@ class BotUi {
       } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
       if (!st.open) return;
     } else if (e.type === 'mapclick') {
-      st.screen = {name: 'karte'}; st.lastClick = this.now();
+      st.screen = {name: 'kartem'}; st.lastClick = this.now();
     } else return;
     try { await this.show(viewer, st); } catch (err) {
       this.flash(st, 'Fehler: ' + err.message);
@@ -710,7 +711,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || []});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : (await this.api.schematics(viewer)).map((p) => p.file), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }

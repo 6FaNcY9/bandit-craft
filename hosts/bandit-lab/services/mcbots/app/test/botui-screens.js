@@ -139,7 +139,7 @@ assert.equal(botButtons(lage(view({snaps: [work('bot1'), idle('bot2'), off('bot3
   assert.deepEqual(a, b); assert.deepEqual(bot(mk(), 'bot1'), bot(mk({health: 19.6}, {runningS: 739}), 'bot1'));
   assert.notDeepEqual(a, lage(mk({}, {progress: '6/64'})));
 }
-assert.deepEqual([...REFRESHING], ['lage', 'bot', 'ov', 'botm']);
+assert.deepEqual([...REFRESHING], ['lage', 'bot', 'ov', 'botm', 'kartem', 'zielm']);
 assert.equal(render({name: 'stopall'}, view()).exit_action.action.payload.a, 'lage');
 assert.equal(text(render({name: 'nonsense'}, view({snaps: []})).title), 'Kommandostand');
 assert.equal(safe('a§cb\u0007c\n d', 99), 'a b c d'.replace('a b', 'ab')); // colour code stripped, control chars become spaces
@@ -150,22 +150,17 @@ assert.equal(safe('a§cb\u0007c\n d', 99), 'a b c d'.replace('a b', 'ab')); // c
   assert.match(body(lage(view({snaps: [fresh]}))).join('\n'), /fehlen/); assert.match(body(bot(view({snaps: [fresh]}), 'bot1')).join('\n'), /fehlen/);
 }
 console.log('botui-screens ok');
-{ // Ziele: owner gets toggles and one slider per quota, a restricted viewer only the sidebar and their trader chests
+{ // Ziele: only the quota sliders, Speichern and Zurück (the toggles live in the zielm menu)
   const {ziele} = require('../botui-screens');
   const keeper = {state: () => ({available: true, enabled: true, quotas: [{item: 'logs', want: 64, have: 10}, {item: 'coal', want: 100, have: null}, {item: 'torch', want: 2000, have: 5}]})};
-  const traderChests = {list: (b) => (b === 'MisaBot' ? {sticks: [{x: 1, y: 2, z: 3}], stores: []} : {sticks: [], stores: [{x: 4, y: 5, z: 6}]})};
-  const v = view({keeper, traders: ['MisaBot', 'EM_Trader'], traderChests});
-  const d = render({name: 'ziele'}, v);
+  const d = render({name: 'ziele'}, view({keeper}));
   assert.deepEqual(d.inputs.map((i) => [i.key, i.end, i.initial]), [['want_logs', 256, 64], ['want_coal', 400, 100], ['want_torch', 4096, 2000]]);
   assert.ok(d.inputs.every((i) => i.type === 'minecraft:number_range' && i.start === 0 && i.step === 1));
   assert.ok(!REFRESHING.has('ziele'), 'an input screen never refreshes');
-  assert.deepEqual(d.actions.filter((a) => a.action.payload?.a === 'keeper').map((a) => [a.action.payload.a, a.action.payload.on]), [['keeper', 0]]);
-  assert.equal(d.actions.find((a) => a.label.text === 'Speichern').action.additions.a, 'saveziele');
-  assert.deepEqual(d.actions.filter((a) => a.action.payload?.a === 'trader_del').map((a) => a.action.payload), [{a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 1, y: 2, z: 3}, {a: 'trader_del', bot: 'EM_Trader', kind: 'stores', x: 4, y: 5, z: 6}]);
-  const m = JSON.parse(JSON.stringify(render({name: 'ziele'}, view({keeper, owner: false, allowed: ['MisaBot'], traders: ['MisaBot', 'EM_Trader'], traderChests}))));
-  assert.equal(m.inputs, undefined); assert.ok(!JSON.stringify(m).includes('keeper') && !JSON.stringify(m).includes('saveziele'));
-  assert.deepEqual(m.actions.filter((a) => a.action.payload?.a === 'trader_del').map((a) => a.action.payload.bot), ['MisaBot']);
-  assert.ok(m.actions.some((a) => a.action.payload?.a === 'sidebar'));
+  assert.deepEqual(d.actions.map((a) => text(a.label)), ['Speichern', 'Zurück']);
+  assert.equal(d.actions[0].action.additions.a, 'saveziele'); assert.equal(d.actions[1].action.payload.a, 'zielm');
+  const m = JSON.parse(JSON.stringify(render({name: 'ziele'}, view({keeper, owner: false, allowed: ['MisaBot']}))));
+  assert.equal(m.inputs, undefined); assert.ok(!JSON.stringify(m).includes('saveziele'));
   { // the configured numbers; initial never above end
     const b = render({name: 'ziele'}, view({keeper: {state: () => ({available: true, enabled: true, quotas: [{item: 'planonly', want: 5, have: 0}], configured: [{item: 'logs', want: 64, have: 1}, {item: 'big', want: 9999, have: 1}]})}, traders: []}));
     assert.deepEqual(b.inputs.map((i) => [i.key, i.end, i.initial]), [['want_logs', 256, 64], ['want_big', 4096, 4096]]);
@@ -177,16 +172,9 @@ console.log('botui-screens ok');
   assert.deepEqual(hk({owner: false, allowed: ['MisaBot']}).map((x) => x[0]), ['MisaBot', 'MisaBot']);
   assert.deepEqual(render({name: 'auftrag'}, view({ctx: {gaze: {...gaze, block: 'stone'}}, traders: ['MisaBot']})).actions.filter((a) => a.action?.payload?.a === 'trader_add'), []);
 }
-{ // Karte: six zoom buttons, "Mitte: ich" and one centre button per allowed bot; an input screen, so it never refreshes
+{ // Karte: the markers sent to the plugin follow the viewer's rights (the zoom/centre buttons are the kartem menu)
   const snaps = [work('bot1'), work('MisaBot')];
-  const pay = (d, a) => d.actions.filter((x) => x.action.payload?.a === a).map((x) => x.action.payload);
-  assert.ok(!REFRESHING.has('karte'));
   assert.ok(lage(view({snaps})).actions.some((a) => a.action.payload?.a === 'karte'), 'Karte button is wired');
-  const d = render({name: 'karte'}, view({snaps, mapState: {zoom: 10, center: 'bot1'}}));
-  assert.deepEqual(pay(d, 'zoom').map((p) => p.z), [1, 2, 5, 10, 25, 50]);
-  assert.deepEqual(pay(d, 'center'), [{a: 'center', me: 1}, {a: 'center', bot: 'bot1'}, {a: 'center', bot: 'MisaBot'}]);
-  const m = render({name: 'karte'}, view({snaps, owner: false, allowed: ['MisaBot']}));
-  assert.deepEqual(pay(m, 'center').map((p) => p.bot), [undefined, 'MisaBot']);
   const {markersOf} = require('../botui');
   const all = [work('bot1', {pos: [10, 64, -5]}), work('MisaBot', {pos: [1, 70, 2], dimension: 'the_nether'}), idle('EM'), off('gone'), work('dead1', {dead: true}), work('bad', {pos: [NaN, 0, 0]})];
   assert.deepEqual(markersOf(all, ['MisaBot']), [{x: 1, z: 2, dim: 'the_nether', kind: 'work', label: 'MisaBot'}]);
@@ -214,14 +202,10 @@ console.log('botui-screens ok');
   assert.match(body(lage(view({snaps, keeper: keeper(32)}))).join('\n'), /Alles auf Lager \(Sandbox\)/);
   assert.match(body(lage(view({snaps: [work('bot19')], keeper: keeper(1)}))).join('\n'), /Bedarf: coal 1\/32/);
   assert.equal(lage(view({snaps, keeper: keeper(32)})).body.find((b) => /Lager/.test(text(b.contents))).contents[1].color, 'green');
-  assert.match(body(ziele(view({snaps, keeper: keeper(1)}))).join('\n'), /Daueraufträge laufen in der Sandbox, nicht in deiner Welt/);
-  assert.doesNotMatch(body(ziele(view({snaps: [work('bot19')], keeper: keeper(1)}))).join('\n'), /Sandbox/);
 
   const who = render({name: 'job', key: 'goto'}, view({snaps})).inputs.find((i) => i.key === 'who');
   assert.deepEqual(who.options.map((o) => o.display.text), ['Erster freier Bot', 'Alle meine Bots', 'bot19', 'bot1 (Sandbox)', 'bot2 (Sandbox)']);
 
-  const karte = render({name: 'karte'}, view({snaps})).actions.filter((a) => a.action.payload?.a === 'center').map((a) => a.action.payload.bot);
-  assert.deepEqual(karte, [undefined, 'bot19'], 'no centre on a world the map does not show');
   assert.deepEqual(markersOf(snaps, '*').map((m) => m.label), ['bot19']);
 
   const named = [{name: 'bot1'}, {name: 'bot19'}, {name: 'MisaBot'}];

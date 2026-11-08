@@ -733,10 +733,13 @@ async function fake() {
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
     await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
-    await click('Fancy', {a: 'ziele'});
-    assert.equal(ui.state('Fancy').screen.name, 'ziele');
+    await click('Fancy', {a: 'zielm'});
+    assert.equal(ui.state('Fancy').screen.name, 'zielm');
     await click('Fancy', {a: 'keeper', on: 1}); await click('Fancy', {a: 'sidebar', on: 0});
-    assert.deepEqual(calls, [['enabled', true], ['sidebar', 'Fancy', false]]);
+    assert.deepEqual(calls, [['enabled', true], ['sidebar', 'Fancy', false]]); assert.equal(ui.state('Fancy').screen.name, 'zielm');
+    await click('Fancy', {a: 'ziele'}); assert.equal(ui.state('Fancy').screen.name, 'ziele');
+    await click('Midari', {a: 'ziele'}); assert.match(ui.state('Midari').flash.text, /Besitzer/);
+    await click('Midari', {a: 'keeper', on: 1}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nur für den Besitzer');
     calls.length = 0;
     await click('Fancy', {a: 'saveziele', want_logs: 99.6});
     assert.deepEqual(calls, [['want', 'logs', 100]]); assert.match(ui.state('Fancy').flash.text, /gespeichert/);
@@ -756,7 +759,7 @@ async function fake() {
     await click('Midari', {a: 'trader_add', bot: 'MisaBot', kind: 'sticks'}, {gaze: {...gaze, x: 99}}); assert.equal(chests.pop()[3].x, 99, 'a guest may pick any chest');
     assert.equal(chests.length, 1);
     await click('Midari', {a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 7, y: 8, z: 9});
-    assert.deepEqual(chests.at(-1), ['remove', 'MisaBot', 'sticks', {x: 7, y: 8, z: 9}]); assert.equal(ui.state('Midari').screen.name, 'ziele');
+    assert.deepEqual(chests.at(-1), ['remove', 'MisaBot', 'sticks', {x: 7, y: 8, z: 9}]); assert.equal(ui.state('Midari').screen.name, 'zielm');
     await click('Midari', {a: 'trader_del', bot: 'bot1', kind: 'sticks', x: 1, y: 1, z: 1}); assert.equal(chests.length, 2);
     // saveziele is all or nothing, refuses out-of-range numbers, and says so without a keeper
     calls.length = 0;
@@ -785,9 +788,10 @@ async function fake() {
     await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
     await click('Fancy', {a: 'karte'});
     assert.deepEqual(f.of('/map/give').map((c) => c.body), [{player: 'Fancy'}]);
-    assert.equal(ui.state('Fancy').screen.name, 'karte');
+    assert.equal(ui.state('Fancy').screen.name, 'kartem');
     assert.deepEqual(maps('Fancy').at(-1), {player: 'Fancy', zoom: 5, center: null, markers: [{x: 5, z: 6, dim: 'overworld', kind: 'idle', label: 'bot1'}, {x: 100, z: -40, dim: 'the_nether', kind: 'work', label: 'MisaBot'}]});
     await click('Fancy', {a: 'zoom', z: 25}); assert.equal(maps('Fancy').at(-1).zoom, 25);
+    assert.equal(ui.state('Fancy').screen.name, 'kartem'); assert.equal(f.of('/menu').at(-1).body.title, 'Bot-Karte');
     const n = f.of('/map').length;
     for (const z of [3, '1e9', 'x', undefined]) { await click('Fancy', {a: 'zoom', z}); assert.match(ui.state('Fancy').flash.text, /ungültiger Zoom/); }
     assert.equal(ui.state('Fancy').mapState.zoom, 25); assert.equal(f.of('/map').length, n);
@@ -809,7 +813,7 @@ async function fake() {
     assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.match(ui.state('Fancy').flash.text, /Keine Karte: Inventar voll/);
     // right click on the map opens the Karte, and the Karte is not refreshed
     await ui.handle({type: 'mapclick', player: 'Fancy'});
-    assert.equal(ui.state('Fancy').screen.name, 'karte'); assert.equal(ui.state('Fancy').open, true);
+    assert.equal(ui.state('Fancy').screen.name, 'kartem'); assert.equal(ui.state('Fancy').open, true); assert.equal(f.of('/menu').at(-1).body.title, 'Bot-Karte');
     const shown = f.of('/show').length; t += 10; await ui.tick(); assert.equal(f.of('/show').length, shown);
     await ui.handle({type: 'mapclick', player: 'Stranger'}); assert.equal(ui.state('Stranger'), undefined);
     end();

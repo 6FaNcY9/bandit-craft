@@ -257,44 +257,22 @@ function jobScreen(view, sc) {
   return dialog(job.label, body, [send, button(txt('Zurück'), 'new', sc.bot ? {bot: sc.bot} : {})], CLOSE, 2, inputs);
 }
 
-// --- Ziele: owner-only keeper and quota sliders; the sidebar and the trader chests of the viewer's bots
+// --- Ziele: the owner's keeper quota sliders (numbers need a dialog); toggles, sidebar and trader chests are the zielm menu
 function ziele(view) {
   const body = [], actions = [], inputs = [];
-  let k = null;
   if (view.owner) {
+    let k = null;
     try { k = view.keeper?.state(); } catch { /* shown as not configured */ }
-    const toggle = (label, enabled, a) => button(txt(`${label}: ${enabled ? 'an' : 'aus'}`, enabled ? 'green' : 'gray'), a, {on: enabled ? 0 : 1}, lines([[enabled ? 'Klick schaltet aus' : 'Klick schaltet ein']]));
-    if (k?.available) actions.push(toggle('Daueraufträge', k.enabled, 'keeper'));
     for (const q of k?.configured || k?.quotas || []) {
       const end = Math.min(4096, Math.max(64, q.want * 4));
       inputs.push(slider('want_' + q.item, `${safe(q.item, 24)}${q.have !== null ? ' (da: ' + q.have + ')' : ''}`, 0, end, 1, Math.min(end, q.want)));
     }
     if (inputs.length) body.push(line(txt('Ziele pro Rohstoff in der Vorratskiste', 'white')));
-    if (k?.available && view.snaps.some((s) => s.sandbox)) body.push(line(txt('Daueraufträge laufen in der Sandbox, nicht in deiner Welt', 'yellow')));
-  }
-  actions.push(button(txt('Seitenleiste an'), 'sidebar', {on: 1}), button(txt('Seitenleiste aus'), 'sidebar', {on: 0}));
-  for (const t of traders(view)) {
-    const own = view.traderChests?.list(t) || {};
-    for (const [kind, label] of [['sticks', 'Sticks'], ['stores', 'Smaragde']]) {
-      for (const c of own[kind] || []) actions.push(button(txt(`✖ ${safe(t, 16)} ${label} ${c.x} ${c.y} ${c.z}`, 'red'), 'trader_del', {bot: t, kind, x: c.x, y: c.y, z: c.z}, lines([['Handelskiste entfernen']])));
-    }
   }
   body.push(...flashLine(view.flash));
   if (inputs.length) actions.push({label: txt('Speichern', 'green'), width: 200, action: {type: 'minecraft:dynamic/custom', id: 'botui:do', additions: {a: 'saveziele'}}});
-  actions.push(button(txt('Zurück'), 'lage'));
+  actions.push(button(txt('Zurück'), 'zielm'));
   return dialog('Ziele', body, actions, CLOSE, 2, inputs);
-}
-
-// --- Karte: zoom and centre of the map item. An input screen (never refreshes), so the buttons stay where the player aims.
-const ZOOMS = [1, 2, 5, 10, 25, 50];
-function karte(view) {
-  const ms = view.mapState || {zoom: 5, center: null};
-  const body = [line(txt(`${ms.zoom} ${ms.zoom === 1 ? 'Block' : 'Blöcke'} pro Pixel · Mitte: ${ms.center ? safe(ms.center, 16) : 'du'}`, 'white')), ...flashLine(view.flash)];
-  const actions = [...ZOOMS.map((z) => button(txt(`${z} ${z === 1 ? 'Block' : 'Blöcke'} pro Pixel`, mark(z === ms.zoom)), 'zoom', {z})),
-    button(txt('Mitte: ich', mark(!ms.center)), 'center', {me: 1}),
-    ...mine(view).filter((s) => !s.sandbox).map((s) => button(txt(`Mitte: ${safe(s.name, 16)}`, mark(ms.center === s.name)), 'center', {bot: s.name})),
-    button(txt('Zurück'), 'lage')];
-  return dialog('Bot-Karte', body, actions, CLOSE);
 }
 
 // The one-time upload link as a browser button; the URL carries the token, so it is shown nowhere else.
@@ -304,8 +282,8 @@ function upload(view, sc) {
 }
 
 // A screen is {name, ...}; unknown names fall back to the Lagebild so a stale state never breaks a viewer.
-const SCREENS = {lage, upload, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele, karte};
-const REFRESHING = new Set(['lage', 'bot', 'ov', 'botm']);
+const SCREENS = {lage, upload, bot: (v, sc) => bot(v, sc.bot), wennfrei, stopall: confirmStop, auftrag, job: jobScreen, ziele};
+const REFRESHING = new Set(['lage', 'bot', 'ov', 'botm', 'kartem', 'zielm']);
 const render = (screen, view) => (SCREENS[screen.name] || lage)(view, screen);
 
-module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK, ZOOMS};
+module.exports = {safe, explain, ziele, lage, bot, confirmStop, render, REFRESHING, QUICK};

@@ -258,3 +258,31 @@ console.log('botui-menus ok');
   assert.deepEqual(b.slots.filter((x) => x.glint).map((x) => x.slot), [4, 19]);
   for (const x of [...m.slots, ...b.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }
+{ // Einstellungen: the owner's keeper and Ziele, everyone's sidebar, the viewer's trader chests; Karte: zoom and centre
+  const ks = (configured) => ({state: () => ({available: true, enabled: false, configured})});
+  const z = (v) => menu({name: 'zielm'}, v).menu;
+  const o = z(view({keeper: ks([['coal', 64]])}));
+  assert.equal(o.title, 'Einstellungen'); assert.equal(o.rows, 2);
+  assert.deepEqual(o.slots.find((x) => x.slot === 0), {slot: 0, item: 'clock', name: 'Daueraufträge: aus', payload: {a: 'keeper', on: true}, glint: false, lore: ['Klick schaltet ein']});
+  assert.deepEqual(o.slots.find((x) => x.slot === 2).payload, {a: 'ziele'}); assert.equal(o.slots.find((x) => x.slot === 2).item, 'writable_book');
+  assert.ok(!o.slots.some((x) => x.payload.a === 'plan'));
+  assert.deepEqual(o.slots.filter((x) => x.item === 'oak_sign').map((x) => x.payload), [{a: 'sidebar', on: 1}, {a: 'sidebar', on: 0}]);
+  assert.deepEqual(z(view({keeper: ks([])})).slots.map((x) => x.slot), [0, 4, 5, 17]);
+  assert.match(z(view({keeper: ks([]), snaps: [{name: 'zed', sandbox: true}]})).slots[0].lore.join(), /Sandbox/);
+  const g = z(view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, keeper: ks([['coal', 64]])}));
+  assert.deepEqual(g.slots.map((x) => x.slot), [4, 5, 17]);
+  const tc = {list: (b) => (b === 'MisaBot' ? {sticks: [{x: 1, y: 2, z: 3}], stores: []} : {sticks: [], stores: [{x: 4, y: 5, z: 6}]})};
+  const t = z(view({traders: ['MisaBot', 'EM_Trader'], traderChests: tc})).slots.filter((x) => x.slot >= 9 && x.slot < 17);
+  assert.deepEqual(t.map((x) => [x.slot, x.item, x.name, x.payload]), [[9, 'stick', 'MisaBot Sticks 1 2 3', {a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 1, y: 2, z: 3}], [10, 'emerald', 'EM_Trader Smaragde 4 5 6', {a: 'trader_del', bot: 'EM_Trader', kind: 'stores', x: 4, y: 5, z: 6}]]);
+  assert.deepEqual(z(view({allowed: ['MisaBot'], owner: false, traders: ['MisaBot', 'EM_Trader'], traderChests: tc})).slots.filter((x) => x.slot >= 9 && x.slot < 17).map((x) => x.payload.bot), ['MisaBot']);
+  assert.equal(slots(view()).find((x) => x.slot === 53).item, 'comparator'); assert.deepEqual(slots(view()).find((x) => x.slot === 53).payload, {a: 'zielm'});
+  const k = menu({name: 'kartem'}, view({mapState: {zoom: 5, center: null}, snaps: [...snaps, {name: 'sbx', online: true, sandbox: true}]})).menu;
+  assert.equal(k.title, 'Bot-Karte');
+  assert.deepEqual(k.slots.filter((x) => x.item === 'map').map((x) => x.count), [1, 2, 5, 10, 25, 50]);
+  assert.deepEqual(k.slots.filter((x) => x.glint).map((x) => x.slot), [2, 9]);
+  assert.equal(k.slots.find((x) => x.slot === 0).name, '1 Block pro Pixel');
+  assert.deepEqual(k.slots.filter((x) => x.slot >= 9 && x.slot < 17).map((x) => x.payload), [{a: 'center', me: 1}, {a: 'center', bot: 'bot2'}, {a: 'center', bot: 'MisaBot'}, {a: 'center', bot: 'zed'}]);
+  assert.deepEqual(menu({name: 'kartem'}, view({mapState: {zoom: 5, center: 'bot2'}})).menu.slots.filter((x) => x.glint).map((x) => x.slot), [2, 10]);
+  for (const x of [...o.slots, ...t, ...k.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+  assert.equal(JSON.stringify(menu({name: 'kartem'}, view())), JSON.stringify(menu({name: 'kartem'}, view())));
+}
