@@ -1,7 +1,6 @@
 'use strict';
 // Server administration for the owner's dashboard: a minimal RCON client (Source RCON, as Minecraft
-// implements it) and the validated admin actions built on it. Human path only: agentauth's allowlist
-// never lists /api/admin/*. RCON is reached over the internal `minecraft` Docker network, never published.
+// implements it) and the validated admin actions built on it. Human path only (Tailscale login). RCON is reached over the internal `minecraft` Docker network, never published.
 const net = require('node:net');
 
 const NAME_RE = /^[A-Za-z0-9_]{1,16}$/;

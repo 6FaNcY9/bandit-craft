@@ -4,7 +4,6 @@ module.exports = async () => {
   { // homebed: one bed slot per bot in the storage rooms - slots, needs, the job against a fake bot
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
     const HB = require('../../homebed');
-    const A = require('../../agentauth');
     const {Vec3} = require('vec3');
     assert.deepStrictEqual(HB.slotSpot(0), {x: -272, y: 58, z: -213, facing: 'north'});
     assert.deepStrictEqual(HB.slotSpot(6), {x: -266, y: 58, z: -213, facing: 'north'}, 'room 1 ends at x -266');
@@ -27,7 +26,6 @@ module.exports = async () => {
     assert.deepStrictEqual(VALIDATE.homebed({x: 1, y: 60, z: 2}), {x: 1, y: 60, z: 2, facing: 'north'});
     assert.throws(() => VALIDATE.homebed({slot: 14}), /slot/);
     assert.throws(() => VALIDATE.homebed({x: 1, y: 60, z: 2, facing: 'up'}), /facing/);
-    assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'homebed', args: {}}, {agentBots: ['bot1'], supplyChest: {x: 1, y: 2, z: 3}}), null);
 
     // bot3's slot is x -270: floor y 57, air 58..61, rows z -214 (head) and -213 (foot)
     const room = (extra = {}) => {
@@ -111,13 +109,11 @@ module.exports = async () => {
   { // graves (AxGraves): validation, the pure decisions, then the job against a fake bot
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
     const G = require('../../graves');
-    const A = require('../../agentauth');
     const {Vec3} = require('vec3');
     assert.deepStrictEqual(VALIDATE.grave({x: 1.9, y: 64, z: -2}), {x: 1, y: 64, z: -2});
     assert.throws(() => VALIDATE.grave({x: 1, y: 999, z: 2}), /y must be/);
     assert.deepStrictEqual(VALIDATE.graves({spots: [{x: 1.8, y: 64, z: 2}]}), {spots: [{x: 1, y: 64, z: 2}]});
     assert.strictEqual(VALIDATE.graves({spots: Array.from({length: 50}, (_, x) => ({x, y: 64, z: 0}))}).spots.length, 40);
-    assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'grave', args: {}}, {agentBots: ['bot1'], supplyChest: {x: 1, y: 2, z: 3}}), null);
 
     const now = Date.now(), ev = (bot, kind, text, age = 0) => ({bot, kind, text, t: now - age});
     assert.deepStrictEqual(G.openGraves([

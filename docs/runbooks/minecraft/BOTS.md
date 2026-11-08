@@ -384,11 +384,10 @@ areas (zoom with the wheel). "Advanced: debug" is the panel described below.
 ### Managing from the dashboard (phone friendly)
 
 All write endpoints below are for humans only (same-origin JSON POST behind the Tailscale login
-check, `TRUSTED_PROXIES` rule unchanged); the agent token is refused on them.
+check, `TRUSTED_PROXIES` rule unchanged).
 
-A job given on the dashboard (`POST /api/job` without the agent token) is the owner's order: until that
-job finishes, or the owner stops or replaces it, every agent order for the bot is refused ("works on the
-owner's ... order: only the owner changes it"), also while it waits to be resumed after a restart. A failure
+A job given on the dashboard (`POST /api/job`) is the owner's order: until that
+job finishes, or the owner stops or replaces it, it is kept (also while it waits to be resumed after a restart). A failure
 does not end it: once a minute an order whose bot is online and idle starts again, 5 min after a failure (20 min
 after `gave up ... (died 4 times)`) and right after a restart, event `the owner's <type> order goes on` (one exploded project chest had ended two orders, and the agents
 then sent bot1 out at night 806 times in 17 h: 17 deaths, 2026-10-17). The open order per bot (type and args)
@@ -397,35 +396,17 @@ is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
 - **Projects** (`POST /api/project {bot, action: pause|resume|stop}`): one row per bot with a
   shaft/excavate/level/seal/rim/treefarm/homebed/build/grave job running, queued or remembered, with progress.
   The server remembers each bot's last project and its validated arguments in `STATE_DIR/projects.json`
-  (any `/api/job`, also the agents', notes it; a stop marks it paused). Pause keeps it, Resume queues
+  (any `/api/job` notes it; a stop marks it paused). Pause keeps it, Resume queues
   the *last project given to that bot* again, Stop forgets it. Pausing a *running* project is a bot stop, so that bot's queue
   goes too; a merely queued project is removed alone.
 - **Quick actions** in every bot card: Stop, Home (`goto` the supply chest), Come to me (the "your player
-  name" field), Rearm, Home bed (+ slot field: the slot is stored per bot in `crews.json`, unique, 0..13;
+  name" field), Rearm, Home bed (+ slot field, 0..13;
   blank = by crew order), and a job picker (any job type, arguments as JSON, validated by `VALIDATE`).
   There is no Graves button: the graves feature only queues a grave job at a death and keeps no list.
 - **Supply chest** panel: the last count (age, who, free slots, contents) and warnings: full (< 4 free
   slots), no food, no torches/coal, no pickaxes, no saplings. "Count it" sends an idle bot. When the chest
-  turns full one `alert` event is emitted (once per fill). Free slots come from `chest.inventoryStart`
+  turns full one ntfy message goes out (once per fill). Free slots come from `chest.inventoryStart`
   minus the stacks in it; an older worker that does not send them shows no "full" warning.
-- **Crews and goals** (`GET/POST /api/crews`, `STATE_DIR/crews.json`): move a worker between agents, edit
-  an agent's goal (max 1000 characters). Names must be `AGENT_BOTS`, an agent is never a worker, a worker
-  is in at most one crew; a refused edit changes nothing. The agent service pulls `GET /api/crews`
-  (the agent bearer may read it) every 30 s and uses it instead of `WORKERS_<agent>` / `AGENTS` in
-  `default.nix`, which stay the defaults; "Reset to defaults" (`{crews: null, goals: null}`) restores
-  them. A goal the agent set itself with `!goal` is kept until the stored goal changes.
-
-### Agent decisions and `GET /api/decisions`
-
-The lab's agent service (`hosts/bandit-lab/services/mcagents`, Andy-4.2 on the
-Ollama container) posts every model reply with its bearer to `POST
-/api/decision`; the dashboard keeps the last 200 apart from the events and shows
-them under "Agent decisions" (newest first, same bot filter). Lead mode: bot1
-is the agent and gives its workers (bot2-bot4, and bot16-bot18 from the
-`mcbots-worker` container, which shares mcbots' network namespace) shifts with
-`!assign`. Keep "Standing orders" off while the agent leads: the keeper would
-hand the same bots its own jobs. Stop the brain without touching running jobs:
-`sudo systemctl stop mcagents`.
 
 ### Events and `GET /api/events`
 

@@ -1,8 +1,6 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const {randomUUID} = require('node:crypto');
-const {rotate} = require('./archive');
 const {dirEn} = require('./farsearch');
 const UUID_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const uuid = (s) => typeof s === 'string' && UUID_RE.test(s) ? s.replace(/-/g, '').toLowerCase() : null;
@@ -124,19 +122,6 @@ function germanReason(text) {
   return text;
 }
 
-function makeDemoLog(file, {maxBytes = 10 * 1024 * 1024} = {}) {
-  if (!file) return {add: () => null, outcome: () => {}};
-  const append = (line) => {
-    fs.mkdirSync(path.dirname(file), {recursive: true});
-    fs.appendFileSync(file, JSON.stringify(line) + '\n', {mode: 0o600});
-    if (fs.statSync(file).size > maxBytes) rotate(file); // the older FILE.1 is kept (archive.js)
-  };
-  return {
-    add(entry) { const id = randomUUID(); append({...entry, id, t: new Date().toISOString(), outcome: null}); return id; },
-    outcome(id, result, text) { append({id, outcome: {t: new Date().toISOString(), result, text}}); },
-  };
-}
-
 function loadRole(file, name) {
   try { const role = JSON.parse(fs.readFileSync(file, 'utf8'))[name]; if (ROLES.has(role)) return role; } catch {}
   return {bot1: 'helfer', bot2: 'sammler', bot3: 'farmer'}[name] || 'helfer';
@@ -150,4 +135,4 @@ function saveRole(file, name, role) {
   fs.renameSync(`${file}.tmp`, file);
 }
 
-module.exports = {uuid, isOwnerMessage, parseOrder, translate, makeSayer, chatLabel, germanReason, makeDemoLog, loadRole, saveRole, UUID_RE, HELP, HELP2};
+module.exports = {uuid, isOwnerMessage, parseOrder, translate, makeSayer, chatLabel, germanReason, loadRole, saveRole, UUID_RE, HELP, HELP2};

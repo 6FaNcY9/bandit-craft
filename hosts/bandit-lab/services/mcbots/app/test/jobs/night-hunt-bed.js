@@ -101,13 +101,10 @@ module.exports = async () => {
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
     const H = require('../../hunt');
     const {Vec3} = require('vec3');
-    const A = require('../../agentauth');
     assert.deepStrictEqual(VALIDATE.hunt({animal: 'sheep', count: 3, x: 1, y: 64, z: 2}), {animal: 'sheep', count: 3, x: 1, y: 64, z: 2, radius: 24});
     for (const bad of [{animal: 'wolf'}, {animal: 'constructor'}, {animal: 'cow', count: 99}, {animal: 'cow', radius: 2}]) assert.throws(() => VALIDATE.hunt({x: 1, y: 64, z: 2, ...bad}), bad.animal);
     assert.deepStrictEqual(VALIDATE.bed({x: 1, y: 60, z: 2, facing: 'north'}), {x: 1, y: 60, z: 2, facing: 'north'});
     for (const facing of ['up', 'constructor', undefined]) assert.throws(() => VALIDATE.bed({x: 1, y: 60, z: 2, facing}), /facing/);
-    const pol = {agentBots: ['bot1'], supplyChest: {x: 1, y: 2, z: 3}};
-    for (const type of ['hunt', 'bed']) assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type, args: {}}, pol), null, type);
 
     // huntTarget: nearest sheep in range; never named, baby, handled, protected, other kinds or players
     const sheep = (id, x, z, extra = {}) => ({id, name: 'sheep', position: new Vec3(x, 64, z), ...extra});

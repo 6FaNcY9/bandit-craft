@@ -4,7 +4,7 @@
   const assert = require('node:assert/strict');
   const {DIRS, hopTarget, farHeading, farFail, FAR_HOP} = require('../farsearch');
   const {germanReason} = require('../owner');
-  const orderOutcome = require('../agentauth').orderOutcome;
+  const orderOutcome = require('../orderloop').orderOutcome;
   const name = (i) => DIRS[i].en;
   // Minecraft north is -z
   assert.equal(DIRS[0].de, 'Norden'); assert.equal(hopTarget({x: 0, z: 0}, DIRS[0]).z, -FAR_HOP);

@@ -5,11 +5,9 @@ module.exports = async () => {
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
     const T = require('../../treefarm');
     const {Vec3} = require('vec3');
-    const A = require('../../agentauth');
     assert.deepStrictEqual(VALIDATE.treefarm({x1: 8, z1: 0, x2: 0, z2: 8}), {x1: 0, z1: 0, x2: 8, z2: 8}, 'corners in any order');
     for (const bad of [{x1: 0, z1: 0, x2: 24, z2: 5}, {x1: 0, z1: 0, x2: 1, z2: 5}, {x1: 0, z1: 0, x2: 5}, {x1: 'a', z1: 0, x2: 5, z2: 5}, {x1: 0.5, z1: 0, x2: 5, z2: 5}]) assert.throws(() => VALIDATE.treefarm(bad), JSON.stringify(bad));
     assert.ok(VALIDATE.treefarm({x1: 0, z1: 0, x2: 23, z2: 23}), '24 x 24 is the limit');
-    assert.strictEqual(A.agentJobRefusal({bots: ['bot1'], type: 'treefarm', args: {}}, {agentBots: ['bot1'], supplyChest: {x: 1, y: 2, z: 3}}), null);
     assert.deepStrictEqual([T.gridCells({x1: 0, z1: 0, x2: 14, z2: 14}).length, T.gridCells({x1: 0, z1: 0, x2: 23, z2: 23}).length, T.gridCells({x1: 0, z1: 0, x2: 2, z2: 2})], [25, 64, [{x: 1, z: 1}]]);
     assert.deepStrictEqual(T.gridCells({x1: -5, z1: 10, x2: 3, z2: 12}).map((c) => `${c.x},${c.z}`), ['-4,11', '-1,11', '2,11'], 'a 3-block grid, one block in from the edge');
     assert.strictEqual(T.pickSapling([{name: 'jungle_sapling'}, {name: 'birch_sapling'}, {name: 'dark_oak_sapling'}, {name: 'oak_sapling'}]).name, 'oak_sapling', 'oak first, never dark_oak');

@@ -3,7 +3,7 @@
 (async () => {
   const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
   const {EventEmitter} = require('node:events');
-  const {isOwnerMessage, parseOrder, translate, makeSayer, makeDemoLog, loadRole, saveRole, HELP, HELP2} = require('../owner');
+  const {isOwnerMessage, parseOrder, translate, makeSayer, loadRole, saveRole, HELP, HELP2} = require('../owner');
   const {BotRunner, VALIDATE} = require('../bots');
   const {loadConfig, loadWorkerConfig} = require('../config');
   const uuid = '623c7ee4-71ca-487a-b92a-a4564e43fbb9', other = '123c7ee4-71ca-487a-b92a-a4564e43fbb9';
@@ -55,20 +55,6 @@
   assert.ok(sent[1].t - sent[0].t >= 38, `one line per gap: ${sent[1].t - sent[0].t} ms`);
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mcbots-owner-'));
   try {
-    const file = path.join(dir, 'demo.jsonl'), log = makeDemoLog(file);
-    const entry = {bot: 'bot1', via: 'whisper', text: 'komm', command: tr('komm'), state: {health: 20}};
-    const id = log.add(entry);
-    assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 1);
-    log.outcome(id, 'finished', 'finished: come');
-    const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
-    assert.deepEqual(lines[0], {...entry, id, t: lines[0].t, outcome: null});
-    assert.ok(Number.isFinite(Date.parse(lines[0].t)));
-    assert.deepEqual(lines[1], {id, outcome: {t: lines[1].outcome.t, result: 'finished', text: 'finished: come'}});
-    const rotated = path.join(dir, 'rotate.jsonl'), small = makeDemoLog(rotated, {maxBytes: 1});
-    small.add(entry); assert.ok(fs.existsSync(`${rotated}.1`)); assert.equal(fs.existsSync(rotated), false);
-    small.add({...entry, text: 'folge'});
-    assert.equal(JSON.parse(fs.readFileSync(`${rotated}.1`, 'utf8')).text, 'folge');
-    const noop = makeDemoLog(null); noop.outcome(noop.add(entry), 'finished', 'ok');
     const roles = path.join(dir, 'roles.json');
     assert.equal(loadRole(roles, 'bot2'), 'sammler');
     saveRole(roles, 'bot1', 'wache'); saveRole(roles, 'bot2', 'farmer');
@@ -76,8 +62,7 @@
     const bot = new EventEmitter(), whispers = [];
     bot.players = {fancy8869: {uuid, username: 'fancy8869', entity: {position: ctx.ownerPos}}};
     bot.whisper = () => { throw new Error('replies go over the say event, not /tell'); };
-    const outcomes = [], orders = [];
-    const runner = new BotRunner('bot1', {log: () => {}, ownerUuids: [uuid], onEvent: (b, k, t) => { if (k === 'say') whispers.push({name: t.split(': ')[0], text: t.slice(t.indexOf(': ') + 2)}); }, demoLog: {add: (e) => { orders.push(e); return String(orders.length); }, outcome: (...a) => outcomes.push(a)}});
+    const runner = new BotRunner('bot1', {log: () => {}, ownerUuids: [uuid], onEvent: (b, k, t) => { if (k === 'say') whispers.push({name: t.split(': ')[0], text: t.slice(t.indexOf(': ') + 2)}); }});
     runner.bot = bot; runner.online = true;
     runner.snapshot = () => ({health: 20, food: 18, job: null, role: runner.role, freeSlots: 36, strangerOrders: runner.strangerOrders});
     runner.pump = () => {}; // keep the real enqueue/validation; no Minecraft work
@@ -93,9 +78,9 @@
     bot.emit('message', msg('[fancy8869 -> bot1] stopp'), 'system', null);
     assert.equal(enqueued.length, 1);
     const job = runner.queue[0];
-    runner.emit('done', 'finished: come', job.id + 1); assert.equal(outcomes.length, 0);
-    runner.emit('done', 'finished: come', job.id); assert.deepEqual(outcomes[0], ['1', 'finished', 'finished: come']);
-    runner.emit('done', 'finished: come', job.id); assert.equal(outcomes.length, 1);
+    runner.emit('done', 'finished: come', job.id + 1);
+    runner.emit('done', 'finished: come', job.id);
+    runner.emit('done', 'finished: come', job.id);
     runner.say = (text) => runner.emit('say', `fancy8869: ${text}`); // unthrottled stand-in for the queueing sayer
     runner.rolesFile = roles; runner.prefsFile = path.join(dir, 'prefs.json');
     bot.emit('message', msg('rolle sammler', true), 'chat', uuid);
@@ -111,7 +96,6 @@
     assert.equal(runner.current.cancelled, true); assert.equal(runner.queue.length, 1);
     assert.match(whispers.at(-1).text, /^ok: abgebrochen, weiter mit komm$/);
     runner.emit('stop', 'stopped: follow fancy8869', runner.current.id, 'folge'); // what the real pump does once the cancelled job ends
-    assert.ok(outcomes.some((o) => o[1] === 'stopped'));
     bot.emit('message', msg('alles stopp', true), 'chat', uuid);
     assert.equal(runner.queue.length, 0); assert.equal(whispers.at(-1).text, 'ok: alles gestoppt'); runner.current = null;
     // the player hears how an in-game order ended, and of a death
@@ -265,7 +249,7 @@
     const before = whispers.length;
     bot.emit('message', msg('abbau', true), 'chat', uuid); bot.emit('message', msg('abbau', true), 'chat', uuid);
     assert.deepEqual(whispers.slice(before).map((w) => w.text), ['ok: läuft schon']); assert.equal(runner.queue.length, 1);
-    assert.deepEqual([...runner.chatJobs], [runner.queue[0].id]); assert.ok(!runner.orders.has(runner.jobSeq)); assert.deepEqual(outcomes.at(-1).slice(1), ['finished', 'läuft schon']);
+    assert.deepEqual([...runner.chatJobs], [runner.queue[0].id]);
     delete runner.builderOrder; runner.queue = []; runner.current = null; runner.chatJobs.clear();
     runner.emit('done', 'finished: something else', 999); assert.ok(!whispers.some((w) => /something else/.test(w.text)));
     const nw = whispers.length; runner.emit('death', 'died at 1 2 3'); assert.equal(whispers.length, nw); // the hub tells of deaths, not the runner

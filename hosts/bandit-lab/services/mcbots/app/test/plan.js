@@ -241,5 +241,4 @@ const {WorldModel} = require('../world');
   assert.strictEqual(loadConfig({BOT_NAMES: 'bot1', PLAN_ENABLE: '', PLAN_ROSTER: ''}).planEnable, false);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PLAN_ENABLE: '1'}), /PLAN_ROSTER/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PLAN_ENABLE: '1', PLAN_ROSTER: 'steve'}), /bot names/);
-  assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PLAN_ENABLE: '1', PLAN_ROSTER: 'bot1', AGENT_TOKEN: 'a'.repeat(40), AGENT_BOTS: 'bot1'}), /agent bots/);
 }

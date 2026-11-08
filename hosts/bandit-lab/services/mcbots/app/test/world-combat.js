@@ -508,49 +508,13 @@ require('../crafting');
   assert.strictEqual(cleanPng('x'.repeat(230000)), null, 'too big');
   assert.strictEqual(cleanPng({}), null);
 }
-// alerts.js: chest gone/back once each, night/morning on change, mobs at most every 2 minutes.
+// chest panel: warnings, free slots travel with the stock
 {
-  const {Alerts, MOB_EVERY_MS} = require('../alerts');
-  const {EventLog} = require('../events');
-  let t = 0;
-  const ev = new EventLog({now: () => t});
-  const al = new Alerts({events: ev, now: () => t});
-  const chest = {x: 1, y: 2, z: 3};
-  al.check({chestBlock: 'chest', timeOfDay: 6000, hostiles: []}, chest);
-  assert.strictEqual(ev.items.length, 0, 'all well');
-  al.check({chestBlock: 'air', timeOfDay: 6000, hostiles: []}, chest);
-  al.check({chestBlock: 'air', timeOfDay: 6000, hostiles: []}, chest);
-  assert.deepStrictEqual(ev.items.map((e) => [e.kind, e.text]), [['alert', 'the supply chest at 1 2 3 is gone (air there now)']]);
-  al.check({chestBlock: null, timeOfDay: 14000, hostiles: [{type: 'creeper'}, {type: 'creeper'}, {type: 'zombie'}]}, chest);
-  assert.match(ev.items.at(-2).text, /night falls/);
-  assert.match(ev.items.at(-1).text, /creeper x2, zombie x1/);
-  t += 1000;
-  al.check({chestBlock: 'chest', timeOfDay: 14000, hostiles: [{type: 'creeper'}]}, chest);
-  assert.match(ev.items.at(-1).text, /is back/, 'no second mob alert within 2 minutes');
-  t += MOB_EVERY_MS;
-  al.check({chestBlock: 'chest', timeOfDay: 23500, hostiles: [{type: 'creeper'}]}, chest);
-  assert.deepStrictEqual(ev.items.slice(-2).map((e) => e.text.split(':')[0]), ['morning', 'hostile mobs near the base']);
-}
-// chest panel: warnings, the full alert fires once per fill, free slots travel with the stock
-{
-  const {Alerts, chestWarnings} = require('../alerts');
-  const {EventLog} = require('../events');
+  const {chestWarnings} = require('../notify');
   const {WorldModel} = require('../world');
   assert.deepStrictEqual(chestWarnings({bread: 3, torch: 8, stone_pickaxe: 1, oak_sapling: 4}, 20), []);
   assert.deepStrictEqual(chestWarnings({cobblestone: 64}, 3), ['full (3 free slots)', 'no food', 'no torches or coal', 'no pickaxes', 'no saplings']);
   assert.deepStrictEqual(chestWarnings({cooked_beef: 1, charcoal: 1, iron_pickaxe: 1, birch_sapling: 1}, null), [], 'unknown free slots: no full warning');
-  const ev = new EventLog();
-  const al = new Alerts({events: ev});
-  al.checkChest(null);
-  al.checkChest({items: {}, free: null});
-  al.checkChest({items: {}, free: 10});
-  assert.strictEqual(ev.items.length, 0);
-  al.checkChest({items: {}, free: 3});
-  al.checkChest({items: {}, free: 0});
-  assert.deepStrictEqual(ev.items.map((e) => [e.kind, e.text]), [['alert', 'the supply chest is full (3 free slots): empty it or build another chest']]);
-  al.checkChest({items: {}, free: 12});
-  al.checkChest({items: {}, free: 2});
-  assert.strictEqual(ev.items.length, 2, 'emptied, then full again: a new alert');
   const w = new WorldModel();
   w.noteStock('bot1', {coal: 2}, 7);
   assert.strictEqual(w.snapshot().stock.free, 7);
@@ -575,32 +539,7 @@ require('../crafting');
   require('node:fs').writeFileSync(require('node:path').join(dir, 'projects.json'), JSON.stringify({bot5: {type: 'say', args: {}}, bot6: {type: 'rim', args: 5}}));
   assert.deepStrictEqual(new Projects(dir).view(), {}, 'entries that are no project are dropped');
 }
-// crews.js: validation and persistence of the dashboard's crews, goals and bed slots
-{
-  const {Crews, MAX_GOAL} = require('../crews');
-  const dir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'mcbots-'));
-  const ctx = {agentBots: ['bot1', 'bot2', 'bot3', 'bot4'], bots: ['bot1', 'bot2', 'bot3', 'bot4', 'bot5']};
-  const c = new Crews(dir, ctx);
-  const agents = new Set(['bot1', 'bot2']);
-  assert.deepStrictEqual(c.data, {crews: {}, goals: {}, slots: {}});
-  c.set({crews: {bot1: ['bot3'], bot2: ['bot4']}, goals: {bot1: ' mine things '}, slots: {bot5: 2}}, agents);
-  assert.deepStrictEqual(new Crews(dir, ctx).data, {crews: {bot1: ['bot3'], bot2: ['bot4']}, goals: {bot1: 'mine things'}, slots: {bot5: 2}}, 'survives a restart');
-  c.set({crews: {bot1: ['bot4'], bot2: ['bot3']}}, agents); // a worker moves between agents
-  assert.deepStrictEqual(c.data.crews, {bot1: ['bot4'], bot2: ['bot3']});
-  assert.strictEqual(c.data.goals.bot1, 'mine things', 'sections left out stay');
-  const bad = [[{crews: {bot1: ['bot3'], bot2: ['bot3']}}, /two crews/], [{crews: {bot1: ['bot2']}}, /agent/], [{crews: {bot1: ['bot3'], bot3: ['bot4']}}, /agent/], [{crews: {bot5: []}}, /not an agent bot/],
-    [{crews: {bot1: ['bot9']}}, /not an agent bot/], [{crews: {bot1: 'bot3'}}, /list/], [{crews: {bot1: Array(13).fill('bot3')}}, /list/], [{goals: {bot1: ''}}, /goal/], [{goals: {bot1: 'x'.repeat(MAX_GOAL + 1)}}, /goal/],
-    [{goals: {bot7: 'x'}}, /not an agent bot/], [{slots: {bot5: 2, bot1: 2}}, /twice/], [{slots: {bot5: 14}}, /slot/], [{slots: {bot9: 1}}, /unknown bot/], [{slots: {bot5: 1.5}}, /slot/], [{junk: 1}, /unknown section/], [{crews: []}, /object/]];
-  for (const [input, re] of bad) assert.throws(() => c.set(input, agents), re, JSON.stringify(input).slice(0, 60));
-  assert.deepStrictEqual(c.data.crews, {bot1: ['bot4'], bot2: ['bot3']}, 'a refused edit changes nothing');
-  c.set({goals: 'x'.repeat(MAX_GOAL) && {bot2: 'x'.repeat(MAX_GOAL)}}, agents);
-  c.set({crews: null, goals: null, slots: null}, agents);
-  assert.deepStrictEqual(c.data, {crews: {}, goals: {}, slots: {}}, 'null clears a section: back to the env');
-}
-{ // the agent token reads the crews and nothing else of the dashboard's editors
-  const A = require('../agentauth');
-  assert.ok(A.agentEndpoint('GET', '/api/crews'));
-  for (const [m, u] of [['POST', '/api/crews'], ['POST', '/api/project'], ['GET', '/api/project'], ['POST', '/api/settings']]) assert.ok(!A.agentEndpoint(m, u), `${m} ${u}`);
+{ // the legacy page
   // the page's job picker only offers jobs the server validates, and its quick actions exist
   const html = require('node:fs').readFileSync(require('node:path').join(APP, 'public/legacy.html'), 'utf8');
   const picker = /const PICKER = \[([^\]]*)\]/.exec(html);

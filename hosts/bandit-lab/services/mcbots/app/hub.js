@@ -63,8 +63,8 @@ function cleanSnapshot(s) {
     isDay: typeof s.isDay === 'boolean' ? s.isDay : null,
     fit: bool(s.fit),
     combat: optStr(s.combat, 32),
-    sheltered: bool(s.sheltered), // agentauth refuses orders to a sheltered bot (server.js restingOf)
-    gettingFood: bool(s.gettingFood), // ... and to one fetching food
+    sheltered: bool(s.sheltered), // in its night shelter
+    gettingFood: bool(s.gettingFood), // hungry and fetching food
     job: job && {label: str(job.label, 160), progress: str(job.progress, 160), type: str(job.type, 32), done: int(job.done), total: int(job.total), runningS: int(job.runningS)},
     activity: str(s.activity, 200),
     dead: bool(s.dead),
@@ -127,7 +127,7 @@ function cleanPng(b64) {
   return buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? buf : null;
 }
 
-// A worker's scan (scan.js): the text, plus the data when it is small. Both are shown to an agent's model, so they are bounded.
+// A worker's scan (scan.js): the text, plus the data when it is small. Both are shown to the dashboard, so they are bounded.
 function cleanScan(m) {
   const text = typeof m?.text === 'string' ? m.text.slice(0, 400) : null;
   if (text === null) return null;

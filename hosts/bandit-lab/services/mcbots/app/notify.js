@@ -4,6 +4,21 @@ const TEN_MIN = 10 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
 const WORKER_LOSS = 5 * 60 * 1000;
 
+const FULL_BELOW = 4; // free slots in the supply chest
+const FOOD = /^(bread|apple|golden_apple|golden_carrot|carrot|baked_potato|cooked_\w+|melon_slice|sweet_berries|pumpkin_pie|cookie|beetroot_soup|mushroom_stew|rabbit_stew|dried_kelp)$/;
+
+// What the supply chest lacks (items: {name: count} as last counted, free: free slots or null when unknown).
+function chestWarnings(items, free) {
+  const has = (re) => Object.keys(items).some((n) => re.test(n));
+  const w = [];
+  if (free != null && free < FULL_BELOW) w.push(`full (${free} free slots)`);
+  if (!has(FOOD)) w.push('no food');
+  if (!has(/^(torch|coal|charcoal)$/)) w.push('no torches or coal');
+  if (!has(/_pickaxe$/)) w.push('no pickaxes');
+  if (!has(/_sapling$/)) w.push('no saplings');
+  return w;
+}
+
 class NtfyNotifier {
   constructor({url = process.env.NTFY_URL, topic = process.env.NTFY_TOPIC || 'mcbots', token = process.env.NTFY_TOKEN, now = Date.now, fetcher = globalThis.fetch} = {}) {
     this.now = now;
@@ -96,4 +111,4 @@ class NtfyNotifier {
   }
 }
 
-module.exports = {NtfyNotifier, TEN_MIN, HOUR, WORKER_LOSS};
+module.exports = {NtfyNotifier, chestWarnings, TEN_MIN, HOUR, WORKER_LOSS};

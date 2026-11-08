@@ -14,7 +14,7 @@ const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
 const {EventLog} = require('./events');
 const archive = require('./archive');
 const gravesLib = require('./graves');
-const {NtfyNotifier} = require('./notify');
+const {NtfyNotifier, chestWarnings} = require('./notify');
 const {Keeper, idle} = require('./keeper');
 const {TradeSchedule} = require('./tradeschedule');
 const {TraderChests} = require('./traderchests');
@@ -24,13 +24,11 @@ const {Plan} = require('./plan');
 const planConfig = require('./plan-config');
 const {botView} = require('./view');
 const {scanAround} = require('./scan');
-const {Alerts, chestWarnings} = require('./alerts');
 const {Settings} = require('./settings');
 const {Places, use: usePlaces, protectedBoxes} = require('./places');
 const {BlockLog, Exporter, areaBoxes} = require('./blocklog');
 const {Projects, PROJECTS} = require('./projects');
-const {Crews} = require('./crews');
-const agentauth = require('./agentauth');
+const orderloop = require('./orderloop');
 const voxels = require('./voxels');
 let voxelBusy = false; // one /api/voxels read at a time
 const {Admin, queued} = require('./admin');
@@ -47,10 +45,8 @@ const rescuers = []; // filled below, once the supply chest is known (rescue.js)
 // (archive.js); the 200-entry ring alone lost the night's deaths. SESSION tells server runs apart (dataset.js).
 const ARCHIVE = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'archive') : null;
 const SESSION = Date.now().toString(36);
-// The owner's orders (dashboard, not an agent): the job each bot was last given, {type, args}. Until that job finishes
-// (or the owner stops or replaces it) no agent order reaches the bot (agentauth): while it ran was not enough, the agents
-// took the bots in the gap after every restart, before their jobs resumed (2026-10-16). A failure starts the job again
-// later (agentauth.orderOutcome). Kept across restarts.
+// The owner's orders (dashboard): the job each bot was last given, {type, args}. A failure starts the job again
+// later (orderloop.orderOutcome). Kept across restarts.
 const ordersFile = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'owner-orders.json') : null;
 const ownerOrders = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(ordersFile, 'utf8'))).map(([b, o]) => [b, typeof o === 'string' ? {type: o} : o]); } catch { return []; } })());
 const saveOrders = () => { if (ordersFile) try { fs.writeFileSync(ordersFile, JSON.stringify(Object.fromEntries(ownerOrders))); } catch {} };
@@ -61,52 +57,52 @@ const idleSince = new Map(); // bot -> when the sweep first saw it with no job a
 const idleHeld = new Set(); // bots the owner stopped: no "Wenn frei" start until they get another job
 let idleStopAll = false; // Stop all: no idle start anywhere until the next non-stop job
 const orderRetryAt = new Map(); // bot -> before then a failed order does not start again
-const deathTimes = new Map(); // bot -> its recent deaths (agentauth.deathLoop)
+const deathTimes = new Map(); // bot -> its recent deaths (orderloop.deathLoop)
 const orderEnded = (e) => {
-  const order = ownerOrders.get(e.bot), out = agentauth.orderOutcome(e, order);
+  const order = ownerOrders.get(e.bot), out = orderloop.orderOutcome(e, order);
   if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
   if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + out.retry)); // never cuts a death hold short
   // A project goes on by itself whenever its bot is idle (sweep below) until it finishes; a failure waits like an order's.
-  const p = projects.get(e.bot), pout = p && !p.paused ? agentauth.orderOutcome(e, p) : null;
+  const p = projects.get(e.bot), pout = p && !p.paused ? orderloop.orderOutcome(e, p) : null;
   if (pout?.end) projects.forget(e.bot);
   if (pout?.retry && !out) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + pout.retry));
   // A job of the bot's idle type that ends (done or failed) leaves a pause before the next idle start.
-  const ic = idleStore.get(e.bot) && idleLib.choiceOf(idleStore.get(e.bot).id), iout = ic?.key && agentauth.orderOutcome(e, {type: ORDER_JOBS[ic.key].type, args: true});
-  if (iout) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + (iout.retry || agentauth.ORDER_RETRY_MS)));
+  const ic = idleStore.get(e.bot) && idleLib.choiceOf(idleStore.get(e.bot).id), iout = ic?.key && orderloop.orderOutcome(e, {type: ORDER_JOBS[ic.key].type, args: true});
+  if (iout) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + (iout.retry || orderloop.ORDER_RETRY_MS)));
   if (e.kind === 'death') { // every bot's, not only one with an order: a queue of jobs kills it just as well
-    const d = agentauth.deathLoop(deathTimes.get(e.bot) || [], e.t);
+    const d = orderloop.deathLoop(deathTimes.get(e.bot) || [], e.t);
     deathTimes.set(e.bot, d.times);
     if (d.hold) {
       const r = runners.get(e.bot), queued = r?.snapshot().queue?.length || 0;
       // A hold, not an end: the order or project starts again after DEATH_HOLD_MS (a paused project never did, bots slept).
-      orderRetryAt.set(e.bot, e.t + agentauth.DEATH_HOLD_MS);
+      orderRetryAt.set(e.bot, e.t + orderloop.DEATH_HOLD_MS);
       if (queued) {
         r.enqueue('stop');
         delete toResume[e.bot];
       }
-      events.add('base', 'alert', agentauth.deathLoopAlert(e.bot, order || (p && !p.paused ? p : null), queued));
+      events.add('base', 'alert', orderloop.deathLoopAlert(e.bot, order || (p && !p.paused ? p : null), queued));
     }
   }
 };
 // Every minute an owner order whose bot is online and idle starts again (after a failure's wait, also after a restart).
 setInterval(() => {
-  for (const [name, order] of agentauth.ordersToStart(ownerOrders, (n) => runners.get(n)?.snapshot(), orderRetryAt)) {
+  for (const [name, order] of orderloop.ordersToStart(ownerOrders, (n) => runners.get(n)?.snapshot(), orderRetryAt)) {
     orderRetryAt.delete(name);
     events.add(name, 'info', `the owner's ${order.type} order goes on`);
     try { runners.get(name).enqueue(order.type, order.args); } catch (err) {
-      orderRetryAt.set(name, Date.now() + agentauth.ORDER_RETRY_MS);
+      orderRetryAt.set(name, Date.now() + orderloop.ORDER_RETRY_MS);
       events.add(name, 'info', `the owner's ${order.type} order could not go on: ${err.message}`);
     }
   }
   // An idle bot without an owner order goes on with its project (paused ones only by Resume).
   const started = new Set();
   const projectOrders = new Map(Object.entries(projects.all).filter(([n, p]) => !p.paused && !ownerOrders.has(n) && runners.has(n)));
-  for (const [name, p] of agentauth.ordersToStart(projectOrders, (n) => runners.get(n)?.snapshot(), orderRetryAt)) {
+  for (const [name, p] of orderloop.ordersToStart(projectOrders, (n) => runners.get(n)?.snapshot(), orderRetryAt)) {
     orderRetryAt.delete(name);
     started.add(name);
     events.add(name, 'info', `its ${p.type} project goes on`);
     try { runners.get(name).enqueue(p.type, p.args); } catch (err) {
-      orderRetryAt.set(name, Date.now() + agentauth.ORDER_RETRY_MS);
+      orderRetryAt.set(name, Date.now() + orderloop.ORDER_RETRY_MS);
       events.add(name, 'info', `its ${p.type} project could not go on: ${err.message}`);
     }
   }
@@ -120,10 +116,10 @@ setInterval(() => {
     started.add(bot);
     try {
       const {type, args} = idleJob(bot, choice);
-      submitJob({bots: [bot], type, args, agent: false, remember: false});
+      submitJob({bots: [bot], type, args, remember: false});
       events.add(bot, 'info', `idle: ${choice.label}`);
     } catch (err) {
-      orderRetryAt.set(bot, Math.max(orderRetryAt.get(bot) || 0, Date.now() + agentauth.ORDER_RETRY_MS));
+      orderRetryAt.set(bot, Math.max(orderRetryAt.get(bot) || 0, Date.now() + orderloop.ORDER_RETRY_MS));
       events.add(bot, 'info', err.message === idleLib.NO_CHEST ? 'Wenn frei braucht eine Kiste' : `Wenn frei geht nicht: ${err.message}`);
     }
   }
@@ -138,20 +134,14 @@ setInterval(() => {
   }
 }, 60000).unref();
 const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); ingame?.event(e); ownAlerts?.event(e, runners.get(e.bot)?.snapshot()); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
-// What the LLM agents said and chose (POST /api/decision from the agent service), kept apart so
-// they never push job events out of the 200-entry event log.
-const decisions = new EventLog();
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
 const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
-const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.agentBots, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
-const agentStatuses = new Map(); // agent -> its last POST /api/agentstatus (goal, workers, role, t)
+const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...cfg.planRoster, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
-const demoLog = require('./owner').makeDemoLog(process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'demonstrations.jsonl') : null);
-const runners = new Map(cfg.names.map((n) => [n, new BotRunner(n, {host: cfg.mcHost, port: cfg.mcPort, log, world, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, loginSeed: cfg.loginSeed, hostLabel: cfg.hostLabel, ownerUuids: cfg.ownerUuids, demoLog, onEvent: (b, k, t) => events.add(b, k, t)})]));
+const runners = new Map(cfg.names.map((n) => [n, new BotRunner(n, {host: cfg.mcHost, port: cfg.mcPort, log, world, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, loginSeed: cfg.loginSeed, hostLabel: cfg.hostLabel, ownerUuids: cfg.ownerUuids, onEvent: (b, k, t) => events.add(b, k, t)})]));
 const settings = new Settings(process.env.STATE_DIR || '');
 const projects = new Projects(process.env.STATE_DIR || '');
-const crews = new Crews(process.env.STATE_DIR || '', {agentBots: cfg.agentBots, bots: cfg.names});
 for (const r of runners.values()) r.getSettings = () => settings.get(r.name);
 if (ARCHIVE) setInterval(() => { try { archive.append(path.join(ARCHIVE, 'states.jsonl'), {server_session: SESSION, t: Date.now(), bots: [...runners.values()].map((r) => r.snapshot())}); } catch {} }, 30000).unref();
 const page = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
@@ -210,10 +200,10 @@ function stopAll() {
   idleStopAll = true;
   return keeperOff;
 }
-// The body of POST /api/job after the origin and agent checks, also behind the in-game UI (botui.js); throws the refusal.
+// The body of POST /api/job after the origin check, also behind the in-game UI (botui.js); throws the refusal.
 // "all" skips remote bots whose worker is away, so a Stop reaches every bot that can still hear it; naming an offline bot is an error.
 // remember: false keeps the job out of the standing orders and projects (the "Wenn frei" jobs restart by the idle sweep).
-function submitJob({bots, type, args, replace, agent = false, remember = true}) {
+function submitJob({bots, type, args, replace, remember = true}) {
   if (type === 'setchest') remember = false; // a setting, not an order to repeat
   const all = bots === 'all';
   const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
@@ -230,7 +220,7 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
       if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); skipped.push(r.name); continue; }
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
       r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' ? {first: true} : {})});
-      if (!agent && remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
+      if (remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
       if (remember) { type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {
         delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
@@ -241,7 +231,7 @@ function submitJob({bots, type, args, replace, agent = false, remember = true}) 
       errors.push(`${r.name}: ${e.message}`); // one bot failing must not keep the others from getting the job
     }
   }
-  if (!agent) saveOrders();
+  saveOrders();
   // Stop all is authoritative here, not in the browser: standing orders off first
   // (they would hand idle bots new work), then every pending recovery dropped.
   let keeperOff = false;
@@ -312,13 +302,13 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
     submit: (viewer, {bots, type, args, replace}) => {
       for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
-      const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, agent: false});
+      const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace});
       for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
       return out;
     },
     stopAll: (viewer) => {
       const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);
-      return bots.length ? submitJob({bots, type: 'stop', agent: false}) : {ok: true, keeperOff: false, unreached: []};
+      return bots.length ? submitJob({bots, type: 'stop'}) : {ok: true, keeperOff: false, unreached: []};
     },
     // Kommandostand: the caller has checked the viewer's rights. set throws a short German Error, else {ok, label}.
     idle: {
@@ -368,7 +358,6 @@ function applyPlaces() {
 }
 applyPlaces();
 // The plan (R7): available only with PLAN_ENABLE; whether it is switched on, and what it has done, is kept in plan.json.
-const SOLVER_SKIPPABLE = new Set(planConfig.OBJECTIVES.filter((o) => o.onBlocked === 'skip' && !planConfig.OBJECTIVES.some((x) => x.needs.includes(o.id))).map((o) => o.id));
 const plan = cfg.planEnable ? new Plan({runners, world, keeper, places, events, objectives: planConfig.OBJECTIVES, roster: cfg.planRoster, chest: planConfig.BASE.chest, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'plan.json') : null, log}) : null;
 
 // Long jobs survive a restart (deploys restart the container): every 5 s the
@@ -436,8 +425,6 @@ const authorized = (req) => {
   if (cfg.trustedProxies.length && !cfg.trustedProxies.includes(peer(req))) return false;
   return cfg.allowed.includes(req.headers['tailscale-user-login']);
 };
-const solverLimiter = new agentauth.SolverLimiter();
-const agentTokenHash = cfg.agentToken ? agentauth.hash(cfg.agentToken) : null;
 // Cross-site guard: browsers send Origin on POST/WS; it must match Host.
 const sameOrigin = (req) => {
   const o = req.headers.origin;
@@ -528,9 +515,6 @@ async function tile(rel) {
   return body;
 }
 
-// A bot in its night shelter or fetching food takes no agent order (agentauth restingOf), or null.
-const busyOf = (s) => (!s ? null : s.sheltered ? `${s.name} shelters in the ground until morning; it takes orders again then` : s.gettingFood ? `${s.name} is hungry (food ${s.food}) and fetching food; it takes orders again once it has some` : null);
-
 const server = http.createServer(async (req, res) => {
   const send = (code, type, body, policy = CSP) => {
     res.writeHead(code, {'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': policy, 'Referrer-Policy': 'no-referrer'});
@@ -544,11 +528,7 @@ const server = http.createServer(async (req, res) => {
     return uploadsLib.handle(req, res, url, {uploads, dir: SCHEMATIC_DIR, parse: (b, o) => schematicLib.parseLitematic(b, o), page: uploadPage, csp: UPLOAD_CSP, events,
       say: (p, b, t) => ingame?.say(p, b, t), fileRe: buildLib.SCHEMATIC_RE, sameOrigin, log: (m) => log('upload', m)}).catch((e) => { log('upload', e.message); if (!res.headersSent) json(500, {error: 'Fehler'}); });
   }
-  // A request with a bearer is the agent service (H5) and nothing else: a wrong token never falls
-  // back to the human path, and the token only reaches state, events and its own bots' jobs.
-  const agent = agentauth.bearerMatches(req.headers.authorization, agentTokenHash);
-  if (agent === false || (agent && !agentauth.agentEndpoint(req.method, url.pathname))) return json(403, {error: 'forbidden'});
-  if (!agent && !authorized(req)) {
+  if (!authorized(req)) {
     if (req.headers['tailscale-user-login']) log('auth', `refused a Tailscale identity from ${peer(req)} (not a trusted proxy)`);
     return json(403, {error: 'forbidden'});
   }
@@ -620,10 +600,10 @@ const server = http.createServer(async (req, res) => {
   // The 3D map's presets (the plan's areas) and the bots an order may go to; no secrets.
   if (req.method === 'GET' && url.pathname === '/api/areas') {
     const zones = places.list.filter((p) => p.box);
-    return json(200, {areas: Object.fromEntries(zones.map((p) => [p.name, p.box])), zones, agentBots: cfg.agentBots, roster: cfg.planRoster || [], protectedAreas: cfg.protectedAreas});
+    return json(200, {areas: Object.fromEntries(zones.map((p) => [p.name, p.box])), zones, roster: cfg.planRoster || [], protectedAreas: cfg.protectedAreas});
   }
   // Blocks of a box for the dashboard's 3D map, read from the bot nearest to its centre whose chunks are
-  // loaded. Human path only (not an agent endpoint). Only bots of this process are readable: a worker's
+  // loaded. Only bots of this process are readable: a worker's
   // bots (RemoteRunner) keep their chunks in the worker, and there is no RPC for them.
   if (req.method === 'GET' && url.pathname === '/api/voxels') {
     if (voxelBusy) return json(429, {error: 'another map read is running, try again in a moment'});
@@ -658,50 +638,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === 'GET' && url.pathname === '/api/events') return json(200, {lastId: events.lastId, events: events.since(Number(url.searchParams.get('since')) || 0)});
-  if (req.method === 'GET' && url.pathname === '/api/decisions') return json(200, {lastId: decisions.lastId, events: decisions.since(Number(url.searchParams.get('since')) || 0)});
-  if (req.method === 'POST' && url.pathname === '/api/decision') {
-    if (!agent) return json(403, {error: 'forbidden'}); // only the agent service reports decisions
-    try {
-      const {bot, text, backend = 'lab'} = await readJson(req);
-      if (!cfg.agentBots.includes(bot) || typeof text !== 'string') throw new Error('bot must be an agent bot, text a string');
-      if (!agentauth.validBackend(backend)) throw new Error('backend must be a name of at most 128 characters');
-      decisions.add(bot, 'info', text.replace(/\s+/g, ' ').trim()).backend = backend;
-      return json(200, {ok: true});
-    } catch (e) {
-      return json(400, {error: e.message});
-    }
-  }
-  if (req.method === 'POST' && url.pathname === '/api/agentstatus') {
-    if (!agent) return json(403, {error: 'forbidden'});
-    try {
-      const st = agentauth.agentStatus(await readJson(req), {agentBots: cfg.agentBots});
-      if (st.error) throw new Error(st.error);
-      agentStatuses.set(st.agent, {...st, t: Date.now()});
-      return json(200, {ok: true});
-    } catch (e) {
-      return json(400, {error: e.message});
-    }
-  }
-  if (req.method === 'GET' && url.pathname === '/api/crews') return json(200, crews.data);
-  // The problem solver's notes, escalations and plan skips (agentauth.solverAction). Agent token only.
-  if (req.method === 'POST' && url.pathname === '/api/solver') {
-    if (!agent) return json(403, {error: 'forbidden'});
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
-    try {
-      // Only an optional objective may be skipped by the solver: one the plan itself would skip when blocked and
-      // that nothing later needs. It skipped the shaft (the main project) over missing torches (2026-10-11).
-      const blocked = plan ? [...new Set([...plan.blocked.keys(), ...plan.parked])].filter((id) => SOLVER_SKIPPABLE.has(id)) : [];
-      const r = agentauth.solverAction(await readJson(req), {agentBots: cfg.agentBots, roster: cfg.planRoster || [], blocked, limiter: solverLimiter});
-      if (r.error) return json(403, {error: r.error});
-      if (r.skip) plan.skip(r.skip);
-      events.add(r.bot, r.kind, r.text);
-      broadcast();
-      return json(200, {ok: true});
-    } catch (e) {
-      return json(400, {error: e.message});
-    }
-  }
-  if (req.method === 'GET' && url.pathname === '/api/agents') return json(200, [...agentStatuses.values()]);
   if (req.method === 'GET' && url.pathname === '/api/world') return json(200, world.snapshot());
   const vm = req.method === 'GET' && /^\/api\/view\/(\w{1,16})\.png$/.exec(url.pathname);
   if (vm) {
@@ -726,7 +662,6 @@ const server = http.createServer(async (req, res) => {
   }
   const sm = req.method === 'GET' && /^\/api\/scan\/(\w{1,16})$/.exec(url.pathname);
   if (sm) {
-    if (agent && !cfg.agentBots.includes(sm[1]) && !(cfg.planRoster || []).includes(sm[1])) return json(403, {error: 'not an agent or roster bot'}); // the agent token reaches its own bots and the plan roster (the solver reads their surroundings)
     const r = runners.get(sm[1]);
     if (!r || !r.online) return json(404, {error: 'offline or unknown bot'});
     try {
@@ -761,7 +696,7 @@ const server = http.createServer(async (req, res) => {
     }
     return json(200, {generatedAt: new Date().toISOString(), generatedAtMs: Date.now(), windowS: WINDOW_MS / 1000, bots, workers});
   }
-  // Server admin: human path only (agentEndpoint never lists these, so a bearer is refused above).
+  // Server admin: human path only (no bearer path any more).
   if (url.pathname.startsWith('/api/admin/')) {
     const post = req.method === 'POST';
     if (!admin) return json(503, {error: 'server admin is not configured (RCON_HOST, RCON_PASSWORD)'});
@@ -847,17 +782,6 @@ const server = http.createServer(async (req, res) => {
       return json(400, {error: e.message});
     }
   }
-  if (req.method === 'POST' && url.pathname === '/api/crews') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
-    try {
-      const input = await readJson(req);
-      const data = crews.set(input, new Set([...agentStatuses.keys(), ...Object.keys(crews.data.crews)]));
-      events.add('crews', 'info', `crews edited: ${Object.keys(input).join(', ')}`);
-      return json(200, data);
-    } catch (e) {
-      return json(400, {error: e.message});
-    }
-  }
   // Pause/Stop end a bot's project (the running one, else the queued ones); Resume queues the last one again.
   if (req.method === 'POST' && url.pathname === '/api/project') {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
@@ -889,10 +813,8 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/api/job') {
     if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
     try {
-      const {bots, type, args, replace, solver} = await readJson(req);
-      const refused = agent && agentauth.agentJobRefusal({bots, type, args, replace, solver}, {agentBots: cfg.agentBots, supplyChest, roster: cfg.planRoster || [], places: places.list, jobOf: (n) => runners.get(n)?.snapshot().job, restingOf: (n) => agentauth.resting(events.since(0), n) || busyOf(runners.get(n)?.snapshot()), ownerOrderOf: (n) => ownerOrders.get(n)?.type, limiter: solverLimiter});
-      if (refused) return json(403, {error: refused});
-      const {saveErr, unreached, keeperOff} = submitJob({bots, type, args, replace, agent});
+      const {bots, type, args, replace} = await readJson(req);
+      const {saveErr, unreached, keeperOff} = submitJob({bots, type, args, replace});
       if (saveErr) return json(500, {error: `stopped, but the stopped state could not be saved (${saveErr}): saved jobs may come back after a restart`, unreached});
       return json(200, {ok: true, keeperOff, unreached});
     } catch (e) {
@@ -1020,23 +942,13 @@ const evictTick = admin && process.env.MC_VHOST ? setInterval(() => {
   if (sandboxConsole) admin.returnBots(sandboxConsole).then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} from the sandbox back to the real server`), () => {});
 }, 30000) : null;
 
-// Alerts for the lead agent (alerts.js), from what a local bot in the overworld sees.
-const alerts = new Alerts({events});
-const alertTick = setInterval(() => {
+// ntfy: the supply chest's lacks and a worker that stays away.
+const notifyTick = setInterval(() => {
   try {
-    alerts.checkChest(supplyStock());
     notifier.chest(supplyStock(), supplyStock() && chestWarnings(supplyStock().items, supplyStock().free));
     notifier.tick();
-    const r = [...runners.values()].find((x) => !(x instanceof RemoteRunner) && x.online && x.bot?.entity && /overworld/.test(x.bot.game?.dimension || ''));
-    if (!r || !supplyChest) return;
-    const {Vec3} = require('vec3');
-    alerts.check({
-      chestBlock: r.bot.blockAt(new Vec3(supplyChest.x, supplyChest.y, supplyChest.z))?.name ?? null,
-      timeOfDay: r.bot.time?.timeOfDay,
-      hostiles: world.hostilesNear(supplyChest.x, supplyChest.z, 'overworld', 16),
-    }, supplyChest);
   } catch (e) {
-    log('alerts', `error: ${e.message}`);
+    log('notify', `error: ${e.message}`);
   }
 }, 5000);
 
@@ -1053,7 +965,7 @@ function shutdown() {
   clearInterval(jobsTimer); // first: stopping the bots cancels their jobs, which must not be saved
   clearInterval(tick);
   clearInterval(keeperTick);
-  clearInterval(alertTick);
+  clearInterval(notifyTick);
   clearInterval(evictTick);
   clearInterval(blocklogTimer);
   blocklog.flush();

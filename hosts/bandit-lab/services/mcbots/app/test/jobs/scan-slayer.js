@@ -7,7 +7,6 @@ module.exports = async () => {
     const {tidyTargets} = require('../../tidy');
     const {cleanScan, RemoteRunner} = require('../../hub');
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
-    const A = require('../../agentauth');
     const {Vec3} = require('vec3');
     // A world of stone below y 64 and air above; `set` overrides single blocks by "x,y,z".
     const worldOf = (set = {}) => (v) => {
@@ -65,8 +64,6 @@ module.exports = async () => {
       assert.strictEqual(await rr.askScan(20), null, 'no answer: null after the wait');
       assert.strictEqual(sent.length, 2);
     }
-    assert.ok(A.agentEndpoint('GET', '/api/scan/bot16') && !A.agentEndpoint('POST', '/api/scan/bot16'));
-    assert.strictEqual(A.agentJobRefusal({bots: ['bot16'], type: 'tidy', args: {radius: 24}}, {agentBots: ['bot16'], supplyChest: {x: 1, y: 2, z: 3}}), null);
 
     // tidy: validation, the pure choice of items, then the job against a fake bot
     assert.deepStrictEqual(VALIDATE.tidy({}), {radius: 16});

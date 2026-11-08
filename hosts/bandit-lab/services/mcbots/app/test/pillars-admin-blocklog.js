@@ -117,8 +117,6 @@ const assert = require('node:assert');
     await ad.act('restart');
     srv.close();
   });
-  const A2 = require('../agentauth');
-  for (const [m, u] of [['GET', '/api/admin/status'], ['GET', '/api/admin/query'], ['GET', '/api/admin/console'], ['POST', '/api/admin/action']]) assert.ok(!A2.agentEndpoint(m, u), `agent token must not reach ${u}`);
   const cfgAdmin = require('../config').loadConfig;
   assert.throws(() => cfgAdmin({BOT_NAMES: 'bot1', RCON_HOST: 'minecraft'}), /RCON_HOST and RCON_PASSWORD/);
   assert.deepStrictEqual(cfgAdmin({BOT_NAMES: 'bot1', RCON_HOST: 'minecraft', RCON_PASSWORD: 'x', BOT_PASSWORD_SEED: 's'}).rcon, {host: 'minecraft', port: 25575, password: 'x'});

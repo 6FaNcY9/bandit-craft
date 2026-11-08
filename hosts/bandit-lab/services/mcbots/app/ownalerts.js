@@ -1,6 +1,6 @@
 'use strict';
 // What a bot's owner hears in chat about their servant (dies, sticks, lacks material, long job done) and the digest
-// when they join. Base alerts for the owner's phone are alerts.js; this is the in-game side.
+// when they join. Base alerts for the owner's phone are notify.js; this is the in-game side.
 const {germanReason} = require('./owner');
 const RATE_MS = 600000;
 const MAX_LINES = 6;

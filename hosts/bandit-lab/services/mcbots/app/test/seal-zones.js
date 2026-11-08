@@ -184,5 +184,4 @@ const {VALIDATE} = require('../bots');
   fs.writeFileSync(path.join(dir, 'chests.json'), JSON.stringify(Object.fromEntries(w.chests)));
   w2.persistChests(path.join(dir, 'chests.json'));
   assert.strictEqual(w2.chests.get('-251,59,-214').items.iron_ingot, 9, 'reloads');
-  assert.ok(require('../agentauth').agentEndpoint('GET', '/api/storage/find'));
 }

@@ -60,7 +60,7 @@
   const n = t.said.length; lastJob.t.done = 8; lastJob.t.total = 10; await sleep(60); // would be 80 % if the timer still ran
   assert.equal(t.said.length, n);
   // dropped queue and "zu oft unterbrochen"
-  t = mk(true, false); t.r.queue = [{id: 50, type: 'come', args: {}}]; t.r.chatJobs.add(50); t.r.orders.set(50, 'x'); t.r.dropQueue();
+  t = mk(true, false); t.r.queue = [{id: 50, type: 'come', args: {}}]; t.r.chatJobs.add(50); t.r.dropQueue();
   assert.equal(t.said.at(-1), 'gestoppt: komm');
   t.r.chatJobs.add(51); t.r.resumeLater({id: 51, type: 'mine', args: {block: 'stone', count: 3}, interruptions: 3}, 'died');
   assert.equal(t.said.at(-1), 'Problem: hol 3 stein: zu oft unterbrochen');

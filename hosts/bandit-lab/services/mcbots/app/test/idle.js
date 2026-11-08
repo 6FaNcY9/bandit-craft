@@ -2,7 +2,7 @@
 (async () => {
   const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
   const {IdleStore, idleToStart, resolveIdle, choiceOf, trackIdle, CHOICES} = require('../idle');
-  const agentauth = require('../agentauth');
+  const orderloop = require('../orderloop');
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mcbots-idle-'));
   try {
     assert.deepEqual(CHOICES.map((c) => c.id), ['holz', 'stein', 'wache', 'baumfarm', 'keeper']);
@@ -38,9 +38,9 @@
     // idle: a failing pref waits ORDER_RETRY_MS
     store.set('MisaBot', 'holz');
     assert.equal(run(t0 + 200000).length, 1);
-    retryAt.set('MisaBot', t0 + 200000 + agentauth.ORDER_RETRY_MS);
-    assert.deepEqual(run(t0 + 200000 + agentauth.ORDER_RETRY_MS - 1), []);
-    assert.equal(run(t0 + 200000 + agentauth.ORDER_RETRY_MS).length, 1);
+    retryAt.set('MisaBot', t0 + 200000 + orderloop.ORDER_RETRY_MS);
+    assert.deepEqual(run(t0 + 200000 + orderloop.ORDER_RETRY_MS - 1), []);
+    assert.equal(run(t0 + 200000 + orderloop.ORDER_RETRY_MS).length, 1);
     // offline, queue, held (the server passes held bots as busy)
     snaps.set('MisaBot', {...idle, online: false}); assert.deepEqual(run(t0 + 500000), []);
     snaps.set('MisaBot', {...idle, connected: false}); assert.deepEqual(run(t0 + 500000), []);

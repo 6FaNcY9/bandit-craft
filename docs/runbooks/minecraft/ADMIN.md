@@ -32,8 +32,7 @@ time and weather, the ImageFrame list, a command console and "restart with warni
   and reaches Paper (`/run/minecraft-rcon/rcon.env`) and the dashboard (`mcbots-seed`) as
   environment files. Since 5.5 the password is the SOPS secret `minecraft-rcon-password`
   (bandit-nix `secrets/lab.yaml`); rotate it there, deploy, restart `docker-mcbots`.
-- Access: `/api/admin/*` is human-only. The agent bearer token is refused (deny-by-default list in
-  `agentauth.js`), POSTs need same origin and JSON like every other dashboard POST, names must
+- Access: `/api/admin/*` is human-only (Tailscale login), POSTs need same origin and JSON like every other dashboard POST, names must
   match `[A-Za-z0-9_]{1,16}`, commands are at most 200 characters on one line, and every
   action is written to the events feed (`admin: kick X`).
 - Console shows the commands you send and Paper's replies only. `latest.log` is not mounted into

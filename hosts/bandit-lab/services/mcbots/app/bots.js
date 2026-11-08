@@ -357,7 +357,7 @@ const chatLabel = (j) => owner.chatLabel(j, jobLabel(j));
 const jobLabel = (j) => `${j.type} ${Object.values(j.args).map((v) => (Array.isArray(v) ? `${v.length} blocks` : v && typeof v === 'object' ? `at ${at(v)}` : v)).join(' ')}`;
 
 class BotRunner {
-  constructor(name, {host, port, log, world, protectedAreas = [], supplyChest = null, loginSeed = null, hostLabel = '', onEvent = null, ownerUuids = [], demoLog = null}) {
+  constructor(name, {host, port, log, world, protectedAreas = [], supplyChest = null, loginSeed = null, hostLabel = '', onEvent = null, ownerUuids = []}) {
     this.name = name;
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
@@ -391,8 +391,6 @@ class BotRunner {
     this.stopped = false; // process shutdown
     this.jobSeq = 0;
     this.ownerUuids = ownerUuids;
-    this.demoLog = demoLog;
-    this.orders = new Map();
     this.chatJobs = new Set(); // in-game orders whose outcome is whispered back to the player who gave it
     this.strangerOrders = 0;
     this.rolesFile = process.env.STATE_DIR ? require('node:path').join(process.env.STATE_DIR, 'roles.json') : null;
@@ -432,12 +430,6 @@ class BotRunner {
   }
 
   emit(kind, text, jobId, chatText = text) { // text is the English log line; chatText what the player hears
-    const id = this.orders.get(jobId);
-    if (id && ['done', 'fail', 'stop'].includes(kind)) {
-      this.orders.delete(jobId);
-      try { this.demoLog?.outcome(id, {done: 'finished', fail: 'failed', stop: 'stopped'}[kind], text); }
-      catch (e) { this.log(this.name, `demonstration: ${e.message}`); }
-    }
     // Without this a player hears only "ok" and must guess whether the order worked (guest bot, 2026-10-29).
     if (['done', 'fail', 'stop'].includes(kind) && this.chatJobs.delete(jobId)) this.say(`${{done: 'fertig', fail: 'Problem', stop: 'gestoppt'}[kind]}: ${chatText}`);
     try {
@@ -462,13 +454,12 @@ class BotRunner {
       const name = player?.username;
       if (!name || !/^\w{1,16}$/.test(name)) return;
       this.answerTo = name;
-      let id, jobId;
+      let jobId;
       try {
         let command = owner.translate(order.words, {owner: name, ownerPos: player.entity?.position || null});
-        id = this.demoLog?.add({bot: this.name, via: whisper ? 'whisper' : 'chat', text, command, state: this.snapshot()});
         command = this.builderOrder(command, player, name);
-        if (command.unknown) { this.say(owner.HELP); this.demoLog?.outcome(id, 'unknown', owner.HELP); return; }
-        if (command.help) { this.say(owner.HELP2); this.demoLog?.outcome(id, 'finished', owner.HELP2); return; }
+        if (command.unknown) { this.say(owner.HELP); return; }
+        if (command.help) { this.say(owner.HELP2); return; }
         const now = command.now;
         const job = command.type ? command : now;
         if (job?.type === 'trade') { // every bot trades in its own hall, else Misa's
@@ -483,12 +474,11 @@ class BotRunner {
           if (!this.online || this.dead) throw new Error(this.dead ? 'bot is dead' : 'bot is offline');
           VALIDATE[job.type](job.args); // refuse before touching the queue
           jobId = this.jobSeq + 1;
-          if (id) this.orders.set(jobId, id);
           this.chatJobs.add(jobId);
           wait = this.chatEnqueue(job.type, job.args, {now: !!now});
           if (!wait && jobId !== this.current?.id && !this.queue.some((j) => j.id === jobId)) { // a duplicate area order: enqueue dropped it
-            this.chatJobs.delete(jobId); this.orders.delete(jobId);
-            this.say('ok: läuft schon'); this.demoLog?.outcome(id, 'finished', 'läuft schon');
+            this.chatJobs.delete(jobId);
+            this.say('ok: läuft schon');
             return;
           }
         } else if (command.stop || command.stopAll) {
@@ -503,7 +493,7 @@ class BotRunner {
           else {
             const [j] = this.queue.splice(n - 1, 1);
             if (q.first) { this.queue.unshift(j); queued = `als nächstes: ${chatLabel(j)}`; }
-            else { this.orders.delete(j.id); this.chatJobs.delete(j.id); queued = `weg: ${chatLabel(j)}`; }
+            else { this.chatJobs.delete(j.id); queued = `weg: ${chatLabel(j)}`; }
           }
         } else if (command.verbose !== undefined) {
           savePrefs(this.prefsFile, this.name, {verbose: command.verbose}); this.prefs.verbose = command.verbose;
@@ -523,12 +513,9 @@ class BotRunner {
         const statusLine = s && `Leben ${s.health}, Essen ${s.food}, ${s.job ? (this.current ? chatLabel(this.current) : s.job.label || '').slice(0, 24) + (s.job.total > 0 ? ` ${Math.round(100 * s.job.done / s.job.total)}%` : '') : 'frei'}, Liste ${this.queue.length}, Inventar ${Math.round(100 * (36 - (s.freeSlots ?? 36)) / 36)}%, Kiste ${this.prefs.chest ? 'ja' : 'nein'}`;
         const receipt = wait ? `kommt dran, Platz ${wait}` : command.receipt ?? statusLine ?? queued ?? (command.role ? `Rolle ${command.role}` : {come: 'komme', follow: 'folge dir', guard: 'halte Wache', mine: 'sammle', chop: 'hole Holz', give: 'bringe dir alles', clear: 'baue ab', schematic: 'baue'}[job?.type] ?? 'verstanden');
         if (!job || wait) this.say(`ok: ${receipt}`); // a job that starts at once is acknowledged by its start line
-        if (!job) this.demoLog?.outcome(id, 'finished', receipt);
       } catch (e) {
-        this.orders.delete(jobId);
         this.chatJobs.delete(jobId);
         this.say(`geht nicht: ${e.message}`);
-        try { if (id) this.demoLog?.outcome(id, 'refused', e.message); } catch (err) { this.log(this.name, `demonstration: ${err.message}`); }
       }
     });
   }
@@ -583,7 +570,7 @@ class BotRunner {
   }
 
   dropQueue() {
-    for (const j of this.queue) if (this.orders.has(j.id)) this.emit('stop', `stopped: ${jobLabel(j)}`, j.id, chatLabel(j));
+    for (const j of this.queue) if (this.chatJobs.has(j.id)) this.emit('stop', `stopped: ${jobLabel(j)}`, j.id, chatLabel(j));
     this.queue = [];
   }
 
@@ -1017,8 +1004,8 @@ class BotRunner {
       isDay: this.online ? b.time?.isDay ?? (Number.isFinite(b.time?.timeOfDay) && b.time.timeOfDay >= 0 && b.time.timeOfDay < 12000) : null,
       fit: this.online ? !!this.combat?.fit?.() : false, // the keeper sends only a fit bot to a spawner
       combat: this.combat.mode || null,
-      sheltered: this.inShelter() && !!b && isNight(b), // in its night shelter (nightShelter): agents leave it alone until morning
-      gettingFood: !!this.gettingFood, // hungry and fetching food (upkeep): agents leave it alone until it has some
+      sheltered: this.inShelter() && !!b && isNight(b), // in its night shelter (nightShelter)
+      gettingFood: !!this.gettingFood, // hungry and fetching food (upkeep)
       job: this.current && {label: label(this.current), progress: this.current.progress, type: this.current.type, done: this.current.t?.done || 0, total: this.current.t?.total || 0, runningS: Math.round((Date.now() - (this.current.startedAt || Date.now())) / 1000)},
       activity: this.activity(),
       dead: this.dead,
@@ -1190,7 +1177,7 @@ async function waitCalm(r, job, until = Infinity) {
 // bot3 died at night in the forest (zombies, an enderman: main server 2026-10-13/14), and the base is dark too.
 // Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
-const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (alerts.js)
+const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (odds.js)
 const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 // Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.
@@ -2318,8 +2305,7 @@ async function care(r, job) {
   if (needFood && r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
     r.foodTriedAt = Date.now();
     r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from the supply chest`);
-    // Agents take no order while this runs (server.js restingOf): bot1's agent replaced its job right after
-    // "getting bread from the wheat field", and it stayed at food 0 and 4.7 health (2026-10-15).
+    // Shown in the snapshot while this runs.
     r.gettingFood = true;
     try {
       await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {

@@ -15,13 +15,6 @@ const places = [
 const idleBot = (name, extra = {}) => ({name, online: true, dead: false, health: 20, food: 18, pos: [1, 64, 2], job: null, queue: [], inventory: ['cobblestone x32', 'stick x2'], lastError: '', lastErrorAgoS: null, ...extra});
 const mkState = (bots, plan = {}) => ({bots, supplyChest: chest, places, world: {stock: {items: {coal: 3, bread: 40}}}, plan: {roster: ['bot3', 'bot4'], current: {id: 'iron', label: 'Get iron', pct: 20, note: 'short: iron 0/32'}, parked: [], ...plan}});
 
-// MENU_JOBS mirrors the dashboard's allowlist (mcbots agentauth.js)
-{
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../hosts/bandit-lab/services/mcbots/app/agentauth.js'), 'utf8');
-  const m = /const SOLVER_JOBS = new Set\(\[([^\]]*)\]\)/.exec(src);
-  assert.deepStrictEqual(m[1].split(',').map((x) => x.trim().replace(/'/g, '')).sort(), [...MENU_JOBS].sort());
-}
-
 // reply parsing against the menu
 {
   const menu = S.menuFor({kind: 'job failed'}, true);
