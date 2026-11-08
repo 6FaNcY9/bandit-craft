@@ -1,8 +1,7 @@
 'use strict';
-// Servants empty into their own chest after work (bots.js shouldEmpty), and the bot screen says where the chest is.
+// Servants empty into their own chest after work (bots.js shouldEmpty).
 const assert = require('node:assert/strict');
 const {shouldEmpty} = require('../bots');
-const screens = require('../botui-screens');
 
 const job = (type) => ({id: 1, type, args: {}, status: 'done'});
 const prefs = {chest: {x: 1, y: 2, z: 3}};
@@ -18,14 +17,6 @@ assert.equal(shouldEmpty({...job('get'), status: 'failed'}, [], prefs, 3), true,
 assert.equal(shouldEmpty({...job('mine'), status: 'stopped'}, [], prefs, 3), false, 'stopped');
 assert.equal(shouldEmpty({...job('mine'), interrupted: true}, [], prefs, 3), false, 'interrupted');
 
-{ // bot screen line
-  const text = (s) => JSON.stringify(s);
-  const view = (chest) => ({snaps: [{name: 'MisaBot', online: true, health: 20, food: 20, freeSlots: 5, chest}], allowed: ['MisaBot']});
-  const withChest = text(screens.bot(view({x: 1, y: 64, z: -3}), 'MisaBot'));
-  const without = text(screens.bot(view(null), 'MisaBot'));
-  assert.ok(withChest.includes('Kiste: 1 64 -3'), withChest.slice(0, 300));
-  assert.ok(without.includes('Kiste: keine – Zauberstab auf eine Kiste'));
-}
 { // setchest applies at once: queue and running job stay untouched; unseen chunk accepted, a seen non-chest refused
   const {BotRunner} = require('../bots');
   const saved = [];

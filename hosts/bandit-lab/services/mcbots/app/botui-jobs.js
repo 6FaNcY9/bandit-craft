@@ -90,33 +90,6 @@ const AREA = Object.keys(JOBS).filter((k) => JOBS[k].needs.includes(area));
 
 const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
 
-// What a gazed block offers, most useful first. preset: the target (when the job uses one) and the block name.
-// bots: the bots the viewer commands (all names for the owner); an aimed-at one of them gets a botscreen row.
-function contextJobs(gaze, allowed = '*', viewer, bots = Array.isArray(allowed) ? allowed : []) {
-  if (!gaze || typeof gaze.block !== 'string') return [];
-  const b = gaze.block, e = gaze.entity, keys = ['summon'], rows = [];
-  if (e?.type === 'player') {
-    if (bots.includes(e.name)) rows.push({key: 'botscreen', preset: {bot: e.name}});
-    else if (e.name !== viewer) keys.push('followme');
-  } else if (/^(cow|sheep|pig|chicken)$/.test(e?.type)) keys.push('hunt');
-  if (/_ore$|ancient_debris/.test(b)) keys.push('mine', 'shift');
-  if (/_log$|_wood$/.test(b)) keys.push('chop', 'shiftlogs');
-  if (isChest(b)) keys.push('deposit', 'withdraw', 'stock');
-  if (isChest(b) && !e) keys.push('setchest'); // the hub takes the gazed block, so an aimed-at entity (another position) would only be refused
-  if (/spawner/.test(b)) keys.push('lightspawner');
-  if (/wheat|farmland/.test(b)) keys.push('wheatfarm');
-  keys.push('goto', 'guard', 'tidy');
-  const at = e ? {x: Math.floor(e.x), y: Math.floor(e.y), z: Math.floor(e.z)} : gaze; // an aimed-at entity is the target, not the block behind it
-  const out = keys.filter((key) => mayOrder(allowed, key)).map((key) => {
-    const job = JOBS[key], preset = {};
-    if (job.loc) Object.assign(preset, pt(at));
-    if (job.needs.includes(animal)) preset.animal = e.type;
-    if (job.needs.includes(block)) preset.block = b;
-    return {key, preset};
-  });
-  return [out[0], ...rows, ...out.slice(1)];
-}
-
 const dims = (sel) => (sel.a && sel.b ? [Math.abs(sel.a.x - sel.b.x) + 1, Math.abs(sel.a.y - sel.b.y) + 1, Math.abs(sel.a.z - sel.b.z) + 1] : null);
 
 // The area jobs once both corners are set; a box over the limit (VALIDATE says so) or across worlds is not ok.
@@ -262,4 +235,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: key !== 'setchest' && data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, contextJobs, areaJobs, dims, AREA, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, areaJobs, dims, AREA, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

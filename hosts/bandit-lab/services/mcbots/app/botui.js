@@ -6,8 +6,7 @@ const FLASH_MS = 30000;
 
 // One handler per click `data.a`: (st, data, ui, viewer) -> void, may be async, may throw.
 // Every handler that touches bots checks the viewer's rights itself (allowedBots / owner); the data is the player's input.
-const {explain, QUICK} = require('./botui-screens');
-const QUICK_LABEL = Object.fromEntries(QUICK);
+const {explain} = require('./botui-screens');
 const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
 const menus = require('./botui-menus');
@@ -145,9 +144,7 @@ const ACTIONS = {
     st.open = false; // the plugin stops tracking on its own, no `closed` follows
     await ui.call('/close', {player: viewer}).catch((e) => ui.log(`botui ${viewer}: close: ${e.message}`));
   },
-  lage: (st) => { st.screen = {name: 'lage'}; },
   ov: (st) => { st.screen = {name: 'ov'}; },
-  oldmenu: (st) => { st.screen = {name: 'lage'}; },
   botm: (st, data, ui, viewer) => { st.screen = {name: 'botm', bot: oneBot(ui, viewer, data)}; },
   idlem: (st, data, ui, viewer) => { st.screen = {name: 'idlem', bot: oneBot(ui, viewer, data)}; },
   invm: (st, data, ui, viewer) => { st.screen = {name: 'invm', bot: oneBot(ui, viewer, data)}; },
@@ -466,13 +463,10 @@ const ACTIONS = {
   },
   // A one-time link for the viewer (uploads.js); the dialog opens it in the browser.
   upload: (st, data, ui, viewer) => { st.screen = {name: 'upload', url: ui.api.uploadLink(viewer)}; },
-  bot: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
-  botscreen: (st, data, ui, viewer) => { st.screen = {name: 'bot', bot: oneBot(ui, viewer, data)}; },
-  idle_open: (st, data, ui, viewer) => { st.screen = {name: 'wennfrei', bot: oneBot(ui, viewer, data)}; },
   // Rights first, then the hub decides (api.idle.set throws a short German reason, e.g. keeper for guests).
   idle_set: (st, data, ui, viewer) => {
     const bot = oneBot(ui, viewer, data);
-    st.screen = data.m ? {name: 'botm', bot} : {name: 'bot', bot};
+    st.screen = {name: 'botm', bot};
     const r = ui.api.idle.set(bot, data.choice === 'none' ? null : data.choice);
     ui.flash(st, `${bot}: wenn frei → ${r?.label || 'Nichts'}`, true);
   },
@@ -486,58 +480,19 @@ const ACTIONS = {
     ui.api.resume(viewer, bot);
     ui.flash(st, `${bot}: weiter`, true);
   },
-  new: (st, data, ui, viewer) => { st.screen = {name: 'auftrag', ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})}; },
-  job: (st, data, ui, viewer) => {
-    if (!jobs.hasJob(data.key)) throw new Error('unbekannter Auftrag');
-    if (!jobs.mayOrder(ui.viewerBots[viewer], data.key)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
-    st.screen = {name: 'job', key: data.key, preset: jobs.presetOf(data, jobs.JOBS[data.key]), ...(data.bot !== undefined ? {bot: oneBot(ui, viewer, data)} : {})};
-  },
-  // Every field is the player's input: jobs.build validates all of it, then VALIDATE has the last word (dashboard path).
-  send: async (st, data, ui, viewer) => {
-    try {
-      const o = jobs.build(data.key, data, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(),
-        allowed: ui.viewerBots[viewer], viewer, schematics: (await ui.api.schematics(viewer)).map((p) => p.file)});
-      const r = ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace});
-      done(r);
-      if (r?.skipped?.length === o.bots.length) { // nothing was queued (graves: none open)
-        ui.flash(st, o.type === 'graves' ? 'Keine offenen Gräber' : 'Nichts zu tun');
-        st.screen = {name: 'lage'};
-        return;
-      }
-      ui.flash(st, (o.bots.length > 1 ? o.bots.length + ' Bots' : o.bots[0]) + ': ' + (r?.pending ? 'Kiste wird gesetzt…' : o.say), true);
-      st.screen = {name: 'lage'};
-      if (o.area) await clearSel(st, ui, viewer);
-    } catch (e) {
-      ui.flash(st, 'Geht nicht: ' + explain(e.message));
-      if (!(st.screen.name === 'job' && st.screen.key === data.key)) st.screen = {name: 'auftrag'};
-    }
-  },
   stopall: (st, data, ui, viewer) => { ownerOnly(ui, viewer); st.screen = {name: 'stopall'}; },
   stopall_ok: (st, data, ui, viewer) => {
     ownerOnly(ui, viewer);
     const r = ui.api.stopAll(viewer);
-    st.screen = {name: 'lage'};
+    st.screen = {name: 'ov'};
     ui.flash(st, 'Alle gestoppt' + (r?.keeperOff ? ', Daueraufträge aus' : ''), true);
-  },
-  quick: (st, data, ui, viewer) => {
-    const bot = oneBot(ui, viewer, data), label = Object.hasOwn(QUICK_LABEL, data.job) && QUICK_LABEL[data.job];
-    if (!label) throw new Error('unbekannter Auftrag');
-    if (!jobs.mayOrder(ui.viewerBots[viewer], data.job)) throw new Error('Diesen Auftrag darfst du nicht erteilen');
-    let args = {};
-    if (data.job === 'deposit' || data.job === 'rearm') {
-      const c = ui.api.keeper?.state().chest;
-      if (!c) throw new Error('keine Vorratskiste eingestellt');
-      args = {x: c.x, y: c.y, z: c.z};
-    }
-    done(ui.api.submit(viewer, {bots: [bot], type: data.job, args}));
-    ui.flash(st, `${bot}: ${label} gestartet`, true);
   },
   zielm: (st) => { st.screen = {name: 'zielm'}; },
   ziele: (st, data, ui, viewer) => { ownerOnly(ui, viewer); st.screen = {name: 'ziele'}; },
-  // The plugin moves or creates the viewer's map item; a full inventory comes back as an error and the Lagebild stays.
+  // The plugin moves or creates the viewer's map item; a full inventory comes back as an error and the overview stays.
   karte: async (st, data, ui, viewer) => {
     const r = await ui.call('/map/give', {player: viewer});
-    if (!r.ok) { st.screen = {name: 'lage'}; return ui.flash(st, `Keine Karte: ${r.error || 'unbekannter Fehler'}`); }
+    if (!r.ok) { st.screen = {name: 'ov'}; return ui.flash(st, `Keine Karte: ${r.error || 'unbekannter Fehler'}`); }
     st.screen = {name: 'kartem'};
     await ui.pushMap(viewer, st);
   },
@@ -675,12 +630,12 @@ class BotUi {
     if (e.type === 'join') { this.api.presence?.(viewer, 'join'); return; }
     let st = this.states.get(viewer);
     if (e.type === 'closed') { if (st) st.open = false; return; }
-    if (!st) this.states.set(viewer, st = {viewer, screen: {name: 'lage'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
+    if (!st) this.states.set(viewer, st = {viewer, screen: {name: 'ov'}, open: false, lastJson: null, flash: null, sel: {a: null, b: null, dim: null}, ctx: {}, lastClick: 0, mapState: {zoom: 5, center: null}});
     st.ctx = {pos: e.pos, dim: e.dim, yaw: e.yaw, gaze: e.gaze};
     if (e.type === 'lage') {
       st.screen = {name: 'ov'}; st.lastClick = this.now();
     } else if (e.type === 'open') {
-      // right-click / Shift+F: a bot you command -> its screen; anything else aimed at -> orders for it; else the Lagebild
+      // right-click / Shift+F: a bot you command -> its screen; a chest, table, animal... -> its menu; else the overview
       const g = e.gaze, allowed = this.viewerBots[viewer], who = g?.entity?.type === 'player' && g.entity.name;
       const mineBot = who && (allowed === '*' ? this.api.snapshots().some((s) => s.name === who) : allowed.includes(who));
       st.lastClick = this.now();
@@ -697,9 +652,8 @@ class BotUi {
       else if (g && !g.entity && /wheat|farmland/.test(g.block)) st.screen = {name: 'whom', job: 'wheatfarm'};
       else if (g && !g.entity && /spawner/.test(g.block)) st.screen = {name: 'whom', job: 'lightspawner', at: {x: g.x, y: g.y, z: g.z}};
       else if (e.sneak === true && g && !g.entity) { await this.markAt(st, viewer, g, e.dim); return; }
-      // a set corner A keeps the next open on the area steps
       else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
-      else st.screen = {name: g && (g.entity || g.block !== 'air') || st.sel.a ? 'auftrag' : 'ov'};
+      else st.screen = {name: 'ov'};
     } else if (e.type === 'click') {
       st.lastClick = this.now(); st.lastJson = null; st.open = true; // a click proves a dialog is up; it always re-shows
       // shortcut: Escape during this click's render re-shows until the queued close arrives one poll later, a flicker; skip the show if a close is already queued when that is ever seen.
@@ -774,10 +728,9 @@ class BotUi {
     const allowed = this.viewerBots[viewer];
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
-    const refreshing = this.screens.REFRESHING.has(st.screen.name);
+    if (this.screens.DIALOGS && !menus.MENUS.has(st.screen.name) && !this.screens.DIALOGS.has(st.screen.name)) st.screen = {name: 'ov'}; // a stale state never breaks a viewer
     if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, area: st.area, sel: st.sel, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
-    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
-      places: this.api.places(), schematics: refreshing ? [] : (await this.api.schematics(viewer)).map((p) => p.file), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
+    return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash});
   }
 
   // refresh: the plugin itself refuses (feedback "closed") when the player closed the dialog while this was on the wire.

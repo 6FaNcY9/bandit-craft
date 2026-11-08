@@ -40,7 +40,7 @@ async function fake() {
 
 (async () => {
   const AIM = {x: 0, y: 0, z: 0, block: 'air', entity: {type: 'zombie'}}; // aimed at something: the stub's order screen (a bare open now goes to the overview menu)
-  const stub = {body: 'one', REFRESHING: new Set(['lage', 'auftrag', 'bot']), seen: [], render(screen, view) { this.seen.push(view); return {type: 'notice', title: screen.name + ':' + this.body}; }};
+  const stub = {body: 'one', REFRESHING: new Set(['ov', 'auftrag']), seen: [], render(screen, view) { this.seen.push(view); return {type: 'notice', title: screen.name + ':' + this.body}; }};
   let t = 1000;
   const logs = [];
   const mk = async (over = {}) => {
@@ -48,6 +48,15 @@ async function fake() {
     const stopped = [];
     const ui = new BotUi({url: f.url, token: 'tok', viewerBots: {Fancy: '*', Midari: ['MisaBot']}, log: (m) => { logs.push(m); if (process.env.DBG) console.log(m); }, now: () => t, refreshMs: 20, retryMs: 20,
       screens: stub, api: {snapshots: () => [{name: 'bot1'}, {name: 'MisaBot'}], places: () => [], schematics: async () => [], stopAll: (v) => stopped.push(v)}, ...over});
+    if (!over.screens) { // the stub stands in for a dialog: the overview (what an open lands on) renders through it
+      const real = ui.render.bind(ui);
+      ui.render = (viewer, st) => {
+        if (st.screen.name !== 'ov') return real(viewer, st);
+        const was = st.screen;
+        st.screen = {name: 'auftrag'};
+        try { return real(viewer, st); } finally { st.screen = was; }
+      };
+    }
     return {f, ui, stopped, end: () => { ui.stop(); f.server.close(); }};
   };
   const dialogs = (f) => f.of('/show').map((c) => c.body);
@@ -81,7 +90,7 @@ async function fake() {
     const v = stub.seen.at(-1);
     assert.equal(v.viewer, 'Midari');
     assert.deepEqual(v.snaps.map((s) => s.name), ['MisaBot']);
-    assert.deepEqual(v.ctx, {pos: [1, 2, 3], dim: 'nether', yaw: 9, gaze: AIM});
+    assert.deepEqual(ui.state('Midari').ctx, {pos: [1, 2, 3], dim: 'nether', yaw: 9, gaze: AIM});
     assert.equal(dialogs(f)[0].player, 'Midari');
     end();
   }
@@ -107,10 +116,10 @@ async function fake() {
     stub.body = 'one';
     end();
   }
-  { // a click re-shows even when nothing changed; an unknown action flashes; lage goes home
+  { // a click re-shows even when nothing changed; an unknown action flashes; ov goes home
     const {f, ui, end} = await mk();
     await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
-    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'lage'}});
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'ov'}});
     assert.equal(f.of('/show').length, 2);
     await ui.handle({type: 'click', player: 'Fancy', data: {a: 'nope'}});
     assert.equal(f.of('/show').length, 3);
@@ -232,7 +241,7 @@ async function fake() {
     await until(() => f.of('/events').length, 'poll');
     f.add('open', 'Fancy', {gaze: AIM});
     await until(() => ui.state('Fancy'), 'state');
-    f.add('click', 'Fancy', {data: {a: 'lage'}});
+    f.add('click', 'Fancy', {data: {a: 'ov'}});
     await sleep(100);
     const n = f.of('/events').length;
     await sleep(100);
@@ -244,7 +253,7 @@ async function fake() {
     logs.length = 0;
     const {f, ui, end} = await mk();
     await ui.handle({type: 'open', player: 'Fancy', gaze: AIM});
-    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'lage'}});
+    await ui.handle({type: 'click', player: 'Fancy', data: {a: 'ov'}});
     stub.body = 'nine'; await ui.tick();
     assert.deepEqual(f.of('/show').map((c) => c.body.refresh), [undefined, undefined, true]);
     f.refuseRefresh = true; stub.body = 'ten'; await ui.tick();
@@ -311,7 +320,7 @@ async function fake() {
     assert.ok(logs.some((m) => /Fancy: close:/.test(m))); assert.equal(ui.state('Fancy').open, false);
     end();
   }
-  { // the real Lagebild and Bot screens: navigation, rights, stop, quick jobs, Alle stopp for the owner only
+  { // the dialogs left (stop all, upload): rights, confirmation, /show only for them; a fresh open is the overview menu
     const submits = [], stops = [];
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null}];
     const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], keeper: {state: () => ({available: true, quotas: [], chest: {x: 1, y: 2, z: 3}})},
@@ -319,29 +328,23 @@ async function fake() {
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data) => ui.handle({type: 'click', player, data});
     const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
-    await ui.handle({type: 'open', player: 'Fancy', gaze: AIM}); await click('Fancy', {a: 'lage'}); // the old text Lagebild is only reachable by this click now
-    assert.equal(last().actions.filter((a) => a.action.payload?.a === 'bot').length, 2);
-    await click('Fancy', {a: 'bot', bot: 'bot1'});
-    assert.deepEqual(ui.state('Fancy').screen, {name: 'bot', bot: 'bot1'});
+    await ui.handle({type: 'open', player: 'Fancy', gaze: null}); // air: the overview, a menu
+    assert.equal(f.of('/menu').length, 1); assert.equal(f.of('/show').length, 0); assert.equal(f.of('/menu')[0].body.title, 'Bots');
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'ov'});
+    await click('Fancy', {a: 'lage'}); // a deleted action
+    assert.match(ui.state('Fancy').flash.text, /Unbekannte Aktion/); assert.equal(f.of('/show').length, 0);
     await click('Fancy', {a: 'stop', bot: 'bot1'});
     assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'stop', args: {}}]);
-    assert.match(JSON.stringify(last().body), /✔|bot1: gestoppt/);
-    await click('Fancy', {a: 'quick', bot: 'bot1', job: 'deposit'});
-    assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'deposit', args: {x: 1, y: 2, z: 3}}]);
-    await click('Fancy', {a: 'quick', bot: 'bot1', job: 'homebed'});
-    assert.deepEqual(submits.at(-1)[1].args, {});
-    const n = submits.length;
-    await click('Fancy', {a: 'quick', bot: 'bot1', job: 'rm -rf'});
-    assert.equal(submits.length, n); assert.match(ui.state('Fancy').flash.text, /unbekannter Auftrag/);
+    assert.match(ui.state('Fancy').flash.text, /bot1: gestoppt/);
     await click('Fancy', {a: 'stopall'});
     assert.equal(ui.state('Fancy').screen.name, 'stopall'); assert.equal(stops.length, 0); // asks first
+    assert.equal(last().exit_action.action.payload.a, 'ov');
     await click('Fancy', {a: 'stopall_ok'});
-    assert.deepEqual(stops, ['Fancy']); assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.match(ui.state('Fancy').flash.text, /Alle gestoppt, Daueraufträge aus/);
-    // a restricted viewer: own bot only, no Alle stopp, forged clicks refused
-    await ui.handle({type: 'open', player: 'Midari', gaze: AIM}); await click('Midari', {a: 'lage'});
-    assert.ok(!JSON.stringify(last()).includes('stopall'));
-    await click('Midari', {a: 'bot', bot: 'bot1'});
-    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(ui.state('Midari').screen.name, 'lage');
+    assert.deepEqual(stops, ['Fancy']); assert.equal(ui.state('Fancy').screen.name, 'ov'); assert.match(ui.state('Fancy').flash.text, /Alle gestoppt, Daueraufträge aus/);
+    // a restricted viewer: own bot only, forged clicks refused
+    await ui.handle({type: 'open', player: 'Midari', gaze: null});
+    await click('Midari', {a: 'botm', bot: 'bot1'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(ui.state('Midari').screen.name, 'ov');
     await click('Midari', {a: 'stop', bot: 'bot1'}); await click('Midari', {a: 'stopall'}); await click('Midari', {a: 'stopall_ok'});
     assert.equal(submits.filter(([v]) => v === 'Midari').length, 0); assert.equal(stops.length, 1);
     assert.match(ui.state('Midari').flash.text, /Besitzer/);
@@ -352,11 +355,18 @@ async function fake() {
     await click('Midari', {a: 'upload', url: 'https://evil.test', viewer: 'Fancy'});
     assert.equal(ui.state('Midari').screen.name, 'upload');
     assert.deepEqual(last().actions[0].action, {type: 'minecraft:open_url', url: 'https://x.test/upload?t=tok-Midari'});
-    await click('Midari', {a: 'lage'});
-    // the flash is gone from the next render once it has expired
-    t += 31000;
-    await click('Fancy', {a: 'lage'});
-    assert.doesNotMatch(JSON.stringify(last().body), /gestoppt/);
+    assert.equal(last().exit_action.action.payload.a, 'ov');
+    await click('Fancy', {a: 'ziele'}); assert.equal(last().title.text, 'Ziele');
+    // /show only ever carries stopall, upload and ziele
+    const shown = f.of('/show').map((c) => JSON.parse(c.body.dialog).title.text);
+    assert.deepEqual([...new Set(shown)].sort(), ['Alle stoppen?', 'Bauplan hochladen', 'Ziele']);
+    // a viewer whose saved screen is a deleted dialog lands on the overview
+    for (const name of ['lage', 'bot', 'auftrag', 'job', 'wennfrei', 'nonsense']) {
+      ui.state('Fancy').screen = {name, bot: 'bot1'};
+      const n = f.of('/menu').length, m = f.of('/show').length;
+      await ui.show('Fancy', ui.state('Fancy'));
+      assert.deepEqual(ui.state('Fancy').screen, {name: 'ov'}, name); assert.equal(f.of('/menu').length, n + 1); assert.equal(f.of('/show').length, m);
+    }
     end();
   }
   { // overview menu: /menu not /show, click re-posts, closed stops refresh, a refused refresh is quiet, guest stopmine
@@ -695,46 +705,37 @@ async function fake() {
     assert.equal(submits.length, 1); assert.doesNotMatch(ui.state('Fancy').flash.text, /Cannot read|undefined/);
     end();
   }
-  { // Kommandostand: lage event, aimed-at bot, Wenn frei picker, rights
+  { // Kommandostand: lage event, open routing, deleted actions, Wenn frei rights
     const set = [], store = {MisaBot: null};
     const snaps = [{name: 'bot1', online: true, activity: 'idle', job: null}, {name: 'MisaBot', online: true, activity: 'idle', job: null, guest: true}];
     const api = {snapshots: () => snaps, places: () => [], schematics: async () => [],
       idle: {get: (b) => store[b] ? {id: store[b]} : null, set: (b, id) => { if (id === 'keeper') throw new Error('Daueraufträge nur für Bandits Diener'); set.push([b, id]); store[b] = id; return {ok: true, label: id ? 'Holz-Schicht' : 'Nichts'}; }}};
     const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
     const click = (player, data) => ui.handle({type: 'click', player, data});
-    const last = () => JSON.parse(f.of('/show').at(-1).body.dialog);
-    const labels = () => last().actions.map((a) => JSON.stringify(a.label));
     await ui.handle({type: 'lage', player: 'Fancy'});
     assert.equal(ui.state('Fancy').screen.name, 'ov'); assert.equal(f.of('/show').length, 0); assert.match(f.of('/menu')[0].body.title, /Bots/);
-    await click('Fancy', {a: 'oldmenu'});
-    assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.equal(f.of('/show').length, 1);
-    assert.ok(last().actions.some((a) => a.action.command === '/zauberstab' && a.action.type === 'minecraft:run_command'));
     const bot = {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'player', name: 'MisaBot', x: 1, y: 2, z: 3}};
-    await ui.handle({type: 'open', player: 'Fancy', gaze: bot}); await ui.handle({type: 'click', player: 'Fancy', gaze: bot, data: {a: 'new'}});
-    assert.equal(last().actions.filter((a) => a.action.payload?.a === 'botscreen').length, 1);
-    assert.equal(labels().filter((l) => /Hierher rufen/.test(l)).length, 1);
-    await ui.handle({type: 'open', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}}); await ui.handle({type: 'click', player: 'Midari', gaze: {...bot, entity: {...bot.entity, name: 'bot1'}}, data: {a: 'new'}});
-    assert.ok(!last().actions.some((a) => a.action.payload?.a === 'botscreen')); // a foreign bot: no row
-    { // open routing: aimed bot of yours -> its screen; anything else aimed at -> auftrag; nothing -> the overview
+    { // open routing: an aimed bot of yours -> its menu; anything else without a menu of its own -> the overview
       const open = async (player, gaze) => { await ui.handle({type: 'open', player, gaze}); return ui.state(player).screen; };
-      assert.equal((await open('Fancy', {x: 1, y: 2, z: 3, block: 'bedrock'})).name, 'auftrag');
-      assert.equal((await open('Fancy', null)).name, 'ov');
+      assert.deepEqual(await open('Fancy', {x: 1, y: 2, z: 3, block: 'bedrock'}), {name: 'ov'});
+      assert.deepEqual(await open('Fancy', {x: 1, y: 2, z: 3, block: 'air', entity: {type: 'zombie'}}), {name: 'ov'});
+      assert.deepEqual(await open('Fancy', null), {name: 'ov'});
       assert.deepEqual(await open('Midari', bot), {name: 'botm', bot: 'MisaBot'});
-      assert.equal((await open('Midari', {...bot, entity: {...bot.entity, name: 'bot1'}})).name, 'auftrag');
+      assert.deepEqual(await open('Midari', {...bot, entity: {...bot.entity, name: 'bot1'}}), {name: 'ov'});
+      ui.state('Fancy').sel = {a: {x: 1, y: 2, z: 3, dim: 'overworld'}, b: null, dim: 'overworld'}; // a set corner no longer steers the open
+      assert.deepEqual(await open('Fancy', {x: 1, y: 2, z: 3, block: 'bedrock'}), {name: 'ov'});
+      assert.equal(f.of('/show').length, 0);
     }
-    await click('Midari', {a: 'botscreen', bot: 'bot1'});
-    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
-    await click('Fancy', {a: 'botscreen', bot: 'MisaBot'});
-    assert.deepEqual(ui.state('Fancy').screen, {name: 'bot', bot: 'MisaBot'});
-    assert.ok(labels().some((l) => l.includes('Wenn frei: Nichts')));
-    await click('Fancy', {a: 'idle_open', bot: 'MisaBot'});
-    assert.deepEqual(ui.state('Fancy').screen, {name: 'wennfrei', bot: 'MisaBot'});
-    assert.ok(labels().some((l) => l.includes('Stein-Schicht')) && labels().some((l) => l.includes('"Nichts"')) && !labels().some((l) => l.includes('Daueraufträge'))); // keeper hidden for a guest bot
+    for (const a of ['bot', 'botscreen', 'idle_open', 'new', 'job', 'send', 'quick', 'oldmenu', 'corner', 'clearsel']) {
+      await click('Fancy', {a}); assert.match(ui.state('Fancy').flash.text, /Unbekannte Aktion/, a);
+    }
+    await click('Fancy', {a: 'botm', bot: 'MisaBot'});
+    assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'MisaBot'});
     await click('Midari', {a: 'idle_set', bot: 'bot1', choice: 'holz'});
     assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(set.length, 0);
     await click('Midari', {a: 'idle_set', bot: 'MisaBot', choice: 'holz'});
     assert.deepEqual(set, [['MisaBot', 'holz']]); assert.match(ui.state('Midari').flash.text, /MisaBot: wenn frei → Holz-Schicht/);
-    assert.ok(labels().some((l) => l.includes('Wenn frei: Holz-Schicht in meine Kiste')));
+    assert.deepEqual(ui.state('Midari').screen, {name: 'botm', bot: 'MisaBot'});
     await click('Midari', {a: 'idle_set', bot: 'MisaBot', choice: 'keeper'});
     assert.match(ui.state('Midari').flash.text, /Daueraufträge nur für Bandits Diener/);
     end();
@@ -825,8 +826,8 @@ async function fake() {
     assert.deepEqual(f.of('/map')[0].body.markers[0], {x: 9, z: 9, dim: 'overworld', kind: 'idle', label: 'bot1'});
     // a full inventory is told, not hidden, and the dialog stays on the Lagebild
     f.give = {ok: false, error: 'Inventar voll'};
-    await click('Fancy', {a: 'lage'}); await click('Fancy', {a: 'karte'});
-    assert.equal(ui.state('Fancy').screen.name, 'lage'); assert.match(ui.state('Fancy').flash.text, /Keine Karte: Inventar voll/);
+    await click('Fancy', {a: 'ov'}); await click('Fancy', {a: 'karte'});
+    assert.equal(ui.state('Fancy').screen.name, 'ov'); assert.match(ui.state('Fancy').flash.text, /Keine Karte: Inventar voll/);
     // right click on the map opens the Karte, and the Karte is not refreshed
     await ui.handle({type: 'mapclick', player: 'Fancy'});
     assert.equal(ui.state('Fancy').screen.name, 'kartem'); assert.equal(ui.state('Fancy').open, true); assert.equal(f.of('/menu').at(-1).body.title, 'Bot-Karte');
