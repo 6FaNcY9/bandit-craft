@@ -35,7 +35,7 @@ const uploadsLib = require('./uploads');
 const cfg = loadConfig();
 const log = (who, msg) => console.log(`${new Date().toISOString()} [${who}] ${msg}`);
 const world = new WorldModel();
-if (process.env.STATE_DIR) require('./prune').pruneStores(process.env.STATE_DIR, new Set([...cfg.names, ...Object.values(cfg.hubWorkers).flat(), ...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots])); // retired bots' saved state
+if (process.env.STATE_DIR) require('./prune').pruneStores(process.env.STATE_DIR, new Set([...cfg.names, ...Object.values(cfg.hubWorkers).flat(), ...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots, ...Object.values(cfg.viewerBots).flat().filter((b) => b !== '*')])); // retired bots' saved state
 if (process.env.STATE_DIR) world.persistChests(path.join(process.env.STATE_DIR, 'chests.json')); // the storage index
 if (process.env.STATE_DIR) world.persistExperience(path.join(process.env.STATE_DIR, 'experience.json'));
 const notifier = new NtfyNotifier();

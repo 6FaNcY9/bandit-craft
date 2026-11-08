@@ -392,7 +392,7 @@ const {BotRunner} = require('../bots');
     const port = await freePort();
     const wport = await freePort();
     const child = spawn(process.execPath, [path.join(APP, 'server.js')], {
-      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: dir, SUPPLY_CHEST: '1,64,1', KEEPER_QUOTAS: 'logs:64', WORKER_PORT: String(wport), WORKER_TOKEN: TOKEN, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
+      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', INGAME_VIEWERS: 'a=bot5', STATE_DIR: dir, SUPPLY_CHEST: '1,64,1', KEEPER_QUOTAS: 'logs:64', WORKER_PORT: String(wport), WORKER_TOKEN: TOKEN, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     await new Promise((res, rej) => {
