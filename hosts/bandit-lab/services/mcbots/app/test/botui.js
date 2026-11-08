@@ -843,6 +843,13 @@ async function fake() {
     assert.deepEqual(markOf(ui, 'Midari'), {spot: null, area: null});
     await sneak('Fancy', 1, 2, 3, {dim: 'overworld'}); t += 1000; await sneak('Fancy', 4, 5, 6, {dim: 'the_nether'});
     assert.equal(bars().at(-1), 'Ecken in verschiedenen Welten');
+    // a mark from another world is never used here: no submit, German flash
+    await sneak('Fancy', 1, 2, 3, {dim: 'overworld'});
+    const before = submits.length;
+    await ev('Fancy', {a: 'guardgo', bot: 'bot1', radius: 16, mark: 1}, {dim: 'the_nether'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: Markierung ist in einer anderen Welt');
+    await ev('Fancy', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'mark'}, {dim: 'the_nether'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: Markierung ist in einer anderen Welt');
+    assert.equal(submits.length, before);
+    await ev('Fancy', {a: 'placego', mode: 'goto', bot: 'bot1', where: 'mark'}); assert.deepEqual(submits.at(-1).args, {x: 1, y: 2, z: 3});
     // amounts feed shiftgo
     await ev('Fancy', {a: 'shiftm'}); await ev('Fancy', {a: 'pickblock', block: 'iron_ore'});
     await ev('Fancy', {a: 'setamount', amount: 256}); await ev('Fancy', {a: 'shiftgo'});

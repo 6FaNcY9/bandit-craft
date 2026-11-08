@@ -57,6 +57,12 @@ function markOf(ui, viewer) {
   const k = ui.marks.get(viewer);
   return {spot: k?.spot || null, area: k?.area || null};
 }
+// The mark an order may use: orders are stamped with the viewer's current world, so a mark from another one is refused.
+function markSpot(st, ui, viewer) {
+  const spot = markOf(ui, viewer).spot;
+  if (spot && jobs.dimOf(spot.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Markierung ist in einer anderen Welt');
+  return spot;
+}
 // First call: a spot. A second within PICK_MS turns it into an area (spot -> corner a). null: the corners are in different worlds.
 function setMark(ui, viewer, g, dim) {
   const prev = markOf(ui, viewer), spot = {x: g.x, y: g.y, z: g.z, dim}, at = ui.now();
@@ -183,7 +189,7 @@ const ACTIONS = {
     st.screen = {name: 'botm', bot};
     if (!RADII.includes(data.radius)) throw new Error('unbekannter Radius');
     if (data.mark) {
-      const spot = markOf(ui, viewer).spot;
+      const spot = markSpot(st, ui, viewer);
       if (!spot) return ui.flash(st, 'Keine Stelle markiert');
       return orderAt(st, ui, viewer, bot, 'guard', {radius: data.radius, x: spot.x, y: spot.y, z: spot.z});
     }
@@ -200,7 +206,7 @@ const ACTIONS = {
     if (!/^(gaze|pos|mark|place:.+)$/.test(where)) throw new Error('unbekanntes Ziel');
     st.screen = {name: 'botm', bot};
     if (where !== 'mark') return orderAt(st, ui, viewer, bot, 'goto', {where});
-    const spot = markOf(ui, viewer).spot;
+    const spot = markSpot(st, ui, viewer);
     if (!spot) return ui.flash(st, 'Keine Stelle markiert');
     orderAt(st, ui, viewer, bot, 'goto', {x: spot.x, y: spot.y, z: spot.z});
   },
