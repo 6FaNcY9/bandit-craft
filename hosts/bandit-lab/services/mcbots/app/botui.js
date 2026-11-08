@@ -239,6 +239,15 @@ const ACTIONS = {
     orderAt(st, ui, viewer, bot, data.job, {...at, ...(data.job === 'tidy' ? {radius: 16} : {})});
     st.screen = {name: 'botm', bot};
   },
+  huntm: (st) => { if (!st.hunt) throw new Error('Erst ein Tier anklicken'); st.screen = {name: 'huntm'}; },
+  huntgo: (st, data, ui, viewer) => {
+    const h = st.hunt;
+    if (!h) throw new Error('Erst ein Tier anklicken');
+    if (![1, 4, 8, 16].includes(data.n)) throw new Error('unbekannte Anzahl');
+    const bot = oneBot(ui, viewer, {bot: h.bot});
+    orderAt(st, ui, viewer, bot, 'hunt', {animal: h.animal, n: data.n, ...h.at});
+    st.screen = {name: 'botm', bot};
+  },
   pickitem: (st, data, ui, viewer) => {
     const mode = st.screen.name === 'gridm' && st.screen.mode;
     if (!mode || mode === 'block' || !Object.values(menus.GRID_MODES[mode].tabs).some((l) => l.includes(data.item))) throw new Error('unbekanntes Item');
@@ -563,6 +572,9 @@ class BotUi {
       else if (mineBot) st.screen = {name: 'botm', bot: who};
       else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm', at: {x: g.x, y: g.y, z: g.z}};
+      else if (g?.entity && /^(cow|sheep|pig|chicken)$/.test(g.entity.type)) { try { st.hunt = {animal: g.entity.type, at: {x: g.entity.x, y: g.entity.y, z: g.entity.z}, bot: botOf(st, this, viewer)}; st.screen = {name: 'huntm'}; } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
+      else if (g && !g.entity && /wheat|farmland/.test(g.block)) st.screen = {name: 'whom', job: 'wheatfarm'};
+      else if (g && !g.entity && /spawner/.test(g.block)) st.screen = {name: 'whom', job: 'lightspawner', at: {x: g.x, y: g.y, z: g.z}};
       else if (e.sneak === true && g && !g.entity) { await this.markAt(st, viewer, g, e.dim); return; }
       // a set corner A keeps the next open on the area steps
       else if (g && !g.entity && !st.sel.a && jobs.BLOCKS.includes(oreOf(g.block))) { try { ACTIONS.shiftm(st, {block: g.block}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
@@ -614,7 +626,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, make: st.make, recent: st.recent, places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || []});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || []});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
       places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }

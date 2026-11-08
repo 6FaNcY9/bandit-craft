@@ -386,6 +386,39 @@ async function fake() {
     assert.equal(ui.state('Fancy').open, false); assert.equal(logs.length, before);
     end();
   }
+  { // staff on an animal, wheat, a spawner: Jagen counts, Weizenfarm and Ausleuchten ask who; the guest only gets her bot
+    const submits = [], snaps = [{name: 'bot1', online: true, health: 20, activity: 'idle', job: null}, {name: 'MisaBot', online: true, health: 10, activity: 'idle', job: null, guest: true}];
+    const api = {snapshots: () => snaps, places: () => [{name: 'w1', kind: 'wheat', box: {x1: 1, y1: 60, z1: 2, x2: 5, y2: 64, z2: 6}}], schematics: async () => [], submit: (v, j) => { submits.push([v, j]); return {ok: true, unreached: []}; }, idle: {get: () => null}};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    const open = (player, gaze) => ui.handle({type: 'open', player, gaze});
+    await open('Fancy', {block: 'air', entity: {type: 'cow', x: 10, y: 64, z: 10}});
+    assert.match(f.of('/menu').at(-1).body.title, /Kühe jagen/);
+    await ev('Fancy', {a: 'huntgo', n: 4});
+    assert.deepEqual(submits.at(-1)[1], {bots: ['bot1'], type: 'hunt', args: {animal: 'cow', count: 4, x: 10, y: 64, z: 10, radius: 24}, replace: false});
+    assert.equal(ui.state('Fancy').screen.name, 'botm'); assert.match(ui.state('Fancy').flash.text, /bot1: 4 Kühe jagen/);
+    const n = submits.length;
+    await ev('Fancy', {a: 'huntm'}); await ev('Fancy', {a: 'huntgo', n: 3});
+    assert.match(ui.state('Fancy').flash.text, /Fehler: unbekannte Anzahl/); assert.equal(submits.length, n);
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'spawner'});
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'lightspawner', x: 1, y: 2, z: 3});
+    assert.deepEqual(submits.at(-1)[1], {bots: ['bot1'], type: 'light', args: {spawner: {x: 1, y: 2, z: 3}}, replace: false});
+    await open('Fancy', {x: 1, y: 2, z: 3, block: 'wheat'});
+    assert.equal(ui.state('Fancy').screen.name, 'whom');
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'wheatfarm'});
+    assert.equal(submits.at(-1)[1].type, 'wheatfarm'); assert.deepEqual(submits.at(-1)[1].args, {x1: 1, z1: 2, x2: 5, z2: 6});
+    // guest
+    await open('Midari', {block: 'air', entity: {type: 'pig', x: 1, y: 2, z: 3}});
+    assert.match(f.of('/menu').at(-1).body.title, /Schweine jagen: MisaBot/);
+    await ev('Midari', {a: 'botpick', back: 'huntm'}); await ev('Midari', {a: 'setbot', bot: 'bot1', back: 'huntm'});
+    assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'huntgo', n: 1}); assert.equal(submits.at(-1)[1].bots[0], 'MisaBot');
+    await ev('Midari', {a: 'go', bot: 'bot1', job: 'wheatfarm'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await ev('Midari', {a: 'go', bot: 'bot1', job: 'lightspawner', x: 1, y: 2, z: 3}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/);
+    await open('Midari', {x: 1, y: 2, z: 3, block: 'spawner'});
+    assert.deepEqual(f.of('/menu').at(-1).body.slots.filter((s) => s.head).map((s) => s.head), ['MisaBot']);
+    end();
+  }
   { // bot page: go jobs, rights, flash on the action bar, chest for a bot, idle_set back to the page, staff routing
     const submits = [], snaps = [{name: 'bot1', online: true, health: 20, activity: 'idle', job: null, chest: {x: 9, y: 9, z: 9}}, {name: 'MisaBot', online: true, health: 10, activity: 'idle', job: null, guest: true}];
     const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push([v, j]); return {ok: true, unreached: []}; },

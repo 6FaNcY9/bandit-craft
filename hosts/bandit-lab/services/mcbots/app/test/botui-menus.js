@@ -230,3 +230,15 @@ console.log('botui-menus ok');
   m = page('bedrock', []); assert.ok(!at(m, 2)); assert.ok(!JSON.stringify(m).includes('undefined'));
   assert.ok(!JSON.stringify(menu({name: 'smeltm'}, view({make: undefined})).menu).includes('undefined'));
 }
+
+{ // Jagen counts and Spawner/Weizenfarm heads; every payload a real action
+  const h = menu({name: 'huntm'}, view({hunt: {animal: 'cow', bot: 'zed'}})).menu;
+  assert.match(h.title, /Kühe jagen: zed/); assert.equal(h.slots.find((x) => x.slot === 0).item, 'cow_spawn_egg');
+  assert.deepEqual([2, 3, 4, 5].map((i) => h.slots.find((x) => x.slot === i).count), [1, 4, 8, 16]);
+  assert.deepEqual(h.slots.find((x) => x.slot === 7).payload, {a: 'botpick', back: 'huntm'});
+  const w = menu({name: 'whom', job: 'lightspawner', at: {x: 1, y: 2, z: 3}}, view()).menu;
+  assert.match(w.title, /Spawner ausleuchten/);
+  assert.deepEqual(w.slots.find((x) => x.head === 'zed').payload, {a: 'go', bot: 'zed', job: 'lightspawner', x: 1, y: 2, z: 3});
+  assert.match(menu({name: 'whom', job: 'wheatfarm'}, view()).menu.title, /Weizenfarm/);
+  for (const x of [...h.slots, ...w.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+}

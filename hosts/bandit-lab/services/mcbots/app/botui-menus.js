@@ -125,6 +125,24 @@ function chestPage(view, screen = {}) {
   return {type: 'chest', title: screen.at ? `Kiste bei ${screen.at.x} ${screen.at.y} ${screen.at.z}: wer?` : 'Kiste: wer?', rows, slots};
 }
 
+// Staff aimed at wheat or a spawner: pick which of the viewer's bots gets the order (screen.at is the spawner for lightspawner).
+function whomPage(view, screen) {
+  const rows = Math.min(6, Math.ceil((view.snaps.length + 1) / 9)), last = rows * 9 - 1;
+  const slots = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, last)
+    .map((s, i) => slot(i, 'player_head', s.name, {a: 'go', bot: s.name, job: screen.job, ...(screen.at || {})}, {head: s.name}));
+  slots.push(back(last, 'ov'));
+  return {type: 'chest', title: screen.job === 'wheatfarm' ? 'Weizenfarm: wer?' : 'Spawner ausleuchten: wer?', rows, slots};
+}
+
+// Staff aimed at an animal: how many to hunt, and which bot.
+function huntPage(view) {
+  const h = view.hunt, de = germanName(h.animal);
+  const slots = [slot(0, `${h.animal}_spawn_egg`, de, {a: 'huntm'})];
+  [1, 4, 8, 16].forEach((n, i) => slots.push(slot(2 + i, 'iron_sword', `${n} jagen`, {a: 'huntgo', n}, {count: n})));
+  slots.push(slot(7, 'player_head', h.bot, {a: 'botpick', back: 'huntm'}, {head: h.bot, lore: ['Klick: anderer Bot']}), back(8, 'ov'));
+  return {type: 'chest', title: `${de} jagen: ${h.bot}`, rows: 1, slots};
+}
+
 // One bot at the clicked chest: remember it, store, take out, count, tidy; a trader bot also files it as a trade chest.
 function chestJobsPage(view, screen) {
   const bot = screen.bot, job = (j) => ({a: 'chestjob', bot, job: j});
@@ -230,7 +248,7 @@ function botPickPage(view, screen = {}) {
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 
