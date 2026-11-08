@@ -103,13 +103,23 @@ function billOfMaterials(blocks, version = '26.1') {
 
 const byPosition = (a, b) => a.y - b.y || a.z - b.z || a.x - b.x;
 
+const rotateXZ = (rotation, x, z) => rotation === 90 ? [-z, x] : rotation === 180 ? [-x, -z] : rotation === 270 ? [z, -x] : [x, z];
+
+// The box placeSchematic fills (no mirror), for the placement ghost: same rotation, so the two cannot disagree.
+function schematicBox({size, offset}, origin, rotation = 0) {
+  const xs = [offset.x, offset.x + size.x - 1], zs = [offset.z, offset.z + size.z - 1];
+  const c = xs.flatMap((x) => zs.map((z) => rotateXZ(rotation, x, z)));
+  return {x1: origin.x + Math.min(...c.map((p) => p[0])), y1: origin.y + offset.y, z1: origin.z + Math.min(...c.map((p) => p[1])),
+    x2: origin.x + Math.max(...c.map((p) => p[0])), y2: origin.y + offset.y + size.y - 1, z2: origin.z + Math.max(...c.map((p) => p[1]))};
+}
+
 function placeSchematic(parsed, {origin, rotation = 0, mirror = 'none', air = false}) {
   if (![0, 90, 180, 270].includes(rotation)) throw new Error('schematic: invalid rotation');
   if (!['none', 'left_right', 'front_back'].includes(mirror)) throw new Error('schematic: invalid mirror');
   const transform = (x, z) => {
     if (mirror === 'left_right') z = -z;
     if (mirror === 'front_back') x = -x;
-    return rotation === 90 ? [-z, x] : rotation === 180 ? [-x, -z] : rotation === 270 ? [z, -x] : [x, z];
+    return rotateXZ(rotation, x, z);
   };
   const horizontal = ['north', 'east', 'south', 'west'];
   const direction = (d) => {
@@ -173,4 +183,4 @@ function buildOrder(targets) {
   return {order: [...rest, ...last], deferred, unsupported: unsupported.sort(byPosition), skipped};
 }
 
-module.exports = {parseLitematic, billOfMaterials, placeSchematic, buildOrder};
+module.exports = {parseLitematic, billOfMaterials, placeSchematic, schematicBox, buildOrder};

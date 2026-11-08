@@ -62,7 +62,7 @@ const JOBS = {
   smelt: {label: 'Schmelzen', type: 'smelt', general: true, needs: [item, count(1, 64, 1, 8)], args: (v) => ({item: v.item, count: R(v.n)}), say: (v) => `${germanName(v.item)} schmelzen`},
   schematic: {label: 'Bauen', type: 'schematic', general: true, loc: true, needs: [schematic, where, rotation],
     args: (v, ctx) => ({file: v.file, origin: pt(v.at), rotation: v.rotation, chests: ctx.supply ? [pt(ctx.supply)] : []}), say: (v) => `Bauen ${v.file}`},
-  produce: {label: 'Material für Bauplan', type: 'produce', general: true, needs: [schematic, where, rotation, chest],
+  produce: {label: 'Material für Bauplan', type: 'produce', general: true, loc: true, needs: [schematic, where, rotation, chest],
     args: (v) => ({file: v.file, origin: pt(v.at), rotation: v.rotation, chests: [pt(v.chest)], store: pt(v.chest)}), say: (v) => `Material für ${v.file}`},
   summon: {label: 'Hierher rufen', type: 'goto', general: true, needs: [], args: (v, ctx) => pt(resolveTarget('pos', ctx)), say: () => 'Hierher rufen'},
   followme: {label: 'Folge mir', type: 'follow', needs: [], args: (v, ctx) => ({player: ctx.viewer}), say: () => 'Folgen'},

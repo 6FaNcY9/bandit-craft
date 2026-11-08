@@ -936,5 +936,48 @@ async function fake() {
     await ev('Fancy', {a: 'go', bot: 'bot1', job: 'goto', x: 4, y: 65, z: 6}); assert.deepEqual(submits.at(-1).args, {x: 4, y: 65, z: 6});
     end();
   }
+  { // part 2b task 4: plan grid, placement with rotation, build/produce; the guest sees only her plans and ground() still decides
+    const submits = [], snaps = [{name: 'bot1', online: true, health: 20, job: null, chest: {x: 9, y: 9, z: 9}}, {name: 'MisaBot', online: true, health: 10, job: null, guest: true}];
+    const infos = [{file: 'a.litematic', size: {x: 3, y: 2, z: 5}, offset: {x: 1, y: 0, z: -2}, blocks: 30, top: 'stone', mtime: 1, owner: null}, {file: 'fancy-x.litematic', size: {x: 1, y: 1, z: 1}, offset: {x: 0, y: 0, z: 0}, blocks: 1, top: 'stone', mtime: 2, owner: 'fancy'}];
+    const api = {snapshots: () => snaps, places: () => [], schematics: async (v) => (v === 'Fancy' ? infos : infos.slice(0, 1)), keeper: {state: () => ({chest: null})},
+      submit: (v, j) => { if (v === 'Midari') throw new Error('Fremdes Gelände'); submits.push(j); return {ok: true, unreached: []}; }};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const {schematicBox} = require('../schematic');
+    const ev = (player, data, extra = {}) => ui.handle({type: 'click', player, data, pos: [0, 64, 0], dim: 'overworld', ...extra});
+    const open = (player, extra) => ui.handle({type: 'open', player, pos: [0, 64, 0], dim: 'overworld', ...extra});
+    const outlines = () => f.of('/outline').map((c) => c.body), menus = () => f.of('/menu').map((c) => c.body);
+    await ev('Fancy', {a: 'schemm', bot: 'bot1'}); assert.equal(menus().at(-1).title, 'Bauplan für bot1');
+    await ev('Fancy', {a: 'pickplan', file: 'a.litematic'}); assert.equal(menus().at(-1).title, 'Bauen: a');
+    await ev('Fancy', {a: 'pickplan', file: 'x.litematic'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: Bauplan nicht gefunden');
+    await ev('Fancy', {a: 'buildgo', mode: 'schematic'}); assert.equal(ui.state('Fancy').flash.text, 'Erst einen Ort wählen');
+    await ev('Fancy', {a: 'rotate', rotation: 45}); assert.match(ui.state('Fancy').flash.text, /Drehung/);
+    await ev('Fancy', {a: 'placego', mode: 'build', where: 'pos'});
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: schematicBox(infos[0], {x: 0, y: 64, z: 0}, 0), ghost: true});
+    await ev('Fancy', {a: 'buildgo', mode: 'schematic'});
+    assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'schematic', args: {file: 'a.litematic', origin: {x: 0, y: 64, z: 0}, rotation: 0, chests: []}, replace: false});
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').screen.name, 'botm');
+    // rotate + place by staff: relative follow box, sneak rotates and keeps the pick, a plain click confirms
+    await ev('Fancy', {a: 'pickplan', file: 'a.litematic'}); await ev('Fancy', {a: 'rotate', rotation: 90});
+    await ev('Fancy', {a: 'pick', kind: 'place'});
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null, ghost: true, follow: schematicBox(infos[0], {x: 0, y: 0, z: 0}, 90)});
+    assert.equal(f.of('/actionbar').at(-1).body.text, 'Klick = hier bauen · Schleichen+Klick = drehen');
+    const nm = menus().length;
+    await open('Fancy', {sneak: true, gaze: {x: 5, y: 64, z: 5, block: 'stone'}});
+    assert.deepEqual(outlines().at(-1).follow, schematicBox(infos[0], {x: 0, y: 0, z: 0}, 180)); assert.equal(menus().length, nm); assert.ok(ui.state('Fancy').pick);
+    await open('Fancy', {gaze: {x: 5, y: 64, z: 5, block: 'air'}}); assert.ok(ui.state('Fancy').pick); assert.equal(menus().length, nm);
+    await open('Fancy', {gaze: {x: 5, y: 64, z: 5, block: 'stone'}});
+    assert.equal(menus().at(-1).title, 'Bauen: a'); assert.equal(ui.state('Fancy').pick, null);
+    assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: schematicBox(infos[0], {x: 5, y: 64, z: 5}, 180), ghost: true});
+    await ev('Fancy', {a: 'buildgo', mode: 'produce'});
+    assert.equal(submits.at(-1).type, 'produce'); assert.deepEqual(submits.at(-1).args.store, {x: 9, y: 9, z: 9}); assert.equal(submits.at(-1).args.rotation, 180);
+    // guest: no owner-only plan, her submit fails in ground(): flash, selection kept
+    await ev('Midari', {a: 'schemm', bot: 'MisaBot'}); await ev('Midari', {a: 'pickplan', file: 'fancy-x.litematic'});
+    assert.equal(ui.state('Midari').flash.text, 'Fehler: Bauplan nicht gefunden');
+    await ev('Midari', {a: 'pickplan', file: 'a.litematic'}); await ev('Midari', {a: 'placego', mode: 'build', where: 'pos'});
+    const no = outlines().length;
+    await ev('Midari', {a: 'buildgo', mode: 'schematic'});
+    assert.equal(ui.state('Midari').flash.text, 'Fehler: Fremdes Gelände'); assert.ok(ui.state('Midari').build.at); assert.equal(outlines().length, no);
+    end();
+  }
   console.log('botui ok');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -131,7 +131,7 @@ const harness = (over = {}) => {
   const snaps = [{...base, name: 'bot1'}, {...base, name: 'bot2'}, {...base, name: 'MisaBot'}];
   let id = 0;
   const fetch = async (url, o) => { calls.push({path: new URL(url).pathname, body: o.body && JSON.parse(o.body)}); return {ok: true, json: async () => ({ok: true})}; };
-  const api = {snapshots: () => snaps, places: () => over.places || [], schematics: async () => ['house.litematic'], keeper: {state: () => ({chest: {x: 10, y: 65, z: 10}})},
+  const api = {snapshots: () => snaps, places: () => over.places || [], schematics: async () => [{file: 'house.litematic', size: {x: 1, y: 1, z: 1}, offset: {x: 0, y: 0, z: 0}, blocks: 1, top: 'stone', mtime: 1, owner: null}], keeper: {state: () => ({chest: {x: 10, y: 65, z: 10}})},
     submit: (v, j) => { if (over.fail) throw new Error(over.fail); submits.push({v, ...j}); return {ok: true, unreached: []}; }, stopAll: () => ({})};
   const ui = new BotUi({url: 'http://x', token: 't', viewerBots: {Fancy: '*', Midari: ['MisaBot']}, api, log: () => {}, fetch});
   const ev = (type, player, extra = {}) => ui.handle({id: ++id, type, player, pos: [1, 64, 1], dim: 'overworld', yaw: 0, gaze: chestG, ...extra});

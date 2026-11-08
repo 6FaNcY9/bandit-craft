@@ -7,6 +7,7 @@ const {safe} = require('./botui-screens');
 const {germanName, BLOCKS, CRAFTS, SMELTS} = require('./botui-jobs');
 const {recipeGrid, SMELT} = require('./recipes');
 const {FUELS} = require('./crafting');
+const itemsByName = require('minecraft-data')('26.1').itemsByName;
 
 // One slot: `payload` comes back as the click's data, `extra` carries count/damage/head/glint/lore.
 const slot = (i, item, name, payload, extra = {}) => ({slot: i, item, name: safe(name, 40), payload, ...extra});
@@ -54,7 +55,7 @@ function botPage(view, screen) {
     go(5, 'chest', 'Einlagern', 'deposit'), slot(6, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
     slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type)}), go(11, 'iron_axe', 'Holz holen', 'chop'),
     slot(12, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(13, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
-    slot(14, 'bricks', 'Bauen…', {a: 'job', key: 'schematic', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
+    slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
     go(16, 'oak_sapling', 'Baumfarm', 'treefarm'),
     slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), slot(25, 'book', 'Mehr…', {a: 'morem', bot}), back(26, 'ov')]};
 }
@@ -247,8 +248,38 @@ function botPickPage(view, screen = {}) {
   return {type: 'chest', title: 'Welcher Bot?', rows, slots};
 }
 
+// Bauplan: the visible plans as a paged grid, the viewer's recent ones first, then newest.
+function schemPage(view, screen) {
+  const bot = snapOf(view, screen.bot).name, recent = view.recentPlans || [], rank = (p) => { const i = recent.indexOf(p.file); return i < 0 ? 99 : i; };
+  const plans = [...(view.schematics || [])].sort((a, b) => rank(a) - rank(b) || b.mtime - a.mtime);
+  const pages = Math.max(1, Math.ceil(plans.length / 45)), page = Math.max(0, Math.min(pages - 1, Number(screen.page) || 0));
+  const slots = plans.slice(page * 45, page * 45 + 45).map((p, i) => slot(i, itemsByName[p.top] ? p.top : 'paper', p.file.replace(/\.litematic$/, ''), {a: 'pickplan', file: p.file},
+    {lore: [`${p.size.x} × ${p.size.y} × ${p.size.z} · ${p.blocks} Blöcke`, p.owner ? 'eigener Plan' : 'geteilt']}));
+  if (!plans.length) slots.push(slot(22, 'barrier', 'Keine Baupläne · Bauplan hochladen', {a: 'upload'}));
+  if (pages > 1) slots.push(slot(45, 'arrow', 'Vorherige Seite', {a: 'schemm', bot, page: Math.max(0, page - 1)}), slot(53, 'arrow', 'Nächste Seite', {a: 'schemm', bot, page: Math.min(pages - 1, page + 1)}));
+  slots.push(back(49, 'botm', bot));
+  return {type: 'chest', title: `Bauplan für ${safe(bot, 20)}`, rows: 6, slots};
+}
+
+// Bauen: who, plan, rotation, where (stick / mark / here / saved places), when, go.
+function buildPage(view) {
+  const b = view.build, info = (view.schematics || []).find((p) => p.file === b.file), top = info && itemsByName[info.top] ? info.top : 'paper';
+  const where = (i, item, name, w) => slot(i, item, name, {a: 'placego', mode: 'build', where: w});
+  const slots = [slot(0, 'player_head', b.bot, {a: 'botpick', back: 'buildm'}, {head: b.bot, lore: ['Klick: anderer Bot']}),
+    slot(1, top, b.file.replace(/\.litematic$/, ''), {a: 'buildm'}, info ? {lore: [`${info.size.x} × ${info.size.y} × ${info.size.z}`]} : {}),
+    ...[0, 90, 180, 270].map((r, i) => slot(3 + i, 'compass', `${r}°`, {a: 'rotate', rotation: r}, {glint: b.rotation === r})),
+    back(8, 'schemm', b.bot), slot(9, 'grass_block', 'Platzieren (zeig mit dem Stab)', {a: 'pick', kind: 'place'}),
+    ...(view.mark?.spot ? [where(10, 'red_banner', 'Markierte Stelle', 'mark')] : []), where(11, 'compass', 'Wo ich stehe', 'pos'),
+    slot(12, 'oak_sign', 'Gespeicherte Orte…', {a: 'placem', mode: 'build', bot: b.bot}),
+    b.at ? slot(14, 'target', `Wohin: ${b.at.x} ${b.at.y} ${b.at.z}`, {a: 'buildm'}) : slot(14, 'barrier', 'Noch kein Ort', {a: 'buildm'}),
+    slot(18, 'clock', 'Danach', {a: 'setwhen', when: 'next'}, {glint: b.when === 'next'}), slot(19, 'clock', 'Jetzt (ersetzt die Arbeit)', {a: 'setwhen', when: 'now'}, {glint: b.when === 'now'}),
+    slot(21, 'bricks', 'Bauen', {a: 'buildgo', mode: 'schematic'}), slot(22, 'chest', 'Material sammeln', {a: 'buildgo', mode: 'produce'}, {lore: ['legt alles in die Kiste des Bots']}),
+    slot(26, 'barrier', 'Abbrechen', {a: 'botm', bot: b.bot})];
+  return {type: 'chest', title: `Bauen: ${safe(b.file.replace(/\.litematic$/, ''), 30)}`, rows: 3, slots};
+}
+
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

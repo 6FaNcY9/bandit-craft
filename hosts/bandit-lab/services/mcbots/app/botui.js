@@ -12,6 +12,7 @@ const {botState} = require('./ingame');
 const jobs = require('./botui-jobs');
 const menus = require('./botui-menus');
 const {recipeGrid} = require('./recipes');
+const {schematicBox} = require('./schematic');
 const ownerOnly = (ui, viewer) => { if (ui.viewerBots[viewer] !== '*') throw new Error('nur für den Besitzer'); };
 const oneBot = (ui, viewer, data) => allowedBots(ui.viewerBots, viewer, [data.bot])[0];
 const on = (data) => data.on === 1 || data.on === true;
@@ -24,6 +25,12 @@ const traderOf = (ui, viewer, data) => {
 const done = (r) => { if (r?.unreached?.length) throw new Error('nicht erreichbar'); };
 
 const box = (p, q) => ({x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)});
+// The plan's info among those this viewer may see (a guest's list is filtered by api.schematics).
+const planOf = async (ui, viewer, file) => {
+  const info = (await ui.api.schematics(viewer)).find((p) => p.file === file);
+  if (!info) throw new Error('Bauplan nicht gefunden');
+  return info;
+};
 const outline = (ui, viewer, b, ghost = false) => ui.call('/outline', {player: viewer, box: b, ...(ghost ? {ghost: true} : {})}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
 const clearSel = async (st, ui, viewer) => { st.sel = {a: null, b: null, dim: null}; await outline(ui, viewer, null); };
 
@@ -126,6 +133,12 @@ function setBlock(st, block) {
   st.recent = [block, ...(st.recent || []).filter((b) => b !== block)].slice(0, 4);
 }
 
+// The ghost box relative to the gazed block, moved by the plugin; the old plugin ignores `follow`.
+async function followGhost(st, ui, viewer) {
+  const info = await planOf(ui, viewer, st.build.file);
+  await ui.call('/outline', {player: viewer, box: null, ghost: true, follow: schematicBox(info, {x: 0, y: 0, z: 0}, st.build.rotation)}).catch((e) => ui.log(`botui ${viewer}: outline: ${e.message}`));
+}
+
 const ACTIONS = {
   // `none` after_action keeps the dialog open on the client, so the plugin clears it; Escape closes it either way.
   close: async (st, data, ui, viewer) => {
@@ -200,15 +213,66 @@ const ACTIONS = {
     st.screen = {name: 'placem', mode: data.mode, bot: oneBot(ui, viewer, data)};
   },
   // Hingehen: gaze, position, the stored mark or a saved place (build mode follows with the plan menus).
-  placego: (st, data, ui, viewer) => {
-    const bot = oneBot(ui, viewer, data), where = String(data.where);
-    if (data.mode !== 'goto') throw new Error('unbekannter Modus');
+  placego: async (st, data, ui, viewer) => {
+    const where = String(data.where);
+    if (data.mode !== 'goto' && data.mode !== 'build') throw new Error('unbekannter Modus');
     if (!/^(gaze|pos|mark|place:.+)$/.test(where)) throw new Error('unbekanntes Ziel');
+    if (data.mode === 'build') { // the bot is the plan's (rights checked when it was chosen), not the payload's
+      if (!st.build) throw new Error('Erst einen Bauplan wählen');
+      const at = where === 'mark' ? markSpot(st, ui, viewer) : jobs.resolveTarget(where, st.ctx, ui.api.places());
+      st.screen = {name: 'buildm'};
+      if (!at) return ui.flash(st, 'Keine Stelle markiert');
+      st.build.at = {x: at.x, y: at.y, z: at.z, dim: at.dim};
+      return outline(ui, viewer, schematicBox(await planOf(ui, viewer, st.build.file), st.build.at, st.build.rotation), true);
+    }
+    const bot = oneBot(ui, viewer, data);
     st.screen = {name: 'botm', bot};
     if (where !== 'mark') return orderAt(st, ui, viewer, bot, 'goto', {where});
     const spot = markSpot(st, ui, viewer);
     if (!spot) return ui.flash(st, 'Keine Stelle markiert');
     orderAt(st, ui, viewer, bot, 'goto', {x: spot.x, y: spot.y, z: spot.z});
+  },
+  schemm: (st, data, ui, viewer) => { st.screen = {name: 'schemm', bot: botOf(st, ui, viewer, data.bot), page: Math.max(0, Math.floor(Number(data.page)) || 0)}; },
+  buildm: (st) => { if (!st.build) throw new Error('Erst einen Bauplan wählen'); st.screen = {name: 'buildm'}; },
+  pickplan: async (st, data, ui, viewer) => {
+    await planOf(ui, viewer, data.file);
+    const prev = st.build;
+    st.build = {file: data.file, bot: botOf(st, ui, viewer), rotation: prev?.file === data.file ? prev.rotation : 0, at: null, when: 'next', mode: 'schematic'};
+    st.recentPlans = [data.file, ...(st.recentPlans || []).filter((f) => f !== data.file)].slice(0, 4);
+    st.screen = {name: 'buildm'};
+  },
+  rotate: async (st, data, ui, viewer) => {
+    if (!st.build) throw new Error('Erst einen Bauplan wählen');
+    if (![0, 90, 180, 270].includes(data.rotation)) throw new Error('Drehung ungültig');
+    st.build.rotation = data.rotation;
+    st.screen = {name: 'buildm'};
+    if (st.build.at) await outline(ui, viewer, schematicBox(await planOf(ui, viewer, st.build.file), st.build.at, data.rotation), true);
+  },
+  setwhen: (st, data) => {
+    if (!st.build) throw new Error('Erst einen Bauplan wählen');
+    if (data.when !== 'next' && data.when !== 'now') throw new Error('unbekannter Zeitpunkt');
+    st.build.when = data.when;
+    st.screen = {name: 'buildm'};
+  },
+  // Bauen / Material sammeln: the order goes through jobs.build and api.submit (ground()); a refusal keeps the selection.
+  buildgo: async (st, data, ui, viewer) => {
+    const b = st.build;
+    if (!b) throw new Error('Erst einen Bauplan wählen');
+    if (data.mode !== 'schematic' && data.mode !== 'produce') throw new Error('unbekannter Modus');
+    st.screen = {name: 'buildm'};
+    if (!b.at) return ui.flash(st, 'Erst einen Ort wählen');
+    if (jobs.dimOf(b.at.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Ort ist in einer anderen Welt');
+    const bot = oneBot(ui, viewer, {bot: b.bot}), d = {file: b.file, rotation: b.rotation, when: b.when, x: b.at.x, y: b.at.y, z: b.at.z};
+    if (data.mode === 'produce') {
+      const c = ui.api.snapshots().find((s) => s.name === bot)?.chest || supplyFor(ui, viewer);
+      if (!c) return ui.flash(st, 'Erst eine Kiste merken');
+      d.chesttext = `${c.x} ${c.y} ${c.z}`;
+    }
+    const o = jobs.build(data.mode, {who: bot, ...d}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: (await ui.api.schematics(viewer)).map((p) => p.file)});
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+    await clearSel(st, ui, viewer);
+    st.screen = {name: 'botm', bot};
+    ui.flash(st, `${bot}: ${o.say}`, true);
   },
   // Herstellen window: st.make is the viewer's craft in the making; the same bot keeps its item.
   craftm: (st, data, ui, viewer) => {
@@ -296,7 +360,16 @@ const ACTIONS = {
     st.screen = {name: data.back, ...(data.back === 'botm' ? {bot} : {})};
   },
   pick: async (st, data, ui, viewer) => {
-    if (data.kind !== 'block' && data.kind !== 'chest') throw new Error('unbekannte Auswahl');
+    if (data.kind !== 'block' && data.kind !== 'chest' && data.kind !== 'place') throw new Error('unbekannte Auswahl');
+    if (data.kind === 'place') { // the ghost follows the staff's gaze (plugin), the next staff click is the origin
+      if (!st.build) throw new Error('Erst einen Bauplan wählen');
+      st.pick = {kind: 'place', until: ui.now() + PICK_MS};
+      st.screen = {name: 'buildm'};
+      await ACTIONS.close(st, data, ui, viewer);
+      await followGhost(st, ui, viewer);
+      await ui.call('/actionbar', {player: viewer, text: 'Klick = hier bauen · Schleichen+Klick = drehen'}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
+      return;
+    }
     const bot = data.bot !== undefined ? oneBot(ui, viewer, data) : undefined;
     if (!bot) formOf(st, ui, viewer);
     st.pick = {kind: data.kind, bot, until: ui.now() + PICK_MS};
@@ -363,7 +436,7 @@ const ACTIONS = {
   send: async (st, data, ui, viewer) => {
     try {
       const o = jobs.build(data.key, data, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(),
-        allowed: ui.viewerBots[viewer], viewer, schematics: await ui.api.schematics(viewer)});
+        allowed: ui.viewerBots[viewer], viewer, schematics: (await ui.api.schematics(viewer)).map((p) => p.file)});
       const r = ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace});
       done(r);
       if (r?.skipped?.length === o.bots.length) { // nothing was queued (graves: none open)
@@ -568,7 +641,7 @@ class BotUi {
       const mineBot = who && (allowed === '*' ? this.api.snapshots().some((s) => s.name === who) : allowed.includes(who));
       st.lastClick = this.now();
       if (st.pick && st.pick.until < this.now()) st.pick = null; // expired: dropped, this open is handled normally
-      if (st.pick) { if (!await this.consumePick(st, viewer, g)) return; }
+      if (st.pick) { if (!await this.consumePick(st, viewer, g, e.sneak === true)) return; }
       else if (mineBot) st.screen = {name: 'botm', bot: who};
       else if (g && !g.entity && (g.block === 'crafting_table' || /^(furnace|blast_furnace|smoker)$/.test(g.block))) { try { ACTIONS[g.block === 'crafting_table' ? 'craftm' : 'smeltm'](st, {}, this, viewer); } catch (err) { this.flash(st, 'Fehler: ' + err.message); } }
       else if (g && !g.entity && jobs.isChest(g.block)) st.screen = {name: 'chestm', at: {x: g.x, y: g.y, z: g.z}};
@@ -608,7 +681,18 @@ class BotUi {
   }
 
   // The staff's right click while a pick is live is the answer. false: wrong target, flash only, the pick stays and no menu opens.
-  async consumePick(st, viewer, g) {
+  async consumePick(st, viewer, g, sneak = false) {
+    if (st.pick.kind === 'place') {
+      if (!g || g.entity || g.block === 'air') { this.flash(st, 'Zeig auf einen Block'); return false; }
+      try {
+        if (sneak) { st.build.rotation = (st.build.rotation + 90) % 360; await followGhost(st, this, viewer); return false; }
+        st.pick = null;
+        st.build.at = {x: g.x, y: g.y, z: g.z, dim: st.ctx.dim};
+        await outline(this, viewer, schematicBox(await planOf(this, viewer, st.build.file), st.build.at, st.build.rotation), true);
+      } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
+      st.screen = {name: 'buildm'};
+      return true;
+    }
     const {kind, bot} = st.pick, ok = g && !g.entity && (kind === 'chest' ? jobs.isChest(g.block) : jobs.BLOCKS.includes(oreOf(g.block)));
     if (!ok) { this.flash(st, kind === 'chest' ? 'Das ist keine Kiste' : 'Das ist kein passender Block'); return false; }
     st.pick = null;
@@ -626,9 +710,9 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     const refreshing = this.screens.REFRESHING.has(st.screen.name);
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || []});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || []});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash, idle: this.api.idle, ctx: st.ctx, sel: st.sel,
-      places: this.api.places(), schematics: refreshing ? [] : await this.api.schematics(viewer), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
+      places: this.api.places(), schematics: refreshing ? [] : (await this.api.schematics(viewer)).map((p) => p.file), traderChests: this.api.traderChests, traders: this.api.traders?.() || [], mapState: st.mapState});
   }
 
   // refresh: the plugin itself refuses (feedback "closed") when the player closed the dialog while this was on the wire.

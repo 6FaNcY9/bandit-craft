@@ -99,3 +99,13 @@ const {VALIDATE} = require('../bots');
   for (const n of ['wildflowers', 'short_grass', 'poppy']) assert.ok(B.PLANTS.has(n), n);
   for (const n of ['torch', 'redstone_wire', 'rail', 'lever', 'tripwire']) assert.ok(!B.PLANTS.has(n), n);
 }
+{ // the ghost box is the box placeSchematic fills, for every rotation and a non-zero offset (part 2b)
+  const {placeSchematic, schematicBox} = require('../schematic');
+  const parsed = {size: {x: 3, y: 2, z: 5}, offset: {x: 1, y: 0, z: -2}}, origin = {x: 10, y: 64, z: 10};
+  const blocks = [];
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 2; y++) for (let z = 0; z < 5; z++) blocks.push({x, y, z, name: 'stone', props: {}});
+  for (const r of [0, 90, 180, 270]) {
+    const placed = placeSchematic({...parsed, blocks, air: []}, {origin, rotation: r}), min = (k) => Math.min(...placed.map((b) => b[k])), max = (k) => Math.max(...placed.map((b) => b[k]));
+    assert.deepStrictEqual(schematicBox(parsed, origin, r), {x1: min('x'), y1: min('y'), z1: min('z'), x2: max('x'), y2: max('y'), z2: max('z')}, `rotation ${r}`);
+  }
+}

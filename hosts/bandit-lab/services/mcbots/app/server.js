@@ -331,7 +331,10 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...cfg.guestBots, ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
     places: () => places.list,
     // A guest sees the shared plans and their own uploads; the owner everything (uploads.js visible).
-    schematics: async (viewer) => uploadsLib.visible((await listSchematics()).filter((x) => !x.error).map((x) => x.file), viewer, cfg.viewerBots[viewer] === '*', cfg.ingameViewers),
+    schematics: async (viewer) => {
+      const infos = (await listSchematics()).filter((x) => !x.error), ok = new Set(uploadsLib.visible(infos.map((x) => x.file), viewer, cfg.viewerBots[viewer] === '*', cfg.ingameViewers));
+      return infos.filter((x) => ok.has(x.file));
+    },
     uploadLink: (viewer) => `${cfg.uploadBase}/upload?t=${uploads.issue(viewer)}`,
     sidebar: (viewer, on) => mainConsole?.([on ? `team join mcbots ${viewer}` : `team leave ${viewer}`]),
   }}) : null;
@@ -459,13 +462,18 @@ async function listSchematics() {
       try {
         const s = await schematicLib.parseLitematic(fs.readFileSync(path.join(SCHEMATIC_DIR, file)));
         const bom = schematicLib.billOfMaterials(s.blocks);
-        c = {mtime: st.mtimeMs, info: {file, name: s.name, size: s.size, blocks: s.blocks.length, items: bom.items}};
+        const count = {};
+        for (const b of s.blocks) { const n = b.name.replace(/^minecraft:/, ''); count[n] = (count[n] || 0) + 1; }
+        const top = Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] || 'stone';
+        c = {mtime: st.mtimeMs, info: {file, name: s.name, size: s.size, offset: s.offset, blocks: s.blocks.length, items: bom.items, top, mtime: st.mtimeMs}};
       } catch (e) {
         c = {mtime: st.mtimeMs, info: {file, error: e.message.slice(0, 120)}};
       }
       schematicInfo.set(file, c);
     }
-    out.push(c.info);
+    // owner: the uploading viewer's prefix (uploads.js fileName), null for a shared plan
+    const owner = c.info.error ? null : (cfg.ingameViewers || []).map((v) => String(v).toLowerCase()).find((v) => file.toLowerCase().startsWith(v + '-')) || null;
+    out.push({...c.info, owner});
   }
   return out;
 }

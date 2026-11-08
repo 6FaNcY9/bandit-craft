@@ -242,3 +242,19 @@ console.log('botui-menus ok');
   assert.match(menu({name: 'whom', job: 'wheatfarm'}, view()).menu.title, /Weizenfarm/);
   for (const x of [...h.slots, ...w.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }
+{ // schemm: newest first, own plans labelled, recent first, empty -> upload; buildm glints rotation and when
+  const infos = [{file: 'a.litematic', size: {x: 1, y: 1, z: 1}, blocks: 1, top: 'stone', mtime: 1, owner: null},
+    {file: 'fancy-b.litematic', size: {x: 4, y: 3, z: 4}, blocks: 20, top: 'stone_bricks', mtime: 2, owner: 'fancy'}];
+  const m = menu({name: 'schemm', bot: 'zed', page: 0}, view({schematics: infos})).menu;
+  assert.equal(m.title, 'Bauplan für zed'); assert.equal(m.rows, 6);
+  assert.deepEqual(m.slots.filter((x) => x.slot < 45).map((x) => x.name), ['fancy-b', 'a']);
+  assert.equal(m.slots[0].item, 'stone_bricks'); assert.deepEqual(m.slots[0].lore, ['4 × 3 × 4 · 20 Blöcke', 'eigener Plan']);
+  assert.deepEqual(m.slots[0].payload, {a: 'pickplan', file: 'fancy-b.litematic'}); assert.equal(m.slots[1].lore[1], 'geteilt');
+  assert.deepEqual(menu({name: 'schemm', bot: 'zed'}, view({schematics: infos, recentPlans: ['a.litematic']})).menu.slots[0].name, 'a');
+  const e = menu({name: 'schemm', bot: 'zed'}, view({schematics: []})).menu.slots.find((x) => x.slot === 22);
+  assert.equal(e.item, 'barrier'); assert.deepEqual(e.payload, {a: 'upload'});
+  const b = menu({name: 'buildm'}, view({schematics: infos, build: {file: 'a.litematic', bot: 'zed', rotation: 90, at: null, when: 'now', mode: 'schematic'}})).menu;
+  assert.equal(b.title, 'Bauen: a');
+  assert.deepEqual(b.slots.filter((x) => x.glint).map((x) => x.slot), [4, 19]);
+  for (const x of [...m.slots, ...b.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
+}
