@@ -145,11 +145,10 @@ const SCHEDULE = [[0, 60], [30000, 30], [50000, 10]]; // [ms after the request, 
 
 class Admin {
   // call(commands[]) -> Promise<replies[]>; botNames: names to mark as bots; events: the dashboard's EventLog.
-  constructor({call, events, botNames = [], guests = [], setTimer = setTimeout, clearTimer = clearTimeout}) {
+  constructor({call, events, botNames = [], setTimer = setTimeout, clearTimer = clearTimeout}) {
     this.call = call;
     this.events = events;
     this.botNames = new Set(botNames);
-    this.guests = new Set(guests); // another player's bots (GUEST_BOTS) play on the real server: never evicted
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
     this.console = []; // {id, t, cmd, reply}, newest last
@@ -180,25 +179,6 @@ class Admin {
     if (!QUERIES[what]) throw new Error('what must be one of ' + Object.keys(QUERIES).join(', '));
     const t = clean((await this.call([QUERIES[what]]))[0]);
     return {what, names: what === 'whitelist' ? parse.whitelist(t) : what === 'bans' ? parse.bans(t) : undefined, text: t.slice(0, 4000)};
-  }
-
-  // Bots that ended up on this (the real) server while they belong in the sandbox: VeloAuth sends a login to
-  // main when the sandbox is down (lab 2026-10-11, a deploy). A kick makes Velocity move them to the sandbox.
-  async evictBots() {
-    const [list] = await this.call(['minecraft:list']);
-    const bots = parse.players(list).filter((n) => this.isBot(n) && !this.guests.has(n));
-    for (const n of bots) await this.call([`minecraft:kick ${n} bots play in the sandbox`]);
-    return bots;
-  }
-
-  // The reverse: a bot of the real server that logged in while Paper was starting fell back to the sandbox and stays
-  // there (MisaBot, deploy 2026-11-04). A kick moves it on along Velocity's try list, which is main.
-  async returnBots(sandboxCall) {
-    await this.call(['minecraft:list']); // throws while the real server is down: a kick would send the bot nowhere
-    const [list] = await sandboxCall(['minecraft:list']);
-    const bots = parse.players(list).filter((n) => this.guests.has(n));
-    for (const n of bots) await sandboxCall([`minecraft:kick ${n} this bot plays on the main server`]);
-    return bots;
   }
 
   consoleSince(since = 0) { return {lastId: this.nextId, entries: this.console.filter((e) => e.id > since)}; }

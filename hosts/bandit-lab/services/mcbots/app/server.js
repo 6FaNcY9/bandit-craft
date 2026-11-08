@@ -19,7 +19,6 @@ const {Keeper, idle} = require('./keeper');
 const {TradeSchedule} = require('./tradeschedule');
 const {TraderChests} = require('./traderchests');
 const {Board} = require('./board');
-const scenarioRun = require('./scenario-run');
 const planConfig = require('./plan-config');
 const {botView} = require('./view');
 const {scanAround} = require('./scan');
@@ -135,8 +134,8 @@ setInterval(() => {
 const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); ingame?.event(e); ownAlerts?.event(e, runners.get(e.bot)?.snapshot()); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
 const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
-const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue, the scenarios and the laptop tools
-const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...Object.values(cfg.hubWorkers).flat()], guests: [...cfg.guestBots, ...cfg.mainBots]}) : null;
+const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue and the laptop tools
+const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...Object.values(cfg.hubWorkers).flat()]}) : null;
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
 const runners = new Map(cfg.names.map((n) => [n, new BotRunner(n, {host: cfg.mcHost, port: cfg.mcPort, log, world, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, loginSeed: cfg.loginSeed, hostLabel: cfg.hostLabel, ownerUuids: cfg.ownerUuids, onEvent: (b, k, t) => events.add(b, k, t)})]));
 const settings = new Settings(process.env.STATE_DIR || '');
@@ -169,7 +168,6 @@ const tradeSchedule = cfg.tradeSchedule.length ? new TradeSchedule({runners, hal
 // (PROTECTED_AREAS and the dashboard's protected zones, which join that array) is refused when the job is made.
 const touches = (b) => cfg.protectedAreas.find(([x1, z1, x2, z2, y1, y2]) => b.x1 <= x2 && b.x2 >= x1 && b.z1 <= z2 && b.z2 >= z1 && (y1 == null || y2 == null || (b.y1 <= y2 && b.y2 >= y1)));
 const board = cfg.boardBots.length ? new Board({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'board.json') : null, locked: (b) => { const a = touches(b); return a && `the protected area ${a.slice(0, 4).join(' ')}`; }}) : null;
-let scenarioRunning = false;
 // Map markers: the first 'supply' place is the supply chest for every bot, the
 // hub's workers and the keeper; the first 'site' place is where the keeper works.
 const places = new Places(process.env.STATE_DIR || '');
@@ -836,20 +834,6 @@ const server = http.createServer(async (req, res) => {
       return json(502, {error: e.message});
     }
   }
-  // A sandbox scenario (scenario.js) runs inside the hub: the dashboard's owner starts it, results go to the event log.
-  if (board && req.method === 'POST' && url.pathname === '/api/scenarios') {
-    if (!sameOrigin(req) || !String(req.headers['content-type']).startsWith('application/json')) return json(403, {error: 'bad origin'});
-    if (!cfg.sandboxRcon) return json(400, {error: 'no sandbox console (SANDBOX_RCON_HOST unset)'});
-    // The console resets the sandbox, but the board's bots dig wherever they play: never with them on the real server.
-    if (!process.env.MC_VHOST) return json(400, {error: 'the bots play on the real server (no MC_VHOST): a scenario would dig there'});
-    if (scenarioRunning) return json(409, {error: 'a scenario is already running'});
-    const {name, runs = 1} = await readJson(req).catch(() => ({}));
-    scenarioRunning = true;
-    scenarioRun.main([String(name), '--runs', String(Math.min(5, Number(runs) || 1))], process.env, {call: sandboxConsole, http: boardHttp, out: (line) => events.add('scenario', 'info', line)})
-      .catch((e) => events.add('scenario', 'error', e.message))
-      .finally(() => { scenarioRunning = false; });
-    return json(202, {started: name});
-  }
   return json(404, {error: 'not found'});
 });
 
@@ -870,16 +854,6 @@ const tick = setInterval(() => {
   broadcast();
   hub?.broadcastWorld();
 }, 1000);
-// The board, in-process for the scenarios: same answers as the HTTP routes, without the owner check they need.
-async function boardHttp(method, p, body) {
-  if (p === '/api/state') return {status: 200, body: state()};
-  if (method === 'GET') return {status: 200, body: board.state()};
-  try {
-    return {status: 200, body: board.create({kind: body.kind, box: body.box, by: 'scenario'})};
-  } catch (e) {
-    return {status: 400, body: {error: e.message}};
-  }
-}
 function boardTick() {
   const snaps = new Map([...runners.values()].map((r) => [r.name, r.snapshot()]));
   for (const e of board.observe(snaps)) events.add('board', e.what === 'failed' ? 'error' : 'info', `${e.part || e.job} ${e.what}${e.bot ? ` (${e.bot})` : ''}${e.error ? `: ${e.error}` : ''}`);
@@ -909,12 +883,6 @@ const keeperTick = setInterval(() => {
     log('keeper', `error: ${e.message}`);
   }
 }, 5000);
-// MC_VHOST (the bots play in the sandbox): keep the real server, which the Server panel's RCON reaches, free of all but its own bots, and those out of the sandbox.
-const evictTick = admin && process.env.MC_VHOST ? setInterval(() => {
-  admin.evictBots().then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} off the real server to the sandbox`), () => {});
-  if (sandboxConsole) admin.returnBots(sandboxConsole).then((names) => names.length && events.add('admin', 'info', `moved ${names.join(', ')} from the sandbox back to the real server`), () => {});
-}, 30000) : null;
-
 // ntfy: the supply chest's lacks and a worker that stays away.
 const notifyTick = setInterval(() => {
   try {
@@ -939,7 +907,6 @@ function shutdown() {
   clearInterval(tick);
   clearInterval(keeperTick);
   clearInterval(notifyTick);
-  clearInterval(evictTick);
   clearInterval(blocklogTimer);
   blocklog.flush();
   stopBlueMap();

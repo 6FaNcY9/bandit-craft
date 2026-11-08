@@ -161,8 +161,6 @@ The v1 chest menus (CommandPanels `/bots`, `botmenu`) and the `pa data` push and
   board or help job). The screens mark the others "Sandbox" and list them last. A free pick (`Erster freier`, `Alle meine`) takes only bots
   on main and, for the owner, none of a guest's; a named sandbox bot takes no job with a place, since those coordinates are another spot in
   another world. They are off the map, and `Bedarf` and `Ziele` say "Sandbox", because that is where the keeper then works.
-- A bot of the real server that logged in while Paper was starting lands in the sandbox. Every 30 s the hub kicks such a bot there, and
-  Velocity's try list moves it to main (`Admin.returnBots`).
 - Shipping: the deploy itself restarts `minecraft-server-paper` (nix-minecraft restarts a server whose symlink set changed) and mcbots, which
   kicks players: run the warn script from AGENTS.md first and deploy when nobody plays. The old `bots.yml` and `botmenu.yml` are removed in
   Paper's start-pre (`extraStartPre`, before CommandPanels loads) and again by `minecraft-panels`; both lines are one-time cleanup and can go
@@ -849,11 +847,11 @@ before chopping or mining). Without `SUPPLY_CHEST` or quotas the panel is absent
 
 ![Standing orders panel: quotas, stock and who works on what](img/standing-orders.png)
 
-## Board and scenarios (`app/board.js`, `app/scenario.js`)
+## Board (`app/board.js`)
 
 The job board (spec `docs/specs/2026-10-23-bots-redesign.md`) takes an owner's job, cuts it into
 slices ("parts") of at most 4 wide and hands each to an idle bot of `BOARD_BOTS` as a `part` job.
-The keeper and the plan never task those bots. Today it knows one kind: `excavate`, a box of at most
+The keeper never tasks those bots. Today it knows one kind: `excavate`, a box of at most
 64 x 32 x 64 (x, y, z).
 
 - Start a job: `POST /api/board/jobs {"kind": "excavate", "box": {"x1":..,"y1":..,"z1":..,"x2":..,"y2":..,"z2":..}}`
@@ -868,14 +866,6 @@ The keeper and the plan never task those bots. Today it knows one kind: `excavat
   owner order to a board bot frees its part without a try.
 - A `part` digs natural ground top down, then the blocks the bots placed there (scaffold), and
   leaves torches. It fetches only what it needs (pickaxe, food, room in the inventory), no armour.
-
-Scenarios check the board in the sandbox. `POST /api/scenarios {"name": "excavate-16", "runs": 3}`
-(owner only, from the laptop over the tailnet URL) makes the hub rebuild the test box over the
-sandbox console, start the job, sample every 2 s and check "box empty" from the console (torches
-excepted). One JSON line per run lands in the event log (`scenario`) and in
-`/state/scenarios.jsonl`: `ok`, `empty`, `failed` parts, `ms`, `stalls` (60 s without progress while
-a part runs) and `deaths`. Spike baseline with today's dig loop: 25 min for 16 x 8 x 16 with three
-bots.
 
 ## Building (`build` job)
 
