@@ -228,7 +228,7 @@ Chest and hopper windows with item icons replace the text dialogs as the main su
   result), chest minecart Holen… (`gridm` mode `get`: click = 16, shift = 64, for the page's bot). Sneak + staff right click on a crafting
   table or a furnace/blast furnace/smoker opens `craftm` / `smeltm`; a plain right click still uses the block. Recipe-book clicks on our
   views are cancelled (Paper `PlayerRecipeBookClickEvent`).
-- Part 2b (2026-11-08): marks (sneak + staff on the ground = spot, again elsewhere = area; one store per viewer, 6 h), Mehr… and
+- Part 2b (2026-11-08): marks (sneak + staff on the ground = spot, again elsewhere = area; one store per viewer, 6 h; overview slot 47 `markclear` drops it with its ghost), Mehr… and
   Bewachen…/Hingehen… on the bot page, chest jobs (`chestjobs`, staff on a chest), staff on an animal (`huntm`), wheat or a spawner (`whom`),
   schematic grid `schemm` and the Platzieren ghost (blue `BlockDisplay` box follows the gaze, sneak + click rotates, click sets; plugin
   `/outline ghost/follow`, restart Paper), Bauen / Material sammeln (`buildm`), Bereich (`aream`: Ausheben, Abbauen, Schacht, Ausleuchten,
