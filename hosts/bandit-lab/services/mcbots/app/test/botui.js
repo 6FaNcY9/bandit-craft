@@ -932,6 +932,14 @@ async function fake() {
     assert.deepEqual(ui.state('Midari').flash.ok, false);
     t += MARK_MS + 1;
     assert.deepEqual(markOf(ui, 'Midari'), {spot: null, area: null});
+    // the overview offers Markierung löschen only while a mark exists; the click drops mark and ghost
+    await ev('Midari', {a: 'ov'});
+    assert.ok(!f.of('/menu').at(-1).body.slots.some((s) => s.payload.a === 'markclear'));
+    await sneak('Midari', 5, 64, 5); await ev('Midari', {a: 'ov'});
+    assert.ok(f.of('/menu').at(-1).body.slots.some((s) => s.payload.a === 'markclear'));
+    await ev('Midari', {a: 'markclear'});
+    assert.equal(markOf(ui, 'Midari').spot, null); assert.deepEqual(f.of('/outline').at(-1).body, {player: 'Midari', box: null});
+    assert.ok(!f.of('/menu').at(-1).body.slots.some((s) => s.payload.a === 'markclear'));
     await sneak('Fancy', 1, 2, 3, {dim: 'overworld'}); t += 1000; await sneak('Fancy', 4, 5, 6, {dim: 'the_nether'});
     assert.equal(bars().at(-1), 'Ecken in verschiedenen Welten');
     // a mark from another world is never used here: no submit, German flash

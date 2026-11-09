@@ -31,6 +31,7 @@ function overview(view) {
   });
   slots.push(slot(45, 'barrier', 'Alle: Stopp', {a: view.owner ? 'stopall' : 'stopmine'}),
     slot(46, 'ender_pearl', 'Alle: Komm zu mir', {a: 'comeall'}),
+    ...(view.mark?.spot ? [slot(47, 'red_banner', 'Markierung löschen', {a: 'markclear'}, {lore: ['Nimmt auch den blauen Kasten weg']})] : []),
     slot(49, 'map', 'Karte', {a: 'karte'}),
     slot(51, 'writable_book', 'Bauplan hochladen', {a: 'upload'}),
     slot(53, 'comparator', 'Einstellungen', {a: 'zielm'}));

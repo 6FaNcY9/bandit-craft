@@ -70,6 +70,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MenuType;
 import org.bukkit.inventory.PlayerInventory;
@@ -387,6 +388,7 @@ public class BotUi extends JavaPlugin implements Listener {
     ItemStack it = new ItemStack(m);
     ItemMeta meta = it.getItemMeta();
     meta.displayName(Component.text(str(s, "name")).decoration(TextDecoration.ITALIC, false));
+    meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS); // a badge tool shows its name and lore, not vanilla stats
     if (s.get("lore") instanceof JSONArray a) {
       List<Component> lore = new ArrayList<>();
       for (Object l : a) lore.add(Component.text((String) l).decoration(TextDecoration.ITALIC, false));

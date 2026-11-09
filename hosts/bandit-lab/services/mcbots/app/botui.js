@@ -224,6 +224,7 @@ const ACTIONS = {
     } catch (e) { throw new Error(explain(e.message)); }
   },
   areaclear: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = {name: 'botm', bot: botOf(st, ui, viewer)}; },
+  markclear: async (st, data, ui, viewer) => { ui.marks.delete(viewer); await outline(ui, viewer, null); st.screen = {name: 'ov'}; ui.flash(st, 'Markierung gelöscht', true); },
   guardm: (st, data, ui, viewer) => { st.screen = {name: 'guardm', bot: oneBot(ui, viewer, data)}; },
   // Bewachen: Shift looks, the mark slot uses the stored spot, else where the viewer stands.
   guardgo: (st, data, ui, viewer) => {
