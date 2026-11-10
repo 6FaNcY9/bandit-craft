@@ -166,7 +166,7 @@ Vanilla does this with one game rule (renamed from `spawnRadius` in 1.21.11), se
 after the border; it is stored in the world:
 
 ```bash
-mcp setworldspawn 0 ~ 0
+mcp setworldspawn 0 '~' 0   # quoted: the shell would turn a bare ~ into the home directory
 mcp gamerule respawn_radius 4500
 mcp gamerule respawn_radius
 ```
