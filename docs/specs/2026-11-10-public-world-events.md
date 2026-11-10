@@ -1,7 +1,7 @@
 # Public world: world events (design, 2026-11-10)
 
-Status: written with the owner on 2026-11-10, not yet approved. Nothing here is built, and no
-command below has been run on Paper 26.2.
+Status: written with the owner on 2026-11-10 and approved with the agent's defaults ("do what you
+recommend"). The pack is built and tested locally (see "Built so far"); it is not on the server.
 Belongs to the public anarchy world (`2026-11-10-public-anarchy-world.md`).
 
 ## Intent
@@ -140,12 +140,34 @@ accepted (the evenness of the spread is still unproven).
 
 ## Built so far (2026-11-10)
 
-The supply drop: `hosts/bandit-lab/services/minecraft-public/events` (the datapack),
-`tools/minecraft-public-events/test.sh` (one whole drop on a throwaway Paper, pass or fail) and
-`bot-run.sh` with `bot.js` (Mineflayer bots hear the announcement, walk there and loot the chest;
-prints what they measured). First bot run, two bots on a flat world, radius 48: both set off on
-the announcement, the nearer one (30 blocks) emptied the chest 11 seconds later, the other (47
-blocks) found it empty; tick time 4 ms average. The pack is not linked into the server yet.
+The whole pack, `hosts/bandit-lab/services/minecraft-public/events` (namespace `bev`), with six
+kinds chosen by weight: supply drop 30, boss 20, dungeon 15, meteor 15, thunderstorm 10, blood
+night 10. One event at a time; the gap between events runs down only while the player minimum
+is online.
+
+- **Drop**: a chest with the `bev:drop` table on the surface.
+- **Boss**: the Ash King (wither skeleton) or the Colossus (ravager), with guards, a boss bar and
+  the `bev:boss` table on death. A boss nobody killed stays in the world without its bar.
+- **Dungeon**: a tower above ground or a crypt below it, each with two spawners and a chest
+  (`bev:dungeon`); the crypt's chest is trapped. Both are templates generated from code by
+  `tools/minecraft-public-events/gen.py`, which also prints them layer by layer for review.
+- **Meteor**: a crater and a core of obsidian and magma around ancient debris and raw gold.
+- **Thunderstorm** and **blood night**: bounded lightning and mob waves near players for the
+  event's time.
+
+Changed against the goals above: vanilla structures (trial chambers, ancient city pieces) are
+not in the rotation. Placing one needs a 12 x 13 chunk area forced and about four seconds; our
+own templates need nine chunks and no measurable time. They can join later as their own kind.
+
+Checks: `tools/minecraft-public-events/test.sh` runs the schedule and every kind from
+announcement to end on a throwaway Paper and asserts its trace; it passes. `bot-run.sh` with
+`bot.js` plays one supply drop with Mineflayer bots (two bots, flat world: the nearer one empties
+the chest about ten seconds after it lands; tick time under 5 ms average).
+
+Not done: the pack is not linked into the server (the nix-minecraft symlink and the matching
+change to bandit-nix `ci/lab-mc-public.nix`), no picture of the dungeons beyond the text
+layout, no resource pack, and no run on real terrain with real players, so the weights, the
+loot and the mob numbers are untested guesses.
 
 ## Open, the owner's call
 

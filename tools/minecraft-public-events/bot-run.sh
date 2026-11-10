@@ -69,6 +69,7 @@ cmd "data modify storage bev:cfg radius set value $radius"
 cmd 'scoreboard players set #lead bev 200'   # 10 seconds from the announcement to the landing
 cmd 'scoreboard players set #life bev 2400'  # marked for two minutes
 cmd "scoreboard players set #min_players bev $bots"
+cmd 'scoreboard players set #force bev 1'    # a supply drop, not a random kind
 cmd 'scoreboard players set #next bev 200'   # the gap runs down once every bot is in
 
 node "$here/bot.js" "$port" "$bots" 150 >"$dir/bots.json" &
