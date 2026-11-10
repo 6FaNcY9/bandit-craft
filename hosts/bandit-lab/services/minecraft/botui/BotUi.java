@@ -775,6 +775,7 @@ public class BotUi extends JavaPlugin implements Listener {
       ItemStack cur = inv.getItem(slot);
       boolean occupied = cur != null && !cur.getType().isAir();
       if (occupied && isStaff(cur)) {
+        inv.setItem(slot, staff()); // an old staff (a stick) becomes the current one
         p.sendMessage(Component.text(HAND_HINT));
       } else if (occupied && inv.firstEmpty() == -1) {
         p.sendMessage(Component.text("Inventar voll"));
@@ -800,7 +801,7 @@ public class BotUi extends JavaPlugin implements Listener {
   private boolean holdsStick(Player p, EquipmentSlot hand) {
     // the main-hand event of an off-hand-only staff click is not a failure: the off-hand event follows and opens
     if (hand == EquipmentSlot.HAND && isStaff(p.getInventory().getItemInOffHand())) return false;
-    return p.getInventory().getItemInMainHand().getType() == Material.STICK || p.getInventory().getItemInOffHand().getType() == Material.STICK;
+    return p.getInventory().getItemInMainHand().getType() == STAFF || p.getInventory().getItemInOffHand().getType() == STAFF;
   }
 
   /** Ignored lines: one per player per 2 s. Opened lines always log (so an open is never hidden) and restart the window. */
@@ -812,8 +813,11 @@ public class BotUi extends JavaPlugin implements Listener {
     getLogger().info("staff: " + p.getName() + " " + a + " " + hand + " " + what);
   }
 
+  /** Not a stick: Litematica's tool item is one, and it keeps every click with it on the client, so none reached the server. */
+  private static final Material STAFF = Material.BLAZE_ROD;
+
   private ItemStack staff() {
-    ItemStack i = new ItemStack(Material.STICK);
+    ItemStack i = new ItemStack(STAFF);
     ItemMeta m = i.getItemMeta();
     m.displayName(Component.text("Zauberstab", NamedTextColor.DARK_PURPLE).decoration(TextDecoration.ITALIC, false));
     m.lore(List.of(Component.text("Linksklick: Übersicht · Rechtsklick: auf etwas zeigen", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
