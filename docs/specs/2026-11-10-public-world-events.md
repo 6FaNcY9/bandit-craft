@@ -34,7 +34,12 @@ the players do with it is their business.
   The owner sees a picture of each new dungeon and approves it before it joins the rotation.
 - What an event leaves behind stays: the dungeon, the crater, the burnt forest. Over the years
   the map fills with the ruins of past events. Nothing is cleaned up.
-- Players need nothing but a vanilla client.
+- Players install nothing by hand. What the server sends by itself is fine (the owner,
+  2026-11-10): a server resource pack may give bosses, loot and events their own look and sound.
+  It is offered, not required (the agent's call: a forced pack locks out players with unusual
+  clients, and those are this server's audience); without it everything still works and looks
+  vanilla. The pack needs a public download address, so it arrives with the relay or the site
+  and is not part of the first build.
 
 ## Non-goals
 
