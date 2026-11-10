@@ -1,7 +1,7 @@
 # Public world: world events (design, 2026-11-10)
 
 Status: written with the owner on 2026-11-10 and approved with the agent's defaults ("do what you
-recommend"). The pack is built and tested locally (see "Built so far"); it is not on the server.
+recommend"). The pack is built, tested locally (see "Built so far") and loaded by the public server.
 Belongs to the public anarchy world (`2026-11-10-public-anarchy-world.md`).
 
 ## Intent
@@ -164,10 +164,12 @@ announcement to end on a throwaway Paper and asserts its trace; it passes. `bot-
 `bot.js` plays one supply drop with Mineflayer bots (two bots, flat world: the nearer one empties
 the chest about ten seconds after it lands; tick time under 5 ms average).
 
-Not done: the pack is not linked into the server (the nix-minecraft symlink and the matching
-change to bandit-nix `ci/lab-mc-public.nix`), no picture of the dungeons beyond the text
-layout, no resource pack, and no run on real terrain with real players, so the weights, the
-loot and the mob numbers are untested guesses.
+On the server since 2026-11-10: delivered as a copy through nix-minecraft `files` (a symlink in
+the world stops Minecraft 26.2 from starting), and Paper logged "Found new data pack file/bev" on
+the first start. bandit-nix `ci/lab-mc-public.nix` does not pin the pack yet.
+
+Not done: no picture of the dungeons beyond the text layout, no resource pack, and no run on real
+terrain with real players, so the weights, the loot and the mob numbers are untested guesses.
 
 ## Open, the owner's call
 

@@ -109,13 +109,14 @@
   '';
 
   # The design's technical guards. The packet-limiter, book-size and spam-limiter defaults are left alone.
-  # UNVERIFIED: the three chunk-loading-basic key names are from docs.papermc.io, not checked against Paper 26.2 build 130.
+  # The three chunk-loading-basic keys are in force on Paper 26.2 build 130 (read back on the lab, 2026-11-10).
   globalGuardPatch = ''
     yq -i '.chunk-loading-basic.player-max-chunk-load-rate = 40 | .chunk-loading-basic.player-max-chunk-send-rate = 40 | .chunk-loading-basic.player-max-chunk-generate-rate = 5' config/paper-global.yml
   '';
-  # UNVERIFIED: every key name and entity id below is from docs.papermc.io, not checked against Paper 26.2 build 130.
+  # Read back on the lab after the first start (2026-11-10): the arrow and experience_orb limits, the two
+  # chunk and collision keys and the redstone implementation are in the file Paper 26.2 build 130 wrote.
   # A wrong name is not fatal (Paper ignores or drops an unknown key) but then that guard is not in force:
-  # compare config/paper-world-defaults.yml after the first start (PUBLIC.md).
+  # compare config/paper-world-defaults.yml after changing a key (PUBLIC.md).
   worldGuardPatch = ''
     yq -i '.chunks.entity-per-chunk-save-limit.arrow = 16 | .chunks.entity-per-chunk-save-limit.ender_pearl = 8 | .chunks.entity-per-chunk-save-limit.experience_orb = 16 | .chunks.entity-per-chunk-save-limit.fireball = 8 | .chunks.entity-per-chunk-save-limit.small_fireball = 8 | .chunks.entity-per-chunk-save-limit.snowball = 8 | .chunks.prevent-moving-into-unloaded-chunks = true | .collisions.max-entity-collisions = 2 | .misc.redstone-implementation = "ALTERNATE_CURRENT" | .anticheat.anti-xray.enabled = false' config/paper-world-defaults.yml
   '';
