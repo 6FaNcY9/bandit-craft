@@ -23,6 +23,11 @@
       ./hosts/bandit-lab/services/mcagents
     ];
 
+    # The public world (docs/specs/2026-11-10-public-anarchy-world.md): the inside of bandit-nix's `mc-public`
+    # container, its own Velocity and Paper. Not part of `lab`: it must never be imported into the host itself.
+    # The importer supplies nix-minecraft's module and overlay; the module takes no `repoConfig`, `inputs` or sops.
+    nixosModules.mc-public = ./hosts/bandit-lab/services/minecraft-public;
+
     # The laptop side of the PC manager: `pc-admin`, admin on the gaming PCs with the owner's finger
     # (tools/winpc/README.md). bandit-nix imports it into the laptop host.
     nixosModules.pc-admin = ./tools/winpc/pc-admin.nix;

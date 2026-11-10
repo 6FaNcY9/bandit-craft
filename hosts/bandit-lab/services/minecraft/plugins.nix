@@ -39,6 +39,19 @@ in
         source = "https://modrinth.com/plugin/bluemap/versions";
       };
     };
+    # The public world only (../minecraft-public: pre-generation inside its border). The private Paper leaves
+    # it out by name (nix-minecraft.nix `paperPlugins`). The hash is the sha512 Modrinth's API lists for this
+    # file (read 2026-11-10), converted to SRI; no machine has fetched the jar against it yet.
+    chunky = {
+      file = "Chunky-Paper-1.5.66.jar";
+      version = "1.5.66";
+      url = "https://cdn.modrinth.com/data/fALzjamp/versions/RBuKjN4k/Chunky-Paper-1.5.66.jar";
+      hash = "sha512-xnsUVpuGJNjUylUPCgZHA+FE04gHO0w0qRPDvTTqOTUb71BFQhAdf4W0mbTelcJNAnpi7mSq0/mnBRrkvsgMUg==";
+      mc263 = {
+        status = "exists";
+        source = "https://modrinth.com/plugin/chunky/versions";
+      };
+    };
     # Not on Modrinth/Hangar; Jenkins may prune old builds, so keep the jar in the binary cache.
     citizens = {
       file = "Citizens-2.0.44-b4258.jar";

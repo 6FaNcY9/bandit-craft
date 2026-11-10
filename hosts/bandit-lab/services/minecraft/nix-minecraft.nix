@@ -41,8 +41,9 @@
 
   # The plugins the Docker stack runs, as symlinks into the store (D2: all jars come from plugins.nix).
   # The rehearsal left Jarvis out so its live AI/API config was not used twice; the Docker server is
-  # stopped at the cutover, so it comes along now.
-  paperPlugins = lib.mapAttrs' (_: p: lib.nameValuePair "plugins/${p.file}" p.src) plugins;
+  # stopped at the cutover, so it comes along now. `chunky` is pinned for the public world only
+  # (../minecraft-public) and stays off this server.
+  paperPlugins = lib.mapAttrs' (_: p: lib.nameValuePair "plugins/${p.file}" p.src) (builtins.removeAttrs plugins ["chunky"]);
 
   # Same keys as the live server.properties (dumped 2026-10-22, minus the RCON password and the
   # management-server keys the server regenerates); only the lines after the attrset differ.
