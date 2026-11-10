@@ -92,8 +92,8 @@ Each line names its host. `sudo` on the lab asks for the password.
    Lab: `sudo nixos-container run mc-public -- ss -ltnH` -> 25565 on `*`, 25567 on `127.0.0.1`, no 25575.
    Laptop (granted in step 3): `nc -vz <mc-public tailnet address> 25565` succeeds; from a tailnet device
    without the grant it does not.
-6. Lab, what Paper loaded (UNVERIFIED: the Paper key names. SModeration 2.0.0 declares no LuckPerms
-   dependency, only an optional voice chat one):
+6. Lab, what Paper loaded (the key names match what the pinned build writes, and Chunky and SModeration
+   2.0.0 load on it without LuckPerms; both checked locally on 2026-11-10):
    `sudo journalctl -M mc-public -u minecraft-server-paper | grep -E 'Chunky|SModeration|Done \('`
    `sudo cat /srv/mc-public/data/paper/ops.json` -> `[]`
    `sudo grep -A4 chunk-loading-basic /srv/mc-public/data/paper/config/paper-global.yml` -> 40, 40, 5
@@ -128,8 +128,7 @@ the contract check forbids declared operators.
 ## World border and pre-generation
 
 `max-world-size=5000` already stops the border at radius 5,000 in every dimension. Set the visible border
-once (10000 is the diameter; UNVERIFIED whether 26.2 keeps one border per dimension, the three lines are
-harmless either way):
+once (10000 is the diameter; 26.2 keeps one border per dimension, so all three lines are needed):
 
 ```bash
 mcp worldborder center 0 0
@@ -138,8 +137,8 @@ mcp execute in minecraft:the_nether run worldborder set 10000
 mcp execute in minecraft:the_end run worldborder set 10000
 ```
 
-Chunky, one world after the other (command names from Chunky's documentation, UNVERIFIED on 1.5.66; world
-names as `sudo ls /srv/mc-public/data/paper` shows them). Radius 5120 is the border plus the view distance
+Chunky, one world after the other (these commands ran on Chunky 1.5.66 with the pinned Paper on
+2026-11-10). Radius 5120 is the border plus the view distance
 (6 chunks), so a player at the border generates nothing: 640 x 640 = 409,600 chunks per dimension.
 
 ```bash
@@ -156,7 +155,7 @@ resume; it runs inside the 3-CPU cap, so expect hours. Measure when all three ar
 numbers into the design's "Longevity" section (estimate there: under 10 GB):
 
 ```bash
-sudo du -sh /srv/mc-public/data/paper/world*
+sudo du -sh /srv/mc-public/data/paper/world/dimensions/minecraft/*
 sudo du -sh /srv/mc-public/data
 ```
 
@@ -172,8 +171,8 @@ mcp gamerule respawn_radius 4500
 mcp gamerule respawn_radius
 ```
 
-4500 keeps new players 500 blocks inside the border. UNVERIFIED on Paper 26.2: that the rule takes a value
-this large, and that the spread is even. MC-302446 (open, reported for 1.21.9) puts players at the northern
+4500 keeps new players 500 blocks inside the border. Paper 26.2 accepts the value; UNVERIFIED is that the
+spread is even. MC-302446 (open, reported for 1.21.9) puts players at the northern
 edge of the radius for high values. Check before testers judge it: let one account die without a bed ten
 times and note the coordinates. If they cluster, the rule stays at its default and a spawn plugin becomes a
 design change (the exact plugin list is part of the contract check).

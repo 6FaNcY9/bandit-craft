@@ -105,6 +105,39 @@ the players do with it is their business.
 - The console command that starts an event for testing is a rule of procedure, not a technical
   barrier: the console is root in the container, which only the owner is.
 
+## Spike results (2026-11-10, pinned Paper 26.2 build 130, local throwaway server)
+
+Run from the console and from a datapack (`min_format`/`max_format` 107, the server's
+`data_major`). All of these work:
+
+- `random value` into a score or storage, and a macro function (`function ... with storage`)
+  that takes the coordinates.
+- `forceload add` followed in the same function by `positioned over world_surface`: the chest
+  landed on the surface block at a random place 2,000 blocks away.
+- A chest with a `LootTable` from the datapack, and the same table as a mob's `DeathLootTable`.
+- `schedule function ... 60t` for the end of the event; `forceload remove` there released the
+  chunk.
+- A summoned wither skeleton with `max_health` 300, `attack_damage` and `scale` attributes, a
+  custom name, and a custom boss bar whose value follows its `Health`.
+- `place template` of a room generated from code (a Python script writing the structure NBT with
+  `DataVersion` 4903): its chest and light were where the generator put them.
+- `place structure minecraft:trial_chambers`: works once the surrounding chunks are loaded. With
+  one forced chunk it answers "That position is not loaded"; with a 12 x 13 chunk area forced it
+  generated in about four seconds. Tick time afterwards: 1.1 ms average. The builder forces the
+  structure's area, not one chunk, and releases it afterwards.
+- `weather thunder`, `time set midnight`, a summoned lightning bolt.
+- `say` from a function writes a line to the server log (`[Server] ...`), which is the hook for
+  the dashboard. `tick query` from the console prints average and percentile tick times.
+
+Not done in the spike: a picture of a placed structure. The generator prints the room layer by
+layer as text, which is enough to review a layout; a rendered image still needs its own attempt
+(a bot with a viewer, or a template renderer).
+
+Also learned, for the runbook and the dashboard: the world border is kept per dimension; the
+world is one folder with `dimensions/minecraft/<name>` and `players/` inside (no `world_nether`
+folder); Chunky takes `world_nether` and `minecraft:the_nether` alike; `respawn_radius 4500` is
+accepted (the evenness of the spread is still unproven).
+
 ## Open, the owner's call
 
 - Renewing the End (the dragon and the end cities' loot) on a schedule, so the End stays worth
