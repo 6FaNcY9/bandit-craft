@@ -33,6 +33,7 @@ customers.
 | Border 10,000 x 10,000, pre-generated | `max-world-size = 5000`, Chunky (runbook) |
 | Hard difficulty, 20 slots | `server.properties` |
 | Nothing sold that gives an advantage | design, "Monetization" |
+| Automatic events, the same for everyone, vanilla loot only | the `bev` datapack: its own schedule, nothing a player or the owner triggers; loot tables hold vanilla items |
 
 If a protected area is ever added, name it in the rules and drop "no admin interference" from every
 text first. A hidden exception to an advertised rule is not something these texts may cover.
@@ -47,6 +48,8 @@ text first. A hidden exception to an advertised rule is not something these text
 3. No advertising and no real-money trading.
 
 Everything else is allowed. Griefing, raiding, stealing and hacked clients are part of the game.
+The server runs events by itself (supply drops, bosses, ruins, meteors, storms, blood nights) at random
+places, announced to everyone. Nobody can start, buy or steer one, and their loot is vanilla.
 Chat is not anarchy: Mojang's chat reporting is on, and reports to <REPORT-MAIL> are answered within 48 hours.
 ```
 
@@ -71,6 +74,7 @@ random, with nothing. What you build stands until someone finds it.
 - No operators, no admin items, no rollbacks
 - No /home, /tpa, /rtp, no kits, no crates
 - TNT duplication works
+- Automatic world events at random places, announced to all, vanilla loot only
 - 20 slots, so the map stays lived in
 
 Three rules: nothing illegal, no crashing the server, no advertising. That is the whole list.
@@ -184,8 +188,7 @@ The server tells everyone where the loot is. That's the problem. <NAME>, anarchy
 Java Edition. #minecraft #minecraftserver #anarchy #minecraftjava
 ```
 
-Only mention the supply drop in any of these once the events datapack is live on the server; until then
-drop that sentence. Instagram and TikTok have their own rules for promoting games to minors: the texts
+The events datapack is live on the server since 2026-11-10, so the supply drop sentence may stay. Instagram and TikTok have their own rules for promoting games to minors: the texts
 advertise a free game and no purchase, and they should stay that way.
 
 ## Tester invitation (phases 1 and 2, sent personally)
