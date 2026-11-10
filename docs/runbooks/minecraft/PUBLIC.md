@@ -159,6 +159,24 @@ sudo du -sh /srv/mc-public/data/paper/world*
 sudo du -sh /srv/mc-public/data
 ```
 
+## Random far spawn
+
+The design wants a random far spawn on first join and on a bedless death, and nothing else (no `/rtp`).
+Vanilla does this with one game rule (renamed from `spawnRadius` in 1.21.11), set once from the console
+after the border; it is stored in the world:
+
+```bash
+mcp setworldspawn 0 ~ 0
+mcp gamerule respawn_radius 4500
+mcp gamerule respawn_radius
+```
+
+4500 keeps new players 500 blocks inside the border. UNVERIFIED on Paper 26.2: that the rule takes a value
+this large, and that the spread is even. MC-302446 (open, reported for 1.21.9) puts players at the northern
+edge of the radius for high values. Check before testers judge it: let one account die without a bed ten
+times and note the coordinates. If they cluster, the rule stays at its default and a spawn plugin becomes a
+design change (the exact plugin list is part of the contract check).
+
 ## Turn it off
 
 - Pause, lab: `sudo systemctl stop container@mc-public`. It returns at the next boot or the next deploy
@@ -172,5 +190,5 @@ sudo du -sh /srv/mc-public/data
 
 ## Not decided or not in phase 1
 
-Relay and PROXY protocol, backups and the restore drill, the store, chat guards, the random far spawn,
-`difficulty` (Paper's default applies), an exploit-fix plugin.
+Relay and PROXY protocol, backups and the restore drill, the store, chat guards, an exploit-fix plugin.
+`difficulty` is `hard`. The random far spawn is a console step above and unproven until its check passes.

@@ -24,11 +24,11 @@
   velocityPackage = pkgs.velocityServers.velocity-3_5_1-build_615;
 
   # Only what differs from Paper's defaults; nix-minecraft rewrites server.properties from this on every start.
-  # `difficulty` is not in the design: Paper's default applies until the owner decides.
   paperProperties = {
     accepts-transfers = false;
     allow-flight = true; # anarchy: vanilla must not kick flyers; the pre-generated world is the guard
     broadcast-console-to-ops = false;
+    difficulty = "hard"; # anarchy: the world is as dangerous as the players (owner's goal, 2026-11-10)
     enable-query = false;
     enable-rcon = false; # the console is the systemd socket (/run/minecraft/paper.stdin), root in the container only
     enable-status = true;
