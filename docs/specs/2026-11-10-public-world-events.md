@@ -138,6 +138,15 @@ world is one folder with `dimensions/minecraft/<name>` and `players/` inside (no
 folder); Chunky takes `world_nether` and `minecraft:the_nether` alike; `respawn_radius 4500` is
 accepted (the evenness of the spread is still unproven).
 
+## Built so far (2026-11-10)
+
+The supply drop: `hosts/bandit-lab/services/minecraft-public/events` (the datapack),
+`tools/minecraft-public-events/test.sh` (one whole drop on a throwaway Paper, pass or fail) and
+`bot-run.sh` with `bot.js` (Mineflayer bots hear the announcement, walk there and loot the chest;
+prints what they measured). First bot run, two bots on a flat world, radius 48: both set off on
+the announcement, the nearer one (30 blocks) emptied the chest 11 seconds later, the other (47
+blocks) found it empty; tick time 4 ms average. The pack is not linked into the server yet.
+
 ## Open, the owner's call
 
 - Renewing the End (the dragon and the end cities' loot) on a schedule, so the End stays worth

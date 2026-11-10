@@ -141,6 +141,53 @@ Drei Regeln, angepinnt in #regeln. Alles andere ist erlaubt.
 Gründer behalten ihren Tag. Danke fürs frühe Kaputtmachen.
 ```
 
+## Telegram (channel or group post, opening day)
+
+```text
+<NAME> is open: a small anarchy Minecraft world (Java Edition).
+
+Hard survival, three rules, never reset. No admins, no kits, no teleports. Griefing and hacked clients
+are allowed. The server drops loot at random places and tells everyone where: go and get it, or wait
+for whoever does.
+
+Free with a paid Java account, 20 slots.
+Address: <ADDRESS>
+Rules and legal: <SITE>
+```
+
+## Instagram (caption for a screenshot or a short clip)
+
+```text
+Nobody is coming to save your base.
+
+<NAME>: anarchy Minecraft, Java Edition. One world, 10,000 x 10,000 blocks, never reset. Hard mode,
+three rules, no admins. The server drops loot somewhere and announces the coordinates. What happens
+there is up to whoever shows up.
+
+Free to join. Address in bio.
+
+Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
+
+#minecraft #minecraftserver #anarchy #minecraftjava #survival
+```
+
+Put the address and the site in the profile, since captions carry no links.
+
+## TikTok (clip idea and caption)
+
+Clip, 15 to 25 seconds, filmed on the server itself, nothing staged: the chat line "Supply drop in 20
+min at X ... Z ...", a cut to the run across the map, the chest, and whoever is already waiting there.
+End on the address as text.
+
+```text
+The server tells everyone where the loot is. That's the problem. <NAME>, anarchy Minecraft, free,
+Java Edition. #minecraft #minecraftserver #anarchy #minecraftjava
+```
+
+Only mention the supply drop in any of these once the events datapack is live on the server; until then
+drop that sentence. Instagram and TikTok have their own rules for promoting games to minors: the texts
+advertise a free game and no purchase, and they should stay that way.
+
 ## Tester invitation (phases 1 and 2, sent personally)
 
 ```text

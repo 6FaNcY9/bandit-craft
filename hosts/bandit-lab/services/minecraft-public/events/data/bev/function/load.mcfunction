@@ -11,3 +11,5 @@ execute unless score #lead bev matches 0.. run scoreboard players set #lead bev 
 execute unless score #life bev matches 0.. run scoreboard players set #life bev 36000
 # First event two hours of populated play after the first load.
 execute unless score #next bev matches -2147483648.. run scoreboard players set #next bev 144000
+# Events land within this many blocks of 0 0: 500 inside the 5,000 border.
+execute unless data storage bev:cfg radius run data modify storage bev:cfg radius set value 4500

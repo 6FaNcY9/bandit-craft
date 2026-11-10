@@ -84,6 +84,14 @@ cmd "execute in minecraft:overworld positioned $x 0 $z positioned over world_sur
 wait_for 5 'TEST chest on the surface'
 wait_for 5 'has the following block data: .*bev:drop'
 
+# The table's gear comes out enchanted (12 draws of 4 to 6 rolls: gear is all but certain to be among them).
+cmd "forceload add 0 0"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do cmd 'loot spawn 0 200 0 loot bev:drop'; done
+cmd 'execute if entity @e[type=minecraft:item,nbt={Item:{components:{"minecraft:enchantments":{}}}}] run say TEST enchanted gear in the loot'
+cmd 'kill @e[type=minecraft:item]'
+cmd "forceload remove 0 0"
+wait_for 5 'TEST enchanted gear in the loot'
+
 # A due gap does not start a second event while one is live. The next one gets a long lead, so the
 # forced-chunk query below falls into its announced phase, when nothing is forced.
 cmd 'scoreboard players set #lead bev 400'
