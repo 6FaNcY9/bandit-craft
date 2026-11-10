@@ -92,7 +92,8 @@ Each line names its host. `sudo` on the lab asks for the password.
    Lab: `sudo nixos-container run mc-public -- ss -ltnH` -> 25565 on `*`, 25567 on `127.0.0.1`, no 25575.
    Laptop (granted in step 3): `nc -vz <mc-public tailnet address> 25565` succeeds; from a tailnet device
    without the grant it does not.
-6. Lab, what Paper loaded (UNVERIFIED parts: SModeration without LuckPerms, and the Paper key names):
+6. Lab, what Paper loaded (UNVERIFIED: the Paper key names. SModeration 2.0.0 declares no LuckPerms
+   dependency, only an optional voice chat one):
    `sudo journalctl -M mc-public -u minecraft-server-paper | grep -E 'Chunky|SModeration|Done \('`
    `sudo cat /srv/mc-public/data/paper/ops.json` -> `[]`
    `sudo grep -A4 chunk-loading-basic /srv/mc-public/data/paper/config/paper-global.yml` -> 40, 40, 5

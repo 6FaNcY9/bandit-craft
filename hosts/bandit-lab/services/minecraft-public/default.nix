@@ -53,7 +53,7 @@
   };
 
   # The private proxy's keys, minus its sandbox backend and forced host.
-  # UNVERIFIED: that Velocity 3.5.1 takes an empty [forced-hosts] table as "none" (the private file always has one entry).
+  # The empty [forced-hosts] table is accepted: this file started the pinned Velocity 3.5.1 build 615 on 2026-11-10.
   velocityToml = pkgs.writeText "velocity.toml" ''
     config-version = "2.8"
     bind = "0.0.0.0:25565"
