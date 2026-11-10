@@ -93,8 +93,8 @@ def tower():
         g.box(1, floor, 1, 7, floor, 7, bricks)
     for y in (1, 2):
         g.set(4, y, 0, AIR)  # the door
-    for y in range(1, 15):
-        g.set(7, y, 4, "minecraft:ladder", {"facing": "west"})  # up the east wall, through both floors
+    for y in range(1, 16):
+        g.set(7, y, 4, "minecraft:ladder", {"facing": "west"})  # up the east wall, through both floors and the roof
     for y, x in ((7, 0), (7, 8), (12, 0), (12, 8)):
         g.set(x, y, 4, "minecraft:iron_bars")  # slits: light for players, none that stops a spawner
     g.set(4, 6, 4, "minecraft:spawner", nbt=spawner("minecraft:zombie"))
@@ -104,7 +104,6 @@ def tower():
         for z in range(9):
             if (x in (0, 8) or z in (0, 8)) and (x + z) % 2 == 0:
                 g.set(x, 16, z, bricks(x, 16, z))  # battlements
-    g.set(7, 15, 4, AIR)  # the ladder's way out onto the roof
     return g
 
 
