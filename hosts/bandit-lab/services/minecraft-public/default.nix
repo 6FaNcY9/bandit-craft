@@ -142,6 +142,9 @@ in {
       # nix-minecraft writes no ops.json for an empty `operators`, so a console `op` would survive restarts.
       # This copy is put back on every start.
       files."ops.json" = pkgs.writeText "ops.json" "[]\n";
+      # The world events (docs/specs/2026-11-10-public-world-events.md). A copy, renewed on every start:
+      # Minecraft refuses to start a world that has a symlink in it.
+      files."world/datapacks/bev" = ./events;
       # The exact list (bandit-nix ci/lab-mc-public.nix). LuckPerms comes with the store, phase 3.
       symlinks = {
         "plugins/${plugins.chunky.file}" = plugins.chunky.src; # pre-generation inside the border
