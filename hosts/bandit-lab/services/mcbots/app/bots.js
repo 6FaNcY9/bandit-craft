@@ -3573,9 +3573,10 @@ const JOBS = {
     const target = own ? r.prefs.chest : job.args; // not written into job.args: the job may be shown or resumed
     const {x, y, z} = target;
     // Far from the base chest, cheap surplus the hall is over its cap for is dropped here, never carried home (owner 2026-11-11).
-    if (!own && storage.sameXYZ(job.args, planConfig.BASE.chest) && Math.hypot(bot.entity.position.x - x, bot.entity.position.z - z) > 48) {
+    // Not on an `only` hand-in, and never a kind in `keep`: the farms replant from those (architect review 2026-11-11).
+    if (!own && !job.args.only && storage.sameXYZ(job.args, planConfig.BASE.chest) && Math.hypot(bot.entity.position.x - x, bot.entity.position.z - z) > 48) {
       const totals = storage.hallTotals(r.world?.chests);
-      await tossJunk(r, job, (n) => storage.DROPPABLE(n) && storage.surplus(n, totals) > 0);
+      await tossJunk(r, job, (n) => storage.DROPPABLE(n) && storage.surplus(n, totals) > 0 && !job.args.keep?.[n]);
     }
     await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, target)} to deposit`}).catch((e) => { if (own && /^could not reach/.test(e.message)) (r.unreachableChests ||= new Map()).set(layout.keyOf(target), Date.now()); throw e; });
     job.t.doing = `depositing at ${place(r, target)}`;

@@ -25,6 +25,15 @@ assert.strictEqual(S.surplus('cobblestone', null), 0, 'no index: keep');
 assert.strictEqual(S.hallTotals(new Map([['1,2,3', {items: {cobblestone: 9}}]])), null, 'chests outside the hall do not count');
 assert.strictEqual(S.hallTotals(undefined), null);
 
+// Keep-cap spares must not refill the supply chest: sticks and planks have a base-chest cap (architect review 2026-11-11).
+{
+  const none = () => false;
+  assert.strictEqual(S.storeFor('stick', none, (n) => S.overCap(n, {stick: 64})), 'room', 'sticks above 64 go to the hall');
+  assert.strictEqual(S.storeFor('stick', none, (n) => S.overCap(n, {stick: 63})), 'base');
+  assert.strictEqual(S.storeFor('spruce_planks', none, (n) => S.overCap(n, {oak_planks: 200, birch_planks: 56})), 'room', 'all planks are one kind');
+  assert.strictEqual(S.storeFor('oak_planks', none, (n) => S.overCap(n, {oak_planks: 10})), 'base');
+}
+
 (async () => {
   const {JOBS} = require('../bots');
   const layout = require('../storage-layout');
@@ -83,6 +92,17 @@ assert.strictEqual(S.hallTotals(undefined), null);
   x = rig({carried, chests: base, index: new Map()});
   await JOBS.deposit(x.r, job({...BASE}));
   assert.deepStrictEqual(x.tossed, []);
+  // far from the chest a hand-in with `keep` or `only` never drops the farm's own stock (the wheat farm's 64 seeds, architect review 2026-11-11)
+  const seedHall = new Map([['-263,58,-219', {items: {wheat_seeds: 2000}, free: 0}]]);
+  x = rig({carried: [['wheat_seeds', 200]], chests: base, index: seedHall});
+  await JOBS.deposit(x.r, job({...BASE, only: null, keep: {wheat_seeds: 64}}));
+  assert.deepStrictEqual(x.tossed, [], 'the 64 seeds to replant from are not dropped');
+  x = rig({carried: [['wheat_seeds', 64], ['bread', 5]], chests: base, index: seedHall});
+  await JOBS.deposit(x.r, job({...BASE, only: 'bread'}));
+  assert.deepStrictEqual(x.tossed, [], 'an `only` hand-in drops nothing');
+  x = rig({carried: [['wheat_seeds', 200]], chests: base, index: seedHall});
+  await JOBS.deposit(x.r, job({...BASE}));
+  assert.deepStrictEqual(x.tossed, ['wheat_seeds'], 'a plain far deposit still drops the surplus seeds (owner 2026-11-11)');
 
   // near the base with the hall full: over-quota cobblestone and room items stay with the bot, never back into the base chest
   const fullHall = Object.fromEntries(layout.SLOTS.map((c) => [layout.keyOf(c), {room: 0, items: {}}]));
