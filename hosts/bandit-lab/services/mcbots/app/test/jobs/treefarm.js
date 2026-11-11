@@ -66,7 +66,7 @@ module.exports = async () => {
 
     // the job: a 9 x 9 farm, 9 cells; the chest holds saplings; a grown tree is cut and replanted
     const small = {x1: 0, z1: 0, x2: 8, z2: 8};
-    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood}) => {
       const events = [], infos = [], calls = {deposit: 0, withdraw: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const bot = {
@@ -80,6 +80,7 @@ module.exports = async () => {
       const job = {type: 'treefarm', args: small, t: {}, cancelled: false};
       let sleeps = 0;
       const tf = T.makeTreeFarm({
+        ...(enoughWood ? {enoughWood} : {}),
         goNear: async (r, j, x, y, z) => { bot.entity.position = new Vec3(x, y, z); },
         guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
         sleep: async () => { if (++sleeps > stopAfterSleeps) job.cancelled = true; },
@@ -149,6 +150,18 @@ module.exports = async () => {
     f.r.protectedAreas = [[0, 0, 8, 8]];
     await assert.rejects(f.run(), /nothing to farm/);
     assert.strictEqual(f.events.filter((e) => e.startsWith('plant')).length, 0);
+    // the hall holds enough logs: the farm waits instead of chopping, and never fails for it (owner 2026-11-11)
+    w = flat();
+    for (const c of T.gridCells(small)) tree(w, c.x, c.z, 4);
+    f = fake({world: w, inv: [{name: 'oak_sapling', count: 9, type: 1}], enoughWood: () => 500});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual([f.calls.dig.length, f.calls.deposit], [0, 0], 'nothing cut, nothing deposited');
+    assert.strictEqual(f.job.t.doing, 'enough wood in the hall, waiting');
+    // below the cap again: the next round chops as before
+    let wood = 500;
+    f = fake({world: w, inv: [{name: 'oak_sapling', count: 9, type: 1}], stopAfterSleeps: 100, enoughWood: () => { const n = wood; wood = 0; return n; }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(f.calls.dig.length, 36, 'all 9 trees cut after the wait');
     // still full after the logs-only deposit (sticks, tools, seeds): one plain deposit, then the farm goes on
     let free = 3;
     const onlys = [];

@@ -3331,6 +3331,7 @@ const {highway} = roadJob.makeRoad({
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,
+  enoughWood: (r) => storage.surplus('oak_log', storage.hallTotals(r.world?.chests)), // every *_log is one kind
   deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, ...(only ? {only} : {})}})),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
 });
