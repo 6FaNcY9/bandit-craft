@@ -52,13 +52,11 @@ For any session that wants to pick this up, steer it or connect its own work to 
    Not shipped yet: the bridge deletes its own messages in `#ingame-chat` after 30 days (owner's decision
    2026-11-11; no new right for any bot). Tried in `SelfTest` and `e2e-chat.js`, not against the real Discord:
    deleting messages older than two weeks one by one is slow there (429), the plugin waits as told.
-7. Done in the client 2026-11-11 with the owner's yes: Discord's default channels `rules` and the voice
-   `Allgemein` are deleted (both were empty); "Public Bot" is off for `bandit-admin` (its install link had to be
-   set to "None" first). Still there, the owner's call: the text channel `Allgemein` (Discord's system channel,
-   holds the two "added a bot" lines; everyone and the bridge bot can see and write there, the layout does not
-   cover it) and `moderator-only` (private; Discord sends its community and safety notices there, move those to
-   `#mod-log` in the server settings before deleting it). The empty categories `Textkanäle` and `Sprachkanäle`
-   are left as well.
+7. Done in the client 2026-11-11 with the owner's yes: all four of Discord's default channels are deleted
+   (`rules`, `moderator-only`, both `Allgemein`), the safety notifications channel is `#mod-log` (it was unset),
+   and "Public Bot" is off for `bandit-admin` (its install link had to be set to "None" first). The guild has no
+   system channel now, so Discord posts no "joined" lines. Left: the empty categories `Textkanäle` and
+   `Sprachkanäle`.
 
 ## How to reach this session
 
