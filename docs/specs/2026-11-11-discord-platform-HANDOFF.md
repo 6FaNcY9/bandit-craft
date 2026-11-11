@@ -25,9 +25,10 @@ For any session that wants to pick this up, steer it or connect its own work to 
 
 ## Next steps
 
-1. Owner: create the guild + `bandit-admin` application, add SOPS `discord-admin-token`,
-   send the guild ID.
-2. Agent: writing-plans for phase 1 (admin bot: layout + alerts), then build and test.
+1. Done 2026-11-11: guild `1569890251738980352`, `bandit-admin` invited, SOPS `discord-admin-token`.
+2. Phase 1 built on this branch (`hosts/bandit-lab/services/discord-admin`); bandit-nix branch
+   `feat/discord-admin` (worktree `~/src/bandit-nix-discord`) carries the token and the input bump.
+   After deploy: runtime check in `2026-11-11-discord-phase1-plan.md`.
 3. Phases 2 to 4 as in the design.
 
 ## How to reach this session

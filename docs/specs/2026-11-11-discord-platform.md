@@ -41,8 +41,10 @@ Owner's choices: community server, chat bridge, status and alerts, bot control; 
 
 ## Guild layout (agent's call)
 
-Roles: `Owner`, `Moderator`, `Spieler` (granted by onboarding after the rules are accepted),
-`@everyone` (read-only on the info channels).
+Roles: `Owner`, `Moderator`, `@everyone` (read-only on the info channels). A `Spieler` role was
+dropped in phase 1: Discord's rules screening already keeps `@everyone` from writing before the
+rules are accepted, with no bot needed. Discord's own `#rules` and `#moderator-only` stay; the bot
+points the guild's rules and updates channels at `#regeln-rules` and `#mod-log`.
 
 - **INFO**: `#regeln-rules` (read-only, the public world's rules), `#ankündigungen` (read-only,
   events from `docs/specs/2026-11-10-public-world-events.md`), `#server-status` (read-only, bot
@@ -63,6 +65,10 @@ here.
 1. **Guild and alerts.** Owner steps: create the guild, the admin-bot application, the SOPS
    values. Agent: admin bot with the layout and `#lab-alerts`. Runtime check: the layout exists,
    a test alert arrives, a non-owner account sees neither ADMIN nor any slash command.
+   Built 2026-11-11 (`hosts/bandit-lab/services/discord-admin`, plan
+   `2026-11-11-discord-phase1-plan.md`): Discord REST through Node's `fetch`, no npm dependencies
+   (discord.js arrives with the gateway in phase 4); alerts are read from ntfy topic `mcbots`
+   with the existing read-only user. Onboarding and rules screening are switched on in the client.
 2. **Status.** `#server-status` updates within one minute of the public world going down or up.
 3. **Chat bridge.** Bridge application and SOPS value; plugin pinned in `plugins.nix`. This
    changes the public world's "exact plugin list", so bandit-nix `ci/lab-mc-public.nix` gains the
