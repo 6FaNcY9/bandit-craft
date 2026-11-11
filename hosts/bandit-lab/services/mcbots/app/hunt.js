@@ -218,7 +218,7 @@ function makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at}) {
     r.emit('info', `spawn set at ${at(cells.foot)}${confirmed ? '' : ' (no server confirmation seen: it may have been set already)'}`);
   }
 
-  return {hunt, bed};
+  return {hunt, bed, engage};
 }
 
 module.exports = {ANIMALS, FACING, MEAT, named, baby, foodAnimal, huntTarget, bedCells, bedCheck, standable, woolColour, makeHunt};

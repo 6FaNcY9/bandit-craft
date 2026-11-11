@@ -23,6 +23,7 @@ const tradeJob = require('./trade');
 const treeFarmJob = require('./treefarm');
 const wheatFarmJob = require('./wheatfarm');
 const cropFarmJob = require('./cropfarm');
+const animalFarmJob = require('./animalfarm');
 const fluidsJob = require('./fluids');
 const unroofJob = require('./unroof');
 const homebedJob = require('./homebed');
@@ -70,9 +71,9 @@ const {makeRide} = require('./cartride');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
-const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'tidy', 'trade', 'highway']);
+const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm', 'tidy', 'trade', 'highway']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
-const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'highway']); // a resumed build/excavate skips what is done
+const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm', 'highway']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
 // Above these a kept kind is filed like any other item (bot19 carried 448 sticks, 7 iron pickaxes, 3 tables, 2026-11-11).
@@ -131,7 +132,7 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 
 // Normalise and validate job arguments (throws on bad input).
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
-const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm', 'cropfarm']); // one run covers the area
+const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm']); // one run covers the area
 const ENCHANTABLE = /^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$/;
 const VALIDATE = {
   help: () => ({}),
@@ -370,6 +371,12 @@ const VALIDATE = {
     if (!Object.hasOwn(cropFarmJob.CROP_KINDS, a.crop ?? '')) throw new Error(`crop must be one of ${Object.keys(cropFarmJob.CROP_KINDS).join(', ')}`);
     box.crop = a.crop;
     if (a.y != null) box.y = num(a.y, -64, 320, 'y'); // ground level to search around; default is the supply chest's y
+    return box;
+  },
+  // Tend a pen of at most 16 x 16 until stopped: breed, shear, cull above 8 per kind, hand the drops in.
+  animalfarm: (a) => {
+    const box = wheatFarmJob.farmBox(zoned(a), {max: 16, what: 'pen'});
+    if (a.y != null) box.y = num(a.y, -64, 320, 'y'); // ground level of the gates; default is the supply chest's y
     return box;
   },
   say: (a) => {
@@ -2246,7 +2253,7 @@ const keepBackOf = (r, items, keep) => {
 const ownSpare = (r, keep) => keepBackOf(r, r.bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || /_(helmet|chestplate|leggings|boots)$/.test(it.name) || r.bot.registry.foodsByName[it.name])), keep);
 // Servants empty into their own chest when a top-level gathering job ends and nothing else is queued (Misa 2026-11-06).
 // A child job (Object.create(job)) never does; the next queued job may need the items.
-const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'cropfarm', 'hunt', 'produce', 'graves']);
+const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm', 'hunt', 'produce', 'graves']);
 const shouldEmpty = (job, queue, prefs, spareCount) => EMPTIES.has(job.type) && (job.status === 'done' || job.status === 'failed') && !job.interrupted
   && Object.getPrototypeOf(job) === Object.prototype && !queue.length && !!prefs?.chest && spareCount > 0;
 const {JUNK} = storage;
@@ -3329,7 +3336,7 @@ const {grave, graves} = gravesJob.makeGraves({goNear, guard, sleep, deposit: (r,
 const {trade} = tradeJob.makeTrade({goNear, guard, sleep, count: (bot, name) => crafting.count(bot, name), ensureItem: (r, job, name, want) => crafting.ensureItem(r, job, name, want),
   withdraw: (r, job, item, count, from) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...from}})),
   deposit: (r, job, store, only) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...store, ...(only ? {only} : {})}}))});
-const {hunt, bed} = huntJob.makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at});
+const {hunt, bed, engage} = huntJob.makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at});
 
 const {homebed} = homebedJob.makeHomebed({goNear, guard, sleep, goals, crafting, run: buildRunJob, at, digAt, NATURAL});
 
@@ -3394,6 +3401,13 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
 
 const {cropfarm} = cropFarmJob.makeCropFarm({
   goNear, guard, sleep, digAt, waitCalm, at,
+  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)), // 0 without an index: a stale one never pauses
+  deposit: async (r, job, only) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only}})); },
+  withdraw: async (r, job, item, count) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})); },
+});
+
+const {animalfarm} = animalFarmJob.makeAnimalFarm({
+  goNear, guard, sleep, waitCalm, crafting, at, engage,
   enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)), // 0 without an index: a stale one never pauses
   deposit: async (r, job, only) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only}})); },
   withdraw: async (r, job, item, count) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})); },
@@ -3497,6 +3511,7 @@ const JOBS = {
   tidy,
   wheatfarm,
   cropfarm,
+  animalfarm,
   fluids,
   grave,
   graves,

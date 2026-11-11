@@ -18,7 +18,7 @@ function boxRule(areas, name, box) {
 
 // A guest's farms lie on its own ground: the order's box must pass boxRule. null for any other order.
 function groundRule(areas, name, type, a) {
-  const box = type === 'treefarm' || type === 'wheatfarm' || type === 'cropfarm' ? {x1: Math.min(a.x1, a.x2), y1: -64, z1: Math.min(a.z1, a.z2), x2: Math.max(a.x1, a.x2), y2: 320, z2: Math.max(a.z1, a.z2)} : null;
+  const box = type === 'treefarm' || type === 'wheatfarm' || type === 'cropfarm' || type === 'animalfarm' ? {x1: Math.min(a.x1, a.x2), y1: -64, z1: Math.min(a.z1, a.z2), x2: Math.max(a.x1, a.x2), y2: 320, z2: Math.max(a.z1, a.z2)} : null;
   return box && boxRule(areas, name, box);
 }
 
