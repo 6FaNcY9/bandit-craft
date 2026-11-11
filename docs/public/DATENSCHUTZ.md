@@ -1,6 +1,6 @@
 # Datenschutzerklärung / Privacy Policy
 
-Stand: <DATUM>
+Stand: 11.11.2026
 
 Diese Erklärung gilt für den Minecraft-Server Bandit Anarchy (`impairment-peterson.tun.ply.gg:24924`) und für diese
 Seiten. Sie sagt dir, welche Daten über dich anfallen, wofür, auf welcher Rechtsgrundlage und wie
@@ -11,8 +11,8 @@ darunter.
 
 Verantwortlicher im Sinne von Art. 4 Z 7 DSGVO:
 
-<BETREIBER-NAME>
-<BETREIBER-ANSCHRIFT>
+Maximilian Philip Wein
+Wien, Österreich
 E-Mail: <KONTAKT-MAIL>
 
 Der Server wird von einer Privatperson in Österreich unentgeltlich betrieben. Ein
@@ -235,8 +235,8 @@ Konto und löschen die an das Konto gebundenen Daten.
 
 Controller within the meaning of Art. 4(7) GDPR:
 
-<BETREIBER-NAME>
-<BETREIBER-ANSCHRIFT>
+Maximilian Philip Wein
+Vienna, Austria
 Email: <KONTAKT-MAIL>
 
 The server is run free of charge by a private individual in Austria. No data protection officer has

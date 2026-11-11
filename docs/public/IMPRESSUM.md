@@ -1,14 +1,14 @@
 # Impressum / Legal Notice
 
-Stand: <DATUM>
+Stand: 11.11.2026
 
 Angaben nach § 25 Mediengesetz (MedienG) und, soweit anwendbar, § 5 E-Commerce-Gesetz (ECG). Die
 deutsche Fassung ist maßgeblich; die englische Fassung steht darunter.
 
 ## Medieninhaber und Betreiber
 
-<BETREIBER-NAME>
-<BETREIBER-ANSCHRIFT>
+Maximilian Philip Wein
+Wien, Österreich
 
 Medieninhaber dieser Seiten und Betreiber des Minecraft-Servers Bandit Anarchy
 (`impairment-peterson.tun.ply.gg:24924`).
@@ -48,8 +48,8 @@ Austrian E-Commerce Act (ECG).
 
 ## Media owner and operator
 
-<BETREIBER-NAME>
-<BETREIBER-ANSCHRIFT>
+Maximilian Philip Wein
+Vienna, Austria
 
 Media owner of these pages and operator of the Minecraft server Bandit Anarchy
 (`impairment-peterson.tun.ply.gg:24924`).
@@ -85,9 +85,11 @@ Not an official Minecraft product. Not approved by or associated with Mojang or 
 1. **Volle Anschrift oder nur Wohnort?** Für eine kleine Website, die über die Darstellung des
    Medieninhabers nicht hinausgeht, verlangt § 25 Abs. 5 MedienG nur Name und Wohnort, keine volle
    Anschrift. Das gilt nach meinem Verständnis, solange das ECG nicht anwendbar ist (siehe Punkt 2).
-   Auf einem Anarchy-Server mit Doxxing-Risiko spricht viel dafür, <BETREIBER-ANSCHRIFT> vorerst nur
-   mit dem Ort zu füllen. Prüfen, ob die Seiten diese Voraussetzung erfüllen; Spieler-News oder
-   Kostenberichte könnten darüber hinausgehen.
+   Auf einem Anarchy-Server mit Doxxing-Risiko spricht viel dafür, die Anschrift vorerst nur
+   mit dem Ort zu füllen. Entschieden vom Betreiber am 11.11.2026: nur der Wohnort (Wien), keine
+   Straße. Prüfen, ob die Seiten diese Voraussetzung erfüllen; Spieler-News oder
+   Kostenberichte könnten darüber hinausgehen. Mit dem ersten Verkauf (Punkt 3) muss die volle
+   Anschrift dazu.
 2. **ECG heute.** § 5 ECG gilt für Dienste der Informationsgesellschaft, die „in der Regel gegen
    Entgelt“ erbracht werden. Ein kostenloser, werbefreier Privatserver fällt nach meiner Einschätzung
    eher nicht darunter, sicher ist das nicht. Daher die Formulierung „soweit anwendbar“.

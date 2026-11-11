@@ -1,13 +1,13 @@
 # Nutzungsbedingungen / Terms of Use
 
-Stand: <DATUM>
+Stand: 11.11.2026
 
 Die deutsche Fassung ist maßgeblich; die englische Fassung steht darunter.
 
 ## 1. Geltung
 
 Diese Bedingungen gelten für die Nutzung des Minecraft-Servers Bandit Anarchy
-(`impairment-peterson.tun.ply.gg:24924`). Betreiber ist <BETREIBER-NAME> (siehe [Impressum](IMPRESSUM.md)). Mit dem
+(`impairment-peterson.tun.ply.gg:24924`). Betreiber ist Maximilian Philip Wein (siehe [Impressum](IMPRESSUM.md)). Mit dem
 Verbinden zum Server stimmst du diesen Bedingungen zu. Wenn du nicht einverstanden bist, spiel bitte
 nicht auf dem Server. Die Nutzung ist kostenlos.
 
@@ -114,7 +114,7 @@ oder Microsoft verbunden.
 ## 1. Scope
 
 These terms apply to the use of the Minecraft server Bandit Anarchy (`impairment-peterson.tun.ply.gg:24924`). It is run
-by <BETREIBER-NAME> (see the [legal notice](IMPRESSUM.md)). By connecting to the server you accept
+by Maximilian Philip Wein (see the [legal notice](IMPRESSUM.md)). By connecting to the server you accept
 these terms. If you do not agree, please do not play on the server. Use is free of charge.
 
 ## 2. Requirements

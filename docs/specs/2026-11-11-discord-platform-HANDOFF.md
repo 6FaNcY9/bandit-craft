@@ -99,8 +99,9 @@ For any session that wants to pick this up, steer it or connect its own work to 
     text now names the provider, says there is no processing agreement and no adequacy decision, and bases
     the transfer on Art. 49(1)(b) GDPR (the agent's wording, not legally reviewed; the risk is in open
     point 4). Left open in the privacy text: how long operating statistics are kept (open point 1; no
-    collector for the public world exists in this branch). Still placeholders, only the owner can give
-    them: `<KONTAKT-MAIL>`, `<MELDE-MAIL>`, `<BETREIBER-NAME>`, `<BETREIBER-ANSCHRIFT>`, `<DATUM>`.
+    collector for the public world exists in this branch). Name, town (owner's choice: town only, no
+    street, because of doxxing) and date are filled in. Still placeholders: `<KONTAKT-MAIL>` and `<MELDE-MAIL>`;
+    the owner makes one new mailbox for both (not the private one; agents may not create accounts).
 
 ## How to reach this session
 
