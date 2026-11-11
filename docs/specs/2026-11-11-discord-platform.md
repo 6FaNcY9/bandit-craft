@@ -78,6 +78,15 @@ here.
    gives Discord's own live countdown `<t:…:R>`). From that moment the address and the live status
    show, so the whitelist must be off by then. Two lost pings in a row mean offline (30 s apart).
    Launch texts for server lists and the teaser page: `docs/marketing/`.
+
+   **Launch target (owner, 2026-11-11): Saturday 2026-12-05, 18:00 Europe/Vienna.** Internal until the
+   blockers are done; the texts keep saying "soon" meanwhile, because a moved date costs more trust than
+   a late announcement. Blockers: the public address answers a status ping (it did not on 2026-11-11), a
+   tester round with real players, the restore drill, the legal pages, the whitelist off at the opening.
+   To announce: `LAUNCH_AT = "1796493600"` in `hosts/bandit-lab/services/discord-admin/default.nix`,
+   `LAUNCH = Date.UTC(2026, 11, 5, 17, 0)` in `docs/marketing/teaser/index.html` (republish it), the
+   date into `docs/marketing/2026-11-11-launch-texts.md`, then deploy. Posts: teaser one to two weeks
+   before, a reminder about 24 hours before, server-list entries with the address only at the opening.
 3. **Chat bridge.** Bridge application and SOPS value; plugin pinned in `plugins.nix`. This
    changes the public world's "exact plugin list", so bandit-nix `ci/lab-mc-public.nix` gains the
    plugin in the same change. Runtime check: chat both ways, mentions are stripped, the private
