@@ -58,6 +58,12 @@ retry backoff with an alert, keeper jobs without far search, keeper tidy of a fu
   `room` items back into the base chest; the carry-out withdraws a stack only if the hall has room for it.
 - A stale index errs toward keeping.
 
+### Keep caps (G1, found while planning)
+- bot19 carried 448 sticks, 7 iron pickaxes and 3 crafting tables: every deposit keeps sticks, planks, coal, torches,
+  tables, furnaces and all tools. Above a per-bot cap (stick 64, each planks 64, coal 64, torch 64, table 1, furnace 1,
+  2 of each tool) they are filed like any other item. The tree farm deposits logs only; when that leaves the bot
+  full it makes one plain deposit before failing.
+
 ### Death spots (G2)
 - Per bot, in memory: death positions of the last 24 h. A death within 32 blocks of an earlier one: no
   grave trip, the interrupted job is not resumed, one alert ("left the grave at X, 2 deaths there").
