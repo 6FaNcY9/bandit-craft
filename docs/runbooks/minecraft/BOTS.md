@@ -195,6 +195,11 @@ Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/super
   some 40 times at an ocean monument (main server 2026-11-09).
   `getItem` no longer learns a "no free … within" failure as a broken way (it used to block `mine:<item>` fleet-wide up to 24 h).
   Internal torch wood (`noFar`) stays local.
+  Death spots (`app/graves.js`): a death within 32 blocks of one in the last 24 h sends no grave trip and resumes no job (one
+  `alert`: "left the grave at …, N deaths there"); far searches avoid 64-block boxes around those spots. Per bot, in memory.
+- Stress test (`tools/mcbots-report/`): before and after a deploy, `curl -s https://bandit-lab.tail7facc9.ts.net:8445/api/archive/events.jsonl
+  > /tmp/ev.jsonl && node tools/mcbots-report/report.js /tmp/ev.jsonl --days 4`: done/fail/death per bot and day, the top fails
+  (digits as #) and death cells (32 blocks). A fail that keeps its count after a deploy was not fixed.
 - Alerts to the bot's owner (`app/ownalerts.js`): dead, stuck (No path / no progress), missing (`no way to get`), done (≥ 600 s), one
   per viewer|bot|kind per 10 min, via `ingame.say`. Join digest via `Ingame.tell` (one tellraw, ≤ 6 lines) from the quit time in
   `STATE_DIR/viewers.json`; no stored quit = no digest.
