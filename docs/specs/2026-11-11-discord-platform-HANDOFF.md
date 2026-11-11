@@ -35,11 +35,13 @@ For any session that wants to pick this up, steer it or connect its own work to 
    rules screening with four rules, the permanent invite. See the design's phase list.
 4. Launch: target and blockers are in the design ("Launch target"). The tunnel is the mc-public session's
    work; the status ping still got no answer on 2026-11-11 04:55.
-5. Phase 4 (bot control) is built, not deployed: `/bots status | stopp | weiter` in `#bot-kommando`, the hub's
-   new `/api/remote/` door (it restarts the bots' hub on deploy). After the deploy the owner types the three
-   commands; a second account with the Moderator role must not see the command at all. Phase 3 (chat bridge)
-   changes the public Paper's plugin list: start it once the tunnel answers, and name the bridge in the privacy
-   policy first.
+5. Phase 4 (bot control) is live since 2026-11-11 05:29 (bandit-craft 4438bc9, bandit-nix cb7a165):
+   `/bots status | stopp | weiter` in `#bot-kommando` through the hub's `/api/remote/` door. Checked live as
+   the owner: `status` lists the eight bots; `stopp` and `weiter` with a name that does not exist are answered
+   by the hub ("Diesen Bot gibt es nicht.", "Kein pausiertes Projekt.") and stand in its log under `[remote]`.
+   Not checked: stopping and resuming a real bot from Discord, and that a second account with the Moderator
+   role does not see the command. Phase 3 (chat bridge) changes the public Paper's plugin list; the tunnel
+   answers a status ping since 2026-11-11, so it can start once the privacy policy names the bridge.
 6. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
    switch "Public Bot" off for `bandit-admin` in the developer portal.
 
