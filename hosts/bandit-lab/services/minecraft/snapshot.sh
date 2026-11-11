@@ -8,6 +8,9 @@
 #
 # Backend: MC_UNIT set = a nix-minecraft server (systemd unit, console FIFO
 # MC_CONSOLE); unset = the Docker container MC_CONTAINER.
+# MC_MACHINE set (with MC_UNIT) = that server runs inside the nspawn container of
+# this name: the unit and its journal are asked through -M, and the console FIFO is
+# reached through the container's root (/proc/<leader>/root), all from the host.
 #
 # Not captured: the panel's own backups, caches, logs, BlueMap's rendered tiles
 # and downloaded client jar (regenerated). LuckPerms' H2 file is copied as a crash-consistent
@@ -18,11 +21,19 @@ dest=${1:?usage: minecraft-snapshot DEST}
 data=${MC_DATA:-/srv/containers/minecraft/data}
 unit=${MC_UNIT-}
 container=${MC_CONTAINER:-minecraft}
+machine=${MC_MACHINE-}
 fifo=${MC_CONSOLE:-/run/minecraft/paper.stdin}
+in_machine=()
+if [ -n "$machine" ]; then
+  in_machine=(-M "$machine")
+  # A stopped container has no leader: the unit query below then decides (cold copy or refuse).
+  leader=$(machinectl show "$machine" -p Leader --value 2>/dev/null) || leader=
+  [ -n "$leader" ] && fifo=/proc/$leader/root$fifo
+fi
 
 if [ -n "$unit" ]; then
   console() { printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null; }
-  saved_since() { journalctl -u "$unit" --since "@$1" -o cat 2>&1 | grep -q "Saved the game"; }
+  saved_since() { journalctl "${in_machine[@]}" -u "$unit" --since "@$1" -o cat 2>&1 | grep -q "Saved the game"; }
 else
   console() { docker exec --user 1000 "$container" mc-send-to-console "$1" >/dev/null; }
   saved_since() { docker logs --since "$1" "$container" 2>&1 | grep -q "Saved the game"; }
@@ -54,7 +65,18 @@ trap resume EXIT
 # cold; anything else must not be mistaken for a stopped server (that would
 # copy a live world).
 if [ -n "$unit" ]; then
-  state=$(systemctl is-active "$unit" 2>&1) || true
+  state=$(systemctl "${in_machine[@]}" is-active "$unit" 2>&1) || true
+  # A container that does not exist as a machine is as cold as a stopped unit; any other
+  # answer than "running" must not be mistaken for that.
+  if [ -n "$machine" ]; then
+    if mstate=$(machinectl show "$machine" -p State --value 2>&1); then
+      [ "$mstate" = running ] || state="machine $machine is $mstate"
+    elif grep -q 'No machine' <<<"$mstate"; then
+      state=inactive
+    else
+      state="machinectl: $mstate"
+    fi
+  fi
   case $state in
     active) running=true ;;
     inactive | failed) running=false ;;
