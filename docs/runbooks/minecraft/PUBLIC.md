@@ -261,8 +261,30 @@ it costs a few euro a month.
    `timeout 3 bash -c '</dev/tcp/<lab tailnet address>/22' && echo OPEN || echo closed` -> `closed`.
 6. Owner, the domain: an `A` record `mc.<domain>` to the VPS address, or the `SRV` record as above.
 
-Not part of this step and still open: the backup job for the public world and its restore drill
-(the design wants both before the whitelist comes off).
+### Backup and restore drill
+
+The public world has its own restic job, `restic-backups-mc-public` (bandit-nix
+`hosts/bandit-lab/services/backup/mc-public.nix`, 06:30 daily, into the lab's peer repository on the
+laptop). It is apart from the job that carries Vaultwarden and the private world on purpose: a public
+world that will not flush fails its own run only. The host takes the copy with `minecraft-snapshot`
+(`MC_MACHINE=mc-public`): saves are flushed and frozen through the container's console while rsync
+reads Paper's directory (worlds, whitelist, bans, plugin data; no logs or caches). A failed or stale
+run alerts like the other backups. Not copied off-site yet: the S3 job is off for the whole lab.
+
+1. Owner, first run by hand (the laptop must be awake and on the tailnet):
+   `ssh -t bandit-lab 'sudo systemctl start restic-backups-mc-public; sudo journalctl -u restic-backups-mc-public -n 15 --no-pager'`
+   -> `snapshot complete` and restic's `snapshot <id> saved`. In the game, saving must be on again:
+   the server log shows `Automatic saving is now enabled`.
+2. Owner, the restore drill (the design wants it passed before the whitelist comes off):
+   `scp tools/mc-public-restore-test.sh bandit-lab:` from a bandit-nix checkout, then
+   `ssh -t bandit-lab 'sudo bash mc-public-restore-test.sh'` -> `PASS`. It restores into a scratch
+   directory, never over the world, and removes it. Record date and snapshot id here:
+
+   - (no drill passed yet)
+
+Real recovery: stop the container (`sudo systemctl stop container@mc-public`), restore the snapshot's
+`paper` directory over `/srv/mc-public/data/paper` keeping the owner (the container's root, uid
+589824), start the container.
 
 ## Opening (phase 3, without the store)
 
