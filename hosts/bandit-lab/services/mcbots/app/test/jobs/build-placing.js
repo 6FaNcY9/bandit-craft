@@ -245,6 +245,7 @@ module.exports = async () => {
     const doing = job.t.doing;
     job.cancelled = true;
     const end = await Promise.race([run, new Promise((res) => setTimeout(() => res('hung'), 3000))]);
+    fs.rmSync(dir, {recursive: true, force: true});
     assert.ok(end instanceof Error && /stopped/.test(end.message), `the loop ends on Stop: ${end}`);
     assert.match(String(doing), /^waiting for material: .*observer/, `it waits for the missing observer instead of spinning without a word (doing: ${doing})`);
   }

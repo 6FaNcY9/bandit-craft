@@ -2923,11 +2923,11 @@ const SCHEMATIC_DIR = process.env.SCHEMATIC_DIR || require('node:path').join(pro
 const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
   light: (r, job) => lightUp(r, job).catch((e) => { guard(job); r.emit('info', `no torch placed: ${e.message.slice(0, 80)}`); }),
   dir: SCHEMATIC_DIR, care,
-  // Waiting for material, the builder makes some itself: one production step for its own project.
+  // Waiting for material, the builder makes some itself: one production step for its own project, never on a far search.
   help: async (r, job) => {
     const a = job.args;
     if (!a.chests?.length) return false;
-    const s = await producer(r, child(job, {type: 'produce', t: {}}), {...a, store: a.chests[0]}).step();
+    const s = await producer(r, child(job, {type: 'produce', t: {}, noFar: true}), {...a, store: a.chests[0]}).step();
     return !s.idle;
   },
   deposit: (r, job, c, only, keep) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {}), ...(keep ? {keep} : {})}}))});
