@@ -385,6 +385,7 @@ class BotRunner {
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
     this.hits = []; // {t, by}: who hurt this bot lately, for the death line
+    this.deathSpots = []; // {x, z, t} of its deaths in the last 24 h (graves.js repeatDeath, deathAvoid)
     this.acquireFailed = new Map(); // acquire.js method key -> until: the "get" job leaves that way out meanwhile
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
     this.unreached = new Map(); // block key -> {n: walks there that failed, t: the last}: the next wait doubles
@@ -756,27 +757,7 @@ class BotRunner {
       }
     });
     bot.on('entityGone', (e) => this.world.forgetMob(e.id));
-    bot.on('death', () => {
-      const doing = this.activity(); // before `dead`, which hides it
-      this.dead = true;
-      this.shelterAt = null;
-      this.lastError = 'died';
-      const p = bot.entity?.position;
-      const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
-      this.deathCause = null;
-      this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${hitsNote(this.hits, doing)}`);
-      this.hits = [];
-      const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
-      this.cancel();
-      this.resumeLater(was, 'died');
-      // Re-equip from the supply chest first thing after respawning.
-      if (this.supplyChest) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: this.supplyChest, status: 'queued'});
-      // ... and then fetch the loot from the grave AxGraves made, before the interrupted job goes on.
-      const spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue});
-      // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
-      if (spot && process.env.GRAVES === 'none') this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'tidy', args: {x: spot.x, y: spot.y, z: spot.z, radius: 8}, status: 'queued'});
-      else if (spot) this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'grave', args: spot, status: 'queued'});
-    });
+    bot.on('death', () => this.onDeath(bot));
     bot.on('error', (e) => {
       this.lastError = String(e.message || e);
       this.log(this.name, `error: ${this.lastError}`);
@@ -878,6 +859,35 @@ class BotRunner {
     this.enqueue(type, args, first ? {first: true} : at < 0 ? {} : {at});
     const place = this.queue.findIndex((j) => j.id === id);
     return !first && busy && place >= 0 ? place + 1 : 0;
+  }
+
+  // The bot's 'death' event (a method so the self-check can call it).
+  onDeath(bot) {
+    const doing = this.activity(); // before `dead`, which hides it
+    this.dead = true;
+    this.shelterAt = null;
+    this.lastError = 'died';
+    const p = bot.entity?.position;
+    const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
+    this.deathCause = null;
+    this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${hitsNote(this.hits, doing)}`);
+    this.hits = [];
+    const now = Date.now();
+    const earlier = gravesJob.recentDeaths(this.deathSpots, now);
+    const near = gravesJob.deathsNear(earlier, p, now);
+    this.deathSpots = p ? [...earlier, {x: Math.floor(p.x), z: Math.floor(p.z), t: now}] : earlier;
+    const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
+    this.cancel();
+    // A second death at the same place: no grave trip and no resumed job walk back there (bot1, 40 deaths at a monument, 2026-11-09).
+    if (near) this.emit('alert', `left the grave at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}, ${near + 1} deaths there within 24 h${was ? `; ${was.type} not resumed` : ''}`);
+    else this.resumeLater(was, 'died');
+    // Re-equip from the supply chest first thing after respawning.
+    if (this.supplyChest) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: this.supplyChest, status: 'queued'});
+    // ... and then fetch the loot from the grave AxGraves made, before the interrupted job goes on.
+    const spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue, deaths: earlier, now});
+    // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
+    if (spot && process.env.GRAVES === 'none') this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'tidy', args: {x: spot.x, y: spot.y, z: spot.z, radius: 8}, status: 'queued'});
+    else if (spot) this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'grave', args: spot, status: 'queued'});
   }
 
   cancel() {
@@ -2587,7 +2597,7 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
 async function farHop(r, job, what, far, surface) {
   const p = r.bot.entity.position;
   if (far.dir < 0) {
-    far.dir = farsearch.farHeading(p, r.protectedAreas, r.supplyChest, far.tried);
+    far.dir = farsearch.farHeading(p, [...(r.protectedAreas || []), ...gravesJob.deathAvoid(r.deathSpots, Date.now())], r.supplyChest, far.tried); // death spots count as protected
     if (far.dir < 0) { far.stuck = true; return false; }
   }
   far.last = far.dir;

@@ -169,7 +169,7 @@ const workerServer = hub ? createWorkerServer(hub) : null;
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
 // ALLOWED_TS_LOGINS is set, nothing is served without it.
 // Standing orders: only with a supply chest and at least one quota; switched off at every start.
-const keeper = cfg.keeperQuotas.length ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots]}) : null;
+const keeper = cfg.keeperQuotas.length ? new Keeper({runners, world, chest: cfg.supplyChest, quotas: cfg.keeperQuotas, site: cfg.keeperSite, places: () => places, events, log, file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'keeper.json') : null, skip: [...cfg.boardBots, ...cfg.guestBots, ...cfg.mainBots], held: (n) => (orderRetryAt.get(n) || 0) > Date.now()}) : null;
 // Scheduled trading (TRADE_SCHEDULE): a guest's trader works its hall in set time windows; nothing without a configured hall.
 // Chests set in game replace the configured ones of that bot; cfg.tradeHalls is edited in place, so runners and the schedule follow.
 const traderChests = new TraderChests({file: process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'trader-chests.json') : null, halls: cfg.tradeHalls, log: (m) => log('trade', m), onChange: () => hub?.sendTradeHalls()});

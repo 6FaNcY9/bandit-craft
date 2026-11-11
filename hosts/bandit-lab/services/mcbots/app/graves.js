@@ -55,8 +55,15 @@ function graveCandidates(entities, {x, y, z}) {
 // death position, too far from the base chest, in a protected area, a grave job already queued for it, or
 // the death happened on the way to a grave (a deadly spot would otherwise be visited again and again).
 const ROAD_GRAVE_FAR = 512;
-function graveAfterDeath({pos, dim, chest, areas, jobType, queued}) {
-  if (!pos || !chest || jobType === 'grave' || normDim(dim) !== 'overworld') return null;
+// Death spots, per bot and in memory: bot1 died ~40 times at an ocean monument, each grave trip and resumed chop walking
+// back there (2026-11-09). A death within 32 blocks of one in the last 24 h is a repeat; far searches avoid 64-block boxes.
+const DEATH_RADIUS = 32, DEATH_WINDOW_MS = 24 * 3600000, DEATH_BOX = 32;
+const recentDeaths = (deaths, now) => (deaths || []).filter((d) => now - d.t < DEATH_WINDOW_MS);
+const deathsNear = (deaths, pos, now) => (pos ? recentDeaths(deaths, now).filter((d) => Math.hypot(d.x - pos.x, d.z - pos.z) <= DEATH_RADIUS).length : 0);
+const repeatDeath = (deaths, pos, now) => deathsNear(deaths, pos, now) > 0;
+const deathAvoid = (deaths, now) => recentDeaths(deaths, now).map((d) => [d.x - DEATH_BOX, d.z - DEATH_BOX, d.x + DEATH_BOX, d.z + DEATH_BOX]);
+function graveAfterDeath({pos, dim, chest, areas, jobType, queued, deaths = [], now = Date.now()}) {
+  if (!pos || !chest || jobType === 'grave' || normDim(dim) !== 'overworld' || repeatDeath(deaths, pos, now)) return null;
   const [x, y, z] = [pos.x, pos.y, pos.z].map(Math.floor);
   // bot2 walked 1139 m over land to a grave at Y 0 it could not reach, then stood above the road and the job failed (sandbox 2026-11-04).
   if (jobType === 'highway' && Math.hypot(x - chest.x, z - chest.z) > ROAD_GRAVE_FAR) return null;
@@ -163,4 +170,4 @@ function makeGraves({goNear, guard, sleep, deposit}) {
   return {grave, graves};
 }
 
-module.exports = {click, REACH, graveCandidates, graveAfterDeath, openGraves, armourPicks, makeGraves};
+module.exports = {click, REACH, graveCandidates, graveAfterDeath, repeatDeath, deathsNear, deathAvoid, recentDeaths, openGraves, armourPicks, makeGraves};

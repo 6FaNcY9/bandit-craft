@@ -86,8 +86,9 @@ const getPlan = (item) => (n, c) => [['get', {item, count: n}], ['deposit', {...
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
 class Keeper {
-  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}, file = null, skip = []}) {
+  constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}, file = null, skip = [], held = () => false}) {
     this.runners = runners;
+    this.held = held; // a bot under an order or death hold (server.js orderRetryAt) is not the keeper's either
     // The board's bots (BOARD_BOTS): the keeper took idle ones for light and treefarm jobs mid-board (spike 2026-10-23).
     this.skip = new Set(skip);
     this.world = world;
@@ -156,7 +157,7 @@ class Keeper {
   }
 
   idle(s) {
-    return idle(s) && !this.skip.has(s.name);
+    return idle(s) && !this.skip.has(s.name) && !this.held(s.name);
   }
 
   tick() {
