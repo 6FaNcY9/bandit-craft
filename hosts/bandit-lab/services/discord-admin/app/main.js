@@ -1,6 +1,6 @@
 // bandit-admin: keeps the public guild's layout and its INFO texts (teaser, rules, address, server status)
-// and mirrors lab alerts from ntfy into #lab-alerts.
-// Discord REST only (no gateway until slash commands arrive in phase 4).
+// and mirrors lab alerts from ntfy into #lab-alerts. Discord REST, plus the gateway for the owner's /bots
+// commands in #bot-kommando (control.js).
 
 const fs = require('node:fs')
 const { setTimeout: sleep } = require('node:timers/promises')
@@ -8,6 +8,8 @@ const { LAYOUT, overwrites, diffChannel } = require('./layout')
 const { toDiscord, readCredentials, subscribe } = require('./alerts')
 const { ping, resolveAddress, tracker, keeper } = require('./status')
 const texts = require('./texts')
+const control = require('./control')
+const { connect } = require('./gateway')
 
 function makeApi (token, fetchImpl = fetch, base = 'https://discord.com/api/v10') {
   return async function api (method, path, body) {
@@ -119,10 +121,16 @@ async function infoLoop (api, channels, botId, { address, launchAt }) {
 
 async function main () {
   const creds = process.env.CREDENTIALS_DIRECTORY
-  const api = makeApi(fs.readFileSync(`${creds}/token`, 'utf8').trim())
+  const token = fs.readFileSync(`${creds}/token`, 'utf8').trim()
+  const api = makeApi(token)
   const { channels, botId, writes } = await applyLayout(api, process.env.GUILD_ID)
   console.log(`layout applied, ${writes} writes`)
   const alertsChannel = channels['lab-alerts']
+  // Bot control only where a hub is configured; a failure there leaves layout, texts and alerts running.
+  if (process.env.HUB_URL) {
+    const hub = control.makeHub(process.env.HUB_URL, fs.readFileSync(`${creds}/hub`, 'utf8').trim())
+    control.start({ api, token, guildId: process.env.GUILD_ID, botId, channels, hub, connect }).catch(err => console.error(`bot control off: ${err.message}`))
+  }
   // LAUNCH_AT: unix seconds of the public opening; unset means "soon" and no countdown.
   infoLoop(api, channels, botId, { address: process.env.MC_ADDRESS, launchAt: Number(process.env.LAUNCH_AT) || null })
   await subscribe({

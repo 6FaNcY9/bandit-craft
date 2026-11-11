@@ -31,6 +31,7 @@ const voxels = require('./voxels');
 let voxelBusy = false; // one /api/voxels read at a time
 const {Admin, queued} = require('./admin');
 const uploadsLib = require('./uploads');
+const remoteLib = require('./remote');
 
 const cfg = loadConfig();
 const log = (who, msg) => console.log(`${new Date().toISOString()} [${who}] ${msg}`);
@@ -528,6 +529,11 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/upload' && (req.method === 'GET' || req.method === 'POST')) {
     return uploadsLib.handle(req, res, url, {uploads, dir: SCHEMATIC_DIR, parse: (b, o) => schematicLib.parseLitematic(b, o), page: uploadPage, csp: UPLOAD_CSP, events,
       say: (p, b, t) => ingame?.say(p, b, t), fileRe: buildLib.SCHEMATIC_RE, sameOrigin, log: (m) => log('upload', m)}).catch((e) => { log('upload', e.message); if (!res.headersSent) json(500, {error: 'Fehler'}); });
+  }
+  // The Discord admin bot's door (remote.js): its own token instead of a login, and only status, stop and resume behind it.
+  if (url.pathname.startsWith('/api/remote/')) {
+    return json(...await remoteLib.handle(req, url.pathname, {token: cfg.remoteToken, trusted: !cfg.trustedProxies.length || cfg.trustedProxies.includes(peer(req)), readJson,
+      snapshots: () => [...runners.values()].map((r) => r.snapshot()), projects, submitJob, resumeProject: (bot) => { resumeProject(bot); broadcast(); }, log: (m) => log('remote', m)}));
   }
   if (!authorized(req)) {
     if (req.headers['tailscale-user-login']) log('auth', `refused a Tailscale identity from ${peer(req)} (not a trusted proxy)`);

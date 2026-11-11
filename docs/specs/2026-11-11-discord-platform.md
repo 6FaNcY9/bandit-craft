@@ -94,6 +94,19 @@ here.
 4. **Bot control.** Admin-bot commands against the hub's existing HTTP API with its own token.
    Runtime check: each command from the owner works; the same command from a test account with
    the Moderator role is refused and logged.
+   Built 2026-11-11 (`app/control.js`, `app/gateway.js`; hub side `mcbots/app/remote.js`, see BOTS.md
+   "Discord: `/api/remote/`"): `/bots status`, `/bots stopp [bot]`, `/bots weiter [bot]`, without a name
+   for all. Agent's calls, different from the table above:
+   - The hub had no token access at all (only the Tailscale login, which is full admin with the console),
+     so it got a door of its own that offers status, stop and resume and nothing else. The token is derived
+     from the worker token on the lab; no new SOPS value.
+   - The allow-list is the guild's owner, read from Discord at start, not a list in the code. Misa is added
+     when she is to use it.
+   - No discord.js: the gateway is read with Node's own WebSocket, without intents, so the bot still has no
+     npm dependency. It does not resume a session; a command typed during a reconnect is typed again.
+   - A refused command is answered only to the caller, written to the journal and posted in `#lab-alerts`.
+   - `weiter` resumes paused projects only (what the dashboard's Resume does); jobs that were not a
+     project are given again in the game or on the dashboard.
 
 The privacy policy and terms drafts (`ad43699`) must name the Discord bridge (game chat is
 copied to Discord and back) before phase 3 goes live.

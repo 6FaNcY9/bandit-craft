@@ -246,6 +246,11 @@ in {
             # One hub credential per worker container, derived from the shared token and the container's label
             # (the hub derives the same, hub.js workerToken), so a compromised worker cannot act as another.
             shared=$(tr -d '\n' < ${config.sops.secrets."mcbots-worker-token".path})
+            # The Discord admin bot's hub token (app/remote.js: status, stop and resume, nothing else), derived the same
+            # way so that no new secret is needed. services/discord-admin loads the file as a credential.
+            remote=$(printf 'mcbots-remote:%s' "$shared" | sha256sum | cut -c1-64)
+            printf 'REMOTE_TOKEN=%s\n' "$remote" >> /run/mcbots/seed.env
+            printf '%s' "$remote" > /run/mcbots/remote-token
             ${lib.concatMapStringsSep "\n" (w: ''printf 'BOT_PASSWORD_SEED=%s\nHUB_TOKEN=%s\n' "$seed" "$(printf 'mcbots-worker:%s:%s' '${w.label}' "$shared" | sha256sum | cut -c1-64)" > /run/mcbots/worker-${w.label}.env'') (lib.attrValues workers)}
           '';
         };

@@ -458,6 +458,19 @@ lastError{message,agoS}}]}`. It sits behind the same login check as the rest of
 the dashboard. Positions are sampled every 500 ms (rounded to 0.01) and kept for
 30 s. The bot cards also show "pulled back N x in 30 s" when it is not zero.
 
+### Discord: `/api/remote/` (2026-11-11)
+
+The Discord admin bot (`services/discord-admin`, the owner's `/bots status | stopp | weiter` in `#bot-kommando`) has
+its own door, `app/remote.js`, outside the login allowlist: `Authorization: Bearer <token>` and three routes, nothing
+else of the API. `GET /api/remote/fleet` returns `{bots: [{name, online, job, queued, paused}]}` (`paused`: the type
+of a paused project). `POST /api/remote/stop {"bot": "bot2"}` is the dashboard's Stop, without `bot` its Stop all.
+`POST /api/remote/resume` queues paused projects again, one bot's or all (`no paused project` otherwise; a running
+project is never queued twice). Token: `mcbots-seed` derives it from the worker token
+(`sha256("mcbots-remote:<shared token>")`), hands it to the hub as `REMOTE_TOKEN` and to the bot as
+`/run/mcbots/remote-token`; no token, no door. A request Tailscale Serve forwarded (`X-Forwarded-For`) or one from
+outside `TRUSTED_PROXIES` is refused even with the token. Every use, and every refusal of a tried token, is in the hub log
+under `[remote]`. Check on the lab: `journalctl -u docker-mcbots | grep remote`.
+
 ## 3D map and box orders
 
 Dashboard panel "3D map and box orders" (closed by default; the vendored three.js `app/public/vendor/three.min.js`, r159, MIT, is fetched only when you press Load, and the CSP allows scripts from the app itself).

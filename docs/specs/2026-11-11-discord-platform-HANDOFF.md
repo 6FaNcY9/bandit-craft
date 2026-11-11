@@ -35,9 +35,11 @@ For any session that wants to pick this up, steer it or connect its own work to 
    rules screening with four rules, the permanent invite. See the design's phase list.
 4. Launch: target and blockers are in the design ("Launch target"). The tunnel is the mc-public session's
    work; the status ping still got no answer on 2026-11-11 04:55.
-5. Next to build: phase 4 (bot control) touches only `discord-admin` and the hub's API, so it does not
-   collide with the public world's work. Phase 3 (chat bridge) changes the public Paper's plugin list:
-   start it once the tunnel answers, and name the bridge in the privacy policy first.
+5. Phase 4 (bot control) is built, not deployed: `/bots status | stopp | weiter` in `#bot-kommando`, the hub's
+   new `/api/remote/` door (it restarts the bots' hub on deploy). After the deploy the owner types the three
+   commands; a second account with the Moderator role must not see the command at all. Phase 3 (chat bridge)
+   changes the public Paper's plugin list: start it once the tunnel answers, and name the bridge in the privacy
+   policy first.
 6. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
    switch "Public Bot" off for `bandit-admin` in the developer portal.
 
