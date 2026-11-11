@@ -97,7 +97,7 @@ here.
    one), account linking and canned replies, it knows no account-age rule, and none of it can be tried without
    a real token. Ours does only what the table above asks, and `tools/botui-stand/e2e-chat.js` runs it on a
    real Paper 26.2 against a made-up Discord. Details and operation: PUBLIC.md "Discord chat bridge". The
-   bandit-nix half is commit 0dc48ba on its branch `feat/discord-bridge`.
+   bandit-nix half is one commit on its branch `feat/discord-bridge`.
 4. **Bot control.** Admin-bot commands against the hub's existing HTTP API with its own token.
    Runtime check: each command from the owner works; the same command from a test account with
    the Moderator role is refused and logged.

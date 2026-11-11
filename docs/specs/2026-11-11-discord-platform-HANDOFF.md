@@ -42,7 +42,7 @@ For any session that wants to pick this up, steer it or connect its own work to 
    Not checked: stopping and resuming a real bot from Discord, and that a second account with the Moderator
    role does not see the command.
 6. Phase 3 (chat bridge) is built and tried on the local stand, not deployed: plugin `minecraft-public/chatbridge`
-   here, bandit-nix commit 0dc48ba on `feat/discord-bridge` (worktree `~/src/bandit-nix-bridge`). It cannot build
+   here, bandit-nix branch `feat/discord-bridge` (one commit, worktree `~/src/bandit-nix-bridge`). It cannot build
    on the lab before the owner has made the application `bandit-bridge` (Message Content Intent on, Public Bot
    off), invited it and put its token into `secrets/lab.yaml` as `discord-bridge-token`. Shipping restarts the
    public Paper. Once the bot is in the guild, set `BRIDGE_ID` in `discord-admin/default.nix` to its application id
@@ -51,6 +51,9 @@ For any session that wants to pick this up, steer it or connect its own work to 
    `#ingame-chat`, `@everyone` typed in the game does not ping, the private world is untouched.
 7. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
    switch "Public Bot" off for `bandit-admin` in the developer portal.
+8. Open from the bridge's security review: `discord-admin/app/gateway.js` puts its wait back to 5 s on every READY, so a
+   connection that drops again and again after READY could pass Discord's 1000 identifies a day (token reset). The
+   bridge plugin keeps logins 90 s apart; the admin bot does not yet.
 
 ## How to reach this session
 
