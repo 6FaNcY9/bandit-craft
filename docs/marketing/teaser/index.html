@@ -1,0 +1,288 @@
+<title>Bandit Anarchy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+  /* Layout: a photocopied flyer. One left-aligned column, heavy ink rules, the sealed countdown as the one loud block. */
+  :root {
+    --paper: #e4e6e3;
+    --ink: #111312;
+    --muted: #555b57;
+    --red: #c81d17;
+    --grid: #b9bdb9;
+    --display: "Anton", "Haettenschweiler", "Impact", "Arial Narrow", sans-serif;
+    --body: "Courier Prime", "Courier New", ui-monospace, monospace;
+    --rule: 6px solid var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --paper: #121413; --ink: #e7e9e6; --muted: #9aa09c; --red: #ff4a3d; --grid: #3a3f3c; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --paper: #121413; --ink: #e7e9e6; --muted: #9aa09c; --red: #ff4a3d; --grid: #3a3f3c; color-scheme: dark; }
+
+  body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 1.0625rem; line-height: 1.5; }
+  .sheet {
+    max-width: 46rem; margin: 0 auto; padding-block: 1.5rem 3rem;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-direction: column; gap: 2.5rem;
+  }
+  .sheet[data-lang="de"] [lang="en"], .sheet[data-lang="en"] [lang="de"] { display: none; }
+
+  .mast { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem 1rem; border-bottom: var(--rule); padding-bottom: .5rem; }
+  .mast b { font-family: var(--display); font-weight: 400; font-size: 1.5rem; letter-spacing: .04em; text-transform: uppercase; }
+  .mast span { color: var(--muted); font-size: .875rem; }
+  .langs { display: flex; gap: .25rem; }
+  .langs button {
+    font: 700 .875rem var(--body); color: var(--ink); background: none; border: 2px solid var(--ink); padding: .2rem .55rem; cursor: pointer;
+  }
+  .langs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
+
+  h1, h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; line-height: .95; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(3.5rem, 17vw, 8.5rem); letter-spacing: -.01em; }
+  h1 em { font-style: normal; color: var(--red); }
+  h2 { font-size: clamp(1.75rem, 6vw, 2.75rem); }
+  p { margin: 0; max-width: 60ch; }
+  .lead { font-size: 1.1875rem; }
+  section, header { display: flex; flex-direction: column; gap: 1rem; }
+
+  /* The countdown: censor bars until the date is announced, plain digits once it is. */
+  .clock { border-block: var(--rule); padding-block: 1.25rem; display: flex; flex-direction: column; gap: .75rem; }
+  .clock .label { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: .875rem; }
+  .digits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(.4rem, 2vw, 1rem); }
+  .digits div { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+  .digits output {
+    font-family: var(--display); font-size: clamp(2.75rem, 15vw, 7rem); line-height: 1; text-align: center;
+    font-variant-numeric: tabular-nums; padding-block: .1em;
+  }
+  .digits small { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); text-align: center; }
+  .clock[data-state="sealed"] output { background: var(--ink); color: var(--paper); }
+  .clock[data-state="sealed"] output span { opacity: .22; }
+  .clock[data-state="open"] .digits { display: none; }
+  .clock .open { font-family: var(--display); font-size: clamp(3rem, 16vw, 7rem); line-height: 1; color: var(--red); text-transform: uppercase; }
+  .stamp {
+    align-self: flex-start; border: 3px solid var(--red); color: var(--red); font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; padding: .2rem .6rem; transform: rotate(-2deg); font-size: .9375rem;
+  }
+
+  .map { width: 100%; max-width: 32rem; aspect-ratio: 1; display: block; }
+  .map .edge { fill: none; stroke: var(--ink); stroke-width: 6; }
+  .map .grid { stroke: var(--grid); stroke-width: 1.5; }
+  .map text { fill: var(--muted); font: 700 24px var(--body); }
+  .map .mark line { stroke: var(--red); stroke-width: 5; stroke-linecap: square; }
+  .map .mark circle { fill: none; stroke: var(--red); stroke-width: 3; opacity: 0; }
+  .map .mark.new circle { animation: ping 1.6s ease-out 1; }
+  @keyframes ping { from { opacity: .9; r: 6px; } to { opacity: 0; r: 70px; } }
+  .ticker { font-weight: 700; min-height: 3em; }
+  .ticker i { font-style: normal; color: var(--muted); font-weight: 400; }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.5rem 2rem; }
+  .cols > div { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+  h3 { font: 700 .875rem var(--body); letter-spacing: .12em; text-transform: uppercase; margin: 0; border-bottom: 2px solid var(--ink); padding-bottom: .25rem; }
+  ul, ol { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: .3rem; }
+  .gone li { text-decoration: line-through; text-decoration-color: var(--red); text-decoration-thickness: 2px; list-style: none; margin-left: -1.4rem; }
+
+  .cta { border: var(--rule); padding: 1.25rem; display: flex; flex-direction: column; gap: .75rem; align-items: flex-start; }
+  .cta a {
+    font-family: var(--display); font-size: 1.75rem; text-transform: uppercase; letter-spacing: .03em; text-decoration: none;
+    background: var(--red); color: var(--paper); padding: .35rem 1rem;
+  }
+  .cta a:hover { background: var(--ink); }
+  footer { color: var(--muted); font-size: .8125rem; border-top: 2px solid var(--ink); padding-top: .75rem; }
+
+  @media (prefers-reduced-motion: reduce) { .map .mark.new circle { animation: none; } }
+</style>
+
+<main class="sheet" data-lang="de">
+  <div class="mast">
+    <b>Bandit Anarchy</b>
+    <span lang="de">Anarchie-Server · Minecraft Java</span>
+    <span lang="en">Anarchy server · Minecraft Java</span>
+    <div class="langs" role="group" aria-label="Sprache / Language">
+      <button type="button" id="lang-de" data-set="de" aria-pressed="true">DE</button>
+      <button type="button" id="lang-en" data-set="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+
+  <header>
+    <h1 lang="de">Eine Welt.<br><em>Kein Reset.</em></h1>
+    <h1 lang="en">One world.<br><em>No resets.</em></h1>
+    <p class="lead" lang="de">Bald öffnet eine Welt, die nie zurückgesetzt wird. Was am ersten Tag gebaut oder gesprengt wird, steht in fünf Jahren noch so da.</p>
+    <p class="lead" lang="en">A world opens soon that will never be reset. What gets built or blown up on day one will still be there in five years.</p>
+  </header>
+
+  <div class="clock" id="clock" data-state="sealed">
+    <div class="label" id="clock-label">
+      <span lang="de">Öffnet in</span><span lang="en">Opens in</span>
+    </div>
+    <div class="digits" aria-hidden="true">
+      <div><output data-unit="d"><span>??</span></output><small><span lang="de">Tage</span><span lang="en">Days</span></small></div>
+      <div><output data-unit="h"><span>??</span></output><small><span lang="de">Std</span><span lang="en">Hrs</span></small></div>
+      <div><output data-unit="m"><span>??</span></output><small>Min</small></div>
+      <div><output data-unit="s"><span>??</span></output><small><span lang="de">Sek</span><span lang="en">Sec</span></small></div>
+    </div>
+    <div class="open" id="clock-open" hidden><span lang="de">Offen.</span><span lang="en">Open.</span></div>
+    <div class="stamp" id="clock-stamp"><span lang="de">Datum zensiert</span><span lang="en">Date redacted</span></div>
+    <p id="clock-note">
+      <span lang="de">Das Startdatum steht fest, sobald der Balken fällt. Enthüllt wird es im Discord, die Adresse erst zum Start.</span>
+      <span lang="en">The launch date is set once the bars drop. It will be revealed on Discord, the address only at launch.</span>
+    </p>
+  </div>
+
+  <section>
+    <h2 lang="de">10.000 x 10.000 Blöcke. Noch unberührt.</h2>
+    <h2 lang="en">10,000 x 10,000 blocks. Still untouched.</h2>
+    <p lang="de">Supply-Drops, Bosse, Dungeons, Meteore, Gewitter und Blutnächte tauchen zu zufälligen Zeiten an zufälligen Orten auf und werden mit Koordinaten angesagt. Wer lebend rauskommt, behält die Beute. Was ein Event hinterlässt, bleibt für immer auf der Karte.</p>
+    <p lang="en">Supply drops, bosses, dungeons, meteors, thunderstorms and blood nights appear at random times and places and are announced with coordinates. Whoever gets out alive keeps the loot. What an event leaves behind stays on the map forever.</p>
+    <svg class="map" id="map" viewBox="-90 -40 1130 1110" role="img" aria-label="Karte der Welt von −5000 bis 5000 auf beiden Achsen mit Beispiel-Events / Map of the world from −5000 to 5000 on both axes with example events">
+      <g id="grid"></g>
+      <rect class="edge" x="0" y="0" width="1000" height="1000"></rect>
+      <text x="0" y="1040" text-anchor="middle">−5000</text>
+      <text x="500" y="1040" text-anchor="middle">X 0</text>
+      <text x="1000" y="1040" text-anchor="middle">5000</text>
+      <text x="-14" y="8" text-anchor="end">−5000</text>
+      <text x="-14" y="508" text-anchor="end">Z 0</text>
+      <text x="-14" y="1000" text-anchor="end">5000</text>
+      <g id="marks"></g>
+    </svg>
+    <p class="ticker" id="ticker"></p>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h3><span lang="de">Erlaubt</span><span lang="en">Allowed</span></h3>
+      <ul lang="de"><li>Griefen und Fallen</li><li>Hack-Clients</li><li>TNT-Duper</li><li>Alles, was die drei Regeln nicht verbieten</li></ul>
+      <ul lang="en"><li>Griefing and traps</li><li>Hacked clients</li><li>TNT dupers</li><li>Anything the three rules do not forbid</li></ul>
+    </div>
+    <div>
+      <h3><span lang="de">Gibt es nicht</span><span lang="en">Does not exist</span></h3>
+      <ul class="gone"><li>Rollbacks</li><li>/home</li><li>/tpa</li><li>/rtp</li><li><span lang="de">Welt-Resets</span><span lang="en">World resets</span></li></ul>
+    </div>
+    <div>
+      <h3><span lang="de">Die drei Regeln</span><span lang="en">The three rules</span></h3>
+      <ol lang="de"><li>Keine illegalen Inhalte, keine Drohungen, kein Doxxing.</li><li>Den Server nicht crashen oder absichtlich lahmlegen.</li><li>Keine Werbung, kein Handel gegen echtes Geld.</li></ol>
+      <ol lang="en"><li>No illegal content, threats or doxxing.</li><li>No crashing or deliberately lagging the server.</li><li>No advertising and no real-money trading.</li></ol>
+    </div>
+    <div>
+      <h3><span lang="de">Mitspielen</span><span lang="en">Joining</span></h3>
+      <ul lang="de"><li>Kostenlos</li><li>Minecraft Java mit gekauftem Account</li><li>Nichts zu installieren</li><li>20 Plätze zum Start</li></ul>
+      <ul lang="en"><li>Free</li><li>Minecraft Java with a paid account</li><li>Nothing to install</li><li>20 slots at launch</li></ul>
+    </div>
+  </section>
+
+  <div class="cta">
+    <h2 lang="de">Sei am ersten Tag dabei.</h2>
+    <h2 lang="en">Be there on day one.</h2>
+    <p lang="de">Startdatum und Adresse gibt es zuerst im Discord.</p>
+    <p lang="en">The launch date and the address are announced on Discord first.</p>
+    <a id="discord" href="#" hidden>Discord</a>
+    <p id="discord-soon"><b lang="de">Der Einladungslink folgt in Kürze.</b><b lang="en">The invite link follows shortly.</b></p>
+  </div>
+
+  <footer>
+    <span lang="de">Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.</span>
+    <span lang="en">Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.</span>
+  </footer>
+</main>
+
+<script>
+  // The two values to fill in. LAUNCH: the opening as Date.UTC(year, month - 1, day, hour, minute) in UTC, or null
+  // while the date is not announced. DISCORD: the permanent invite link, or '' to hide the button.
+  const LAUNCH = null
+  const DISCORD = ''
+
+  const sheet = document.querySelector('.sheet')
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  // Language: German unless the browser prefers something else.
+  function setLang (lang) {
+    sheet.dataset.lang = lang
+    for (const b of document.querySelectorAll('.langs button')) b.setAttribute('aria-pressed', String(b.dataset.set === lang))
+    say()
+  }
+  for (const b of document.querySelectorAll('.langs button')) b.addEventListener('click', () => setLang(b.dataset.set))
+
+  if (DISCORD) {
+    const a = document.getElementById('discord')
+    a.href = DISCORD
+    a.target = '_blank'
+    a.rel = 'noopener'
+    a.hidden = false
+    document.getElementById('discord-soon').hidden = true
+  }
+
+  // Countdown. Sealed: digits flicker under the censor bars and mean nothing. Dated: a real countdown.
+  const clock = document.getElementById('clock')
+  const units = Object.fromEntries([...document.querySelectorAll('[data-unit]')].map(o => [o.dataset.unit, o.firstElementChild]))
+  const two = n => String(n).padStart(2, '0')
+  function tick () {
+    if (LAUNCH === null) {
+      if (!reduced) for (const el of Object.values(units)) el.textContent = two(Math.floor(Math.random() * 100))
+      return
+    }
+    const left = Math.floor((LAUNCH - Date.now()) / 1000)
+    if (left <= 0) {
+      clock.dataset.state = 'open'
+      document.getElementById('clock-open').hidden = false
+      document.getElementById('clock-label').hidden = true
+      return
+    }
+    clock.dataset.state = 'running'
+    units.d.textContent = two(Math.floor(left / 86400))
+    units.h.textContent = two(Math.floor(left / 3600) % 24)
+    units.m.textContent = two(Math.floor(left / 60) % 60)
+    units.s.textContent = two(left % 60)
+  }
+  if (LAUNCH !== null) {
+    document.getElementById('clock-stamp').hidden = true
+    document.getElementById('clock-note').hidden = true
+    document.querySelector('.digits').removeAttribute('aria-hidden')
+  }
+  tick()
+  setInterval(tick, LAUNCH === null ? 90 : 1000)
+
+  // The map: 1 unit = 10 blocks. Example events land on it and stay, as their ruins will in the world.
+  const NS = 'http://www.w3.org/2000/svg'
+  const el = (name, attrs) => {
+    const node = document.createElementNS(NS, name)
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v)
+    return node
+  }
+  const grid = document.getElementById('grid')
+  for (let i = 100; i < 1000; i += 100) {
+    grid.append(el('line', { class: 'grid', x1: i, y1: 0, x2: i, y2: 1000 }), el('line', { class: 'grid', x1: 0, y1: i, x2: 1000, y2: i }))
+  }
+  const KINDS = [
+    { de: 'Supply-Drop', en: 'Supply drop' }, { de: 'Boss: Ash King', en: 'Boss: Ash King' }, { de: 'Boss: Colossus', en: 'Boss: Colossus' },
+    { de: 'Dungeon: Krypta', en: 'Dungeon: crypt' }, { de: 'Dungeon: Turm', en: 'Dungeon: tower' }, { de: 'Meteor', en: 'Meteor' },
+    { de: 'Blutnacht', en: 'Blood night' }, { de: 'Gewitter', en: 'Thunderstorm' }
+  ]
+  // A fixed seed for the first marks, so the page looks the same at rest for everyone.
+  let seed = 20261111
+  const seeded = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+  const marks = document.getElementById('marks')
+  let last = null
+  function drop (rand, fresh) {
+    const x = Math.round(rand() * 9600 - 4800)
+    const z = Math.round(rand() * 9600 - 4800)
+    const g = el('g', { class: fresh ? 'mark new' : 'mark', transform: `translate(${(x + 5000) / 10} ${(z + 5000) / 10})` })
+    g.append(el('circle', { r: 6 }), el('line', { x1: -11, y1: -11, x2: 11, y2: 11 }), el('line', { x1: -11, y1: 11, x2: 11, y2: -11 }))
+    marks.append(g)
+    last = { kind: KINDS[Math.floor(rand() * KINDS.length)], x, z }
+    say()
+  }
+  function say () {
+    if (!last) return
+    const de = sheet.dataset.lang === 'de'
+    const n = v => String(v).replace('-', '−')
+    document.getElementById('ticker').innerHTML =
+      `<i>${de ? 'Beispiel-Ansage' : 'Example announcement'}:</i><br>${last.kind[de ? 'de' : 'en']} ${de ? 'bei' : 'at'} X ${n(last.x)}, Z ${n(last.z)}`
+  }
+  for (let i = 0; i < 7; i++) drop(seeded, false)
+  if (!reduced) {
+    const timer = setInterval(() => {
+      if (marks.childElementCount >= 40) return clearInterval(timer)
+      drop(Math.random, true)
+    }, 3200)
+  }
+
+  setLang((navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en')
+</script>
