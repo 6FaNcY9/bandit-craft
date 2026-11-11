@@ -31,6 +31,13 @@
   assert.deepStrictEqual(nextChain({need: {hopper: 1}, stock: {iron_ingot: 5, chest: 1}, store, taken: new Set(['craft:hopper'])}), {idle: 'the other bots have the open steps', left: []});
   assert.deepStrictEqual(nextChain({need: {}, store}), {idle: 'the project has all it needs', left: []});
   assert.deepStrictEqual(nextChain({need: {white_wool: 2}, store}), {idle: 'nothing the bots can make: white_wool', left: ['white_wool']}); // the producer asks acquire.js for these
+  // shears do not stack: a chain makes what the bag has room for and the store keeps 96 at most (1160 for a sorter, 2026-11-11)
+  const shears = {need: {shears: 1160}, stock: {iron_ingot: 4000}, store};
+  assert.deepStrictEqual(nextChain({...shears, slots: 20}).chain[1], ['craft', {item: 'shears', count: 18}], 'a slot each, two kept for the ingots');
+  assert.deepStrictEqual(nextChain(shears).chain[0], ['withdraw', {item: 'iron_ingot', count: 68, ...store}], 'an empty bag: 34 shears, 68 ingots');
+  assert.strictEqual(nextChain({...shears, slots: 1}).chain[1][1].count, 1, 'never a chain of none: that would end the order');
+  assert.strictEqual(nextChain({...shears, stock: {iron_ingot: 4000, shears: 90}}).chain[1][1].count, 6, 'tops the staged shears up to 96');
+  assert.deepStrictEqual(nextChain({...shears, stock: {iron_ingot: 4000, shears: 96}}), {idle: 'shears are staged, waiting for the builders', left: []}, 'staged is a wait, not "all it needs"');
   console.log('production: next chains ok');
 }
 

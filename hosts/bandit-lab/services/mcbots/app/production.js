@@ -3,9 +3,13 @@
 // store chest holds, the next job chain for an idle bot. Crafts whose ingredients are in the store come
 // first, then smelts whose input and fuel are, then gathering; a step another bot works on (`taken`) is
 // left to it. Chains stay short (one craft or smelt job takes at most 64), so the numbers are fresh between.
+const mcData = require('minecraft-data');
 const {planMaterials} = require('./recipes');
 
 const MAX = 64;
+// Items that do not stack (shears) take a slot each: 64 of them never fit a bag, and 1160 for a sorter fill every chest
+// of the store so that nothing else fits. A chain makes what the bag holds, the store keeps this many (2026-11-11).
+const STAGE = 96;
 const FUEL = 'coal';
 const at = (c) => ({x: c.x, y: c.y, z: c.z});
 
@@ -21,18 +25,22 @@ function gatherJob(how, n) {
 // resting: steps that just ran; they wait while another step is open. The builder used cobblestone up as fast as it
 // came, and "took 3 cobblestone from storage" ran every 2 min for hours while 9 hoppers never got a turn (main
 // server 2026-10-18).
-function nextChain({need, stock = {}, taken = new Set(), resting = new Set(), store, version = '26.1'}) {
+// slots: the bag's free slots; shears and the like take one each, two stay free for the ingredients.
+function nextChain({need, stock = {}, taken = new Set(), resting = new Set(), store, version = '26.1', slots = 36}) {
   if (resting.size) {
-    const other = nextChain({need, stock, taken: new Set([...taken, ...resting]), store, version});
+    const other = nextChain({need, stock, taken: new Set([...taken, ...resting]), store, version, slots});
     if (!other.idle) return other;
   }
   const plan = planMaterials(need, {version, have: stock});
   const has = (item) => stock[item] || 0;
+  const staged = [];
   for (const c of plan.craft) {
     const key = `craft:${c.item}`;
     if (taken.has(key)) continue;
-    // As many crafts as the store has ingredients for, up to MAX items out.
-    const crafts = Math.min(c.crafts, Math.floor(MAX / Math.max(1, c.count / c.crafts)),
+    const out = mcData(version).itemsByName[c.item]?.stackSize === 1 ? Math.min(MAX, Math.max(1, slots - 2), STAGE - has(c.item)) : MAX;
+    if (out < 1) { staged.push(c.item); continue; }
+    // As many crafts as the store has ingredients for, up to `out` items out.
+    const crafts = Math.min(c.crafts, Math.floor(out / Math.max(1, c.count / c.crafts)),
       ...Object.entries(c.ingredients).map(([item, n]) => Math.floor(has(item) / (n / c.crafts))));
     if (crafts < 1) continue;
     const count = Math.min(c.count, Math.round(crafts * (c.count / c.crafts)));
@@ -55,7 +63,8 @@ function nextChain({need, stock = {}, taken = new Set(), resting = new Set(), st
     return {key, label: `${g.how} for ${Math.min(g.count, MAX)} ${g.item}`, chain: [job, ['deposit', {...at(store), only: g.item}]], gather: {item: g.item, count: g.count}};
   }
   const left = [...plan.unknown, ...plan.gather.filter((g) => !gatherJob(g.how, 1)).map((g) => g.item)];
-  return {idle: left.length ? `nothing the bots can make: ${left.join(', ')}` : taken.size ? 'the other bots have the open steps' : 'the project has all it needs', left};
+  const wait = staged.length ? `${staged.join(', ')} are staged, waiting for the builders` : taken.size ? 'the other bots have the open steps' : 'the project has all it needs'; // staged is no end: produce quits on "all it needs"
+  return {idle: left.length ? `nothing the bots can make: ${left.join(', ')}` : wait, left};
 }
 
 module.exports = {nextChain, gatherJob};

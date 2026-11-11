@@ -3234,10 +3234,11 @@ function producer(r, job, args) {
     const taken = new Set(PRODUCING.keys());
     for (const [k, until] of TURNS) if (until < now) TURNS.delete(k);
     const resting = new Set(TURNS.keys());
-    let next = productionLib.nextChain({need, stock, taken, resting, store});
+    const slots = r.bot.inventory.emptySlotCount();
+    let next = productionLib.nextChain({need, stock, taken, resting, store, slots});
     while (!next.idle && r.world && !(await r.world.claim(r.name, `produce:${next.key}`))) {
       taken.add(next.key); // another worker's bot has it
-      next = productionLib.nextChain({need, stock, taken, resting, store});
+      next = productionLib.nextChain({need, stock, taken, resting, store, slots});
     }
     // What these chains cannot make, the planner may (acquire.js: white beds from sheep's wool), up to 16 a step.
     if (next.idle) next = getStep(next.left || [], need, stock, taken, store) || next;
