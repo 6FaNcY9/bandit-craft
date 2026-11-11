@@ -20,7 +20,6 @@
       ./hosts/bandit-lab/services/mcbots
       ./hosts/bandit-lab/services/ollama
       ./hosts/bandit-lab/services/llamacpp
-      ./hosts/bandit-lab/services/mcagents
       ./hosts/bandit-lab/services/discord-admin
     ];
 
@@ -41,7 +40,6 @@
     };
 
     checks.${system} = {
-      mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
       restart-warn-test = import ./ci/restart-warn-test.nix {inherit pkgs;};
       botui = import ./hosts/bandit-lab/services/minecraft/botui {inherit pkgs;};
       chatbridge = import ./hosts/bandit-lab/services/minecraft-public/chatbridge {inherit pkgs;};

@@ -1,5 +1,8 @@
 # Minecraft bot collaboration
 
+> **Historical.** The Andy agents (mcagents) were retired on 2026-11-11; the module and `tools/mcagents` are gone,
+> so file references below no longer resolve. Kept for the record only.
+
 Accepted by Claude and the owner, 2026-10-10. Codex works on
 `codex/review-shipped-2026-10-10`, based on freshly fetched `origin/main`
 `4f2d51b36d726109eb65ea48764ddc5de2dc464c`. This agreement does not grant

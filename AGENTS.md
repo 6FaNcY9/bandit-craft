@@ -1,7 +1,7 @@
 # bandit-craft — Agent Guide
 
 The owner's Minecraft world and everything that plays in it or thinks for it: the Paper server behind
-Velocity, its menus and kits; the Mineflayer bots (mcbots) and their Andy-4.2 brains (mcagents); the
+Velocity, its menus and kits; the Mineflayer bots (mcbots); the
 model serving (lab Ollama, the gaming PCs' llama-server through SSH tunnels); the Windows tooling on
 those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 with its history.
 
@@ -28,7 +28,6 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
 | Flake outputs | `flake.nix` (`nixosModules.lab`, `checks`) |
 | Minecraft server, proxy, sandbox, menus, kits | `hosts/bandit-lab/services/minecraft/` (`kits.nix`, `commandpanels/`, `stage.sh`), `docs/runbooks/minecraft/{ADMIN,PROXY,PANEL,MIGRATION}.md` |
 | Bots (hub, dashboard, jobs, plan) | `hosts/bandit-lab/services/mcbots/` (`app/`, tests `app/test.js` runs `app/test/<topic>.js`), `docs/runbooks/minecraft/BOTS.md` |
-| Agents (Andy-4.2), replay, judge, training data | `hosts/bandit-lab/services/mcagents/`, `tools/mcagents/` (`*.test.js`), `docs/runbooks/minecraft/AGENT-TRAINING.md` |
 | Model serving | `hosts/bandit-lab/services/ollama/`, `hosts/bandit-lab/services/llamacpp/` (PC tunnels) |
 | Gaming PCs (Windows) | `tools/slayer/` (watcher, installer, tests, README), `tools/winpc/` (PC manager) |
 | Plans and designs | `docs/specs/` |
@@ -58,7 +57,7 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
 - Nix: `nix fmt -- <files>`, `nix flake check` here, and in bandit-nix with this checkout:
   `nix build --override-input bandit-craft git+file://$PWD .#nixosConfigurations.bandit-lab.config.system.build.toplevel`
   plus its checks. Evaluation alone is not enough: build the lab before handing over.
-- Node: `node tools/mcagents/<x>.test.js` (all of them), mcbots `app/test.js` (see BOTS.md for the
+- Node: mcbots `app/test.js` (see BOTS.md for the
   NODE_PATH line); one topic alone: `node app/test/<topic>.js`.
 - Windows: copy the scripts to a temp folder on the PC and run `test-watch.ps1`, `test-install.ps1`
   (and the winpc tests); regenerate installer payloads after editing an embedded script.

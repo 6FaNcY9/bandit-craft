@@ -1,5 +1,8 @@
 # Improving the lab's Andy agent with local data
 
+> **Historical.** The Andy agents (mcagents) were retired on 2026-11-11; the module and `tools/mcagents` are gone.
+> Kept for the record only.
+
 Design only, 2026-10-10. Base: fetched `origin/main`
 `9854488089f3f5bf62de8142f6cd71d31db756de`. No implementation, model download,
 training, activation, bot commands or push is authorized by this document.

@@ -745,7 +745,7 @@ Arguments are the shaft job's (`x1 z1 x2 z2`, `top` default 80) plus `y`, so the
   already dug cost nothing.
 - The walk down uses the shaft's own stair, 16 layers per leg, and waits for a fight to end (a creeper backing the bot off
   changes the pathfinder's goal, so the walk is repeated up to 4 times).
-- Agent command `!mineLevel(y)` (uses the lab shaft box, `SHAFT=x1,z1,x2,z2` overrides in `tools/mcagents`); a foreman only assigns it.
+- (Retired with mcagents, 2026-11-11.) Agent command `!mineLevel(y)` (uses the lab shaft box, `SHAFT=x1,z1,x2,z2` overrides in `tools/mcagents`); a foreman only assigns it.
 - Live (2026-10-10, local stage, bot11/bot12 against the lab world, shaft -291 -222 -276 -207): y 40, length 6, branch 4: 88
   columns in 704 s, 9 ores (a copper vein: 32 raw copper), all four tunnels. y 36 (bot12): 889 s, 4 ores, three tunnels (the
   fourth was unreachable while a creeper kept changing the pathfinder's goal; that is why walks now wait and retry). A Stop

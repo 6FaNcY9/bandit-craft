@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   nix:
-    name: Nix checks (mcagents tests, mcbots build with app/test.js)
+    name: Nix checks (mcbots build with app/test.js)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

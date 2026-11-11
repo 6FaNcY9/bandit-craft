@@ -1,17 +1,12 @@
-# Ollama for the Minecraft agents (Andy-4.2), loopback only, GPU via CDI.
+# Ollama, loopback only, GPU via CDI. The Andy-4.2 import was removed with mcagents (2026-11-11);
+# models are pulled by hand.
 #
 # The official image, not nixpkgs' ollama-cuda: that one is not in
 # cache.nixos.org (unfree CUDA) and compiled for ~50 min on the laptop - in CI
-# (120-minute Cachix job) and on the lab at every nixpkgs bump. The model is
-# downloaded once at runtime with its SHA256 checked, so the 5.6 GB GGUF stays
-# out of the system closure (and Cachix). Before the first activation stop the
-# old user unit on the same port: `systemctl --user disable --now mcagents-ollama`.
-{pkgs, ...}: let
-  model = {
-    url = "https://huggingface.co/Mindcraft-CE/Andy-4.2-GGUF/resolve/d3efcb8137c88cd3c23466ddabf985ea59b52fdf/andy-4.2.q4_k_m.gguf";
-    sha256 = "3cfccaa17be8d2ded998fab8bd4b7032f91f2a916ac2aa03a412908342228eb1";
-  };
-in {
+# (120-minute Cachix job) and on the lab at every nixpkgs bump. Before the first
+# activation stop the old user unit on the same port:
+# `systemctl --user disable --now mcagents-ollama`.
+{...}: {
   hardware.nvidia-container-toolkit.enable = true; # writes the CDI spec for nvidia.com/gpu
 
   virtualisation.oci-containers.containers.ollama = {
@@ -36,34 +31,6 @@ in {
     services.docker-ollama = {
       after = ["nvidia-container-toolkit-cdi-generator.service"];
       wants = ["nvidia-container-toolkit-cdi-generator.service"];
-    };
-
-    # Import andy-4.2 once; a later start finds it in Ollama's store and exits.
-    services.ollama-andy = {
-      description = "Import the Andy-4.2 model into Ollama";
-      after = ["docker-ollama.service"];
-      requires = ["docker-ollama.service"];
-      wantedBy = ["multi-user.target"];
-      path = [pkgs.docker pkgs.curl pkgs.coreutils pkgs.gnugrep];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        TimeoutStartSec = "1h";
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-      };
-      script = ''
-        set -euo pipefail
-        for _ in $(seq 60); do docker exec ollama ollama list >/dev/null 2>&1 && break; sleep 2; done
-        if docker exec ollama ollama list | grep -q '^andy-4.2:'; then exit 0; fi
-        d=/var/lib/ollama-import # host-only; the container sees it read-only as /import
-        rm -f "$d/andy.gguf" "$d/Modelfile"
-        curl -fL --retry 3 -o "$d/andy.gguf" ${model.url}
-        echo "${model.sha256}  $d/andy.gguf" | sha256sum -c
-        printf 'FROM /import/andy.gguf\nPARAMETER temperature 0.6\nPARAMETER num_ctx 8192\n' > "$d/Modelfile"
-        docker exec ollama ollama create andy-4.2 -f /import/Modelfile
-        rm -f "$d/andy.gguf" # Ollama copied it into its blob store
-      '';
     };
   };
 }

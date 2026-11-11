@@ -1,7 +1,7 @@
 # bandit-craft
 
 The owner's Minecraft server and the bots that play on it: Paper behind Velocity with menus and kits,
-Mineflayer bots with Andy-4.2 agents, model serving on the lab and on gaming PCs, and the Windows
+Mineflayer bots, model serving on the lab and on gaming PCs, and the Windows
 tooling for those PCs. Deployed to the `bandit-lab` server through
 [bandit-nix](https://github.com/6FaNcY9/bandit-nix), which imports `nixosModules.lab` from this flake.
 
