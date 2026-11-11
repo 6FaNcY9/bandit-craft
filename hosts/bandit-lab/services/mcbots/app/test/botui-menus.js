@@ -96,6 +96,35 @@ assert.ok(MENUS.has('ov'));
   for (const x of [...m1.slots, ...m2.slots, ...m0.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.deepEqual(ar().slots, ar().slots);
 }
+{ // Tiere & Felder: corners or mark first, then the pictures; saved pens and fields start in one click; slot 21 of the bot page opens it
+  const items = require('minecraft-data')('26.1').itemsByName, p = (x, y, z) => ({x, y, z, dim: 'overworld'});
+  const places = [{name: 'Tiere 5 5', kind: 'pen', box: {x1: 5, y1: 60, z1: 5, x2: 9, y2: 66, z2: 9}}, {name: 'Feld 1 1', kind: 'field', crop: 'beetroot', box: {x1: 1, y1: 60, z1: 1, x2: 4, y2: 66, z2: 4}},
+    {name: 'Leer', kind: 'field', box: {x1: 1, y1: 60, z1: 1, x2: 4, y2: 66, z2: 4}}, {name: 'Farm', kind: 'treefarm', box: {x1: 1, y1: 60, z1: 1, x2: 4, y2: 66, z2: 4}}];
+  const fm = (o = {}) => menu({name: 'farmm'}, view({farm: {bot: 'zed'}, sel: {}, places, ...o})).menu, at = (m, i) => m.slots.find((x) => x.slot === i);
+  const m0 = fm(), m1 = fm({sel: {a: p(0, 64, 0), b: p(2, 66, 3)}, mark: {area: {a: p(0, 0, 0), b: p(1, 1, 1)}}});
+  assert.equal(m0.title, 'Tiere & Felder'); assert.equal(m0.rows, 3); assert.equal(m1.title, 'Tiere & Felder: 3 × 4');
+  assert.deepEqual(m0.slots.map((x) => x.slot).sort((x, y) => x - y), [2, 18, 19, 26]); // no corners: no pictures; a field without crop is not offered
+  assert.deepEqual(at(m0, 2).payload, {a: 'pick', kind: 'area'}); assert.equal(at(m0, 2).item, 'blaze_rod'); assert.deepEqual(at(m0, 26).payload, {a: 'botm', bot: 'zed'});
+  assert.deepEqual(at(m1, 3).payload, {a: 'areafrom', from: 'mark'}); assert.equal(at(m1, 3).item, 'red_banner');
+  assert.deepEqual([9, 10, 11, 12, 13].map((i) => [at(m1, i).item, at(m1, i).name, at(m1, i).payload]), [['wheat', 'Tiere', {a: 'farmgo', job: 'animalfarm'}],
+    ['carrot', 'Karotten', {a: 'farmgo', job: 'cropfarm', crop: 'carrot'}], ['potato', 'Kartoffeln', {a: 'farmgo', job: 'cropfarm', crop: 'potato'}],
+    ['beetroot', 'Rote Bete', {a: 'farmgo', job: 'cropfarm', crop: 'beetroot'}], ['sugar_cane', 'Zuckerrohr', {a: 'farmgo', job: 'cropfarm', crop: 'sugar_cane'}]]);
+  assert.deepEqual([18, 19].map((i) => [at(m1, i).item, at(m1, i).payload]), [['wheat', {a: 'go', bot: 'zed', job: 'animalfarm', zone: 'Tiere 5 5'}], ['beetroot', {a: 'go', bot: 'zed', job: 'cropfarm', zone: 'Feld 1 1'}]]);
+  for (const m of [m0, m1]) {
+    assert.equal(new Set(m.slots.map((x) => x.slot)).size, m.slots.length);
+    for (const x of m.slots) { assert.ok(x.slot >= 0 && x.slot < 27); assert.ok(items[x.item], x.item); assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a); }
+  }
+  assert.deepEqual(fm().slots, fm().slots);
+  const b = menu({name: 'botm', bot: 'zed'}, view()).menu.slots.find((x) => x.slot === 21);
+  assert.deepEqual(b.payload, {a: 'farmm', bot: 'zed'}); assert.equal(b.item, 'carrot');
+}
+{ // Wenn frei: Tiere and Feld fit the one row with Nichts and back, for the owner's bot and a guest's
+  for (const b of [{name: 'zed', online: true}, {name: 'MisaBot', online: true, guest: true}]) {
+    const s = menu({name: 'idlem', bot: b.name}, view({snaps: [b]})).menu.slots;
+    assert.equal(new Set(s.map((x) => x.slot)).size, s.length); assert.ok(s.every((x) => x.slot >= 0 && x.slot < 9));
+    assert.deepEqual(['tiere', 'feld'].map((c) => s.find((x) => x.payload.choice === c)?.item), ['wheat', 'carrot']);
+  }
+}
 { // Wenn frei: guest bots get no keeper; the active choice glints; Nichts always
   const guest = {name: 'MisaBot', online: true, guest: true}, own = {name: 'zed', online: true};
   const items = (b, idle) => menu({name: 'idlem', bot: b.name}, view({snaps: [b], idle: {get: () => idle}})).menu.slots;
@@ -333,3 +362,28 @@ console.log('botui-menus ok');
   for (const x of [...o.slots, ...t, ...k.slots]) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(JSON.stringify(menu({name: 'kartem'}, view())), JSON.stringify(menu({name: 'kartem'}, view())));
 }
+(async () => { // Tiere & Felder through the handler: corners, farmgo submits and saves the place; too big refuses; idle_set tiere/feld
+  const {BotUi} = require('../botui');
+  const submits = [], saved = [], sets = [], snaps = [{name: 'zed', online: true, health: 20, job: null}];
+  const api = {snapshots: () => snaps, places: () => [{name: 'Feld 1 1', kind: 'field', dim: 'overworld', crop: 'potato', box: {x1: 1, y1: 60, z1: 1, x2: 4, y2: 66, z2: 4}}], schematics: async () => [],
+    submit: (v, j) => { require('../bots').VALIDATE[j.type](j.args); submits.push(j); return {ok: true, unreached: []}; }, savePlace: (v, place) => saved.push([v, place]),
+    idle: {get: () => null, set: (b, c) => { sets.push([b, c]); return {ok: true, label: c}; }}};
+  const ui = new BotUi({url: 'http://plugin.test', token: 't', viewerBots: {Fancy: '*'}, api, fetch: async () => ({ok: true, json: async () => ({ok: true})}), log: () => {}, now: () => 1e6});
+  const ev = (type, extra) => ui.handle({type, player: 'Fancy', pos: [0, 64, 0], dim: 'overworld', yaw: 0, ...extra}), click = (data) => ev('click', {data});
+  const corners = async (b) => { await click({a: 'pick', kind: 'area'}); await ev('open', {gaze: {x: 0, y: 64, z: 0, block: 'stone'}}); await ev('open', {gaze: {...b, block: 'stone'}}); };
+  await click({a: 'farmm', bot: 'zed'}); assert.equal(ui.state('Fancy').screen.name, 'farmm');
+  await corners({x: 16, y: 64, z: 16}); assert.equal(ui.state('Fancy').screen.name, 'farmm'); // the pick comes back to this page, not to Bereich
+  await click({a: 'farmgo', job: 'animalfarm'});
+  assert.equal(ui.state('Fancy').flash.text, 'Fehler: zu groß: höchstens 16 x 16'); assert.equal(submits.length, 0); assert.equal(saved.length, 0); assert.ok(ui.state('Fancy').sel.b);
+  await corners({x: 3, y: 65, z: 4});
+  await click({a: 'farmgo', job: 'animalfarm'});
+  assert.deepEqual(submits.at(-1), {bots: ['zed'], type: 'animalfarm', args: {x1: 0, z1: 0, x2: 3, z2: 4}, replace: false});
+  assert.deepEqual(saved.at(-1), ['Fancy', {name: 'Tiere 0 0', kind: 'pen', dim: 'overworld', box: {x1: 0, y1: 64, z1: 0, x2: 3, y2: 65, z2: 4}}]);
+  assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'zed'}); assert.equal(ui.state('Fancy').sel.a, null);
+  await click({a: 'farmm', bot: 'zed'}); await corners({x: 3, y: 65, z: 4}); await click({a: 'farmgo', job: 'cropfarm', crop: 'sugar_cane'});
+  assert.equal(submits.at(-1).args.crop, 'sugar_cane'); assert.deepEqual(saved.at(-1)[1], {name: 'Feld 0 0', kind: 'field', dim: 'overworld', box: {x1: 0, y1: 64, z1: 0, x2: 3, y2: 65, z2: 4}, crop: 'sugar_cane'});
+  await click({a: 'go', bot: 'zed', job: 'cropfarm', zone: 'Feld 1 1'}); assert.deepEqual(submits.at(-1).args, {x1: 1, z1: 1, x2: 4, z2: 4, crop: 'potato'});
+  for (const c of ['tiere', 'feld']) { await click({a: 'idle_set', bot: 'zed', choice: c, m: 1}); assert.deepEqual(sets.at(-1), ['zed', c]); assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'zed'}); }
+  ui.stop?.();
+  console.log('botui-menus farm ok');
+})().catch((e) => { console.error(e); process.exit(1); });

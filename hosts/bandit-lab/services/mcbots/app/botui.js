@@ -48,8 +48,9 @@ const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data:
   deposit: {key: 'deposit', data: {}}, chop: {key: 'chop', data: {n: 64}}, treefarm: {key: 'treefarm', data: {}},
   rearm: {key: 'rearm', data: {}}, homebed: {key: 'homebed', data: {}}, graves: {key: 'graves', data: {}}, help: {key: 'help', data: {}},
   goto: {key: 'goto', data: {}, loc: true}, wheatfarm: {key: 'wheatfarm', data: {}}, lightspawner: {key: 'lightspawner', data: {}, loc: true},
-  stock: {key: 'stock', data: {}, loc: true}, tidy: {key: 'tidy', data: {radius: 16}, loc: true}};
-// loc: the order takes x/y/z from the payload (jobs.presetOf bounds-checks them).
+  stock: {key: 'stock', data: {}, loc: true}, tidy: {key: 'tidy', data: {radius: 16}, loc: true},
+  animalfarm: {key: 'animalfarm', data: {}}, cropfarm: {key: 'cropfarm', data: {}}};
+// loc: the order takes x/y/z from the payload (jobs.presetOf bounds-checks them). animalfarm/cropfarm: a saved farm by name (Tiere & Felder).
 
 const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'enchm', 'botm', 'chestjobs'];
 const PICK_BACK = [...GRID_BACK, 'huntm', 'buildm', 'aream', 'enchm'];
@@ -164,7 +165,8 @@ const ACTIONS = {
       const farms = places.filter((p) => p.kind === kind && p.box), z = farms.find((p) => !ui.api.groundOk || ui.api.groundOk(viewer, bot, data.job, p.box));
       if (!z) return ui.flash(st, farms.length ? `Keine ${label} auf deinem Gelände` : `Keine ${label} eingerichtet`);
       extra = {zone: z.name};
-    } else if (spec.loc) extra = Object.fromEntries(['x', 'y', 'z'].filter((k) => data[k] !== undefined).map((k) => [k, data[k]]));
+    } else if (data.job === 'animalfarm' || data.job === 'cropfarm') extra = {zone: String(data.zone)}; // jobs.build finds it among the pens/fields
+    else if (spec.loc) extra = Object.fromEntries(['x', 'y', 'z'].filter((k) => data[k] !== undefined).map((k) => [k, data[k]]));
     const o = jobs.build(spec.key, {who: bot, ...spec.data, ...extra}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places, snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
     done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
     ui.flash(st, `${bot}: ${o.say}`, true);
@@ -200,8 +202,9 @@ const ACTIONS = {
   },
   areafrom: async (st, data, ui, viewer) => {
     if (data.from !== 'mark') throw new Error('unbekannte Quelle');
-    st.area ||= {bot: botOf(st, ui, viewer), when: 'next'}; // a forged click without aream first must not break the render
-    st.screen = {name: 'aream'};
+    const back = st.screen?.name === 'farmm' && st.farm ? 'farmm' : 'aream'; // Tiere & Felder uses the same corners
+    if (back === 'aream') st.area ||= {bot: botOf(st, ui, viewer), when: 'next'}; // a forged click without aream first must not break the render
+    st.screen = {name: back};
     const m = markOf(ui, viewer).area;
     if (!m) return ui.flash(st, 'Kein Bereich markiert');
     if (jobs.dimOf(m.a.dim) !== jobs.dimOf(st.ctx.dim) || jobs.dimOf(m.b.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Markierung ist in einer anderen Welt');
@@ -222,6 +225,28 @@ const ACTIONS = {
       st.screen = {name: 'botm', bot};
       ui.flash(st, `${bot}: ${o.say}`, true);
     } catch (e) { throw new Error(explain(e.message)); }
+  },
+  // Tiere & Felder: st.farm is the bot, st.sel the same corners as Bereich.
+  farmm: (st, data, ui, viewer) => { st.farm = {bot: botOf(st, ui, viewer, data.bot)}; st.screen = {name: 'farmm'}; },
+  // One picture: build and submit the farm (ground() decides), then save the box as a pen or field so it starts in one click next time.
+  farmgo: async (st, data, ui, viewer) => {
+    if (data.job !== 'animalfarm' && data.job !== 'cropfarm') throw new Error('unbekannter Auftrag');
+    if (!st.farm) throw new Error('Erst Tiere & Felder öffnen');
+    st.screen = {name: 'farmm'};
+    if (!st.sel.a || !st.sel.b) return ui.flash(st, 'Erst zwei Ecken wählen');
+    if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Bereich ist in einer anderen Welt');
+    const bot = oneBot(ui, viewer, {bot: st.farm.bot}), pen = data.job === 'animalfarm';
+    let o;
+    try { // a refusal keeps the selection
+      o = jobs.build(data.job, {who: bot, crop: data.crop}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+      done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+    } catch (e) { throw new Error(/at most 16 x 16/.test(e.message) ? 'zu groß: höchstens 16 x 16' : explain(e.message)); }
+    const b = box(st.sel.a, st.sel.b);
+    let note = '';
+    try { ui.api.savePlace(viewer, {name: `${pen ? 'Tiere' : 'Feld'} ${b.x1} ${b.z1}`, kind: pen ? 'pen' : 'field', dim: jobs.dimOf(st.sel.a.dim), box: b, ...(pen ? {} : {crop: o.args.crop})}); } catch (e) { note = ` · nicht gespeichert: ${e.message}`; } // the farm runs anyway
+    await clearSel(st, ui, viewer);
+    st.screen = {name: 'botm', bot};
+    ui.flash(st, `${bot}: ${o.say}${note}`, true);
   },
   areaclear: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = {name: 'botm', bot: botOf(st, ui, viewer)}; },
   markclear: async (st, data, ui, viewer) => { ui.marks.delete(viewer); await outline(ui, viewer, null); st.screen = {name: 'ov'}; ui.flash(st, 'Markierung gelöscht', true); },
@@ -412,10 +437,11 @@ const ACTIONS = {
   pick: async (st, data, ui, viewer) => {
     if (data.kind !== 'block' && data.kind !== 'chest' && data.kind !== 'place' && data.kind !== 'area') throw new Error('unbekannte Auswahl');
     if (data.kind === 'area') { // two staff clicks, the ghost box grows with them
-      if (!st.area) throw new Error('Erst einen Bereich wählen');
+      const back = st.screen?.name === 'farmm' && st.farm ? 'farmm' : 'aream'; // the page that asked gets the corners
+      if (back === 'aream' && !st.area) throw new Error('Erst einen Bereich wählen');
       await clearSel(st, ui, viewer);
-      st.pick = {kind: 'area', until: ui.now() + PICK_MS};
-      st.screen = {name: 'aream'};
+      st.pick = {kind: 'area', until: ui.now() + PICK_MS, back};
+      st.screen = {name: back};
       await ACTIONS.close(st, data, ui, viewer);
       await ui.call('/actionbar', {player: viewer, text: 'Ecke 1 anklicken'}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
       return;
@@ -699,9 +725,10 @@ class BotUi {
       }
       if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(c.dim)) { this.flash(st, 'Ecken in verschiedenen Welten'); return false; }
       st.sel.b = c;
+      const back = st.pick.back || 'aream';
       st.pick = null;
       await outline(this, viewer, box(st.sel.a, c), {ghost: true});
-      st.screen = {name: 'aream'};
+      st.screen = {name: back};
       return true;
     }
     if (st.pick.kind === 'place') {
@@ -732,7 +759,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     if (this.screens.DIALOGS && !menus.MENUS.has(st.screen.name) && !this.screens.DIALOGS.has(st.screen.name)) st.screen = {name: 'ov'}; // a stale state never breaks a viewer
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, area: st.area, sel: st.sel, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, area: st.area, farm: st.farm, sel: st.sel, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash});
   }
 

@@ -339,6 +339,18 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     // Bots that trade: scheduled ones, guests (they get their first chest here) and those with a hall of their own.
     traders: () => [...new Set([...cfg.tradeSchedule.map((e) => e.bot), ...cfg.guestBots, ...[...runners.keys()].filter((n) => cfg.tradeHalls[n.toLowerCase()])])].filter((n) => runners.has(n)),
     places: () => places.list,
+    // Tiere & Felder saves its box like the dashboard's /api/places; a guest's only on ground one of its bots may farm (wheatfarm's rule).
+    savePlace: (viewer, place) => {
+      if (place.kind !== 'pen' && place.kind !== 'field') throw new Error('unbekannte Art');
+      const mine = cfg.viewerBots[viewer], type = place.kind === 'pen' ? 'animalfarm' : 'cropfarm';
+      if (mine !== '*' && !(mine || []).some((b) => { try { ground(viewer, b, type, place.box); return true; } catch { return false; } })) throw new Error('Fremdes Gelände');
+      if (places.list.some((p) => p.name === place.name && p.kind !== place.kind)) throw new Error('Name schon vergeben'); // never replaces another kind of place
+      const p = places.set(place);
+      events.add('map', 'info', `zone ${p.name} (${p.kind}) at ${p.x} ${p.y} ${p.z}`);
+      applyPlaces();
+      broadcast();
+      return p;
+    },
     // A guest sees the shared plans and their own uploads; the owner everything (uploads.js visible).
     schematics: async (viewer) => {
       const infos = (await listSchematics()).filter((x) => !x.error), ok = new Set(uploadsLib.visible(infos.map((x) => x.file), viewer, cfg.viewerBots[viewer] === '*', cfg.ingameViewers));

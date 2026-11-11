@@ -26,7 +26,7 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: {x: -271, y: 
 { // every job builds args its VALIDATE accepts
   const box = {x1: 0, z1: 0, x2: 4, z2: 4};
   const sel = {a: {x: 0, y: 60, z: 0, dim: 'overworld'}, b: {x: 6, y: 62, z: 6, dim: 'overworld'}};
-  const values = {block: 'iron_ore', item: 'stick', n: 16, radius: 16, at: {x: 1, y: 64, z: 2}, chest: {x: 1, y: 64, z: 2}, file: 'a.litematic', rotation: 90, zone: box, animal: 'cow'};
+  const values = {block: 'iron_ore', item: 'stick', n: 16, radius: 16, at: {x: 1, y: 64, z: 2}, chest: {x: 1, y: 64, z: 2}, file: 'a.litematic', rotation: 90, zone: box, animal: 'cow', crop: 'carrot'};
   for (const [key, job] of Object.entries(JOBS)) {
     assert.doesNotThrow(() => VALIDATE[job.type](job.args(key === 'enchant' ? {...values, item: 'iron_pickaxe', n: 2} : values, {sel, supply: {x: 1, y: 2, z: 3}, viewer: 'Midari', pos: [1, 64, 2], dim: 'overworld'})), key);
     assert.ok(job.label && typeof job.say(values) === 'string', key);
@@ -101,6 +101,25 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: {x: -271, y: 
 { // the hub validates the chest order
     assert.throws(() => VALIDATE.setchest({x: 1, y: 999, z: 3}));
     assert.deepEqual(VALIDATE.setchest({x: 1, y: 2, z: 3, junk: 1}), {x: 1, y: 2, z: 3});
+}
+{ // Tiere & Felder: farm jobs from the corners or a saved pen/field, never on the Bereich page; the idle path builds from v.zone
+  const {AREA} = require('../botui-jobs');
+  assert.ok(!AREA.includes('animalfarm') && !AREA.includes('cropfarm'));
+  const p = (x, y, z) => ({x, y, z, dim: 'overworld'}), sel = {a: p(0, 64, 0), b: p(3, 65, 4)};
+  const places = [{name: 'Tiere 5 5', kind: 'pen', dim: 'overworld', box: {x1: 5, y1: 60, z1: 5, x2: 9, y2: 66, z2: 9}}, {name: 'Feld 1 1', kind: 'field', dim: 'overworld', crop: 'potato', box: {x1: 1, y1: 60, z1: 1, x2: 4, y2: 66, z2: 4}}];
+  const env = {ctx: {gaze: null, pos: [1, 64, 2], dim: 'overworld'}, sel, supply: null, places, snaps: [{name: 'bot1', online: true}], allowed: '*', schematics: []};
+  assert.deepEqual(build('animalfarm', {who: 'bot1'}, env).args, {x1: 0, z1: 0, x2: 3, z2: 4});
+  const c = build('cropfarm', {who: 'bot1', crop: 'carrot'}, env);
+  assert.equal(c.type, 'cropfarm'); assert.deepEqual(c.args, {x1: 0, z1: 0, x2: 3, z2: 4, crop: 'carrot'});
+  assert.throws(() => build('cropfarm', {who: 'bot1', crop: 'cactus'}, env));
+  assert.throws(() => build('animalfarm', {who: 'bot1'}, {...env, sel: {a: p(0, 64, 0), b: p(16, 64, 16)}}), /at most 16 x 16/);
+  assert.throws(() => build('animalfarm', {who: 'bot1'}, {...env, sel: {}}), /zwei Ecken/);
+  assert.deepEqual(build('cropfarm', {who: 'bot1', zone: 'Feld 1 1', crop: 'carrot'}, {...env, sel: {}}).args, {x1: 1, z1: 1, x2: 4, z2: 4, crop: 'potato'}); // the saved crop wins
+  assert.deepEqual(build('animalfarm', {who: 'bot1', zone: 'Tiere 5 5'}, {...env, sel: {}}).args, {x1: 5, z1: 5, x2: 9, z2: 9});
+  assert.throws(() => build('animalfarm', {who: 'bot1', zone: 'Feld 1 1'}, env), /Farm nicht gefunden/);
+  assert.deepEqual(VALIDATE.animalfarm(JOBS.animalfarm.args({zone: places[0].box, kind: 'pen'}, {})), {x1: 5, z1: 5, x2: 9, z2: 9});
+  assert.deepEqual(JOBS.cropfarm.args({zone: places[1].box, kind: 'field', crop: 'potato'}, {}), {x1: 1, z1: 1, x2: 4, z2: 4, crop: 'potato'});
+  assert.equal(germanName('beetroot'), 'Rote Bete');
 }
 console.log('botui-jobs ok');
 

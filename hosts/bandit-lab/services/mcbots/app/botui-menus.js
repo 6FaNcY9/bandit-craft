@@ -49,7 +49,7 @@ const back = (i, a, bot) => slot(i, 'arrow', 'Zurück', {a, ...(bot ? {bot} : {}
 const GLINT = {follow: 'lead', goto: 'ender_eye', guard: 'iron_sword', enchant: 'enchanting_table', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart'};
 
 // One bot, 5 rows: head, moving and guarding on top; below four boxes split by black panes, each under a coloured strip
-// that names it (the strips are the only headings visible without hovering). Slot 21 is kept for "Tiere & Felder".
+// that names it (the strips are the only headings visible without hovering).
 function botPage(view, screen) {
   const s = snapOf(view, screen.bot), bot = s.name, hp = s.online ? Math.max(0, Math.min(20, Math.round(s.health) || 0)) : 0;
   const food = s.online ? Math.max(0, Math.min(20, Math.round(s.food) || 0)) : 0;
@@ -64,6 +64,7 @@ function botPage(view, screen) {
     ...[4, 13, 22, 31, 40].map((i) => pane(i, 'black', '·', self)),
     ...strip(9, 'lime', 'Sammeln'), ...strip(14, 'orange', 'Herstellen & Bauen'),
     slot(18, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Klick: Block abbauen', 'Shift: Bereich']}), go(19, 'iron_axe', 'Holz holen', 'chop'), go(20, 'oak_sapling', 'Baumfarm', 'treefarm'),
+    slot(21, 'carrot', 'Tiere & Felder…', {a: 'farmm', bot}, {glint: ['animalfarm', 'cropfarm'].includes(s.job?.type)}),
     slot(23, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(24, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
     slot(25, 'enchanting_table', 'Verzaubern…', {a: 'enchm', bot}, {glint: s.job?.type === 'enchant'}), slot(26, 'bricks', 'Bauen…', {a: 'schemm', bot}),
     ...strip(27, 'brown', 'Lager'), ...strip(32, 'light_blue', 'Einstellungen'),
@@ -108,7 +109,8 @@ function placePage(view, screen) {
 
 // "Wenn frei": one slot per choice the viewer may pick; the keeper only for the owner's own bots.
 const IDLE_ITEM = {holz: ['spruce_log', 'fällt Bäume und füllt seine Kiste'], stein: ['cobblestone', 'baut Stein ab und füllt seine Kiste'],
-  baumfarm: ['oak_sapling', 'pflegt die Baumfarm'], wache: ['iron_sword', 'bewacht den Ort, an dem du ihn gesetzt hast'], keeper: ['clock', 'übernimmt die Daueraufträge']};
+  baumfarm: ['oak_sapling', 'pflegt die Baumfarm'], wache: ['iron_sword', 'bewacht den Ort, an dem du ihn gesetzt hast'], keeper: ['clock', 'übernimmt die Daueraufträge'],
+  tiere: ['wheat', 'pflegt das erste Gehege'], feld: ['carrot', 'pflegt das erste Feld']};
 function idlePage(view, screen) {
   const s = snapOf(view, screen.bot), cur = view.idle?.get(s.name)?.id;
   const slots = CHOICES.filter((c) => IDLE_ITEM[c.id] && (c.id !== 'keeper' || !s.guest)).map((c, i) =>
@@ -326,6 +328,23 @@ function areaPage(view) {
   return {type: 'chest', title: size ? `Bereich: ${size.join(' × ')}` : 'Bereich wählen', rows: 3, slots};
 }
 
+// Tiere & Felder: the corners or the marked area, then one picture starts the farm (and saves it); saved pens and
+// fields (with their crop) start in one click. Own page: on Bereich one mis-click beside "Karotten" would dig up the pen.
+const FARM_CROPS = ['carrot', 'potato', 'beetroot', 'sugar_cane'];
+function farmPage(view) {
+  const bot = view.farm.bot, sel = view.sel || {}, size = dims(sel);
+  const slots = [slot(2, 'blaze_rod', 'Zwei Ecken zeigen', {a: 'pick', kind: 'area'}, {lore: ['Stab-Klick auf Ecke 1, dann Ecke 2']}),
+    ...(view.mark?.area ? [slot(3, 'red_banner', 'Markierter Bereich', {a: 'areafrom', from: 'mark'})] : []), back(26, 'botm', bot)];
+  if (size) slots.push(slot(9, 'wheat', 'Tiere', {a: 'farmgo', job: 'animalfarm'}, {lore: ['Tiere mit Namensschild bleiben verschont']}),
+    ...FARM_CROPS.map((c, i) => slot(10 + i, c, germanName(c), {a: 'farmgo', job: 'cropfarm', crop: c})));
+  // shortcut: 8 saved farms at most (one row); add a row when someone has more.
+  (view.places || []).filter((p) => p.box && (p.kind === 'pen' || (p.kind === 'field' && FARM_CROPS.includes(p.crop)))).slice(0, 8).forEach((p, i) => {
+    const pen = p.kind === 'pen';
+    slots.push(slot(18 + i, pen ? 'wheat' : p.crop, p.name, {a: 'go', bot, job: pen ? 'animalfarm' : 'cropfarm', zone: p.name}, {lore: [pen ? 'Tiere' : germanName(p.crop), 'Klick: starten']}));
+  });
+  return {type: 'chest', title: size ? `Tiere & Felder: ${size[0]} × ${size[2]}` : 'Tiere & Felder', rows: 3, slots};
+}
+
 // Einstellungen: keeper and Ziele are the owner's, the sidebar and the trader chests of the viewer's own traders everyone's.
 function zielPage(view) {
   const slots = [];
@@ -360,7 +379,7 @@ function kartePage(view) {
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, enchm: enchPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, zielm: zielPage, kartem: kartePage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, enchm: enchPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, farmm: farmPage, zielm: zielPage, kartem: kartePage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

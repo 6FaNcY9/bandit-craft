@@ -15,7 +15,7 @@ const DE = {
   iron_ingot: 'Eisenbarren', stick: 'Stock', torch: 'Fackel', oak_planks: 'Eichenbretter', bread: 'Brot', iron_pickaxe: 'Eisenspitzhacke',
   stone_pickaxe: 'Steinspitzhacke', iron_sword: 'Eisenschwert', bucket: 'Eimer', crafting_table: 'Werkbank', furnace: 'Ofen',
   lapis_lazuli: 'Lapislazuli', enchanting_table: 'Zaubertisch', iron_axe: 'Eisenaxt', diamond_pickaxe: 'Diamantspitzhacke', diamond_sword: 'Diamantschwert',
-  cow: 'Kühe', sheep: 'Schafe', pig: 'Schweine', chicken: 'Hühner',
+  cow: 'Kühe', sheep: 'Schafe', pig: 'Schweine', chicken: 'Hühner', carrot: 'Karotten', potato: 'Kartoffeln', beetroot: 'Rote Bete', sugar_cane: 'Zuckerrohr',
 };
 const germanName = (id) => DE[id] || String(id ?? '').replace(/_/g, ' ');
 // What the select lists offer; anything else goes in the "Oder Name" text field.
@@ -33,7 +33,8 @@ const dimOf = (d) => String(d || 'overworld').replace(/^minecraft:/, '');
 // Input kinds. `where` also takes optional (tidy: default is the supply chest).
 const count = (min, max, step, initial) => ({kind: 'count', min, max, step, initial});
 const block = {kind: 'block'}, item = {kind: 'item'}, chest = {kind: 'chest'}, where = {kind: 'where'}, radius = (initial, min, max) => ({kind: 'radius', initial, min, max}),
-  schematic = {kind: 'schematic'}, rotation = {kind: 'rotation'}, animal = {kind: 'animal'}, area = {kind: 'area'}, zone = (place) => ({kind: 'zone', place});
+  schematic = {kind: 'schematic'}, rotation = {kind: 'rotation'}, animal = {kind: 'animal'}, area = {kind: 'area'}, zone = (place) => ({kind: 'zone', place}),
+  farmArea = (place) => ({kind: 'farmArea', place}); // the corners or a saved place of that kind; not `area`, so the Bereich page never lists it
 
 const pt = (p) => ({x: p.x, y: p.y, z: p.z});
 const R = Math.round;
@@ -75,6 +76,9 @@ const JOBS = {
   homebed: {label: 'Heim', type: 'homebed', general: true, needs: [], args: () => ({}), say: () => 'Heim'},
   graves: {label: 'Gräber holen', type: 'graves', general: true, needs: [], args: () => ({}), say: () => 'Gräber holen'},
   help: {label: 'Helfen', type: 'help', general: true, needs: [], args: () => ({}), say: () => 'Helfen'},
+  // Tiere & Felder (farmm): v.zone is the corners' box, a saved pen/field's or, from "Wenn frei", the first one's.
+  animalfarm: {label: 'Tiere', type: 'animalfarm', needs: [farmArea('pen')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2}), say: () => 'Tiere'},
+  cropfarm: {label: 'Feld', type: 'cropfarm', needs: [farmArea('field')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2, crop: v.crop}), say: (v) => `Feld: ${germanName(v.crop)}`},
   // Area jobs: the box comes from the selected corners (ctx.sel).
   excavate: {label: 'Raum graben', type: 'excavate', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Raum graben', limit: 'höchstens 9 x 9 x 5'},
   clear: {label: 'Abbauen (Bereich)', type: 'clear', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Bereich abbauen', limit: 'höchstens 32 x 32 x 24'},
@@ -223,11 +227,17 @@ function build(key, data, env) {
     if (!p) throw new Error('Zone nicht gefunden');
     v.zone = p.box; dim = dimOf(p.dim);
   }
-  if (has('area')) {
+  const fa = has('farmArea'), saved = fa && data.zone !== undefined && env.places.find((x) => x.name === data.zone && x.kind === fa.place && x.box);
+  if (fa && data.zone !== undefined) {
+    if (!saved) throw new Error('Farm nicht gefunden');
+    v.zone = saved.box; v.crop = saved.crop; dim = dimOf(saved.dim);
+  }
+  if (has('area') || (fa && !saved)) {
     const {a, b} = env.sel || {};
     if (!a || !b) throw new Error('Bereich fehlt: zwei Ecken setzen');
     if (dimOf(a.dim) !== dimOf(b.dim)) throw new Error('Ecken in verschiedenen Welten');
     dim = dimOf(a.dim);
+    if (fa) { v.zone = bounds(env.sel); v.crop = data.crop; } // VALIDATE checks the crop
   }
   const bots = resolveBots(text('who') || 'frei', env.snaps, env.allowed, dim);
   const args = job.args(v, ctx);

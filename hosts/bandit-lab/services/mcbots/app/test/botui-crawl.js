@@ -17,7 +17,8 @@ const SNAPS = [
   {name: 'EM_Trader', online: true, health: 20, job: {type: 'trade'}, inventory: [], ...at(9, 9)},
 ];
 const PLACES = [{name: 'Vorrat', kind: 'supply', x: -271, y: 66, z: -214}, {name: 'Farm', kind: 'treefarm', x: 20, y: 64, z: 20, box: {x1: 20, y1: 60, z1: 20, x2: 30, y2: 70, z2: 30}},
-  {name: 'Feld', kind: 'wheat', x: 40, y: 64, z: 40, box: {x1: 40, y1: 60, z1: 40, x2: 45, y2: 66, z2: 45}}, {name: 'Spawn', kind: 'protected', x: 0, y: 64, z: 0}];
+  {name: 'Feld', kind: 'wheat', x: 40, y: 64, z: 40, box: {x1: 40, y1: 60, z1: 40, x2: 45, y2: 66, z2: 45}}, {name: 'Spawn', kind: 'protected', x: 0, y: 64, z: 0},
+  {name: 'Tiere 50 50', kind: 'pen', x: 52, y: 64, z: 52, box: {x1: 50, y1: 63, z1: 50, x2: 55, y2: 66, z2: 55}}, {name: 'Feld 60 60', kind: 'field', crop: 'carrot', x: 62, y: 64, z: 62, box: {x1: 60, y1: 63, z1: 60, x2: 64, y2: 66, z2: 64}}];
 const PLANS = [{file: 'haus.litematic', top: 'oak_planks', size: {x: 5, y: 4, z: 5}, offset: {x: 0, y: 0, z: 0}, blocks: 100, mtime: 2, owner: true}];
 const SIZE = {chest: (m) => m.rows * 9, hopper: () => 5, furnace: () => 3};
 
@@ -48,7 +49,7 @@ function mk(viewer) {
       if (type !== 'stop') { if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`); VALIDATE[type](args || {}); }
       return {ok: true, unreached: []};
     }, stopAll: () => ({keeperOff: true}), resume() {}, sidebar() {},
-    uploadLink: (v) => `https://x.test/u?t=${v}`, groundOk: () => true, markers: () => [], presence() {}};
+    savePlace() {}, uploadLink: (v) => `https://x.test/u?t=${v}`, groundOk: () => true, markers: () => [], presence() {}};
   const ui = new BotUi({url: 'http://plugin.test', token: 't', viewerBots: {Fancy: '*', Midari: ['MisaBot', 'EM_Trader'], Leer: ['gone']}, api, fetch, log: (m) => logs.push(m), now: () => (t += 1000)});
   const ev = (type, gaze, extra = {}) => ui.handle({id: ++id, type, player: viewer, pos: [2, 64, 2], dim: 'overworld', yaw: 0, gaze, ...extra});
   return {ui, sent, logs, ev, st: () => ui.state(viewer)};
