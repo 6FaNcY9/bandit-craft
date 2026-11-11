@@ -10,7 +10,8 @@ Phases 2 and 3 (relay, PROXY protocol, backups, store, opening) are not in here.
   namespace (base 589824), private veth `ve-mc-public` (10.251.1.1 host, 10.251.1.2 container), own tailnet
   node `tag:mc-public`. Caps on the whole container: 10G RAM, no swap, 3 CPUs, 2048 tasks, IO weight 50.
 - Inside (`hosts/bandit-lab/services/minecraft-public/`, flake output `nixosModules.mc-public`): Velocity on
-  `0.0.0.0:25565` (the container's firewall admits `tailscale0` only), `online-mode = true`, no plugins;
+  `0.0.0.0:25565` (the container's firewall admits `tailscale0` and the host's tunnel agent over the veth),
+  `online-mode = true`, no plugins;
   Paper on `127.0.0.1:25567` with Chunky and SModeration only, no RCON, no operators, whitelist on.
 - The forwarding secret is generated inside the container (`/var/lib/minecraft-public-secret/secret`). The
   private `minecraft-servers.env`, the private RCON and every sops secret except the container's tailnet
@@ -87,8 +88,10 @@ Each line names its host. `sudo` on the lab asks for the password.
    `sudo iptables -S DOCKER-USER | grep ve-mc-public` (four DROP rules)
    `systemctl show container@mc-public -p MemoryMax -p MemorySwapMax -p CPUQuotaPerSecUSec -p TasksMax -p IOWeight`
    `sudo machinectl status mc-public | grep -i uid` (user namespace base 589824)
-5. The game port is on the container's `tailscale0` only.
-   Lab: `timeout 3 bash -c '</dev/tcp/10.251.1.2/25565' && echo OPEN || echo closed` -> `closed`.
+5. The game port is on the container's `tailscale0` (testers) and, over the veth, from the host only (the
+   tunnel agent). Nothing else reaches it: the host forwards nothing new from the veth into the container.
+   Lab host: `timeout 3 bash -c '</dev/tcp/10.251.1.2/25565' && echo OPEN || echo closed` -> `OPEN`
+   (the host's own tunnel path; from the LAN or another tailnet device without a grant it is closed).
    Lab: `sudo nixos-container run mc-public -- ss -ltnH` -> 25565 on `*`, 25567 on `127.0.0.1`, no 25575.
    Laptop (granted in step 3): `nc -vz <mc-public tailnet address> 25565` succeeds; from a tailnet device
    without the grant it does not.
@@ -180,7 +183,7 @@ design change (the exact plugin list is part of the contract check).
 ## Phase 2: the public address
 
 The lab is behind a router the owner cannot port-forward (CGNAT, or a locked ISP router). A tunnel agent
-in the container dials out and makes the server public without touching the router or exposing the home
+on the host dials out and makes the server public without touching the router or exposing the home
 address. From this phase on Velocity drops every connection without a PROXY header: nobody joins over the
 tailnet address directly any more, the owner included.
 
@@ -192,28 +195,31 @@ tunnel is too slow or unreliable.
 
 ### Default: the playit.gg tunnel
 
-The agent (`playit` package, pinned in `minecraft-public/default.nix`) runs as its own user in the
-container and waits until claimed; its secret lives in the container's own state, no sops key.
+The agent (`playit` package, pinned in bandit-nix `mc-public/default.nix`) runs as its own user **on the
+host**, not in the container: an IPv4-only container is handed an IPv6 relay it cannot reach and the agent
+does not fall back to IPv4 (GH#194); the host has working IPv6. It forwards to the container's Velocity
+over the veth (`10.251.1.2:25565`, PROXY v2 set in the playit account). Its secret lives in the host's own
+state (`/var/lib/playit/playit.toml`, the `playit` user), no sops key.
 
 1. Owner: a free account at playit.gg (email only, no payment).
 2. Ship the Velocity change (`haproxy-protocol = true`) with the matching line in bandit-nix
    `ci/lab-mc-public.nix` and the tunnel package, then `lab-apply`. This restarts the public pair only.
-3. Owner, claim the agent, lab:
+3. Owner, claim the agent, on the lab host (the `playit` service must be up, so it after the deploy):
 
    ```bash
-   sudo nixos-container run mc-public -- playit-cli --socket-path /run/playit/playit.sock setup
+   sudo -u playit playit-cli --socket-path /run/playit/playit.sock setup
    ```
 
    It prints a `https://playit.gg/claim/<code>` line. Open it, signed in, and confirm.
-4. Owner, in the playit account: a `Minecraft Java` tunnel to `127.0.0.1:25565`, and set **Proxy
-   Protocol** to **Version 2**. Without it the server sees `127.0.0.1` for everyone and IP bans hit the
-   agent, not the player.
+4. Owner, in the playit account: a `Minecraft Java` tunnel to `10.251.1.2:25565`, and set **Proxy
+   Protocol** to **Version 2**. Without it the server sees the host's veth address (`10.251.1.1`) for
+   everyone and IP bans hit the agent, not the player.
 5. Checks:
    - Laptop: `nix shell nixpkgs#mcstatus -c mcstatus <playit address> status` answers with Paper's
      version and message; the same against the tailnet address times out.
    - Join through the playit address with a whitelisted account. Lab:
      `sudo journalctl -M mc-public -u minecraft-server-velocity -n 20` shows the player's own public
-     address, not `127.0.0.1`.
+     address, not the veth address.
 6. Owner, the domain: a `CNAME` `mc.<domain>` to the playit address (or an `SRV _minecraft._tcp.<domain>`
    -> `0 5 <port> <playit host>` so players type the bare domain). DNS records can be set on a domain
    that lives on shared hosting.
