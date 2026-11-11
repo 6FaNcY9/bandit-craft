@@ -111,12 +111,10 @@ For any session that wants to pick this up, steer it or connect its own work to 
     playit address. Done the same evening: the owner ran the script (with a token already in the laptop shell),
     confirmed the destination address; MX now points to Cloudflare, both rules exist, and a status ping
     through `bandit.atmosphaere.at` (SRV, node-minecraft-protocol) answered "Paper 26.2, 0/20". The legal texts
-    and the ad plan now use `bandit.atmosphaere.at`. Not yet: a real join through the name, a test mail to
-    admin@, and the deploy of 66c1ca4 (the admin bot's `MC_ADDRESS` is now `bandit.atmosphaere.at`; its status ping
-    resolves the SRV to the same tunnel; lab built with it on 2026-11-11; the branch went into craft main
-    on 2026-11-11 through the session that collected all work before a laptop reboot (bandit-nix main locks
-    craft f77b5aa); that session deploys the lab, `~/bandit-address-deploy.sh` is obsolete. Check after the
-    deploy: `systemctl show discord-admin -p Environment` on the lab shows `MC_ADDRESS=bandit.atmosphaere.at`).
+    and the ad plan now use `bandit.atmosphaere.at`. Deployed 2026-11-11 16:56 (lab on craft f77b5aa):
+    `discord-admin` runs with `MC_ADDRESS=bandit.atmosphaere.at` (checked on the lab), so the bot shows that
+    name from the opening on; `~/bandit-address-deploy.sh` is obsolete. Not yet: a real join through the name
+    and a test mail to admin@ from a non-Gmail sender (Gmail hides mail the owner sends to their own address).
 
 ## How to reach this session
 
