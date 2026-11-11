@@ -12,7 +12,7 @@ Phases 2 and 3 (relay, PROXY protocol, backups, store, opening) are not in here.
 - Inside (`hosts/bandit-lab/services/minecraft-public/`, flake output `nixosModules.mc-public`): Velocity on
   `0.0.0.0:25565` (the container's firewall admits `tailscale0` and the host's tunnel agent over the veth),
   `online-mode = true`, no plugins;
-  Paper on `127.0.0.1:25567` with Chunky and SModeration only, no RCON, no operators, whitelist on.
+  Paper on `127.0.0.1:25567` with Chunky and SModeration only, no RCON, the owner (fancy8869) as the only operator, whitelist on.
 - The forwarding secret is generated inside the container (`/var/lib/minecraft-public-secret/secret`). The
   private `minecraft-servers.env`, the private RCON and every sops secret except the container's tailnet
   auth key stay outside.
@@ -98,7 +98,7 @@ Each line names its host. `sudo` on the lab asks for the password.
 6. Lab, what Paper loaded (the key names match what the pinned build writes, and Chunky and SModeration
    2.0.0 load on it without LuckPerms; both checked locally on 2026-11-10):
    `sudo journalctl -M mc-public -u minecraft-server-paper | grep -E 'Chunky|SModeration|Done \('`
-   `sudo cat /srv/mc-public/data/paper/ops.json` -> `[]`
+   `sudo cat /srv/mc-public/data/paper/ops.json` -> only fancy8869
    `sudo grep -A4 chunk-loading-basic /srv/mc-public/data/paper/config/paper-global.yml` -> 40, 40, 5
    `sudo grep -E 'redstone-implementation|max-entity-collisions|prevent-moving-into|arrow|experience_orb' /srv/mc-public/data/paper/config/paper-world-defaults.yml`
    A key that Paper dropped or renamed is missing here: fix its name in `minecraft-public/default.nix`.
@@ -111,7 +111,7 @@ Each line names its host. `sudo` on the lab asks for the password.
    the bots on the dashboard.
 9. Pre-generation size, see below.
 
-## Console, whitelist, mute and ban (no RCON, no operators)
+## Console, whitelist, mute and ban (no RCON, the owner the only operator)
 
 On the lab; the console is a FIFO that only root inside the container can write:
 
@@ -125,8 +125,8 @@ sudo journalctl -M mc-public -u minecraft-server-paper -n 5
 
 The whitelist lives in `/srv/mc-public/data/paper/whitelist.json`; Nix writes none. Mute and ban are
 SModeration's console commands (`docs/runbooks/minecraft/ADMIN.md` links its reference), or vanilla
-`mcp ban <Name> <reason>` and `mcp pardon <Name>`. Never `op`: `ops.json` is emptied on every start and
-the contract check forbids declared operators.
+`mcp ban <Name> <reason>` and `mcp pardon <Name>`. Never `op` anyone else: `ops.json` is rewritten from Nix on every start (the owner only) and
+the contract check allows no other operator. The owner's kit: `/function bev:kit` in the game.
 
 ## World border and pre-generation
 

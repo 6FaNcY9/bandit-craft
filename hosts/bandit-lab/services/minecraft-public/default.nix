@@ -3,7 +3,7 @@
 # (0.0.0.0:25565; the container's firewall admits its own tailscale0 only) in front of one Paper
 # (127.0.0.1:25567). Nothing is shared with the private stack (../minecraft/nix-minecraft.nix): own data
 # directory, own forwarding secret (generated below; never the private minecraft-servers.env), no RCON,
-# no operators, premium accounts only, no VeloAuth and no BotGate.
+# no operators but the owner, premium accounts only, no VeloAuth and no BotGate.
 # The importer provides nix-minecraft's module and overlay. This module takes no `repoConfig`, no `inputs`
 # and declares no sops secret, so nothing of the host can leak in through it.
 # Runbook: docs/runbooks/minecraft/PUBLIC.md. Contract check: bandit-nix ci/lab-mc-public.nix.
@@ -147,10 +147,12 @@ in {
       package = paperPackage;
       jvmOpts = jvmOpts "6G"; # the container is capped at 10G (bandit-nix)
       serverProperties = paperProperties;
-      operators = {}; # none, ever: nothing is sold or granted through operator rights
-      # nix-minecraft writes no ops.json for an empty `operators`, so a console `op` would survive restarts.
-      # This copy is put back on every start.
-      files."ops.json" = pkgs.writeText "ops.json" "[]\n";
+      # The owner only (owner 2026-11-11), nothing sold or granted to players. nix-minecraft writes ops.json
+      # from this on every start, so a console `op` does not survive a restart. The kit: /function bev:kit.
+      operators.fancy8869 = {
+        uuid = "623c7ee4-71ca-487a-b92a-a4564e43fbb9";
+        level = 4;
+      };
       # The world events (docs/specs/2026-11-10-public-world-events.md). A copy, renewed on every start:
       # Minecraft refuses to start a world that has a symlink in it.
       files."world/datapacks/bev" = ./events;
