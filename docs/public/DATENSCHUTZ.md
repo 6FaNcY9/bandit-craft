@@ -73,7 +73,7 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
   pro Person veröffentlicht und nicht weitergegeben.
 - **Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO. Unser berechtigtes Interesse: den Server mit
   begrenzten Mitteln stabil und planbar betreiben.
-- **Speicherdauer:** [OFFEN: Frist vom Betreiber festzulegen]. Auf Wunsch löschen wir deine Werte
+- **Speicherdauer:** höchstens 90 Tage. Auf Wunsch löschen wir deine Werte
   vorher.
 
 ### 5. Besuch dieser Seiten
@@ -157,7 +157,7 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 | Server- und Chatprotokolle (mit IP-Adressen und Befehlen) | etwa 30 Tage |
 | Spielstand (Position, Inventar, Statistiken) | solange die Welt besteht oder bis du die Löschung verlangst |
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
-| Betriebsstatistiken | [OFFEN: Frist vom Betreiber festzulegen] |
+| Betriebsstatistiken | höchstens 90 Tage |
 | Verbindungsdaten beim Tunneldienst playit.gg | legt der Anbieter fest; er nennt keine Frist |
 | Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an admin@atmosphaere.at) |
 
@@ -294,7 +294,7 @@ been appointed; the conditions of Art. 37 GDPR are not met.
   person and not shared.
 - **Legal basis:** Art. 6(1)(f) GDPR. Our legitimate interest: running the server stably and
   predictably with limited resources.
-- **Retention:** [OPEN: period to be set by the operator]. On request we delete your figures sooner.
+- **Retention:** at most 90 days. On request we delete your figures sooner.
 
 ### 5. Visiting these pages
 
@@ -374,7 +374,7 @@ controllers in their own right; where they process data is set out in their priv
 | Server and chat logs (with IP addresses and commands) | about 30 days |
 | Game state (position, inventory, statistics) | as long as the world exists or until you ask for deletion |
 | Bans and mutes | as long as needed to enforce them |
-| Operating statistics | [OPEN: period to be set by the operator] |
+| Operating statistics | at most 90 days |
 | Connection data at the tunnel service playit.gg | set by the provider; it names no period |
 | Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to admin@atmosphaere.at) |
 
@@ -449,8 +449,9 @@ If the processing changes, we update this policy and the date at the top.
    oder klare Kriterien. Die Retention von Prometheus in bandit-nix prüfen und eintragen (Platzhalter
    `[OFFEN: ...]` in beiden Fassungen ersetzen). Nachgesehen am 11.11.2026: Prometheus auf dem Lab
    hält 30 Tage (`--storage.tsdb.retention.time=30d`). In diesem Zweig gibt es aber noch keinen
-   Sammler für die öffentliche Welt. Erst eintragen, wenn feststeht, wo die Werte liegen; werden
-   keine gesammelt, Abschnitt 4 und die Tabellenzeile streichen.
+   Sammler für die öffentliche Welt. Der Betreiber hat am 11.11.2026 höchstens 90 Tage
+   festgelegt (eingetragen). Ein künftiger Sammler muss das einhalten; werden keine Werte gesammelt,
+   Abschnitt 4 und die Tabellenzeile streichen.
 2. **Dashboard-Spec geht über die genannten Fakten hinaus.**
    `docs/specs/2026-11-10-public-world-dashboard.md` sieht weitere Daten pro Person vor (Tode mit
    Ursache, Spielerkills, Distanz, abgebaute Blöcke, Fortschritte) und einen zweiten Zweck (die
