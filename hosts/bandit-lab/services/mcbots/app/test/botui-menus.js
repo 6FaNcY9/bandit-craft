@@ -377,12 +377,12 @@ console.log('botui-menus ok');
   assert.equal(ui.state('Fancy').flash.text, 'Fehler: zu groß: höchstens 16 x 16'); assert.equal(submits.length, 0); assert.equal(saved.length, 0); assert.ok(ui.state('Fancy').sel.b);
   await corners({x: 3, y: 65, z: 4});
   await click({a: 'farmgo', job: 'animalfarm'});
-  assert.deepEqual(submits.at(-1), {bots: ['zed'], type: 'animalfarm', args: {x1: 0, z1: 0, x2: 3, z2: 4}, replace: false});
+  assert.deepEqual(submits.at(-1), {bots: ['zed'], type: 'animalfarm', args: {x1: 0, z1: 0, x2: 3, z2: 4, y: 64}, replace: false});
   assert.deepEqual(saved.at(-1), ['Fancy', {name: 'Tiere 0 0', kind: 'pen', dim: 'overworld', box: {x1: 0, y1: 64, z1: 0, x2: 3, y2: 65, z2: 4}}]);
   assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'zed'}); assert.equal(ui.state('Fancy').sel.a, null);
   await click({a: 'farmm', bot: 'zed'}); await corners({x: 3, y: 65, z: 4}); await click({a: 'farmgo', job: 'cropfarm', crop: 'sugar_cane'});
   assert.equal(submits.at(-1).args.crop, 'sugar_cane'); assert.deepEqual(saved.at(-1)[1], {name: 'Feld 0 0', kind: 'field', dim: 'overworld', box: {x1: 0, y1: 64, z1: 0, x2: 3, y2: 65, z2: 4}, crop: 'sugar_cane'});
-  await click({a: 'go', bot: 'zed', job: 'cropfarm', zone: 'Feld 1 1'}); assert.deepEqual(submits.at(-1).args, {x1: 1, z1: 1, x2: 4, z2: 4, crop: 'potato'});
+  await click({a: 'go', bot: 'zed', job: 'cropfarm', zone: 'Feld 1 1'}); assert.deepEqual(submits.at(-1).args, {x1: 1, z1: 1, x2: 4, z2: 4, crop: 'potato', y: 60});
   for (const c of ['tiere', 'feld']) { await click({a: 'idle_set', bot: 'zed', choice: c, m: 1}); assert.deepEqual(sets.at(-1), ['zed', c]); assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'zed'}); }
   ui.stop?.();
   console.log('botui-menus farm ok');

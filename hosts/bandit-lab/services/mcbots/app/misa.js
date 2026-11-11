@@ -22,6 +22,13 @@ function groundRule(areas, name, type, a) {
   return box && boxRule(areas, name, box);
 }
 
+// Tiere & Felder save: a guest's pen or field lies on ground one of its bots may farm, and a same-named place it replaces
+// must too (else a guest box named like the owner's farm would overwrite it). Bots that are not guests pass, as in ground().
+function saveRule(areas, bots, guests, place, old) {
+  const type = place.kind === 'pen' ? 'animalfarm' : 'cropfarm', ok = (box) => bots.some((b) => !guests.includes(b) || !groundRule(areas, b, type, box));
+  return ok(place.box) && (!old || (old.box && ok(old.box))) ? null : 'Fremdes Gelände';
+}
+
 // "ecke": the block a player stands on is corner 1, the next one corner 2, then 1 again.
 class Corners {
   constructor() { this.by = new Map(); }
@@ -40,4 +47,4 @@ class Corners {
   }
 }
 
-module.exports = {forBot, boxRule, groundRule, Corners};
+module.exports = {forBot, boxRule, groundRule, saveRule, Corners};

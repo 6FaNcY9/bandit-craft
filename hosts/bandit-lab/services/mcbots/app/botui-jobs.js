@@ -42,6 +42,8 @@ const bounds = (sel) => {
   const {a, b} = sel;
   return {x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), z1: Math.min(a.z, b.z), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y), z2: Math.max(a.z, b.z)};
 };
+// The farm's ground level: the jobs search 20 blocks around it, else around the supply chest's y (a far-off farm was never found).
+const groundY = (v) => (v.zone.y1 != null ? {y: v.zone.y1} : {});
 const supplyAt = (ctx) => { if (!ctx.supply) throw new Error('keine Vorratskiste eingestellt'); return pt(ctx.supply); };
 
 // loc: the job uses a target (v.at) and the context preset carries it. here: the label next to the gazed block.
@@ -77,8 +79,8 @@ const JOBS = {
   graves: {label: 'Gräber holen', type: 'graves', general: true, needs: [], args: () => ({}), say: () => 'Gräber holen'},
   help: {label: 'Helfen', type: 'help', general: true, needs: [], args: () => ({}), say: () => 'Helfen'},
   // Tiere & Felder (farmm): v.zone is the corners' box, a saved pen/field's or, from "Wenn frei", the first one's.
-  animalfarm: {label: 'Tiere', type: 'animalfarm', needs: [farmArea('pen')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2}), say: () => 'Tiere'},
-  cropfarm: {label: 'Feld', type: 'cropfarm', needs: [farmArea('field')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2, crop: v.crop}), say: (v) => `Feld: ${germanName(v.crop)}`},
+  animalfarm: {label: 'Tiere', type: 'animalfarm', needs: [farmArea('pen')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2, ...groundY(v)}), say: () => 'Tiere'},
+  cropfarm: {label: 'Feld', type: 'cropfarm', needs: [farmArea('field')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2, crop: v.crop, ...groundY(v)}), say: (v) => `Feld: ${germanName(v.crop)}`},
   // Area jobs: the box comes from the selected corners (ctx.sel).
   excavate: {label: 'Raum graben', type: 'excavate', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Raum graben', limit: 'höchstens 9 x 9 x 5'},
   clear: {label: 'Abbauen (Bereich)', type: 'clear', needs: [area], args: (v, ctx) => bounds(ctx.sel), say: () => 'Bereich abbauen', limit: 'höchstens 32 x 32 x 24'},

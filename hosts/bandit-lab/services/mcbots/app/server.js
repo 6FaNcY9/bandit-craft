@@ -342,9 +342,10 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     // Tiere & Felder saves its box like the dashboard's /api/places; a guest's only on ground one of its bots may farm (wheatfarm's rule).
     savePlace: (viewer, place) => {
       if (place.kind !== 'pen' && place.kind !== 'field') throw new Error('unbekannte Art');
-      const mine = cfg.viewerBots[viewer], type = place.kind === 'pen' ? 'animalfarm' : 'cropfarm';
-      if (mine !== '*' && !(mine || []).some((b) => { try { ground(viewer, b, type, place.box); return true; } catch { return false; } })) throw new Error('Fremdes Gelände');
-      if (places.list.some((p) => p.name === place.name && p.kind !== place.kind)) throw new Error('Name schon vergeben'); // never replaces another kind of place
+      const mine = cfg.viewerBots[viewer], old = places.list.find((p) => p.name === place.name);
+      if (old && old.kind !== place.kind) throw new Error('Name schon vergeben'); // never replaces another kind of place
+      const bad = mine !== '*' && misa.saveRule(cfg.protectedAreas, mine || [], cfg.guestBots, place, old); // the owner overwrites freely
+      if (bad) throw new Error(bad);
       const p = places.set(place);
       events.add('map', 'info', `zone ${p.name} (${p.kind}) at ${p.x} ${p.y} ${p.z}`);
       applyPlaces();

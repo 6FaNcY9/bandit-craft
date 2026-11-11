@@ -56,6 +56,14 @@
   assert.equal(misa.groundRule([base], 'MisaBot', 'setchest', {x: 0, y: 64, z: 0}), null);
   assert.equal(misa.groundRule([base, hall], 'MisaBot', 'chest', {x: 160, y: 65, z: 410}), null);
   assert.equal(misa.groundRule([base], 'MisaBot', 'mine', {}), null);
+  { // Tiere & Felder save: a guest only on her ground, and never over a same-named place off it (the owner's farm)
+    const pen = (x1, z1, x2, z2) => ({name: 'Tiere 1 1', kind: 'pen', box: {x1, y1: 60, z1, x2, y2: 66, z2}}), own = pen(120, 380, 130, 390), owners = pen(-90, 0, -80, 10);
+    assert.equal(misa.saveRule([base], ['MisaBot'], ['MisaBot'], own, null), null);
+    assert.equal(misa.saveRule([base], ['MisaBot'], ['MisaBot'], own, pen(121, 381, 129, 389)), null, 'her own place again');
+    assert.equal(misa.saveRule([base], ['MisaBot'], ['MisaBot'], own, owners), 'Fremdes Gelände', "the owner's place of that name");
+    assert.equal(misa.saveRule([base], ['MisaBot'], ['MisaBot'], owners, null), 'Fremdes Gelände');
+    assert.equal(misa.saveRule([base], ['bot1'], ['MisaBot'], owners, owners), null, 'a viewer with non-guest bots, as ground()');
+  }
   { // her kiste: any chest, also at spawn (her store is there)
     const spot = {x: 0, y: 64, z: 0};
     const q = new BotRunner('MisaBot', {log: () => {}, protectedAreas: [base]});
