@@ -45,7 +45,7 @@ For any session that wants to pick this up, steer it or connect its own work to 
    here, bandit-nix branch `feat/discord-bridge` (one commit, worktree `~/src/bandit-nix-bridge`). It cannot build
    on the lab before the owner has made the application `bandit-bridge` (Message Content Intent on, Public Bot
    off), invited it and put its token into `secrets/lab.yaml` as `discord-bridge-token`. Shipping restarts the
-   public Paper. Once the bot is in the guild, set `BRIDGE_ID` in `discord-admin/default.nix` to its application id
+   public Paper. `BRIDGE_ID` in `discord-admin/default.nix` is its application id, so invite the bot before deploying
    (shuts it out of the other open channels; a security review's finding, see PUBLIC.md). The privacy policy draft
    names the bridge. Runtime check after the deploy: chat both ways in
    `#ingame-chat`, `@everyone` typed in the game does not ping, the private world is untouched.

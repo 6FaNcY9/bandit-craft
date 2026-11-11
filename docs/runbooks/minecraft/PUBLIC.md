@@ -303,9 +303,9 @@ console, no account linking.
   places it at `/var/lib/discord-bridge/token` in the box; `minecraft-public-secret` puts it into the generated
   environment file as `CHATBRIDGE_TOKEN`. The channel id is `CHATBRIDGE_CHANNEL` in the Paper unit. Without a
   token the plugin logs `chat bridge off` and does nothing.
-- What a stolen token can do: the token sits in the public game server. Set `BRIDGE_ID` (the application's id)
-  in `discord-admin/default.nix` once the bot is in the guild: the admin bot then denies it every open channel
-  but `#ingame-chat`. It can still write direct messages to members it sees and change its own name and picture.
+- What a stolen token can do: the token sits in the public game server. `BRIDGE_ID` in
+  `discord-admin/default.nix` is the application's id: the admin bot denies that bot every open channel but
+  `#ingame-chat`. It can still write direct messages to members it sees and change its own name and picture.
   If the public server was broken into, reset the token in the developer portal.
 - New token: change the sops value, deploy, then in the box
   `systemctl restart minecraft-public-secret minecraft-server-paper` (players are disconnected).
