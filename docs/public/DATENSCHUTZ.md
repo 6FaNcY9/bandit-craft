@@ -115,9 +115,11 @@ auf unserem öffentlichen Discord-Server.
 
 ## Wer Daten erhält
 
-- **Relay-Anbieter:** Verbindungen zum Server laufen über einen gemieteten Weiterleitungsserver bei
-  <RELAY-ANBIETER> in der EU. Er leitet die Verbindung nur weiter und sieht dabei deine IP-Adresse.
-  Der Anbieter ist unser Auftragsverarbeiter (Art. 28 DSGVO).
+- **playit.gg (Verbindungsdienst):** Jede Verbindung zum Server läuft über den Tunnel-Dienst
+  playit.gg von Developed Methods LLC, Nevada, USA. playit leitet die Verbindung weiter und sieht
+  dabei deine IP-Adresse und die Verbindungsdaten (Zeitpunkt, Dauer, Datenmenge). Einen Vertrag zur
+  Auftragsverarbeitung (Art. 28 DSGVO) haben wir mit playit nicht; playit verarbeitet die Daten nach
+  seinen eigenen Bedingungen. Mehr dazu unter „Übermittlung außerhalb der EU“.
 - **Mojang/Microsoft:** prüft deine Anmeldung und ist dafür selbst Verantwortlicher; es gilt deren
   Datenschutzerklärung. Die Chat-Meldefunktion von Mojang ist eingeschaltet: Meldest du eine
   Nachricht über das Spiel selbst, geht diese Meldung an Mojang/Microsoft, nicht an uns.
@@ -134,13 +136,30 @@ auf unserem öffentlichen Discord-Server.
 
 ## Übermittlung außerhalb der EU
 
-Der Spielserver läuft auf eigener Hardware des Betreibers in Österreich, der Relay-Server in der EU.
-Außerhalb der EU übermitteln wir Daten nur über die Chat-Brücke (Punkt 6): Sie schickt öffentliche
-Chatnachrichten, Minecraft-Namen, die Zeilen zum Betreten und Verlassen und Todesmeldungen an
-Discord Inc. in den USA. Discord Inc. ist unter dem EU-US Data Privacy Framework zertifiziert; die
-Übermittlung stützt sich auf den Angemessenheitsbeschluss der EU-Kommission vom 10. Juli 2023
-(Art. 45 DSGVO). Mojang/Microsoft und GitHub handeln als eigene Verantwortliche; wo sie Daten
-verarbeiten, steht in ihren Datenschutzerklärungen.
+Der Spielserver läuft auf eigener Hardware des Betreibers in Österreich. Jede Verbindung zum Server
+läuft aber über playit.gg (Developed Methods LLC, Nevada, USA); playit sieht dabei deine IP-Adresse
+und die Verbindungsdaten (Zeitpunkt, Dauer, Datenmenge). Nach eigener Werbung leitet playit jede
+Verbindung über den nächstgelegenen Standort, auch über Standorte in Europa. Zugesagt ist das
+nicht, und das Unternehmen sitzt in den USA; wir behandeln es deshalb als Übermittlung in die USA.
+Wir stützen sie weder auf einen Angemessenheitsbeschluss (Art. 45 DSGVO) noch auf
+Standardvertragsklauseln oder andere Garantien (Art. 46 DSGVO), und einen Vertrag zur
+Auftragsverarbeitung (Art. 28 DSGVO) gibt es nicht. Die Datenschutzerklärung von playit erwähnt
+weder die DSGVO noch die Verbindungen, die über den Dienst laufen, und nennt weder eine Speicherfrist
+noch Speicherorte. Rechtsgrundlage der Übermittlung ist Art. 49 Abs. 1 lit. b DSGVO: Ohne sie kommt
+keine Verbindung zum Server zustande, der Nutzungsvertrag (Punkt 1) ließe sich also nicht erfüllen.
+
+**Was das für dich heißt:** In den USA können Behörden unter Umständen auf diese Daten zugreifen,
+ohne dass du davon erfährst und ohne dass du dich so wehren kannst wie in der EU. Deine Rechte
+(Art. 15 bis 21 DSGVO) kannst du bei uns geltend machen; betreffen sie Daten bei playit, leiten wir
+deine Anfrage an playit weiter, durchsetzen können wir sie dort aber nicht. Willst du das nicht,
+verbinde dich nicht mit dem Server; einen Zugang ohne playit gibt es derzeit nicht.
+
+Außerhalb der EU übermitteln wir Daten außerdem über die Chat-Brücke (Punkt 6): Sie schickt
+öffentliche Chatnachrichten, Minecraft-Namen, die Zeilen zum Betreten und Verlassen und
+Todesmeldungen an Discord Inc. in den USA. Discord Inc. ist unter dem EU-US Data Privacy Framework
+zertifiziert; die Übermittlung stützt sich auf den Angemessenheitsbeschluss der EU-Kommission vom
+10. Juli 2023 (Art. 45 DSGVO). Mojang/Microsoft und GitHub handeln als eigene Verantwortliche; wo
+sie Daten verarbeiten, steht in ihren Datenschutzerklärungen.
 
 ## Speicherdauer im Überblick
 
@@ -150,7 +169,7 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 | Spielstand (Position, Inventar, Statistiken) | solange die Welt besteht oder bis du die Löschung verlangst |
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
 | Betriebsstatistiken | höchstens 90 Tage |
-| Verbindungsdaten am Relay-Server | [OFFEN: vom Betreiber zu ergänzen] |
+| Verbindungsdaten bei playit.gg (IP-Adresse, Zeitpunkt, Dauer, Datenmenge) | legt playit fest, nicht wir; playit nennt keine Frist (siehe [Datenschutzerklärung von playit.gg](https://playit.gg/privacy-policy)) |
 | Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an <KONTAKT-MAIL>) |
 
 ## Löschung: was geht und was nicht
@@ -326,9 +345,11 @@ on our public Discord server.
 
 ## Who receives data
 
-- **Relay provider:** connections to the server pass through a rented forwarding server at
-  <RELAY-ANBIETER> in the EU. It only forwards the connection and sees your IP address while doing so.
-  The provider is our processor (Art. 28 GDPR).
+- **playit.gg (connection service):** every connection to the server passes through the tunnel
+  service playit.gg of Developed Methods LLC, Nevada, USA. playit forwards the connection and sees
+  your IP address and the connection data (time, duration, data volume) while doing so. We have no
+  data processing agreement (Art. 28 GDPR) with playit; playit processes the data under its own
+  terms. See "Transfers outside the EU" for more.
 - **Mojang/Microsoft:** checks your login and is a controller in its own right for that; its privacy
   policy applies. Mojang's chat reporting is enabled: if you report a message through the game itself,
   that report goes to Mojang/Microsoft, not to us.
@@ -345,12 +366,30 @@ on our public Discord server.
 
 ## Transfers outside the EU
 
-The game server runs on the operator's own hardware in Austria, the relay server in the EU. We
-transfer data outside the EU only through the chat bridge (point 6): it sends public chat messages,
-Minecraft names, the join and leave lines and death messages to Discord Inc. in the USA. Discord Inc.
-is certified under the EU-U.S. Data Privacy Framework; the transfer is based on the European
-Commission's adequacy decision of 10 July 2023 (Art. 45 GDPR). Mojang/Microsoft and GitHub act as
-controllers in their own right; where they process data is set out in their privacy policies.
+The game server runs on the operator's own hardware in Austria. Every connection to the server,
+however, passes through playit.gg (Developed Methods LLC, Nevada, USA); playit sees your IP address
+and the connection data (time, duration, data volume) while doing so. According to its own
+advertising, playit routes each connection through the nearest location, including locations in
+Europe. This is not a commitment, and the company is based in the USA; we therefore treat it as a
+transfer to the USA. We do not base it on an adequacy decision (Art. 45 GDPR) or on standard
+contractual clauses or other safeguards (Art. 46 GDPR), and there is no data processing agreement
+(Art. 28 GDPR). playit's privacy policy mentions neither the GDPR nor the connections that pass
+through the service, and names neither a retention period nor storage locations. The legal basis
+for the transfer is Art. 49(1)(b) GDPR: without it no connection to the server can be made, so the
+terms of use (point 1) could not be performed.
+
+**What this means for you:** in the USA, authorities may under certain circumstances access this
+data without you learning about it and without you being able to defend yourself as you could in
+the EU. You can exercise your rights (Art. 15 to 21 GDPR) with us; where they concern data held by
+playit, we forward your request to playit, but we cannot enforce them there. If you do not want
+this, do not connect to the server; there is currently no way to connect without playit.
+
+We also transfer data outside the EU through the chat bridge (point 6): it sends public chat
+messages, Minecraft names, the join and leave lines and death messages to Discord Inc. in the USA.
+Discord Inc. is certified under the EU-U.S. Data Privacy Framework; the transfer is based on the
+European Commission's adequacy decision of 10 July 2023 (Art. 45 GDPR). Mojang/Microsoft and GitHub
+act as controllers in their own right; where they process data is set out in their privacy
+policies.
 
 ## Retention at a glance
 
@@ -360,7 +399,7 @@ controllers in their own right; where they process data is set out in their priv
 | Game state (position, inventory, statistics) | as long as the world exists or until you ask for deletion |
 | Bans and mutes | as long as needed to enforce them |
 | Operating statistics | at most 90 days |
-| Connection data at the relay server | [OPEN: to be completed by the operator] |
+| Connection data at playit.gg (IP address, time, duration, data volume) | set by playit, not by us; playit states no period (see [playit.gg privacy policy](https://playit.gg/privacy-policy)) |
 | Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to <KONTAKT-MAIL>) |
 
 ## Deletion: what is possible and what is not
@@ -430,9 +469,8 @@ If the processing changes, we update this policy and the date at the top.
 
 ## Offene Punkte für den Betreiber
 
-1. **Speicherdauer der Betriebsstatistiken fehlt.** Art. 13 Abs. 2 lit. a DSGVO verlangt eine Frist
-   oder klare Kriterien. Die Retention von Prometheus in bandit-nix prüfen und eintragen (Platzhalter
-   `[OFFEN: ...]` in beiden Fassungen ersetzen).
+1. **Speicherdauer der Betriebsstatistiken.** Erledigt 2026-11-11: höchstens 90 Tage (Betreiber);
+   Prometheus in bandit-nix hält derzeit 30 Tage (`--storage.tsdb.retention.time=30d`).
 2. **Dashboard-Spec geht über die genannten Fakten hinaus.**
    `docs/specs/2026-11-10-public-world-dashboard.md` sieht weitere Daten pro Person vor (Tode mit
    Ursache, Spielerkills, Distanz, abgebaute Blöcke, Fortschritte) und einen zweiten Zweck (die
@@ -443,9 +481,18 @@ If the processing changes, we update this policy and the date at the top.
 3. **Backups.** Die Anarchy-Spec sieht restic-Backups (Peer und off-host) vor; in den Fakten fehlen
    sie. Enthalten sie Spielstände oder Protokolle, müssen Ort, Speicherdauer und der Umgang mit
    Löschanträgen (Daten bleiben bis zum Ablauf der Backup-Retention) genannt werden.
-4. **Relay-Anbieter.** Ein Auftragsverarbeitungsvertrag nach Art. 28 DSGVO mit <RELAY-ANBIETER> muss
-   vorliegen (meist Teil der AGB des Hosters; prüfen). Klären, ob HAProxy am Relay Verbindungen
-   protokolliert und wie lange; den zweiten `[OFFEN]`-Platzhalter ersetzen.
+4. **playit.gg statt Relay in der EU.** Entschieden: playit bleibt vorerst, ohne Vertrag nach
+   Art. 28 DSGVO und ohne Garantie nach Art. 44 ff. DSGVO; der Text sagt das offen und stützt die
+   Übermittlung auf Art. 49 Abs. 1 lit. b DSGVO. Diese Grundlage ist schwach: Art. 49 ist für
+   gelegentliche Übermittlungen gedacht, hier läuft jede Verbindung über playit, und „erforderlich“
+   ist sie nur wegen der Wahl des Dienstes (EDSA-Leitlinien 2/2018). Für Kinder ohne wirksamen
+   Vertrag (Punkt 6 dieser Liste) greift lit. b gar nicht. Einwilligung (lit. a) ist keine bessere
+   Wahl: Sie müsste ausdrücklich sein, und unter 14 ist sie fraglich (Art. 8 DSGVO, § 4 Abs. 4 DSG).
+   Offen: (a) prüfen, ob Developed Methods LLC auf der DPF-Liste steht (dataprivacyframework.gov);
+   wenn ja, Art. 45 statt Art. 49 nennen. (b) Prüfen, ob der Proxy das PROXY protocol von playit
+   nutzt; wenn nicht, stehen in den Protokollen (Punkt 2) und bei Sperren (Punkt 3) nicht die
+   IP-Adressen der Spielenden, sondern die von playit, und Punkt 1 bis 3 müssen angepasst werden.
+   (c) Auf Dauer: ein Relay in der EU mit Vertrag nach Art. 28 DSGVO.
 5. **Beweissicherung über 30 Tage hinaus.** Kommt eine Meldung kurz vor Ablauf, sind die Protokolle
    weg. Wenn einzelne Einträge für eine laufende Meldung oder ein Verfahren länger aufbewahrt werden
    sollen, muss das hier ergänzt werden. Ich habe es nicht aufgenommen, weil es nicht in den Fakten
