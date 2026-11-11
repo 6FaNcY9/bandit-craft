@@ -48,8 +48,9 @@ For any session that wants to pick this up, steer it or connect its own work to 
    denial for a bot that is not a member yet, without an error). Checked with the owner in the game on
    2026-11-11 14:30: join, chat and death lines arrive in `#ingame-chat`; `**test**` from the game stays text;
    `@everyone` from the game is drawn as a mention but the line is not highlighted for the owner (no ping).
-   Not checked yet: that a Discord message shows in the game (two were sent at 14:36, the owner has not said what
-   the game showed), and that a link from the game is not clickable (none was typed). The plugin's
+   A link typed in the game (`https://example.com`, 14:38) is plain text in Discord, not a link.
+   Not confirmed in the owner's words: that a Discord message shows in the game (two were sent at 14:36 while the
+   owner was in the game; the owner answered "done"). The plugin's
    log needs root: `sudo journalctl -M mc-public -u minecraft-server-paper | grep -i "chat bridge"`. The privacy
    policy draft names the bridge; its open points 13-15 are the owner's call.
    Live since 2026-11-11 14:12 (bandit-craft e2be802, bandit-nix 7e69748): the bridge deletes its own messages in
