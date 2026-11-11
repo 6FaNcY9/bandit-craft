@@ -280,7 +280,11 @@ run alerts like the other backups. Not copied off-site yet: the S3 job is off fo
    `ssh -t bandit-lab 'sudo bash mc-public-restore-test.sh'` -> `PASS`. It restores into a scratch
    directory, never over the world, and removes it. Record date and snapshot id here:
 
-   - (no drill passed yet)
+   - 2026-11-11 06:51Z: PASS, snapshot `a18c9549` (8.14 GiB, 2866 region files, 1,360,134 chunks in
+     place). The first run that day failed on the test, not the backup: it required every region file
+     to be whole 4 KiB sectors, but a running server pads a file only when it closes it (4 files near
+     the one online player ended short; whole again after the next restart). The test now checks each
+     chunk against its file instead.
 
 Real recovery: stop the container (`sudo systemctl stop container@mc-public`), restore the snapshot's
 `paper` directory over `/srv/mc-public/data/paper` keeping the owner (the container's root, uid
