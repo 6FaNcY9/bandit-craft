@@ -25,11 +25,21 @@ For any session that wants to pick this up, steer it or connect its own work to 
 
 ## Next steps
 
-1. Done 2026-11-11: guild `1569890251738980352`, `bandit-admin` invited, SOPS `discord-admin-token`.
-2. Phase 1 built on this branch (`hosts/bandit-lab/services/discord-admin`); bandit-nix branch
-   `feat/discord-admin` (worktree `~/src/bandit-nix-discord`) carries the token and the input bump.
-   After deploy: runtime check in `2026-11-11-discord-phase1-plan.md`.
-3. Phases 2 to 4 as in the design.
+1. Live since 2026-11-11 04:30: phases 1 and 2 (layout, lab alerts, teaser, rules, join and status texts),
+   shipped as bandit-craft a6e76d5 and bandit-nix 513820c. Checked live: layout, a real alert in
+   `#lab-alerts`, role preview (Moderator sees MODERATION, `@everyone` neither it nor ADMIN).
+2. Not shipped yet, on this branch on top of main: a660558 (refused server settings no longer stop the
+   bot; invite link in the launch material) and 8d1e6ac (launch target). Ship them with the next change;
+   `tools/craft-bump` needs the full 40-character sha (a short one goes through GitHub's rate-limited API).
+3. Set by hand in the client, not by the bot: rules channel `#regeln-rules`, updates channel `#mod-log`,
+   rules screening with four rules, the permanent invite. See the design's phase list.
+4. Launch: target and blockers are in the design ("Launch target"). The tunnel is the mc-public session's
+   work; the status ping still got no answer on 2026-11-11 04:55.
+5. Next to build: phase 4 (bot control) touches only `discord-admin` and the hub's API, so it does not
+   collide with the public world's work. Phase 3 (chat bridge) changes the public Paper's plugin list:
+   start it once the tunnel answers, and name the bridge in the privacy policy first.
+6. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
+   switch "Public Bot" off for `bandit-admin` in the developer portal.
 
 ## How to reach this session
 
