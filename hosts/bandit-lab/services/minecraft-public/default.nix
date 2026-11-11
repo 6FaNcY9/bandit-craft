@@ -23,26 +23,6 @@
   paperPackage = pkgs.paperServers.paper-26_2-build_130.override {jre = pkgs.jdk25_headless;};
   velocityPackage = pkgs.velocityServers.velocity-3_5_1-build_615;
 
-  # The tunnel to the public address (PUBLIC.md, "Phase 2"): playit.gg's agent dials out from the container,
-  # so neither the router nor a rented relay is involved and the home address stays private. Upstream's
-  # static release binaries, pinned by hash; not in nixpkgs. 1.2.0 (2026-10-29) on purpose, not the 2.0
-  # line that came out the day this was written. Its claim and start were tried with these two files.
-  playit = pkgs.stdenvNoCC.mkDerivation {
-    pname = "playit";
-    version = "1.2.0";
-    daemon = pkgs.fetchurl {
-      url = "https://github.com/playit-cloud/playit-agent/releases/download/v1.2.0/playit-linux-amd64";
-      hash = "sha256-YC3qMojVutTDrdunDs9lNbmuCFuNTy/C/pzekTvaeNA=";
-    };
-    cli = pkgs.fetchurl {
-      url = "https://github.com/playit-cloud/playit-agent/releases/download/v1.2.0/playit-cli-linux-amd64";
-      hash = "sha256-oQzXeGa92Bg3hIrQi2YpASY38mYufAt9kxC822Gf7r0=";
-    };
-    dontUnpack = true;
-    installPhase = "install -Dm755 $daemon $out/bin/playitd; install -Dm755 $cli $out/bin/playit-cli";
-  };
-  playitSocket = "/run/playit/playit.sock";
-
   # Only what differs from Paper's defaults; nix-minecraft rewrites server.properties from this on every start.
   paperProperties = {
     accepts-transfers = false;
@@ -90,9 +70,9 @@
     [forced-hosts]
 
     [advanced]
-    # Phase 2: every connection comes through the tunnel agent below (or a relay, tools/minecraft-public-relay)
-    # and carries the player's address in a PROXY v2 header. A connection without the header is dropped, so
-    # nobody joins over the tailnet address directly any more.
+    # Phase 2: every connection comes through the host's tunnel agent (bandit-nix mc-public/default.nix; or a
+    # relay, tools/minecraft-public-relay) and carries the player's address in a PROXY v2 header. A connection
+    # without the header is dropped, so nobody joins over the tailnet address directly any more.
     # Checked locally against this build: a status ping through HAProxy answers, a direct one does not.
     haproxy-protocol = true
   '';
@@ -204,39 +184,11 @@ in {
     };
   };
 
-  # `playit-cli` for the one-time claim (PUBLIC.md).
-  environment.systemPackages = [playit];
-  users.users.playit = {
-    isSystemUser = true;
-    group = "playit";
-  };
-  users.groups.playit = {};
+  # The tunnel to the public address runs on the HOST, not here (bandit-nix mc-public/default.nix): an
+  # IPv4-only container gets an IPv6 relay from playit and cannot reach it (playit agent has no IPv4
+  # fallback, GH#194). The host has working IPv6 and forwards to this Velocity over the veth.
 
   systemd.services = {
-    # Until the owner has claimed the agent it waits and forwards nothing. Its secret is written by the claim
-    # into the container's own state (0700, this user), like the forwarding secret: no sops key is involved.
-    # The tunnel's target (127.0.0.1:25565, PROXY v2) is set in the playit account, not here.
-    playit = {
-      description = "playit.gg tunnel agent for the public Minecraft address";
-      wantedBy = ["multi-user.target"];
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-      serviceConfig = {
-        ExecStart = "${playit}/bin/playitd --secret-path /var/lib/playit/playit.toml --socket-path ${playitSocket}";
-        User = "playit";
-        Group = "playit";
-        StateDirectory = "playit";
-        StateDirectoryMode = "0700";
-        RuntimeDirectory = "playit";
-        Restart = "always";
-        RestartSec = "10s";
-        NoNewPrivileges = true;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        PrivateTmp = true;
-      };
-    };
-
     # The pair's own forwarding secret, made once inside the container (root-only), like the sandbox's RCON
     # password on the host. No sops key and no path of the private stack is involved. To rotate: remove
     # /var/lib/minecraft-public-secret/secret and restart this unit, then both servers.
