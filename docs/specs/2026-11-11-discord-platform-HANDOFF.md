@@ -112,7 +112,9 @@ For any session that wants to pick this up, steer it or connect its own work to 
     confirmed the destination address; MX now points to Cloudflare, both rules exist, and a status ping
     through `bandit.atmosphaere.at` (SRV, node-minecraft-protocol) answered "Paper 26.2, 0/20". The legal texts
     and the ad plan now use `bandit.atmosphaere.at`. Not yet: a real join through the name, a test mail to
-    admin@, and the admin bot's `#adresse-join` text (still the playit address, code in discord-admin).
+    admin@, and the deploy of 66c1ca4 (the admin bot's `MC_ADDRESS` is now `bandit.atmosphaere.at`; its status ping
+    resolves the SRV to the same tunnel; lab built with it on 2026-11-11; the owner ships it with
+    `sh ~/bandit-address-deploy.sh`, which restarts only discord-admin).
 
 ## How to reach this session
 
