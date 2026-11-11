@@ -19,7 +19,7 @@
   // the whole gather amount rides along, so produce can take it from storage first (1600 stored cobblestone, 2026-10-16)
   assert.deepStrictEqual(nextChain({need: {cobblestone: 1529}, store}).gather, {item: 'cobblestone', count: 1529});
   assert.deepStrictEqual(nextChain({need: {oak_planks: 4}, store}).chain[0], ['mine', {block: 'oak_log', count: 1}], 'oak stays oak');
-  assert.deepStrictEqual(nextChain({need: {snowball: 64}, store}).chain[0], ['mine', {block: 'snow_block', count: 16}], 'four snowballs a snow block');
+  assert.deepStrictEqual(nextChain({need: {snowball: 64}, store}), {idle: 'nothing the bots can make: snowball', left: ['snowball']}, 'no snow job: the owner brings it (bot2 died on the far search, 2026-11-11)');
   // a step that just ran rests while another one is open, and runs again when it is the only one (2026-10-18)
   const both = {need: {cobblestone: 64, sand: 10}, store};
   assert.deepStrictEqual([nextChain(both).key, nextChain({...both, resting: new Set(['gather:sand'])}).key], ['gather:sand', 'gather:cobblestone'], 'the other material gets its turn');

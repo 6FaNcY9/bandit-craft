@@ -14,11 +14,11 @@ const FUEL = 'coal';
 const at = (c) => ({x: c.x, y: c.y, z: c.z});
 
 // What the gather table's `how` becomes as a mcbots job: `mine <block>` collects that block (stone drops
-// cobblestone, iron_ore raw iron), `chop <log>` takes that log kind only, so oak stays oak.
-const YIELD = {snow_block: 4}; // items a mined block gives
+// cobblestone, iron_ore raw iron), `chop <log>` takes that log kind only, so oak stays oak. No job for snow: none lies
+// near the sorter and the far search walked bot2 400 blocks out to its death (2026-11-11), so the owner brings it.
 function gatherJob(how, n) {
   const [verb, block] = how.split(' ');
-  return verb === 'mine' || verb === 'chop' ? ['mine', {block, count: Math.ceil(n / (YIELD[block] || 1))}] : null;
+  return (verb === 'mine' || verb === 'chop') && block !== 'snow_block' ? ['mine', {block, count: n}] : null;
 }
 
 // need, stock: {item: count}; taken: Set of step keys; store: {x,y,z}. -> {key, label, chain} | {idle: why}
