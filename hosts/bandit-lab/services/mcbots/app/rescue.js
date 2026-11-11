@@ -5,7 +5,7 @@
 // since the owner allowed it (2026-10-19: bot1, bot2 and bot19 fell into holes under protected zones and climbed in
 // place until Claude teleported them). Only this guarded tp reaches the console; every rescue is an event, so the
 // causes stay visible (and the fix memory sees the failures).
-const {NAME_RE} = require('./admin');
+const {NAME_RE, parse} = require('./admin');
 
 const STRANDED = 3;
 const GAP_MS = 10 * 60000; // one rescue per bot per 10 min
@@ -47,7 +47,7 @@ class Rescue {
     this.fails.delete(bot);
     // A bot on the other server is none of this console's business (bot2 and bot3 "rescued" by the sandbox, 2026-10-15).
     const [who] = await this.call(['minecraft:list']);
-    if (!String(who).split(/[:,]\s*/).includes(bot)) return void (before === undefined ? this.last.delete(bot) : this.last.set(bot, before));
+    if (!parse.players(String(who)).includes(bot)) return void (before === undefined ? this.last.delete(bot) : this.last.set(bot, before));
     // Only onto ground with room to stand: the old landing beside the supply chest has air under it on the main server.
     const [reply] = await this.call([`execute unless block ${t.x} ${t.y - 1} ${t.z} #minecraft:air if block ${t.x} ${t.y} ${t.z} #minecraft:air if block ${t.x} ${t.y + 1} ${t.z} #minecraft:air run minecraft:tp ${bot} ${t.x + 0.5} ${t.y} ${t.z + 0.5}`]);
     if (/^Teleported /.test(String(reply))) this.events.add(bot, 'info', `rescued: ${why}, teleported to the base (${this.label})`);

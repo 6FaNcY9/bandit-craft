@@ -226,7 +226,7 @@ class RemoteRunner {
     for (const f of waiting) f(v);
   }
 
-  enqueue(type, args = {}, {replace = false, first = false} = {}) {
+  enqueue(type, args = {}, {replace = false, first = false, noFar = false} = {}) {
     if (!this.conn) throw new Error(`${this.name} is offline (its worker is not connected)`);
     if (type === 'stop' || (replace === true && type !== 'setchest')) this.kept = []; // the next status frame is up to a second away
     let clean = {};
@@ -236,7 +236,7 @@ class RemoteRunner {
       clean = VALIDATE[type](args || {});
       if (replace !== true && this.snap.queue.length >= MAX_QUEUE) throw new Error('Warteschlange voll');
     }
-    this.conn.ws.send(JSON.stringify({t: 'job', bot: this.name, type, args: clean, replace: replace === true && type !== 'setchest', ...(first === true ? {first: true} : {})}));
+    this.conn.ws.send(JSON.stringify({t: 'job', bot: this.name, type, args: clean, replace: replace === true && type !== 'setchest', ...(first === true ? {first: true} : {}), ...(noFar === true ? {noFar: true} : {})}));
   }
 }
 

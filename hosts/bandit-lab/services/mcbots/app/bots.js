@@ -74,6 +74,23 @@ const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit',
 const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'highway']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
+// Above these a kept kind is filed like any other item (bot19 carried 448 sticks, 7 iron pickaxes, 3 tables, 2026-11-11).
+const KEEP_CAP = {stick: 64, coal: 64, torch: 64, crafting_table: 1, furnace: 1};
+const keepKey = (n) => (n === 'charcoal' ? 'coal' : n);
+const keepCap = (n) => KEEP_CAP[keepKey(n)] ?? (/_planks$/.test(n) ? 64 : TOOL_RE.test(n) ? 2 : 0);
+// The part of each kept kind above its cap, in inventory order; items outside the keep rules are not returned.
+function beyondKeep(items) {
+  const used = {};
+  const out = [];
+  for (const it of items) {
+    if (!(KEEP_RE.test(it.name) || TOOL_RE.test(it.name))) continue;
+    const k = keepKey(it.name);
+    const room = Math.max(0, keepCap(it.name) - (used[k] || 0));
+    used[k] = (used[k] || 0) + Math.min(room, it.count);
+    if (it.count > room) out.push({...it, count: it.count - room});
+  }
+  return out;
+}
 
 // Global login stagger shared by all runners in this process.
 let nextLogin = 0;
@@ -368,6 +385,7 @@ class BotRunner {
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
     this.hits = []; // {t, by}: who hurt this bot lately, for the death line
+    this.deathSpots = []; // {x, z, t} of its deaths in the last 24 h (graves.js repeatDeath, deathAvoid)
     this.acquireFailed = new Map(); // acquire.js method key -> until: the "get" job leaves that way out meanwhile
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
     this.unreached = new Map(); // block key -> {n: walks there that failed, t: the last}: the next wait doubles
@@ -739,27 +757,7 @@ class BotRunner {
       }
     });
     bot.on('entityGone', (e) => this.world.forgetMob(e.id));
-    bot.on('death', () => {
-      const doing = this.activity(); // before `dead`, which hides it
-      this.dead = true;
-      this.shelterAt = null;
-      this.lastError = 'died';
-      const p = bot.entity?.position;
-      const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
-      this.deathCause = null;
-      this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${hitsNote(this.hits, doing)}`);
-      this.hits = [];
-      const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
-      this.cancel();
-      this.resumeLater(was, 'died');
-      // Re-equip from the supply chest first thing after respawning.
-      if (this.supplyChest) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: this.supplyChest, status: 'queued'});
-      // ... and then fetch the loot from the grave AxGraves made, before the interrupted job goes on.
-      const spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue});
-      // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
-      if (spot && process.env.GRAVES === 'none') this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'tidy', args: {x: spot.x, y: spot.y, z: spot.z, radius: 8}, status: 'queued'});
-      else if (spot) this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'grave', args: spot, status: 'queued'});
-    });
+    bot.on('death', () => this.onDeath(bot));
     bot.on('error', (e) => {
       this.lastError = String(e.message || e);
       this.log(this.name, `error: ${this.lastError}`);
@@ -803,7 +801,7 @@ class BotRunner {
   // replace: drop the queue and the running job first, so a click means "do
   // this now" instead of waiting behind earlier clicks.
   // first: the job goes ahead of the running one, which is interrupted and goes on afterwards (as after a death).
-  enqueue(type, args = {}, {replace = false, first = false, at} = {}) {
+  enqueue(type, args = {}, {replace = false, first = false, at, noFar = false} = {}) {
     if (type === 'setchest') { // first, so replace never comes with it: it only stores a prefs entry and takes effect at once, whatever runs
       if (!this.online) throw new Error('ist nicht online');
       const c = this.setChest(this.bot, null, VALIDATE.setchest(args), true);
@@ -827,6 +825,7 @@ class BotRunner {
     }
     if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
     const job = {id: ++this.jobSeq, type, args: VALIDATE[type](args), status: 'queued'};
+    if (noFar) job.noFar = true; // the keeper's small fetches stay near the base (bot1 hunted 12 logs 600 blocks north, at an ocean monument: 40 deaths, 2026-11-09)
     // An area job the bot already runs or has queued is not queued again: bot2's agent ordered the same shaft
     // four more times while the first one ran, and every run walks all its layers again (lab, 2026-10-13).
     const same = (j) => j && j.type === type && JSON.stringify(j.args) === JSON.stringify(job.args);
@@ -860,6 +859,35 @@ class BotRunner {
     this.enqueue(type, args, first ? {first: true} : at < 0 ? {} : {at});
     const place = this.queue.findIndex((j) => j.id === id);
     return !first && busy && place >= 0 ? place + 1 : 0;
+  }
+
+  // The bot's 'death' event (a method so the self-check can call it).
+  onDeath(bot) {
+    const doing = this.activity(); // before `dead`, which hides it
+    this.dead = true;
+    this.shelterAt = null;
+    this.lastError = 'died';
+    const p = bot.entity?.position;
+    const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
+    this.deathCause = null;
+    this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${hitsNote(this.hits, doing)}`);
+    this.hits = [];
+    const now = Date.now();
+    const earlier = gravesJob.recentDeaths(this.deathSpots, now);
+    const near = gravesJob.deathsNear(earlier, p, now);
+    this.deathSpots = p ? [...earlier, {x: Math.floor(p.x), z: Math.floor(p.z), t: now}] : earlier;
+    const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
+    this.cancel();
+    // A second death at the same place: no grave trip and no resumed job walk back there (bot1, 40 deaths at a monument, 2026-11-09).
+    if (near) this.emit('alert', `left the grave at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}, ${near + 1} deaths there within 24 h${was ? `; ${was.type} not resumed` : ''}`);
+    else this.resumeLater(was, 'died');
+    // Re-equip from the supply chest first thing after respawning.
+    if (this.supplyChest) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: this.supplyChest, status: 'queued'});
+    // ... and then fetch the loot from the grave AxGraves made, before the interrupted job goes on.
+    const spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue, deaths: earlier, now});
+    // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
+    if (spot && process.env.GRAVES === 'none') this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'tidy', args: {x: spot.x, y: spot.y, z: spot.z, radius: 8}, status: 'queued'});
+    else if (spot) this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'grave', args: spot, status: 'queued'});
   }
 
   cancel() {
@@ -1247,8 +1275,11 @@ async function nightShelter(r, job) {
       const lidItem = () => bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name));
       for (let i = 0; i < 20 && !lidItem(); i++) await sleep(100); // the dug dirt drops into the hole
       if (!lidItem()) throw new Error('no block for the lid');
-      await bot.equip(lidItem(), 'hand');
-      await bot.placeBlock(wall, lidAt.minus(wall.position));
+      // Combat may put the sword back in hand between equip and place: check right before placing, retry once (2026-11-11).
+      for (let i = 0; ; i++) {
+        if (bot.heldItem?.name !== lidItem()?.name) await bot.equip(lidItem(), 'hand');
+        try { await bot.placeBlock(wall, lidAt.minus(wall.position)); break; } catch (e) { if (i || !lidItem()) throw e; guard(job); }
+      }
       r.shelterAt = lidAt;
     }
     const top = r.shelterAt;
@@ -2209,16 +2240,16 @@ const ownSpare = (r, keep) => keepBackOf(r, r.bot.inventory.items().filter((it) 
 const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'hunt', 'produce', 'graves']);
 const shouldEmpty = (job, queue, prefs, spareCount) => EMPTIES.has(job.type) && (job.status === 'done' || job.status === 'failed') && !job.interrupted
   && Object.getPrototypeOf(job) === Object.prototype && !queue.length && !!prefs?.chest && spareCount > 0;
-const JUNK = new Set(['cobblestone', 'cobbled_deepslate', 'dirt', 'gravel', 'granite', 'diorite', 'andesite', 'tuff', 'netherrack', 'calcite', 'dripstone_block', 'rooted_dirt', 'leaf_litter']);
+const {JUNK} = storage;
 const jobWants = (job, item) => [job.args?.block, job.args?.item].some((n) => n && (n === item || (item === 'cobblestone' && n === 'stone')));
-async function tossJunk(r, job) {
+async function tossJunk(r, job, pick = (n) => JUNK.has(n)) {
   const {bot} = r;
   // one stack of pillar material is kept: cobblestone first, else the first scaffold block carried
   const held = bot.inventory.items().map((i) => i.name);
   const keep = PILLAR_BLOCKS.find((n) => held.includes(n));
   let kept = false;
   for (const it of bot.inventory.items()) {
-    if (!JUNK.has(it.name) || jobWants(job, it.name) || r.prefs?.keep?.[it.name]) continue;
+    if (!pick(it.name) || jobWants(job, it.name) || r.prefs?.keep?.[it.name]) continue;
     if (it.name === keep && !kept) { kept = true; continue; }
     await bot.tossStack(it).catch(() => {});
     guard(job);
@@ -2569,7 +2600,7 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
 async function farHop(r, job, what, far, surface) {
   const p = r.bot.entity.position;
   if (far.dir < 0) {
-    far.dir = farsearch.farHeading(p, r.protectedAreas, r.supplyChest, far.tried);
+    far.dir = farsearch.farHeading(p, [...(r.protectedAreas || []), ...gravesJob.deathAvoid(r.deathSpots, Date.now())], r.supplyChest, far.tried); // death spots count as protected
     if (far.dir < 0) { far.stuck = true; return false; }
   }
   far.last = far.dir;
@@ -3313,7 +3344,8 @@ const {highway} = roadJob.makeRoad({
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,
-  deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only: 'logs'}})),
+  enoughWood: (r) => storage.surplus('oak_log', storage.hallTotals(r.world?.chests)), // every *_log is one kind
+  deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, ...(only ? {only} : {})}})),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
 });
 
@@ -3414,14 +3446,21 @@ const JOBS = {
       if (!/torch$/.test(bot.blockAt(new Vec3(spot.spot.x, spot.spot.y, spot.spot.z))?.name || '')) throw new Error('torch did not stay beside the spawner');
       return;
     }
+    // An unloaded box reads as all lit: walk there first (bot19 "lit" five zones 200 blocks away from a hole, 2026-11-11).
+    const cx = Math.floor((a.x1 + a.x2) / 2), cz = Math.floor((a.z1 + a.z2) / 2);
+    if (!bot.blockAt(new Vec3(cx, a.y1, cz))) await goNear(r, job, cx, a.y1, cz, 8, {xz: true, doing: `walking to ${a.zone || 'the box'} to light it`});
+    guard(job);
     const chestPoints = [r.supplyChest, ...(r.world?.snapshot().blocks || []).filter((b) => ['chest', 'trapped_chest', 'barrel'].includes(b.type))].filter(Boolean);
     const points = lightCandidates(a, (x, y, z) => bot.blockAt(new Vec3(x, y, z)), (x, z) => insideAreas(r.protectedAreas, x, z), (x, y, z) => {
       const ids = ['torch', 'wall_torch'].map((n) => bot.registry.blocksByName[n]?.id).filter((n) => n !== undefined);
       return bot.findBlocks({matching: ids, maxDistance: 9, count: 64}).some((v) => new Vec3(x, y, z).distanceTo(v) <= 7);
     }, (x, z) => chestPoints.some((c) => Math.hypot(c.x - x, c.z - z) < 2));
     let lit = 0;
+    // A spot the server refused a torch on waits 24 h, not every keeper round (2026-11-11).
+    const refused = (r.refusedLight ||= new Map()), key = (p) => `${p.x},${p.y},${p.z}`;
     for (const p of points) {
       guard(job);
+      if ((refused.get(key(p)) || 0) > Date.now()) continue;
       if (!await getTorch()) break;
       try { await goNear(r, job, p.x, p.y, p.z, 2); } catch { guard(job); continue; }
       guard(job);
@@ -3433,7 +3472,7 @@ const JOBS = {
         await bot.placeBlock(below, new Vec3(0, 1, 0));
         await sleep(200);
         if (/^torch$/.test(bot.blockAt(new Vec3(p.x, p.y, p.z))?.name || '')) lit++;
-      } catch (e) { guard(job); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z}: ${e.message.slice(0, 60)}`); }
+      } catch (e) { guard(job); refused.set(key(p), Date.now() + 24 * 3600000); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z} for 24 h: ${e.message.slice(0, 60)}`); }
     }
     if (!count() && lit === 0) throw new Error('no torches available');
     r.emit('info', `lit ${a.zone || `box ${a.x1},${a.y1},${a.z1}..${a.x2},${a.y2},${a.z2}`}: ${lit} torches`);
@@ -3533,6 +3572,11 @@ const JOBS = {
     if (own && !r.prefs?.chest) throw new Error('keine Kiste zugewiesen');
     const target = own ? r.prefs.chest : job.args; // not written into job.args: the job may be shown or resumed
     const {x, y, z} = target;
+    // Far from the base chest, cheap surplus the hall is over its cap for is dropped here, never carried home (owner 2026-11-11).
+    if (!own && storage.sameXYZ(job.args, planConfig.BASE.chest) && Math.hypot(bot.entity.position.x - x, bot.entity.position.z - z) > 48) {
+      const totals = storage.hallTotals(r.world?.chests);
+      await tossJunk(r, job, (n) => storage.DROPPABLE(n) && storage.surplus(n, totals) > 0);
+    }
     await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, target)} to deposit`}).catch((e) => { if (own && /^could not reach/.test(e.message)) (r.unreachableChests ||= new Map()).set(layout.keyOf(target), Date.now()); throw e; });
     job.t.doing = `depositing at ${place(r, target)}`;
     const Vec3 = require('vec3').Vec3;
@@ -3544,7 +3588,8 @@ const JOBS = {
     // `keep` ({name: n}): that many of a kind stay with the bot (the wheat farm's 64 seeds to replant from).
     const keepBack = (items) => keepBackOf(r, items, job.args.keep);
     // The own chest takes sticks, coal and the rest too (the keep list decides); armour stays on the bot.
-    const junk = () => (own ? ownSpare(r, job.args.keep) : keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name)))));
+    const kept = (it) => TOOL_RE.test(it.name) || KEEP_RE.test(it.name);
+    const junk = () => (own ? ownSpare(r, job.args.keep) : keepBack([...bot.inventory.items().filter((it) => !(kept(it) || isFood(it.name))), ...beyondKeep(bot.inventory.items().filter(kept))]));
     const eligible = () => (only ? keepBack(bot.inventory.items().filter((it) => only(it.name))) : junk());
     let moved = 0;
     const byName = {};
@@ -3627,11 +3672,13 @@ const JOBS = {
         }));
       }
       // One-off tidy-up: carry up to 9 stacks of junk, and of surplus above the quota, already in the base chest to the hall too.
+      // Only what the index says the hall has room for: a carried stack the full hall rejects would come straight back (2026-11-11).
+      const hallRoom = (n) => [...layout.chestsFor(layout.categoryOf(n, isFood)), ...layout.BY_CAT.misc].some((c) => (r.world?.chests?.get(layout.keyOf(c))?.free ?? 0) > 0);
       let carried = 0;
       const held = {};
       for (const it of chest.containerItems()) held[it.name] = (held[it.name] || 0) + it.count;
       for (const it of chest.containerItems()) {
-        if (carried >= 9 || (storage.storeFor(it.name, isFood) !== 'room' && !storage.overCap(it.name, held, -it.count))) continue;
+        if (carried >= 9 || (storage.storeFor(it.name, isFood) !== 'room' && !storage.overCap(it.name, held, -it.count)) || !hallRoom(it.name)) continue;
         guard(job);
         try { await chest.withdraw(it.type, it.metadata, it.count); carried++; held[it.name] -= it.count; } catch { break; } // inventory full
       }
@@ -3654,12 +3701,18 @@ const JOBS = {
           chest = null;
         }
       }
-      // The rooms are full or unreachable: the base chest takes the rest. With `only`, that is the coal that
-      // did not fit before (the junk carried out stays with the bot, never goes back in).
+      // The rooms are full or unreachable: the base chest takes the rest up to its quotas. With `only`, that is the coal that
+      // did not fit before; room items and anything over a quota stay with the bot (they filled the supply chest, 2026-11-11).
       if (only ? eligible().length : junk().length) {
         await goNear(r, job, x, y, z, 3, {under: true, doing: `walking back to ${place(r, job.args)} to deposit`});
         chest = await openChest(r, job, bot.blockAt(new Vec3(x, y, z)));
-        const rest = await fill(chest, eligible());
+        const stock = {};
+        for (const it of chest.containerItems()) stock[it.name] = (stock[it.name] || 0) + it.count;
+        const rest = await fill(chest, eligible().filter((it) => {
+          if (storage.storeFor(it.name, isFood, (n) => storage.overCap(n, stock)) !== 'base') return false;
+          stock[it.name] = (stock[it.name] || 0) + it.count;
+          return true;
+        }));
         noteStock(r, job, chest);
         if (rest.length) throw fullError();
       }
@@ -4213,4 +4266,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {MAX_QUEUE, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {MAX_QUEUE, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};

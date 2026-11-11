@@ -3,7 +3,7 @@ const assert = require('node:assert');
 (async () => { // rescue: three no-path failures in a row, or 8 min climbing on one spot, teleport the bot to the base
   const {Rescue, STUCK_MS} = require('../rescue');
   const sent = [], said = [];
-  let t = 0, online = ['bot4', 'bot2'];
+  let t = 0, online = ['[Arbeiter·Holz+Kohle] bot4', 'bot2']; // a role prefix as on the main server (bot19 never rescued, 2026-11-11)
   let reply = 'Teleported bot4 to -269.500000, 66.000000, -215.500000';
   const call = async (c) => (c[0] === 'minecraft:list' ? [`There are ${online.length} of a max of 12 players online: ${online.join(', ')}`] : (sent.push(...c), [reply]));
   const r = new Rescue({call, events: {add: (b, k, x) => said.push(x)}, target: () => ({x: -270, y: 66, z: -216}), now: () => t});

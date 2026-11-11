@@ -63,10 +63,10 @@ module.exports = async () => {
   assert.deepEqual(own.args, {own: true}, 'the resolved chest never lands in the running job');
   assert.deepEqual(x.walks.at(0).slice(0, 1), [3], 'walked to the own chest');
 
-  // without own: the old behaviour, KEEP_RE items (stick, coal) stay
+  // without own: KEEP_RE items (stick, coal) stay up to their keep cap; the sticks above 64 are filed (2026-11-11)
   x = rig({carried, chests: here, prefs: {chest, keep: {}}});
   await JOBS.deposit(x.r, job('deposit', chest));
-  assert.equal(x.left().stick, 100); assert.equal(x.left().coal, 20); assert.equal(x.stored('3,64,0').dirt, 64);
+  assert.equal(x.left().stick, 64); assert.equal(x.stored('3,64,0').stick, 36); assert.equal(x.left().coal, 20); assert.equal(x.stored('3,64,0').dirt, 64);
   // ... but the keep list holds back for every deposit of this bot
   x = rig({carried, chests: here, prefs: {chest, keep: {dirt: 10}}});
   await JOBS.deposit(x.r, job('deposit', chest));

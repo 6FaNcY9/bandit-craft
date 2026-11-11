@@ -191,8 +191,15 @@ Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/super
 - Far search (`app/farsearch.js`): when nothing free is in view (all protected, under the base, mined out) a non-shift job travels in
   hops of 96 blocks, one heading away from the base and protected boxes, ≤ 8 hops per search, ≤ 16 per run, 2 headings at most;
   progress `sucht weiter Richtung …` as an event and in `doing`. The full failure is "gave up" (retry after 4× `ORDER_RETRY_MS`).
+  The keeper's jobs never search far (`noFar`, also over the worker link): bot1 walked 600 blocks north for 12 logs and died
+  some 40 times at an ocean monument (main server 2026-11-09).
   `getItem` no longer learns a "no free … within" failure as a broken way (it used to block `mine:<item>` fleet-wide up to 24 h).
   Internal torch wood (`noFar`) stays local.
+  Death spots (`app/graves.js`): a death within 32 blocks of one in the last 24 h sends no grave trip and resumes no job (one
+  `alert`: "left the grave at …, N deaths there"); far searches avoid 64-block boxes around those spots. Per bot, in memory.
+- Stress test (`tools/mcbots-report/`): before and after a deploy, `curl -s https://bandit-lab.tail7facc9.ts.net:8445/api/archive/events.jsonl
+  > /tmp/ev.jsonl && node tools/mcbots-report/report.js /tmp/ev.jsonl --days 4`: done/fail/death per bot and day, the top fails
+  (digits as #) and death cells (32 blocks). A fail that keeps its count after a deploy was not fixed.
 - Alerts to the bot's owner (`app/ownalerts.js`): dead, stuck (No path / no progress), missing (`no way to get`), done (≥ 600 s), one
   per viewer|bot|kind per 10 min, via `ingame.say`. Join digest via `Ingame.tell` (one tellraw, ≤ 6 lines) from the quit time in
   `STATE_DIR/viewers.json`; no stored quit = no digest.
@@ -396,6 +403,10 @@ does not end it: once a minute an order whose bot is online and idle starts agai
 after `gave up ... (died 4 times)`) and right after a restart, event `the owner's <type> order goes on` (one exploded project chest had ended two orders, and the agents
 then sent bot1 out at night 806 times in 17 h: 17 deaths, 2026-10-17). The open order per bot (type and args)
 is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
+The same failure again (numbers masked) doubles the wait each time, 5, 10, 20, 40, then 60 min at most, for orders
+and projects alike; the third one in a row is an `alert` event (`its <type> order failed 3 times the same way ...`).
+A new order, a finish or a project's end starts the count over (`orderloop.failStreak`; EM_Trader's full inventory and
+bot19 in a hole each failed every 6-7 min for days, 2026-11-11).
 
 - **Projects** (`POST /api/project {bot, action: pause|resume|stop}`): one row per bot with a
   shaft/excavate/level/seal/rim/treefarm/homebed/build/grave job running, queued or remembered, with progress.
@@ -859,6 +870,9 @@ before chopping or mining). Without `SUPPLY_CHEST` or quotas the panel is absent
 - A chain that ends without the chest getting more of the item puts that item on a
   10 min cooldown (no ore nearby must not become a loop). Items without a recipe
   in the keeper show "no way to make this".
+- A supply chest with 2 free slots or fewer (last count) gets a plain `deposit` at it from an idle bot with 12 free
+  slots, at most every 10 min: the deposit carries 9 stacks of surplus and junk to the storage hall (1443 cobblestone
+  had left 1 slot, 2026-11-11).
 - Bots dig where they stand (nearest blocks within 64); set `KEEPER_SITE` if the
   spawn surroundings should stay untouched. Protected areas stay protected.
 - API: `GET /api/keeper`, `POST /api/keeper {"enabled": true|false}` (same-origin

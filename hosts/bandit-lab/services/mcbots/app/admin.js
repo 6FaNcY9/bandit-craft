@@ -130,7 +130,8 @@ function build(action, b = {}) {
 }
 
 const QUERIES = {plugins: 'plugins', whitelist: 'minecraft:whitelist list', bans: 'minecraft:banlist players', imageframe: 'imageframe list'};
-const afterColon = (t) => (t.includes(':') ? t.slice(t.indexOf(':') + 1) : '').split(',').map((s) => s.trim()).filter((s) => NAME_RE.test(s));
+// The last word: a role prefix comes first ("[Arbeiter·Holz+Kohle] bot19", main server 2026-11-11).
+const afterColon = (t) => (t.includes(':') ? t.slice(t.indexOf(':') + 1) : '').split(',').map((s) => s.trim().split(/\s+/).pop()).filter((s) => NAME_RE.test(s));
 const parse = {
   players: (t) => afterColon(clean(t)),
   whitelist: (t) => afterColon(clean(t)),

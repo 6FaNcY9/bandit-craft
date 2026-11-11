@@ -133,7 +133,7 @@ function pickups(entities, box, areas, me) {
 // The sapling to plant (oak and birch first) among inventory items, or undefined.
 const pickSapling = (items) => SAPLINGS.map((n) => items.find((i) => i.name === n)).find(Boolean);
 
-function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw, at, unpillar = async () => {}}) {
+function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw, at, unpillar = async () => {}, enoughWood = () => 0}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
 
   // Use bone meal on a sapling until it is a tree (or the meal or the tries are gone).
@@ -205,6 +205,12 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
     for (;;) {
       guard(job);
       await waitCalm(r, job);
+      // The hall holds enough logs (15,485 oak logs, 2026-11-11): wait, never fail, go on when it falls below the cap.
+      if (enoughWood(r) > 0) {
+        job.t.doing = 'enough wood in the hall, waiting';
+        for (let i = 0; i < 60; i++) { guard(job); await sleep(1000); }
+        continue;
+      }
       if (r.world?.unreachable) throw new Error('hub unreachable: not chopping without block reservations');
       const dim = normDim(bot.game?.dimension);
       const s = scan(blockAt, box, y0, r.protectedAreas);
@@ -215,6 +221,8 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
       if (bot.inventory.emptySlotCount() < 4) {
         job.progress = `depositing (${cut} logs so far)`;
         await deposit(r, job);
+        // logs only can leave the bot full (sticks, tools, seeds): one plain deposit before giving up
+        if (bot.inventory.emptySlotCount() < 4) await deposit(r, job, null);
         if (bot.inventory.emptySlotCount() < 4) throw new Error('inventory still full after depositing (chest full?)');
         continue;
       }

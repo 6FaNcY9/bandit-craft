@@ -547,3 +547,45 @@ const {BotRunner} = require('../bots');
   }
   console.log('ok');
 })();
+// ---- a second death at the same place: no grave trip, the interrupted job is not resumed, one alert (bot1 at the monument, 40 deaths, 2026-11-09) ----
+{
+  const G = require('../graves');
+  const H = 3600000, now = 100 * H;
+  const deaths = [{x: -300, z: -830, t: now - H}];
+  assert.strictEqual(G.repeatDeath(deaths, {x: -310, y: 60, z: -830}, now), true, '10 blocks from the last death');
+  assert.strictEqual(G.repeatDeath(deaths, {x: -400, y: 60, z: -830}, now), false, '100 blocks away');
+  assert.strictEqual(G.repeatDeath([{x: -300, z: -830, t: now - 25 * H}], {x: -300, y: 60, z: -830}, now), false, 'older than 24 h');
+  assert.deepStrictEqual(G.deathAvoid([...deaths, {x: 0, z: 0, t: now - 25 * H}], now), [[-332, -862, -268, -798]], 'a 64-block box per recent death');
+  const chest = {x: -271, y: 66, z: -214};
+  const g = (pos, ds) => G.graveAfterDeath({pos, dim: 'overworld', chest, areas: [], jobType: 'chop', queued: [], deaths: ds, now});
+  assert.strictEqual(g({x: -290, y: 60, z: -400}, [{x: -295, z: -400, t: now - H}]), null, 'no grave where it died before');
+  assert.deepStrictEqual(g({x: -290, y: 60, z: -400}, [{x: -195, z: -400, t: now - H}]), {x: -290, y: 60, z: -400}, 'a grave as today');
+  // the far search keeps out of a death box like a protected area: north is blocked, another heading is picked
+  const F = require('../farsearch');
+  const me = {x: 0, z: 0};
+  const north = F.DIRS.findIndex((d) => d.dz === -1 && d.dx === 0);
+  const boxes = G.deathAvoid([{x: 0, z: -F.FAR_HOP, t: now - H}], now);
+  assert.notStrictEqual(F.farHeading(me, boxes, {x: 0, z: 500}), north, 'not towards the death spot');
+  assert.strictEqual(F.farHeading(me, [], {x: 0, z: 500}), north, 'north without it (away from the base)');
+
+  // the runner: the death handler
+  const deadBot = (x, z) => ({entity: {position: {x, y: 60, z}}, game: {dimension: 'minecraft:overworld'}});
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  const alerts = [];
+  const emit = r.emit.bind(r);
+  r.emit = (k, t) => { if (k === 'alert') alerts.push(t); emit(k, t); };
+  r.supplyChest = chest;
+  r.current = {id: 1, type: 'chop', args: {count: 12}, status: 'running', t: {}};
+  r.onDeath(deadBot(-300, -830 + 300));
+  assert.ok(r.queue.some((j) => j.type === 'chop'), 'the first death resumes the job');
+  assert.ok(r.queue.some((j) => j.type === 'grave'), 'and fetches the grave');
+  r.queue.length = 0;
+  r.current = {id: 2, type: 'chop', args: {count: 12}, status: 'running', t: {}};
+  r.onDeath(deadBot(-305, -830 + 300));
+  assert.deepStrictEqual(r.queue.map((j) => j.type), ['rearm'], 'second death there: no grave, no resumed chop');
+  assert.strictEqual(alerts.length, 1);
+  assert.match(alerts[0], /2 deaths there/);
+  r.enqueue('goto', {x: 1, y: 64, z: 1});
+  assert.ok(r.queue.some((j) => j.type === 'goto'), 'an owner order after the repeat still runs');
+  console.log('death spots ok');
+}
