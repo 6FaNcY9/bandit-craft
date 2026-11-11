@@ -305,7 +305,8 @@ console, no account linking.
   token the plugin logs `chat bridge off` and does nothing.
 - What a stolen token can do: the token sits in the public game server. `BRIDGE_ID` in
   `discord-admin/default.nix` is the application's id: the admin bot denies that bot every open channel but
-  `#ingame-chat`. It can still write direct messages to members it sees and change its own name and picture.
+  `#ingame-chat`. After a new invite restart `discord-admin`: Discord drops the denial for a bot that is not a
+  member, without an error. It can still write direct messages to members it sees and change its own name and picture.
   If the public server was broken into, reset the token in the developer portal.
 - New token: change the sops value, deploy, then in the box
   `systemctl restart minecraft-public-secret minecraft-server-paper` (players are disconnected).

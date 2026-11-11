@@ -30,7 +30,8 @@ in {
       LAUNCH_AT = "";
       # The hub's dashboard port on the host's loopback. The bot's token opens only /api/remote/ there.
       # The chat bridge application's id (public, not a secret): that bot is denied #chat and the other open channels
-      # (app/layout.js). The bot must be in the guild before this is deployed.
+      # (app/layout.js). Discord takes that denial for a bot that is not in the guild yet and drops it without an
+      # error: after inviting the bot, restart this service.
       BRIDGE_ID = "1569950193837801493";
       HUB_URL = lib.mkIf hub "http://127.0.0.1:${config.virtualisation.oci-containers.containers.mcbots.environment.DASHBOARD_PORT}";
     };

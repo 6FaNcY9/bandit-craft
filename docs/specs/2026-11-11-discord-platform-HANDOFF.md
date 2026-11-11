@@ -41,14 +41,14 @@ For any session that wants to pick this up, steer it or connect its own work to 
    by the hub ("Diesen Bot gibt es nicht.", "Kein pausiertes Projekt.") and stand in its log under `[remote]`.
    Not checked: stopping and resuming a real bot from Discord, and that a second account with the Moderator
    role does not see the command.
-6. Phase 3 (chat bridge) is built and tried on the local stand, not deployed: plugin `minecraft-public/chatbridge`
-   here, bandit-nix branch `feat/discord-bridge` (one commit, worktree `~/src/bandit-nix-bridge`). It cannot build
-   on the lab before the owner has made the application `bandit-bridge` (Message Content Intent on, Public Bot
-   off), invited it and put its token into `secrets/lab.yaml` as `discord-bridge-token`. Shipping restarts the
-   public Paper. `BRIDGE_ID` in `discord-admin/default.nix` is its application id, so invite the bot before deploying
-   (shuts it out of the other open channels; a security review's finding, see PUBLIC.md). The privacy policy draft
-   names the bridge. Runtime check after the deploy: chat both ways in
-   `#ingame-chat`, `@everyone` typed in the game does not ping, the private world is untouched.
+6. Phase 3 (chat bridge) is live since 2026-11-11 07:18: plugin `minecraft-public/chatbridge` here, application
+   `bandit-bridge` (id in `discord-admin/default.nix` as `BRIDGE_ID`; Public Bot off, Message Content Intent on),
+   token in bandit-nix `secrets/lab.yaml` as `discord-bridge-token`. Checked in Discord: the bot is online in
+   `#ingame-chat` and, after the invite and a restart of `discord-admin`, gone from `#chat` (Discord drops the
+   denial for a bot that is not a member yet, without an error). Not checked yet, it needs the owner in the game:
+   chat both ways, `@everyone` typed in the game does not ping, links from the game are not clickable. The plugin's
+   log needs root: `sudo journalctl -M mc-public -u minecraft-server-paper | grep -i "chat bridge"`. The privacy
+   policy draft names the bridge; its open points 13-15 are the owner's call.
 7. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
    switch "Public Bot" off for `bandit-admin` in the developer portal.
 

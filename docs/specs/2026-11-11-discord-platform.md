@@ -91,13 +91,13 @@ here.
    changes the public world's "exact plugin list", so bandit-nix `ci/lab-mc-public.nix` gains the
    plugin in the same change. Runtime check: chat both ways, mentions are stripped, the private
    world is unaffected.
-   Built 2026-11-11, not deployed (it waits for the owner's `discord-bridge-token`): a plugin of our own,
+   Built and deployed 2026-11-11: a plugin of our own,
    `minecraft-public/chatbridge`, instead of DiscordSRV (agent's call). DiscordSRV 1.30.5 runs on Paper 26.x,
    but its defaults include console commands from the chat channel for a role named `Owner` (the guild has
    one), account linking and canned replies, it knows no account-age rule, and none of it can be tried without
    a real token. Ours does only what the table above asks, and `tools/botui-stand/e2e-chat.js` runs it on a
    real Paper 26.2 against a made-up Discord. Details and operation: PUBLIC.md "Discord chat bridge". The
-   bandit-nix half is one commit on its branch `feat/discord-bridge`.
+   bandit-nix half is on its `main` (ea84215).
 4. **Bot control.** Admin-bot commands against the hub's existing HTTP API with its own token.
    Runtime check: each command from the owner works; the same command from a test account with
    the Moderator role is refused and logged.
