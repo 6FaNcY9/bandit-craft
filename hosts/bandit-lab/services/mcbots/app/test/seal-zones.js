@@ -126,6 +126,13 @@ const {VALIDATE} = require('../bots');
   assert.strictEqual(pl.set({name: 'Home', kind: 'home', x: 1, y: 64, z: 2}).box, undefined);
   assert.throws(() => pl.set({name: 'Z', kind: 'shaft'}), /needs a box/);
   assert.throws(() => pl.set({name: 'Z', kind: 'shaft', box: {x1: 0, x2: 70, z1: 0, z2: 3, y1: 0, y2: 3}}), /at most 64/);
+  // pens and fields are zones; only a field keeps its crop, one of cropfarm's
+  const fb = {x1: 0, x2: 3, z1: 0, z2: 3, y1: 64, y2: 64};
+  assert.throws(() => pl.set({name: 'P', kind: 'pen'}), /needs a box/);
+  assert.strictEqual(pl.set({name: 'F', kind: 'field', box: fb, crop: 'carrot'}).crop, 'carrot');
+  assert.strictEqual(pl.set({name: 'P', kind: 'pen', box: fb, crop: 'carrot'}).crop, undefined);
+  assert.throws(() => pl.set({name: 'F', kind: 'field', box: fb, crop: 'cactus'}), /crop/);
+  pl.remove('F'); pl.remove('P');
   const z = pl.set({name: 'Z', kind: 'storage', box: {x1: 5, x2: 1, z1: 9, z2: 7, y1: 60, y2: 58}});
   assert.deepStrictEqual(z.box, {x1: 1, y1: 58, z1: 7, x2: 5, y2: 60, z2: 9});
   assert.deepStrictEqual([z.x, z.y, z.z], [3, 59, 8], 'the point is the centre');

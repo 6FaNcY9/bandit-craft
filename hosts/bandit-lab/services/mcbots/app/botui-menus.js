@@ -83,7 +83,7 @@ function guardPage(view, screen) {
   return {type: 'chest', title: `${safe(bot, 20)}: bewachen`, rows: 1, slots};
 }
 
-const PLACE_ICON = {supply: 'chest', site: 'bricks', home: 'red_bed', afk: 'clock', chest: 'barrel', storage: 'chest', shaft: 'iron_pickaxe', treefarm: 'oak_sapling', wheat: 'wheat', base: 'white_banner'};
+const PLACE_ICON = {supply: 'chest', site: 'bricks', home: 'red_bed', afk: 'clock', chest: 'barrel', storage: 'chest', shaft: 'iron_pickaxe', treefarm: 'oak_sapling', wheat: 'wheat', pen: 'lead', field: 'carrot', base: 'white_banner'};
 // Wohin?: where I look / stand / the marked spot, then the saved places (never the protected ones).
 function placePage(view, screen) {
   const {mode, bot} = screen, pay = (where) => ({a: 'placego', mode, bot, where}), spot = view.mark?.spot, slots = [];

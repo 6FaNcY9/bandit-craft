@@ -10,10 +10,15 @@ const CHOICES = [
   {id: 'holz', label: 'Holz-Schicht in meine Kiste', key: 'shiftlogs', data: {chest: 'own'}},
   {id: 'stein', label: 'Stein-Schicht', key: 'shift', data: {block: 'stone', chest: 'own'}},
   {id: 'wache', label: 'Bewachen hier', key: 'guard', data: {where: 'mark', radius: 16}},
-  {id: 'baumfarm', label: 'Baumfarm', key: 'treefarm', data: {zone: 'first'}},
+  {id: 'baumfarm', label: 'Baumfarm', key: 'treefarm', data: {zone: 'first', kind: 'treefarm'}},
+  {id: 'tiere', label: 'Tiere', key: 'animalfarm', data: {zone: 'first', kind: 'pen'}},
+  {id: 'feld', label: 'Feld', key: 'cropfarm', data: {zone: 'first', kind: 'field'}},
   {id: 'keeper', label: 'Daueraufträge', key: null, data: {}}, // owner's bots only; no job, the keeper takes them
 ];
 const choiceOf = (id) => CHOICES.find((c) => c.id === id) || null;
+// The first saved place of a kind with a box that `ok` accepts (server.js: a guest's only on its own ground).
+const firstZone = (list, kind, ok = () => true) => list.find((p) => p.kind === kind && p.box && ok(p)) || null;
+const NO_ZONE = {treefarm: 'keine Baumfarm-Zone', pen: 'keine Tier-Zone', field: 'keine Feld-Zone'};
 const isPos = (m) => m && ['x', 'y', 'z'].every((k) => Number.isInteger(m[k]));
 
 class IdleStore {
@@ -40,8 +45,8 @@ class IdleStore {
 
 const NO_CHEST = 'no chest';
 // choice -> the values its botui-jobs entry needs; throws a short refusal when a spot is missing.
-// ctx: chest (the bot's own pref), away (chest -> bool: no way to it lately), guest, supplyChest, treefarmZone (a box), mark.
-function resolveIdle(choice, {chest, guest, supplyChest, treefarmZone, mark, away}) {
+// ctx: chest (the bot's own pref), away (chest -> bool: no way to it lately), guest, supplyChest, zoneOf (kind -> place | null), mark.
+function resolveIdle(choice, {chest, guest, supplyChest, zoneOf, mark, away}) {
   const d = choice.data, v = {...d}, pt = (p) => ({x: p.x, y: p.y, z: p.z});
   if (d.chest === 'own') {
     v.chest = chest || (guest ? null : supplyChest);
@@ -50,8 +55,11 @@ function resolveIdle(choice, {chest, guest, supplyChest, treefarmZone, mark, awa
     if (away?.(v.chest)) throw new Error('chest unreachable'); // deposits there failed lately: no gathering for it
   }
   if (d.zone === 'first') {
-    if (!treefarmZone) throw new Error('keine Baumfarm-Zone');
-    v.zone = treefarmZone;
+    const z = zoneOf?.(d.kind);
+    if (!z) throw new Error(NO_ZONE[d.kind]);
+    if (d.kind === 'field' && !z.crop) throw new Error('Feld ohne Frucht');
+    v.zone = z.box;
+    if (d.kind === 'field') v.crop = z.crop;
   }
   if (d.where === 'mark') {
     if (!mark) throw new Error('keine Wache-Position');
@@ -76,4 +84,4 @@ function idleToStart({snaps, store, busy, retryAt, idleSince, now = Date.now()})
   }
   return out;
 }
-module.exports = {CHOICES, choiceOf, IdleStore, idleToStart, trackIdle, resolveIdle, NO_CHEST, IDLE_MS};
+module.exports = {CHOICES, choiceOf, firstZone, IdleStore, idleToStart, trackIdle, resolveIdle, NO_CHEST, IDLE_MS};

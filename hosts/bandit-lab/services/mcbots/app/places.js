@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // Zone kinds carry a box (the owner's "markers where you can make zones"); the others are points.
-const ZONE_KINDS = ['storage', 'shaft', 'treefarm', 'wheat', 'base', 'protected'];
+const ZONE_KINDS = ['storage', 'shaft', 'treefarm', 'wheat', 'pen', 'field', 'base', 'protected'];
 const KINDS = ['supply', 'site', 'home', 'afk', 'chest', ...ZONE_KINDS];
 const MAX_SIDE = 64; // a zone is at most 64 blocks wide
 const DIMS = ['overworld', 'the_nether', 'the_end'];
@@ -30,9 +30,12 @@ function clean(p) {
     box = {x1: Math.min(x1, x2), y1: Math.min(y1, y2), z1: Math.min(z1, z2), x2: Math.max(x1, x2), y2: Math.max(y1, y2), z2: Math.max(z1, z2)};
     if (box.x2 - box.x1 >= MAX_SIDE || box.z2 - box.z1 >= MAX_SIDE) throw new Error(`a zone is at most ${MAX_SIDE} x ${MAX_SIDE} blocks wide`);
   } else if (ZONE_KINDS.includes(p.kind)) throw new Error(`a ${p.kind} zone needs a box`);
+  // A field remembers its crop so a saved field starts cropfarm in one click; the names are cropfarm's own.
+  const crops = Object.keys(require('./cropfarm').CROP_KINDS);
+  if (p.kind === 'field' && p.crop != null && !crops.includes(p.crop)) throw new Error(`crop must be one of ${crops.join(', ')}`);
   // A zone's point is its centre unless given.
   const mid = (a, b) => (box ? Math.floor((box[a] + box[b]) / 2) : undefined);
-  return {name, kind: p.kind, dim, x: n(p.x ?? mid('x1', 'x2'), -3e7, 3e7, 'x'), y: n(p.y ?? mid('y1', 'y2'), -64, 320, 'y'), z: n(p.z ?? mid('z1', 'z2'), -3e7, 3e7, 'z'), ...(box ? {box} : {})};
+  return {name, kind: p.kind, dim, x: n(p.x ?? mid('x1', 'x2'), -3e7, 3e7, 'x'), y: n(p.y ?? mid('y1', 'y2'), -64, 320, 'y'), z: n(p.z ?? mid('z1', 'z2'), -3e7, 3e7, 'z'), ...(box ? {box} : {}), ...(p.kind === 'field' && p.crop != null ? {crop: p.crop} : {})};
 }
 
 // The running Places (set once by server.js), so plan-config and VALIDATE read zones without being handed it.
