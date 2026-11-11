@@ -177,15 +177,52 @@ edge of the radius for high values. Check before testers judge it: let one accou
 times and note the coordinates. If they cluster, the rule stays at its default and a spawn plugin becomes a
 design change (the exact plugin list is part of the contract check).
 
-## Phase 2: the relay and the public address
+## Phase 2: the public address
 
-The lab is behind CGNAT, so players reach a small VPS and the VPS reaches the server over the tailnet
-(`tools/minecraft-public-relay`: HAProxy, TCP only, PROXY v2, per-address connection limits). From this
-phase on Velocity drops every connection without a PROXY header: nobody joins over the tailnet address
-directly any more, the owner included.
+The lab is behind a router the owner cannot port-forward (CGNAT, or a locked ISP router). A tunnel agent
+in the container dials out and makes the server public without touching the router or exposing the home
+address. From this phase on Velocity drops every connection without a PROXY header: nobody joins over the
+tailnet address directly any more, the owner included.
 
 Before: every line of `mc-probe.sh` on the lab says `ok` (the checks above as one script; the agent
 copies it to the lab's home directory).
+
+The default is the playit.gg tunnel (free, no VPS). The VPS relay below is the alternative when the free
+tunnel is too slow or unreliable.
+
+### Default: the playit.gg tunnel
+
+The agent (`playit` package, pinned in `minecraft-public/default.nix`) runs as its own user in the
+container and waits until claimed; its secret lives in the container's own state, no sops key.
+
+1. Owner: a free account at playit.gg (email only, no payment).
+2. Ship the Velocity change (`haproxy-protocol = true`) with the matching line in bandit-nix
+   `ci/lab-mc-public.nix` and the tunnel package, then `lab-apply`. This restarts the public pair only.
+3. Owner, claim the agent, lab:
+
+   ```bash
+   sudo nixos-container run mc-public -- playit-cli --socket-path /run/playit/playit.sock setup
+   ```
+
+   It prints a `https://playit.gg/claim/<code>` line. Open it, signed in, and confirm.
+4. Owner, in the playit account: a `Minecraft Java` tunnel to `127.0.0.1:25565`, and set **Proxy
+   Protocol** to **Version 2**. Without it the server sees `127.0.0.1` for everyone and IP bans hit the
+   agent, not the player.
+5. Checks:
+   - Laptop: `nix shell nixpkgs#mcstatus -c mcstatus <playit address> status` answers with Paper's
+     version and message; the same against the tailnet address times out.
+   - Join through the playit address with a whitelisted account. Lab:
+     `sudo journalctl -M mc-public -u minecraft-server-velocity -n 20` shows the player's own public
+     address, not `127.0.0.1`.
+6. Owner, the domain: a `CNAME` `mc.<domain>` to the playit address (or an `SRV _minecraft._tcp.<domain>`
+   -> `0 5 <port> <playit host>` so players type the bare domain). DNS records can be set on a domain
+   that lives on shared hosting.
+
+### Alternative: a VPS relay
+
+A small VPS runs HAProxy (`tools/minecraft-public-relay`: TCP only, PROXY v2, per-address connection
+limits) and reaches the server over the tailnet. Better latency and fully under the owner's control, but
+it costs a few euro a month.
 
 1. Owner, the VPS: Debian or Ubuntu, one public IPv4, 1 GB of memory is enough, a location near Vienna.
    Log in with an SSH key, not a password. Nothing else runs on it: an attack on the game address must
@@ -196,7 +233,7 @@ copies it to the lab's home directory).
      No rule may give `tag:mc-relay` anything else, and none may let anything reach `tag:mc-relay`.
    - Settings, Keys: an auth key that is not reusable, pre-approved, tagged `tag:mc-relay`. It is typed
      into the script's prompt once and stored nowhere.
-3. Laptop, copy the two files and run the script on the VPS (it asks for the key):
+3. Laptop, copy the files and run the script on the VPS (it asks for the key):
 
    ```bash
    scp -r tools/minecraft-public-relay root@<VPS address>:
@@ -205,18 +242,10 @@ copies it to the lab's home directory).
 
    Its last lines show the relay's sockets (22 and 25565) and `server reachable`. If it says
    `CANNOT reach`, the rule in step 2 is missing or the container is down.
-4. Ship the Velocity change (`haproxy-protocol = true`) and the matching line in bandit-nix
-   `ci/lab-mc-public.nix` together, then `lab-apply`. This restarts the public pair only.
-5. Checks:
-   - Laptop: `nix shell nixpkgs#mcstatus -c mcstatus <VPS address>:25565 status` answers with Paper's
-     version and message; the same against the tailnet address times out.
-   - Join through the VPS address with a whitelisted account. Lab:
-     `sudo journalctl -M mc-public -u minecraft-server-velocity -n 20` shows the player's own public
-     address, not the relay's tailnet address.
-   - VPS: `timeout 3 bash -c '</dev/tcp/<lab tailnet address>/22' && echo OPEN || echo closed` -> `closed`.
-6. Owner, the domain: an `A` record `mc.<domain>` to the VPS address and, so the relay can move without
-   players noticing, `SRV _minecraft._tcp.<domain>` -> `0 5 25565 mc.<domain>`. Players then type the
-   bare domain.
+4. Ship as in the tunnel's step 2, then `lab-apply`.
+5. Checks as for the tunnel, against `<VPS address>:25565`, plus from the VPS:
+   `timeout 3 bash -c '</dev/tcp/<lab tailnet address>/22' && echo OPEN || echo closed` -> `closed`.
+6. Owner, the domain: an `A` record `mc.<domain>` to the VPS address, or the `SRV` record as above.
 
 Not part of this step and still open: the backup job for the public world and its restore drill
 (the design wants both before the whitelist comes off).
