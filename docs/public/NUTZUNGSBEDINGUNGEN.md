@@ -22,10 +22,12 @@ Bandit Anarchy ist eine „Anarchy“-Überlebenswelt mit 20 Plätzen. Die Welt 
 
 - **Erlaubt ist** alles, was nicht gegen eine der drei Regeln unten verstößt, insbesondere Griefing,
   Raiden, Stehlen und veränderte („gehackte“) Clients.
-- **Es gibt keine** Operatoren, keine Rollbacks, keinen Ersatz für verlorene Gegenstände und keinen
-  Schutz für Bauwerke, auch nicht für die des Betreibers oder von Bekannten.
+- **Operator-Rechte** hat nur der Betreiber. Er spielt selbst mit und kann sich damit Gegenstände
+  geben. Spieler können Operator-Rechte weder bekommen noch kaufen.
+- **Es gibt keine** Rollbacks, keinen Ersatz für verlorene Gegenstände und keinen Schutz für
+  Bauwerke, auch nicht für die des Betreibers oder von Bekannten.
 - **Automatische Ereignisse:** Der Server startet von selbst Ereignisse (Versorgungsabwürfe, Bosse,
-  Ruinen, Meteoriten, Stürme, Blutnächte). Niemand kann sie kaufen oder steuern.
+  Ruinen, Meteoriten, Stürme, Blutnächte). Spieler können sie weder kaufen noch steuern.
 - **Eingriffe des Betreibers** gibt es nur, um die drei Regeln durchzusetzen (Stummschalten, Sperren,
   Entfernen rechtswidriger Inhalte nach Meldung) und um den Server technisch zu betreiben.
 
@@ -128,10 +130,12 @@ Bandit Anarchy is an "anarchy" survival world with 20 slots. The world is never 
 
 - **Allowed** is everything that does not break one of the three rules below, in particular griefing,
   raiding, stealing and modified ("hacked") clients.
-- **There are no** operators, no rollbacks, no refunds of lost items and no protection for anyone's
-  builds, including those of the operator or of people the operator knows.
+- **Operator rights** belong to the operator alone. The operator plays too and can use them to give
+  themselves items. Players can neither get nor buy operator rights.
+- **There are no** rollbacks, no refunds of lost items and no protection for anyone's builds,
+  including those of the operator or of people the operator knows.
 - **Automatic events:** the server starts events by itself (supply drops, bosses, ruins, meteors,
-  storms, blood nights). Nobody can buy or steer them.
+  storms, blood nights). Players can neither buy nor steer them.
 - **The operator intervenes** only to enforce the three rules (muting, banning, removing illegal
   content once reported) and to run the server technically.
 
@@ -216,8 +220,8 @@ Not an official Minecraft product. Not approved by or associated with Mojang or 
    rechtswidrige Inhalte nach Meldung zu entfernen, umfasst auch Bauwerke und Schilder (z. B.
    NS-Symbole, strafbar nach dem Verbotsgesetz). Dafür braucht es einen Eingriff in die Welt. Punkt 3
    behält ihn ausdrücklich vor. `docs/runbooks/minecraft/PUBLIC-LAUNCH.md` verlangt, dass eine solche
-   Ausnahme in allen Texten genannt wird; die Werbetexte entsprechend anpassen. Außerdem klären,
-   womit entfernt wird, wenn es keine Operatoren gibt (Konsole).
+   Ausnahme in allen Texten genannt wird; die Werbetexte entsprechend anpassen. Entfernt wird mit
+   den Operator-Rechten des Betreibers (seit 2026-11-11) oder über die Konsole.
 2. **Digital Services Act.** Ob ein kostenloser privater Server ein „Vermittlungsdienst“ (Hosting) im
    Sinne des DSA ist, ist unsicher. Fehlt jedes Entgelt, liegt eher kein Dienst der
    Informationsgesellschaft vor. Spätestens mit dem Store prüfen: Melde- und Abhilfeverfahren
