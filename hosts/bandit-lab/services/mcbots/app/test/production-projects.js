@@ -38,6 +38,12 @@
   assert.strictEqual(nextChain({...shears, slots: 1}).chain[1][1].count, 1, 'never a chain of none: that would end the order');
   assert.strictEqual(nextChain({...shears, stock: {iron_ingot: 4000, shears: 90}}).chain[1][1].count, 6, 'tops the staged shears up to 96');
   assert.deepStrictEqual(nextChain({...shears, stock: {iron_ingot: 4000, shears: 96}}), {idle: 'shears are staged, waiting for the builders', left: []}, 'staged is a wait, not "all it needs"');
+  // a failed chain gives back its inputs and its product, not the fuel (bot19 filed 108 ingots and 10 shears in the far hall, 2026-11-11)
+  const {chainItems} = require('../production');
+  assert.deepStrictEqual(chainItems(craft.chain), ['iron_ingot', 'chest', 'hopper']);
+  assert.deepStrictEqual(chainItems(smelt.chain), ['raw_iron', 'iron_ingot']);
+  assert.deepStrictEqual(chainItems(gather.chain), [gather.key.slice(7)]);
+  assert.deepStrictEqual(chainItems([['get', {item: 'white_bed', count: 1}], ['deposit', {only: 'white_bed'}]]), ['white_bed'], 'a get chain gives back what it fetched');
   console.log('production: next chains ok');
 }
 

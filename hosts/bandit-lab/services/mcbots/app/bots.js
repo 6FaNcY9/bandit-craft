@@ -3278,6 +3278,11 @@ function producer(r, job, args) {
       guard(job);
       r.emit('info', `produce: ${next.label} failed, resting it 10 min: ${e.message.slice(0, 100)}`);
       PRODUCING.set(next.key, {by: '-', until: Date.now() + 10 * 60000});
+      // What the chain took out or made stays in the bag and crowds it: bot19 then walked 200 blocks to the base chest and
+      // filed 108 ingots and 10 shears in the hall (2026-11-11). One failed trip ends the give-back.
+      for (const item of productionLib.chainItems(next.chain).filter((i) => craftingLib.count(r.bot, i))) {
+        try { await viaChests('deposit', {only: item}); } catch { guard(job); break; }
+      }
       return {ran: null};
     } finally {
       clearInterval(hold);

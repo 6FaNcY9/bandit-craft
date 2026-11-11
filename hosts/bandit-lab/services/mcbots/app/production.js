@@ -67,4 +67,7 @@ function nextChain({need, stock = {}, taken = new Set(), resting = new Set(), st
   return {idle: left.length ? `nothing the bots can make: ${left.join(', ')}` : wait, left};
 }
 
-module.exports = {nextChain, gatherJob};
+// What a chain takes from the store or puts into it (not the fuel): a chain that failed gives these back.
+const chainItems = (chain) => [...new Set(chain.filter(([type]) => type === 'withdraw' || type === 'deposit').map(([, a]) => a.item ?? a.only))].filter((item) => item !== FUEL);
+
+module.exports = {nextChain, gatherJob, chainItems};
