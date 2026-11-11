@@ -72,5 +72,11 @@
   const empty = {breed: null, shear: [], cull: [], lacks: []};
   const all = {cow: {adults: herd('cow', 12), babies: 0}, sheep: {adults: herd('sheep', 3, 50), babies: 0}, pig: {adults: [], babies: 0}, chicken: {adults: herd('chicken', 2, 80), babies: 0}};
   assert.deepStrictEqual(planRound(all, opts({paused: true, have: {food: {}, shears: false}})), {cow: empty, sheep: empty, pig: empty, chicken: empty});
+  // a pen cull never holds a sword (no sweep onto a named animal or a calf); the hunt job takes the best of all
+  const {pickWeapon} = require('../hunt');
+  const bag = [{name: 'iron_sword'}, {name: 'stone_axe'}, {name: 'dirt'}];
+  assert.equal(pickWeapon(bag, true).name, 'stone_axe');
+  assert.equal(pickWeapon([{name: 'iron_sword'}, {name: 'dirt'}], true), undefined);
+  assert.equal(pickWeapon(bag, false).name, 'iron_sword');
   console.log('animals ok');
 }

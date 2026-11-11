@@ -78,21 +78,24 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
     const walk = (x, y, z, range, doing) => crossing(() => goNear(r, job, x, y, z, range, {doing}));
     const gone = (e) => e.isValid === false || !bot.entities[e.id] || named(e) || baby(e) || insideAreas(r.protectedAreas, Math.floor(e.position.x), Math.floor(e.position.z));
 
+    // true when the animal got the food; false when it was skipped or the feed failed.
     async function feed(e, food) {
-      if (gone(e)) return;
+      if (gone(e)) return false;
       const item = bot.inventory.items().find((i) => i.name === food);
-      if (!item) return;
+      if (!item) return false;
       try {
         if (e.position.distanceTo(bot.entity.position) > 3) await walk(e.position.x, e.position.y, e.position.z, 2, `walking to a ${e.name} to feed it`);
         guard(job);
         job.t.doing = `feeding a ${e.name} at ${at(e.position.floored())}`;
         await bot.equip(item, 'hand');
         guard(job);
-        if (gone(e)) return; // named, grown into a protected area or gone during the walk
+        if (gone(e)) return false; // named, grown into a protected area or gone during the walk
         await bot.activateEntity(e);
+        return true;
       } catch (err) {
         guard(job);
         r.emit('info', `animalfarm: could not feed a ${e.name} (${String(err.message).slice(0, 60)})`);
+        return false;
       }
     }
 
@@ -103,6 +106,7 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
       for (;;) {
         guard(job);
         await waitCalm(r, job);
+        for (const [k, t] of skip) if (t <= Date.now()) skip.delete(k); // the job runs for days: no stale item ids
         const active = Object.keys(KINDS).filter((k) => !KINDS[k].outputs.some((item) => enough(r, item) > 0));
         if (!active.length) {
           job.t.doing = 'enough in the hall, waiting';
@@ -158,9 +162,9 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
         let acted = false;
         for (const [kind, p] of Object.entries(plans)) {
           if (p.breed) {
-            for (const e of p.breed) await feed(e, KINDS[kind].food);
-            for (const e of p.breed) fed.set(e.id, Date.now());
-            bred++;
+            let got = 0;
+            for (const e of p.breed) if (await feed(e, KINDS[kind].food)) { fed.set(e.id, Date.now()); got++; }
+            if (got === 2) bred++;
             acted = true;
           }
           const shears = bot.inventory.items().find((i) => i.name === 'shears');
@@ -176,7 +180,7 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
             guard(job);
             if (gone(e)) continue;
             job.t.doing = `culling a ${kind} at ${at(e.position.floored())}`;
-            if ((await crossing(() => engage(r, job, e, null))) === 'done') culled++;
+            if ((await crossing(() => engage(r, job, e, null, {noSweep: true}))) === 'done') culled++;
             acted = true;
           }
           report();

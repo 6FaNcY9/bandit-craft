@@ -75,14 +75,17 @@ function woolColour(items) {
   return Object.keys(have).filter((c) => have[c] >= 3).sort((a, b) => have[b] - have[a])[0] || null;
 }
 
+// The best weapon in items; noSweep leaves swords out (a sweep hits the animals next to the target too).
+const pickWeapon = (items, noSweep) => items.filter((i) => weaponScore(i.name) > 0 && !(noSweep && /_sword$/.test(i.name))).sort((a, b) => weaponScore(b.name) - weaponScore(a.name))[0];
+
 function makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
 
   // Close in on one animal and kill it, or shear it. 'done' | 'lost' (30 s, left the area, or no wool).
-  async function engage(r, job, e, shears) {
+  async function engage(r, job, e, shears, {noSweep = false} = {}) {
     const {bot} = r;
     const end = Date.now() + 30000;
-    const weapon = shears || bot.inventory.items().filter((i) => weaponScore(i.name)).sort((a, b) => weaponScore(b.name) - weaponScore(a.name))[0];
+    const weapon = shears || pickWeapon(bot.inventory.items(), noSweep);
     // The live animal may have been named, moved into a protected area or gone since it was picked, and
     // every await below lets that happen: check again before any blow or shearing (Codex R4-1).
     const off = () => named(e) || baby(e) || insideAreas(r.protectedAreas, Math.floor(e.position.x), Math.floor(e.position.z));
@@ -101,6 +104,7 @@ function makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at}) {
           guard(job);
           if (off()) return 'lost';
         }
+        if (noSweep && /_sword$/.test(bot.heldItem?.name || '')) { await bot.unequip('hand').catch(() => {}); guard(job); } // the axe or bare hands, never a sword
         if (e.position.distanceTo(bot.entity.position) > 3) {
           if (!following || !bot.pathfinder.isMoving()) { bot.pathfinder.setGoal(new goals.GoalFollow(e, 2), true); following = true; }
           await sleep(250);
@@ -221,4 +225,4 @@ function makeHunt({goNear, guard, sleep, goals, waitCalm, crafting, at}) {
   return {hunt, bed, engage};
 }
 
-module.exports = {ANIMALS, FACING, MEAT, named, baby, foodAnimal, huntTarget, bedCells, bedCheck, standable, woolColour, makeHunt};
+module.exports = {ANIMALS, FACING, MEAT, named, baby, pickWeapon, foodAnimal, huntTarget, bedCells, bedCheck, standable, woolColour, makeHunt};

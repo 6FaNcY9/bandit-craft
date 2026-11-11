@@ -23,7 +23,7 @@ module.exports = async () => {
     const mob = (id, name, x, z, metadata = {}) => ({id, name, type: 'animal', isValid: true, height: 1, position: new Vec3(x + 0.5, 65, z + 0.5), metadata});
     const herd = (name, n, from = 1) => Array.from({length: n}, (_, i) => mob(from + i, name, i % 5, Math.floor(i / 5) % 5));
     const fake = ({mobs = [], inv = [], blocks = world(), stopAfterSleeps = 5, onSleep, onGoNear, enough, deposit, withdraw, crafting, start = new Vec3(2.5, 65, 2.5)}) => {
-      const calls = {feed: [], engage: [], deposit: [], withdraw: [], craft: [], gate: [], flags: []};
+      const calls = {feed: [], engage: [], deposit: [], withdraw: [], craft: [], gate: [], flags: [], opts: []};
       const it = (name, count) => ({name, count, type: name.length});
       inv = inv.map(([n, c]) => it(n, c));
       let now = 0, sleeps = 0;
@@ -57,8 +57,9 @@ module.exports = async () => {
         sleep: async (ms) => { now += ms; sleepMs.push(ms); onSleep?.(sleepMs.length); if (++sleeps > stopAfterSleeps) job.cancelled = true; },
         waitCalm: async () => {},
         at: (c) => `${c.x} ${c.y} ${c.z}`,
-        engage: async (rr, j, e, shears) => {
+        engage: async (rr, j, e, shears, opts) => {
           calls.engage.push({id: e.id, shears: shears?.name || null});
+          calls.opts.push(opts);
           calls.flags.push({digOnly: rr.digOnly, noScaffold: rr.noScaffold});
           if (!shears) delete bot.entities[e.id];
           return 'done';
@@ -85,12 +86,25 @@ module.exports = async () => {
     f.bot.entities[1].position = new Vec3(4.5, 65, 4.5);
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(f.calls.feed.map((c) => c.id), [2]);
+    assert.strictEqual(f.job.bred, 0, 'a pair half fed is not counted');
+    // a feed that failed is not remembered: the cow is fed with the next one in the next round
+    let fails = 1;
+    f = fake({mobs: herd('cow', 3), inv: [['wheat', 16]], start: new Vec3(0.5, 65, 0.5), stopAfterSleeps: 15, onGoNear: () => { if (fails-- > 0) throw new Error('no path'); }});
+    f.bot.entities[1].position = new Vec3(4.5, 65, 4.5);
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.feed.map((c) => c.id), [2, 1, 3]);
+    assert.strictEqual(f.job.bred, 1);
+    // wheat fetched from the chest feeds the pair in the same round
+    f = fake({mobs: herd('cow', 2), withdraw: async (rr, j, item, count) => { f.inv.push({name: item, count, type: 1}); }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.feed.map((c) => [c.id, c.at]), [[1, 0], [2, 0]]);
 
     // (b) 13 cows, a named one, a calf, a horse, a wolf and a cat: exactly 4 culled, the highest ids, nobody else touched
     const others = [mob(20, 'cow', 1, 1, {2: 'Berta'}), mob(21, 'cow', 1, 2, {16: true}), mob(30, 'horse', 2, 2), mob(31, 'wolf', 3, 3), mob(32, 'cat', 3, 1)];
     f = fake({mobs: [...herd('cow', 13), ...others]});
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(f.calls.engage.map((c) => c.id), [13, 12, 11, 10]);
+    assert.deepStrictEqual(f.calls.opts, Array(4).fill({noSweep: true}), 'a cull never sweeps');
     assert.deepStrictEqual(f.calls.feed, [], 'no wheat: nobody fed');
     assert.ok(f.calls.withdraw.includes('wheat 16 @0'), f.calls.withdraw.join('|'));
     assert.match(f.job.t.doing, /no wheat/);
@@ -103,6 +117,7 @@ module.exports = async () => {
     f = fake({mobs: herd('sheep', 2), inv: [['shears', 1]], stopAfterSleeps: 25});
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(f.calls.engage, [{id: 1, shears: 'shears'}, {id: 2, shears: 'shears'}]);
+    assert.deepStrictEqual(f.calls.opts, [undefined, undefined]);
     f = fake({mobs: herd('sheep', 2), stopAfterSleeps: 25});
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(f.calls.engage, []);
