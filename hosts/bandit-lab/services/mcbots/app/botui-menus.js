@@ -13,29 +13,33 @@ const itemsByName = require('minecraft-data')('26.1').itemsByName;
 // One slot: `payload` comes back as the click's data, `extra` carries count/damage/head/glint/lore.
 const slot = (i, item, name, payload, extra = {}) => ({slot: i, item, name: safe(name, 40), payload, ...extra});
 
-// One badge item per activity (a slot holds one item); idle bots get none and show it in the tooltip only.
+// One badge item per activity (a slot holds one item); a free bot shows a lime dot, an offline one a barrier.
 const BADGE = {mine: 'diamond_pickaxe', shift: 'diamond_pickaxe', chop: 'iron_axe', shiftlogs: 'iron_axe', treefarm: 'iron_axe', guard: 'iron_sword', follow: 'lead', trade: 'emerald', keeper: 'clock', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart', schematic: 'bricks', goto: 'ender_pearl'};
 const badgeOf = (s) => (s.job && BADGE[s.job.type]) || null;
+const byName = (a, b) => String(a.name).localeCompare(String(b.name), undefined, {numeric: true}); // bot2 before bot19
+const pane = (i, color, name, payload) => slot(i, `${color}_stained_glass_pane`, name, payload);
 
-// Rows 1-4: head at slot 2n, its badge to the right (18 bots at most). Bottom row: the all-bot buttons.
+// A row of heads with each bot's status item right under it (the owner read a badge beside a head as one more bot,
+// 2026-11-11), up to 9 bots per head row and 18 in all; a black pane row, then the all-bot buttons.
 function overview(view) {
-  const snaps = [...view.snaps].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 18);
+  const snaps = [...view.snaps].sort(byName).slice(0, 18), rows = snaps.length > 9 ? 6 : 4, base = (rows - 1) * 9;
   const slots = [];
   snaps.forEach((s, n) => {
-    const hp = s.online ? Math.max(0, Math.min(20, Math.round(s.health) || 0)) : 0, payload = {a: 'botm', bot: s.name};
-    const idle = view.idle?.get(s.name), label = idle && choiceOf(idle.id)?.label;
-    const lore = [safe(s.online ? s.activity || 'frei' : 'offline', 40), `♥ ${hp}/20`, ...(label ? [`Wenn frei: ${safe(label, 30)}`] : [])];
-    slots.push(slot(2 * n, 'player_head', s.name, payload, {head: s.name, maxDamage: 20, damage: 20 - hp, lore}));
-    const badge = badgeOf(s);
-    if (badge) slots.push(slot(2 * n + 1, badge, s.name, payload, {lore: lore.slice(0, 1)}));
+    const hp = s.online ? Math.max(0, Math.min(20, Math.round(s.health) || 0)) : 0, payload = {a: 'botm', bot: s.name}, at = 18 * Math.floor(n / 9) + (n % 9);
+    const idle = view.idle?.get(s.name), label = idle && choiceOf(idle.id)?.label, doing = safe(s.online ? s.activity || 'frei' : 'offline', 40);
+    const lore = [doing, `♥ ${hp}/20`, ...(label ? [`Wenn frei: ${safe(label, 30)}`] : [])];
+    slots.push(slot(at, 'player_head', s.name, payload, {head: s.name, maxDamage: 20, damage: 20 - hp, lore}));
+    const status = !s.online ? 'barrier' : badgeOf(s) || 'lime_dye';
+    slots.push(slot(at + 9, status, !s.online ? 'offline' : badgeOf(s) ? doing : 'frei', payload, {lore: [safe(s.name, 30)]}));
   });
-  slots.push(slot(45, 'barrier', 'Alle: Stopp', {a: view.owner ? 'stopall' : 'stopmine'}),
-    slot(46, 'ender_pearl', 'Alle: Komm zu mir', {a: 'comeall'}),
-    ...(view.mark?.spot ? [slot(47, 'red_banner', 'Markierung löschen', {a: 'markclear'}, {lore: ['Nimmt auch den blauen Kasten weg']})] : []),
-    slot(49, 'map', 'Karte', {a: 'karte'}),
-    slot(51, 'writable_book', 'Bauplan hochladen', {a: 'upload'}),
-    slot(53, 'comparator', 'Einstellungen', {a: 'zielm'}));
-  return {type: 'chest', title: 'Bots', rows: 6, slots};
+  for (let i = base - 9; i < base; i++) slots.push(pane(i, 'black', '·', {a: 'ov'}));
+  slots.push(slot(base, 'barrier', 'Alle: Stopp', {a: view.owner ? 'stopall' : 'stopmine'}),
+    slot(base + 1, 'ender_pearl', 'Alle: Komm zu mir', {a: 'comeall'}),
+    ...(view.mark?.spot ? [slot(base + 2, 'red_banner', 'Markierung löschen', {a: 'markclear'}, {lore: ['Nimmt auch den blauen Kasten weg']})] : []),
+    slot(base + 4, 'map', 'Karte', {a: 'karte'}),
+    slot(base + 6, 'writable_book', 'Bauplan hochladen', {a: 'upload'}),
+    slot(base + 8, 'comparator', 'Einstellungen', {a: 'zielm'}));
+  return {type: 'chest', title: 'Bots', rows, slots};
 }
 
 const snapOf = (view, name) => view.snaps.find((s) => s.name === name) || {name, online: false};
@@ -44,22 +48,28 @@ const back = (i, a, bot) => slot(i, 'arrow', 'Zurück', {a, ...(bot ? {bot} : {}
 // The running job type -> the slot that started it (Abbauen and Bauen have no badge slot to light up here).
 const GLINT = {follow: 'lead', goto: 'ender_eye', guard: 'iron_sword', enchant: 'enchanting_table', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart'};
 
-// One bot, 3 rows: head with its state, orders, then Wenn frei / Inventar / Zurück.
+// One bot, 5 rows: head, moving and guarding on top; below four boxes split by black panes, each under a coloured strip
+// that names it (the strips are the only headings visible without hovering). Slot 21 is kept for "Tiere & Felder".
 function botPage(view, screen) {
   const s = snapOf(view, screen.bot), bot = s.name, hp = s.online ? Math.max(0, Math.min(20, Math.round(s.health) || 0)) : 0;
   const food = s.online ? Math.max(0, Math.min(20, Math.round(s.food) || 0)) : 0;
   const idle = view.idle?.get(bot), label = (idle && choiceOf(idle.id)?.label) || 'Nichts';
   const lore = [safe(s.online ? s.activity || 'frei' : 'offline', 40), `♥ ${hp}/20 · Essen ${food}/20`, s.chest ? `Kiste: ${s.chest.x} ${s.chest.y} ${s.chest.z}` : 'Kiste: keine'];
   const go = (i, item, name, job) => slot(i, item, name, {a: 'go', bot, job}, {glint: GLINT[s.job?.type] === item});
-  return {type: 'chest', title: safe(bot, 30), rows: 3, slots: [
-    slot(0, 'player_head', bot, {a: 'botm', bot}, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
-    go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'), go(4, 'iron_sword', 'Bewach diesen Ort', 'guardhere'),
-    go(5, 'chest', 'Einlagern', 'deposit'), slot(6, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
-    slot(10, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Klick: Block abbauen', 'Shift: Bereich']}), go(11, 'iron_axe', 'Holz holen', 'chop'),
-    slot(12, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(13, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
-    slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}), slot(15, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
-    go(16, 'oak_sapling', 'Baumfarm', 'treefarm'), slot(17, 'enchanting_table', 'Verzaubern…', {a: 'enchm', bot}, {glint: s.job?.type === 'enchant'}),
-    slot(19, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(21, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(23, 'barrel', 'Inventar', {a: 'invm', bot}), slot(25, 'book', 'Mehr…', {a: 'morem', bot}), back(26, 'ov')]};
+  const self = {a: 'botm', bot}, strip = (from, color, name) => [0, 1, 2, 3].map((k) => pane(from + k, color, name, self));
+  return {type: 'chest', title: safe(bot, 30), rows: 5, slots: [
+    slot(0, 'player_head', bot, self, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
+    go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'),
+    go(5, 'iron_sword', 'Bewach diesen Ort', 'guardhere'), slot(6, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
+    ...[4, 13, 22, 31, 40].map((i) => pane(i, 'black', '·', self)),
+    ...strip(9, 'lime', 'Sammeln'), ...strip(14, 'orange', 'Herstellen & Bauen'),
+    slot(18, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Klick: Block abbauen', 'Shift: Bereich']}), go(19, 'iron_axe', 'Holz holen', 'chop'), go(20, 'oak_sapling', 'Baumfarm', 'treefarm'),
+    slot(23, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(24, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
+    slot(25, 'enchanting_table', 'Verzaubern…', {a: 'enchm', bot}, {glint: s.job?.type === 'enchant'}), slot(26, 'bricks', 'Bauen…', {a: 'schemm', bot}),
+    ...strip(27, 'brown', 'Lager'), ...strip(32, 'light_blue', 'Einstellungen'),
+    go(36, 'chest', 'Einlagern', 'deposit'), slot(37, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
+    slot(38, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(39, 'barrel', 'Inventar', {a: 'invm', bot}),
+    slot(41, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(42, 'book', 'Mehr…', {a: 'morem', bot}), back(44, 'ov')]};
 }
 
 // Mehr…: the rarer orders and Hingehen….

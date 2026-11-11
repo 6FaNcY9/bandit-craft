@@ -13,22 +13,34 @@ const view = (over = {}) => ({viewer: 'Fancy', snaps, allowed: '*', owner: true,
 const slots = (v) => menu({name: 'ov'}, v).menu.slots;
 
 assert.ok(MENUS.has('ov'));
-{ // owner: three heads sorted by name, the mining bot's badge and damage, stop all asks first
+{ // owner: three heads sorted by name in the top row, each bot's status right under its head, panes, then the buttons
   const m = menu({name: 'ov'}, view()).menu, s = m.slots;
-  assert.equal(m.type, 'chest'); assert.equal(m.rows, 6); assert.match(m.title, /Bots/);
+  assert.equal(m.type, 'chest'); assert.equal(m.rows, 4); assert.match(m.title, /Bots/);
   const heads = s.filter((x) => x.head);
   assert.deepEqual(heads.map((x) => x.head), ['bot2', 'MisaBot', 'zed']);
   const bot2 = heads.find((x) => x.head === 'bot2');
   assert.equal(bot2.damage, 6); assert.equal(bot2.maxDamage, 20);
-  assert.equal(s.find((x) => x.slot === bot2.slot + 1).item, 'diamond_pickaxe');
-  assert.equal(s.filter((x) => x.item === 'diamond_pickaxe').length, 1); // idle and offline bots: no badge
-  assert.deepEqual(s.find((x) => x.slot === 45).payload, {a: 'stopall'});
+  assert.deepEqual(heads.map((x) => x.slot), [0, 1, 2]);
+  assert.deepEqual([9, 10, 11].map((i) => s.find((x) => x.slot === i).item), ['diamond_pickaxe', 'barrier', 'lime_dye']); // working, offline, free
+  assert.deepEqual([9, 10, 11].map((i) => s.find((x) => x.slot === i).name), ['mining stone', 'offline', 'frei']);
+  assert.deepEqual(s.find((x) => x.slot === 9).payload, {a: 'botm', bot: 'bot2'}); assert.deepEqual(s.find((x) => x.slot === 9).lore, ['bot2']);
+  assert.deepEqual(s.filter((x) => x.item === 'black_stained_glass_pane').map((x) => x.slot), [18, 19, 20, 21, 22, 23, 24, 25, 26]);
+  assert.deepEqual(s.find((x) => x.slot === 27).payload, {a: 'stopall'}); assert.equal(s.find((x) => x.slot === 35).item, 'comparator');
   assert.deepEqual(heads[0].payload, {a: 'botm', bot: 'bot2'});
 }
 { // guest: only own bots, stop only mine
   const v = view({viewer: 'Midari', allowed: ['MisaBot'], owner: false, snaps: snaps.filter((x) => x.name === 'MisaBot')});
   assert.deepEqual(slots(v).filter((x) => x.head).map((x) => x.head), ['MisaBot']);
-  assert.deepEqual(slots(v).find((x) => x.slot === 45).payload, {a: 'stopmine'});
+  assert.deepEqual(slots(v).find((x) => x.slot === 27).payload, {a: 'stopmine'});
+}
+{ // 10 to 18 bots: two head rows, each with its status row; numbers sort as numbers; the buttons go back to 45-53
+  const many = Array.from({length: 18}, (_, i) => ({name: `bot${i + 1}`, online: true, health: 20, job: null}));
+  const m = menu({name: 'ov'}, view({snaps: many})).menu, heads = m.slots.filter((x) => x.head);
+  assert.equal(m.rows, 6);
+  assert.deepEqual(heads.slice(0, 3).map((x) => x.head), ['bot1', 'bot2', 'bot3']); assert.equal(heads[8].head, 'bot9');
+  assert.deepEqual(heads.map((x) => x.slot), [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
+  assert.equal(m.slots.find((x) => x.slot === 27).item, 'lime_dye'); assert.deepEqual(m.slots.find((x) => x.slot === 45).payload, {a: 'stopall'});
+  assert.equal(menu({name: 'ov'}, view({snaps: [...many, {name: 'bot19', online: true}]})).menu.slots.filter((x) => x.head).length, 18); // shortcut: the 19th bot is not shown
 }
 { // lore carries activity, hearts and the idle choice; every payload is a real action
   const s = slots(view({idle: {get: (b) => (b === 'zed' ? {id: 'keeper'} : null)}}));
@@ -38,7 +50,7 @@ assert.ok(MENUS.has('ov'));
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
 }
 { // badges for the order types the bot page starts; Weiter only for a paused project
-  const b = (type) => slots(view({snaps: [{name: 'zed', online: true, health: 20, job: {type}}]})).filter((x) => !x.head && x.slot < 45).map((x) => x.item);
+  const b = (type) => slots(view({snaps: [{name: 'zed', online: true, health: 20, job: {type}}]})).filter((x) => x.slot === 9).map((x) => x.item);
   for (const [t, i] of [['craft', 'crafting_table'], ['smelt', 'furnace'], ['get', 'chest_minecart'], ['schematic', 'bricks'], ['goto', 'ender_pearl']]) assert.deepEqual(b(t), [i], t);
   const page = (projects) => menu({name: 'botm', bot: 'zed'}, view({projects})).menu.slots;
   assert.ok(!page({}).some((x) => x.name === 'Weiter')); assert.ok(!page({zed: {paused: false}}).some((x) => x.name === 'Weiter'));
@@ -50,19 +62,19 @@ assert.ok(MENUS.has('ov'));
   const page = (s, o) => menu({name: 'botm', bot: s.name}, bv(s, o)).menu;
   const chopper = {name: 'zed', online: true, health: 18, food: 15, activity: 'chopping', job: {type: 'chop'}, chest: {x: 1, y: 2, z: 3}};
   const m = page(chopper), s = m.slots;
-  assert.equal(m.rows, 3);
+  assert.equal(m.rows, 5);
   assert.match(s.find((x) => x.head === 'zed').lore.join('|'), /♥ 18\/20 · Essen 15\/20.*Kiste: 1 2 3/);
   assert.deepEqual(s.filter((x) => x.glint).map((x) => x.item), ['iron_axe']);
   assert.match(page({name: 'zed', online: true, job: null}).slots[0].lore.join('|'), /Kiste: keine/);
-  assert.deepEqual(s.find((x) => x.slot === 10).payload, {a: 'shiftm', bot: 'zed'}); assert.ok(!s.find((x) => x.slot === 10).glint);
-  assert.deepEqual(s.find((x) => x.slot === 21).payload, {a: 'pick', kind: 'chest', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 21).item, 'hopper');
-  assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 10).glint, true);
-  assert.deepEqual(s.find((x) => x.slot === 12).payload, {a: 'craftm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 12).item, 'crafting_table');
-  assert.deepEqual(s.find((x) => x.slot === 13).payload, {a: 'smeltm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 13).item, 'furnace');
-  assert.deepEqual(s.find((x) => x.slot === 17).payload, {a: 'enchm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 17).item, 'enchanting_table');
-  assert.deepEqual(s.find((x) => x.slot === 15).payload, {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 15).item, 'chest_minecart');
-  assert.deepEqual(s.find((x) => x.slot === 11).payload, {a: 'go', bot: 'zed', job: 'chop'}); assert.equal(s.find((x) => x.slot === 14).item, 'bricks'); assert.equal(s.find((x) => x.slot === 16).item, 'oak_sapling');
-  for (const [type, slot] of [['craft', 12], ['smelt', 13], ['get', 15]]) assert.deepEqual(page({...chopper, job: {type}}).slots.filter((x) => x.glint).map((x) => x.slot), [slot]);
+  assert.deepEqual(s.find((x) => x.slot === 18).payload, {a: 'shiftm', bot: 'zed'}); assert.ok(!s.find((x) => x.slot === 18).glint);
+  assert.deepEqual(s.find((x) => x.slot === 38).payload, {a: 'pick', kind: 'chest', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 38).item, 'hopper');
+  assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 18).glint, true);
+  assert.deepEqual(s.find((x) => x.slot === 23).payload, {a: 'craftm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 23).item, 'crafting_table');
+  assert.deepEqual(s.find((x) => x.slot === 24).payload, {a: 'smeltm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 24).item, 'furnace');
+  assert.deepEqual(s.find((x) => x.slot === 25).payload, {a: 'enchm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 25).item, 'enchanting_table');
+  assert.deepEqual(s.find((x) => x.slot === 37).payload, {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 37).item, 'chest_minecart');
+  assert.deepEqual(s.find((x) => x.slot === 19).payload, {a: 'go', bot: 'zed', job: 'chop'}); assert.equal(s.find((x) => x.slot === 26).item, 'bricks'); assert.equal(s.find((x) => x.slot === 20).item, 'oak_sapling');
+  for (const [type, slot] of [['craft', 23], ['smelt', 24], ['get', 37]]) assert.deepEqual(page({...chopper, job: {type}}).slots.filter((x) => x.glint).map((x) => x.slot), [slot]);
   for (const x of s) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
   assert.deepEqual(s.find((x) => x.item === 'ender_pearl').payload, {a: 'go', bot: 'zed', job: 'summon'});
@@ -204,7 +216,7 @@ assert.ok(MENUS.has('ov'));
   const pg = (name, o = {}, extra = {}) => menu({name, bot: 'zed', ...extra}, view(o)).menu;
   const at = (m, i) => m.slots.find((x) => x.slot === i);
   const b = pg('botm');
-  assert.deepEqual([at(b, 6).item, at(b, 6).payload, at(b, 25).item, at(b, 25).payload], ['shield', {a: 'guardm', bot: 'zed'}, 'book', {a: 'morem', bot: 'zed'}]);
+  assert.deepEqual([at(b, 6).item, at(b, 6).payload, at(b, 42).item, at(b, 42).payload], ['shield', {a: 'guardm', bot: 'zed'}, 'book', {a: 'morem', bot: 'zed'}]);
   const more = pg('morem');
   assert.equal(more.rows, 1); assert.match(more.title, /zed: mehr/);
   assert.deepEqual(more.slots.filter((x) => x.slot < 5).map((x) => x.payload.a), ['placem', 'go', 'go', 'go', 'go']);
@@ -310,7 +322,7 @@ console.log('botui-menus ok');
   const t = z(view({traders: ['MisaBot', 'EM_Trader'], traderChests: tc})).slots.filter((x) => x.slot >= 9 && x.slot < 17);
   assert.deepEqual(t.map((x) => [x.slot, x.item, x.name, x.payload]), [[9, 'stick', 'MisaBot Sticks 1 2 3', {a: 'trader_del', bot: 'MisaBot', kind: 'sticks', x: 1, y: 2, z: 3}], [10, 'emerald', 'EM_Trader Smaragde 4 5 6', {a: 'trader_del', bot: 'EM_Trader', kind: 'stores', x: 4, y: 5, z: 6}]]);
   assert.deepEqual(z(view({allowed: ['MisaBot'], owner: false, traders: ['MisaBot', 'EM_Trader'], traderChests: tc})).slots.filter((x) => x.slot >= 9 && x.slot < 17).map((x) => x.payload.bot), ['MisaBot']);
-  assert.equal(slots(view()).find((x) => x.slot === 53).item, 'comparator'); assert.deepEqual(slots(view()).find((x) => x.slot === 53).payload, {a: 'zielm'});
+  assert.equal(slots(view()).find((x) => x.slot === 35).item, 'comparator'); assert.deepEqual(slots(view()).find((x) => x.slot === 35).payload, {a: 'zielm'});
   const k = menu({name: 'kartem'}, view({mapState: {zoom: 5, center: null}, snaps: [...snaps, {name: 'sbx', online: true, sandbox: true}]})).menu;
   assert.equal(k.title, 'Bot-Karte');
   assert.deepEqual(k.slots.filter((x) => x.item === 'map').map((x) => x.count), [1, 2, 5, 10, 25, 50]);
