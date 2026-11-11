@@ -83,7 +83,13 @@ For any session that wants to pick this up, steer it or connect its own work to 
     English teaser is not on the profile. A German tester call was typed into X but not sent (the agent's click
     was refused by the auto-mode check; the owner may press Post). Checked for other places: Bluesky, Threads,
     Planet Minecraft and Minecraft Forum have no logged-in account in the owner's Chrome; Disboard shows a
-    Cloudflare check. Reddit is blocked for the agent's browser. Next: watch `#hilfe`; the owner whitelists each name on the lab
+    Cloudflare check. Reddit is blocked for the agent's browser. The owner then posted the German tester call on
+    X, and signed in to Planet Minecraft with Discord; with the owner's yes (question dialog, exact text) the agent
+    renamed that account to VinoBandit and opened one thread in Java Edition > Servers:
+    https://www.planetminecraft.com/forums/minecraft/servers/java-26-2-bandit-anarchy-anarchy-that-never-resets-looking-for-testers-711072/
+    Section rule: one advertising thread per server. At the opening, reply in that thread with the address
+    instead of opening a new one. Recruiting staff belongs in "Teams". The section is quiet (new threads get
+    2 to 20 views). Next: watch `#hilfe`; the owner whitelists each name on the lab
     (laptop helper `sh ~/tester.sh <Name>`, not yet run against the lab; it sends the runbook's `whitelist add`
     to the console, PUBLIC.md) and sends the address privately.
 11. Legal drafts (`docs/public/`), 2026-11-11: server name and address are filled in. Found while filling
