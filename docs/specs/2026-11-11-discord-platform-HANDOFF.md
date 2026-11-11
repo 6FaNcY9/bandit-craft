@@ -45,8 +45,11 @@ For any session that wants to pick this up, steer it or connect its own work to 
    `bandit-bridge` (id in `discord-admin/default.nix` as `BRIDGE_ID`; Public Bot off, Message Content Intent on),
    token in bandit-nix `secrets/lab.yaml` as `discord-bridge-token`. Checked in Discord: the bot is online in
    `#ingame-chat` and, after the invite and a restart of `discord-admin`, gone from `#chat` (Discord drops the
-   denial for a bot that is not a member yet, without an error). Not checked yet, it needs the owner in the game:
-   chat both ways, `@everyone` typed in the game does not ping, links from the game are not clickable. The plugin's
+   denial for a bot that is not a member yet, without an error). Checked with the owner in the game on
+   2026-11-11 14:30: join, chat and death lines arrive in `#ingame-chat`; `**test**` from the game stays text;
+   `@everyone` from the game is drawn as a mention but the line is not highlighted for the owner (no ping).
+   Not checked yet: that a Discord message shows in the game (two were sent at 14:36, the owner has not said what
+   the game showed), and that a link from the game is not clickable (none was typed). The plugin's
    log needs root: `sudo journalctl -M mc-public -u minecraft-server-paper | grep -i "chat bridge"`. The privacy
    policy draft names the bridge; its open points 13-15 are the owner's call.
    Live since 2026-11-11 14:12 (bandit-craft e2be802, bandit-nix 7e69748): the bridge deletes its own messages in
