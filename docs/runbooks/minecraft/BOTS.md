@@ -987,8 +987,8 @@ kept over restarts. Code: `app/animalfarm.js` (decisions in `app/animals.js`), `
 
 | Job | Arguments | Does |
 | --- | --- | --- |
-| `cropfarm` | x1 z1 x2 z2 (at most 16 x 16), `crop` = `carrot`, `potato`, `beetroot` or `sugar_cane` (`CROP_KINDS` in `cropfarm.js`), optional y | harvests ripe crops, picks the drops up, replants the same cell from the drops (else 16 from the chest), clears grass off wet soil and tills it with a hoe (asks the chest for an iron, stone or wooden hoe when it has none). Sugar cane: cuts only the block above the base; cane is never planted. |
-| `animalfarm` | x1 z1 x2 z2 (at most 16 x 16), optional y (ground level of the gates) | per kind (cow, sheep, pig, chicken; `KINDS` in `animals.js`): feeds two unfed adults to breed (cows/sheep wheat, pigs carrot, chickens wheat_seeds; 16 from the chest when short), shears woolly sheep (crafts shears when it has none), picks up eggs and drops, culls adults above the kept number. Never a named animal, never a baby. |
+| `cropfarm` | x1 z1 x2 z2 (at most 16 on a side, `farmBox` `max: 16`), `crop` = `carrot`, `potato`, `beetroot` or `sugar_cane` (`CROP_KINDS` in `cropfarm.js`), optional y (-64..320, `VALIDATE` in `bots.js`) | harvests ripe crops, picks the drops up, replants the same cell from the drops (else 16 from the chest), clears grass off wet soil and tills it with a hoe (asks the chest for an iron, stone or wooden hoe when it has none). Sugar cane: cuts only the block above the base; cane is never planted. |
+| `animalfarm` | x1 z1 x2 z2 (at most 16 on a side), optional y (ground level of the gates) | per kind (cow, sheep, pig, chicken; `KINDS` in `animals.js`): feeds two unfed adults to breed (cows/sheep wheat, pigs carrot, chickens wheat_seeds; 16 from the chest when short), shears woolly sheep (crafts shears when it has none), picks up eggs and drops, culls adults above the kept number, newest first (highest entity ids), never the pair being bred. Never a named animal, never a baby, nothing outside the box (edges count as inside) or in a protected area, no kind but these four (no villagers, horses, wolves, cats). Optional y: -64..320. |
 
 **Start (picture menu).** Bot page → carrot **Tiere & Felder…** (slot 21) → page `farmm`.
 - First time: **Zwei Ecken zeigen** (menu closes, two staff clicks, the page comes back) or **Markierter Bereich**, then one
@@ -1015,6 +1015,8 @@ kept over restarts. Code: `app/animalfarm.js` (decisions in `app/animals.js`), `
   failure. Outputs go to the supply chest (owner bots: the hall; guests: their own chest).
 
 **Owner rules (the bots only tend).**
+- Stock the supply chest before the first run: wheat (cows, sheep), carrots (pigs, and planting), wheat_seeds (chickens),
+  seeds or the crop to plant, a hoe, shears (or 2 iron). Breeding needs 2 food in the bag; what is missing waits `RETRY_MS`.
 - Fence the pen and give it a fence gate. The bot notes the closed gates on the box border at the start and closes them again
   after it walks through; a gate you left open stays open. On a pen walk it digs nothing and builds no pillars.
 - Put the first two animals of a kind in by hand: breeding needs 2 adults.
