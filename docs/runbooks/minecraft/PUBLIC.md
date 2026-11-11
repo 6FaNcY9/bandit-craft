@@ -213,10 +213,16 @@ state (`/var/lib/playit/playit.toml`, the `playit` user), no sops key.
    It prints a `https://playit.gg/claim/<code>` line. Open it, signed in, and confirm.
 4. Owner, in the playit account: a `Minecraft Java` tunnel to `10.251.1.2:25565`, and set **Proxy
    Protocol** to **Version 2**. Without it the server sees the host's veth address (`10.251.1.1`) for
-   everyone and IP bans hit the agent, not the player.
+   everyone and IP bans hit the agent, not the player. The agent's page has **Allow IPv6**; it is set to
+   **Only IPv4** (then `sudo systemctl restart playit`). That was the state when the tunnel first
+   answered (2026-11-11); whether it is required was not isolated.
 5. Checks:
    - Laptop: `nix shell nixpkgs#mcstatus -c mcstatus <playit address> status` answers with Paper's
-     version and message; the same against the tailnet address times out.
+     version and message; the same against the tailnet address times out. Ping the **name**, never the
+     edge's IP: playit routes by the hostname in the Minecraft handshake and resets a connection that
+     carries the bare IP (`BrokenPipe`/`ECONNRESET`), also when the tunnel is healthy.
+   - One `control session expired; reconnecting reason=SessionNotSetup` line right after `playit
+     connected; tunnels loaded` is harmless when nothing follows it.
    - Join through the playit address with a whitelisted account. Lab:
      `sudo journalctl -M mc-public -u minecraft-server-velocity -n 20` shows the player's own public
      address, not the veth address.
