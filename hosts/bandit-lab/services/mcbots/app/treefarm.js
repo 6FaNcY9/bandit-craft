@@ -215,6 +215,8 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
       if (bot.inventory.emptySlotCount() < 4) {
         job.progress = `depositing (${cut} logs so far)`;
         await deposit(r, job);
+        // logs only can leave the bot full (sticks, tools, seeds): one plain deposit before giving up
+        if (bot.inventory.emptySlotCount() < 4) await deposit(r, job, null);
         if (bot.inventory.emptySlotCount() < 4) throw new Error('inventory still full after depositing (chest full?)');
         continue;
       }

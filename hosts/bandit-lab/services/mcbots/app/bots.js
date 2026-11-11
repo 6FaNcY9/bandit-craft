@@ -74,6 +74,23 @@ const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit',
 const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'highway']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
+// Above these a kept kind is filed like any other item (bot19 carried 448 sticks, 7 iron pickaxes, 3 tables, 2026-11-11).
+const KEEP_CAP = {stick: 64, coal: 64, torch: 64, crafting_table: 1, furnace: 1};
+const keepKey = (n) => (n === 'charcoal' ? 'coal' : n);
+const keepCap = (n) => KEEP_CAP[keepKey(n)] ?? (/_planks$/.test(n) ? 64 : TOOL_RE.test(n) ? 2 : 0);
+// The part of each kept kind above its cap, in inventory order; items outside the keep rules are not returned.
+function beyondKeep(items) {
+  const used = {};
+  const out = [];
+  for (const it of items) {
+    if (!(KEEP_RE.test(it.name) || TOOL_RE.test(it.name))) continue;
+    const k = keepKey(it.name);
+    const room = Math.max(0, keepCap(it.name) - (used[k] || 0));
+    used[k] = (used[k] || 0) + Math.min(room, it.count);
+    if (it.count > room) out.push({...it, count: it.count - room});
+  }
+  return out;
+}
 
 // Global login stagger shared by all runners in this process.
 let nextLogin = 0;
@@ -3314,7 +3331,7 @@ const {highway} = roadJob.makeRoad({
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,
-  deposit: (r, job) => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only: 'logs'}})),
+  deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, ...(only ? {only} : {})}})),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
 });
 
@@ -3549,7 +3566,8 @@ const JOBS = {
     // `keep` ({name: n}): that many of a kind stay with the bot (the wheat farm's 64 seeds to replant from).
     const keepBack = (items) => keepBackOf(r, items, job.args.keep);
     // The own chest takes sticks, coal and the rest too (the keep list decides); armour stays on the bot.
-    const junk = () => (own ? ownSpare(r, job.args.keep) : keepBack(bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || KEEP_RE.test(it.name) || isFood(it.name)))));
+    const kept = (it) => TOOL_RE.test(it.name) || KEEP_RE.test(it.name);
+    const junk = () => (own ? ownSpare(r, job.args.keep) : keepBack([...bot.inventory.items().filter((it) => !(kept(it) || isFood(it.name))), ...beyondKeep(bot.inventory.items().filter(kept))]));
     const eligible = () => (only ? keepBack(bot.inventory.items().filter((it) => only(it.name))) : junk());
     let moved = 0;
     const byName = {};
@@ -4218,4 +4236,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {MAX_QUEUE, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {MAX_QUEUE, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
