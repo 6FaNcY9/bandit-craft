@@ -477,7 +477,10 @@ If the processing changes, we update this policy and the date at the top.
    Rechtsauskunft, nicht juristisch geprüft). Bleibendes Risiko: Art. 49 ist eine eng auszulegende
    Ausnahme; ob „erforderlich“ trägt, wenn ein Relay in der EU möglich wäre
    (`docs/runbooks/minecraft/PUBLIC.md`), kann eine Behörde anders sehen. Der Wechsel auf den
-   VPS-Relay bleibt der saubere Weg, falls es eine Beschwerde gibt.
+   VPS-Relay bleibt der saubere Weg, falls es eine Beschwerde gibt. PROXY protocol: Velocity verlangt es
+   (`haproxy-protocol = true`) und lehnt Verbindungen ohne ab; Joins und Status über playit klappen
+   (2026-11-11), playit schickt es also. Die echte Spieler-IP im Velocity-Log ist noch einmal mit Root
+   zu bestätigen; stünde dort playits Adresse, müssten Punkt 1 bis 3 angepasst werden.
 5. **Beweissicherung über 30 Tage hinaus.** Kommt eine Meldung kurz vor Ablauf, sind die Protokolle
    weg. Wenn einzelne Einträge für eine laufende Meldung oder ein Verfahren länger aufbewahrt werden
    sollen, muss das hier ergänzt werden. Ich habe es nicht aufgenommen, weil es nicht in den Fakten
