@@ -69,6 +69,11 @@ For any session that wants to pick this up, steer it or connect its own work to 
    and a second look at the list on the day of publishing.
 9. claude-mem was removed on 2026-11-11: this file is the live tracker now, not a work state list.
 
+10. Advertising: the owner asked for it on 2026-11-11. Posted that day with the owner's yes, from the owner's X
+    account: the short English teaser (no date, no address, Discord invite). Not done: server lists (each needs an
+    account the owner creates, and the address only makes sense once the whitelist is off), other Discord servers
+    (the owner names server and channel). The owner's step list is `~/Downloads/bandit-werbung-plan.md`.
+
 ## How to reach this session
 
 Other local Claude sessions can message it with `SendMessage` (see `ListAgents`). If it is gone,
