@@ -83,7 +83,8 @@ no other crops.
   check (`ground()` via `api.submit`).
 
 ### Menu (G3)
-- First time: bot menu, new slot "Tiere & Felder…" (carrot icon) opens a page `farmm`; "Zwei Ecken zeigen" and
+- First time: bot menu, new slot "Tiere & Felder…" (carrot icon; slot 21 in the Sammeln box of src-b0's new layout,
+  branch `feat/menu-layout-2026-11-11`) opens a page `farmm`; "Zwei Ecken zeigen" and
   two staff clicks, or "Markierter Bereich"; one picture starts it: Tiere (wheat icon), Karotten, Kartoffeln,
   Rote Bete, Zuckerrohr.
 - Own page, not the existing Bereich page: there "Abbauen (Bereich)" would sit next to "Karotten", and one
