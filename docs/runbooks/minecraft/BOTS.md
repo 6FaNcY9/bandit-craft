@@ -1010,15 +1010,25 @@ kept over restarts. Code: `app/animalfarm.js` (decisions in `app/animals.js`), `
   the four kinds. Fed and shorn animals are remembered `MEMORY_MS` = 300000 ms (`animals.js`).
 - Hall caps: `HALL_CAPS` in `app/storage.js`: 864 each of carrot, potato, beetroot, beetroot_seeds, sugar_cane, beef,
   porkchop, mutton, chicken, leather, feather, wool (all colours); egg 432.
-- Pause: `cropfarm` waits while the hall holds more than the cap of its crop; `animalfarm` leaves a kind alone while any of
-  its outputs is above the cap. With nothing left to do: `enough in the hall, waiting`, checked again every 60 s, never a
-  failure. Outputs go to the supply chest (owner bots: the hall; guests: their own chest).
+- Chest quota: `CHEST_QUOTA` in `app/storage.js`: 128 per output kind in the chest the farm hands in at (egg 32; all wool
+  colours one kind). Read from the last reading of that exact chest (`world.stocks`, `chestAbove`); a reading older than
+  `STOCK_TTL_MS` = 1800000 ms (30 minutes) counts as unknown, and after a process restart there is none until a bot opens
+  that chest again: unknown means no brake (errs toward working).
+- Pause (`farmEnough` in `app/storage.js`): a kind rests while the hall holds more than its cap OR the chest more than its
+  quota. `cropfarm` checks its crop; `animalfarm` rests a kind while ANY of its outputs is over. With nothing left to do:
+  `enough in the hall, waiting`, checked again every 60 s, never a failure.
+- Known limit: leather and feathers have no consumer, so 128 of them in the chest rest a cow or chicken pen (no breeding, no
+  cull) until the owner empties them; a later change could brake per chore (cull on meat, shear on wool).
+- Chest: hand-in and supplies use the bot's own chest when it has one (`r.prefs?.chest`, set with Kiste merken; guests),
+  else the supply chest (`chestOf` in `app/bots.js`). Neither: the hand-in fails with `no chest` and waits `RETRY_MS`.
 
 **Owner rules (the bots only tend).**
-- Stock the supply chest before the first run: wheat (cows, sheep), carrots (pigs, and planting), wheat_seeds (chickens),
+- Stock the bot's chest (its own, else the supply chest) before the first run: wheat (cows, sheep), carrots (pigs, and planting), wheat_seeds (chickens),
   seeds or the crop to plant, a hoe, shears (or 2 iron). Breeding needs 2 food in the bag; what is missing waits `RETRY_MS`.
-- Fence the pen and give it a fence gate. The bot notes the closed gates on the box border at the start and closes them again
-  after it walks through; a gate you left open stays open. On a pen walk it digs nothing and builds no pillars.
+- Fence the pen and give it a fence gate. After every crossing of the box edge the bot closes every open fence gate on the
+  border, read fresh (`shut()` in `animalfarm.js`): also one you left open, and also when the pen was unloaded at the start.
+  Inside the job it digs nothing and builds no pillars. A resumed job (after a death or reconnect) does not take the generic
+  walk back to its area (`walksBack` in `app/bots.js`); it walks in itself under those rules.
 - Put the first two animals of a kind in by hand: breeding needs 2 adults.
 - Protect pets with a name tag: named animals are never fed, shorn or culled. A lead does not protect an animal inside
   the box (the code does not look at leads).
