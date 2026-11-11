@@ -55,6 +55,16 @@ module.exports = async () => {
     assert.strictEqual(W.scan(w.blockAt, box, 64, []).cells.find((c) => c.x === 4 && c.z === 4).wet, true);
     w = flat({'4,66,6': 'water'});
     assert.strictEqual(W.scan(w.blockAt, box, 64, []).wet, false);
+    // other crops: the crop table names the block and the ripe age; the farm box takes a larger limit
+    const crop = (name, age) => ({name, boundingBox: 'empty', getProperties: () => ({age})});
+    w = flat({'0,64,0': 'farmland', '0,65,0': crop('carrots', 7), '1,64,0': 'farmland', '1,65,0': crop('carrots', 6), '2,64,0': 'farmland', '2,65,0': crop('beetroots', 3)});
+    sc = W.scan(w.blockAt, box, 64, [], W.CROPS.carrot);
+    assert.deepStrictEqual([st(0, 0).state, st(1, 0).state], ['ripe', 'growing'], 'carrots ripen at 7');
+    sc = W.scan(w.blockAt, box, 64, [], W.CROPS.beetroot);
+    assert.strictEqual(st(2, 0).state, 'ripe', 'beetroot ripens at 3');
+    assert.deepStrictEqual(W.farmBox({x1: 0, z1: 0, x2: 15, z2: 15}, {max: 16, what: 'farm'}), {x1: 0, z1: 0, x2: 15, z2: 15});
+    assert.throws(() => W.farmBox({x1: 0, z1: 0, x2: 16, z2: 15}, {max: 16, what: 'farm'}), /a farm is at most 16 x 16/);
+    assert.throws(() => W.farmBox({x1: 0, z1: 0, x2: 9, z2: 9}), /a wheat field is at most 9 x 9/);
     // work: harvest, then plant (as many as seeds), clear/till wet soil only; hoe and seeds are asked for
     const cells = [
       {x: 0, z: 0, state: 'ripe', wet: true}, {x: 3, z: 0, state: 'ripe', wet: false}, {x: 1, z: 1, state: 'plant', wet: true}, {x: 2, z: 1, state: 'plant', wet: true},

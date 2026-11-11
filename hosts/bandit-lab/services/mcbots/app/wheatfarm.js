@@ -18,16 +18,23 @@ const GRASS = /^(short_grass|tall_grass|fern|large_fern)$/;
 const FREE = /^(air|cave_air|short_grass|tall_grass|fern|large_fern)$/;
 const HOE = /^(wooden|stone|iron|golden|diamond|netherite)_hoe$/;
 const WANTED_DROP = /^(wheat|wheat_seeds|bread)$/;
+// The crops a farm job tends: the block, its ripe age, what is planted and what is picked up (cropfarm reuses scan and pickups).
+const CROPS = {
+  wheat: {block: 'wheat', ripe: 7, seed: 'wheat_seeds', drops: WANTED_DROP},
+  carrot: {block: 'carrots', ripe: 7, seed: 'carrot', drops: /^carrot$/},
+  potato: {block: 'potatoes', ripe: 7, seed: 'potato', drops: /^(potato|poisonous_potato)$/},
+  beetroot: {block: 'beetroots', ripe: 3, seed: 'beetroot_seeds', drops: /^(beetroot|beetroot_seeds)$/},
+};
 const RETRY_MS = 300000, BOOTSTRAP_MS = 120000;
 const BREAD_AT = 16;
 
-// {x1, z1, x2, z2} (any corners) -> the box; 1 x 1 to 9 x 9.
-function farmBox(a) {
+// {x1, z1, x2, z2} (any corners) -> the box; 1 x 1 to max x max (9 x 9 for wheat).
+function farmBox(a, {max = MAX_SIDE, what = 'wheat field'} = {}) {
   const [x1, z1, x2, z2] = [a.x1, a.z1, a.x2, a.z2].map((v) => (v === null || v === '' ? NaN : Number(v)));
   if (![x1, z1, x2, z2].every((v) => Number.isInteger(v) && Math.abs(v) <= 3e7)) throw new Error('x1, z1, x2 and z2 must be whole numbers');
   const box = {x1: Math.min(x1, x2), z1: Math.min(z1, z2), x2: Math.max(x1, x2), z2: Math.max(z1, z2)};
   const [w, l] = [box.x2 - box.x1 + 1, box.z2 - box.z1 + 1];
-  if (w > MAX_SIDE || l > MAX_SIDE) throw new Error(`a wheat field is at most ${MAX_SIDE} x ${MAX_SIDE} blocks (this one is ${w} x ${l})`);
+  if (w > max || l > max) throw new Error(`a ${what} is at most ${max} x ${max} blocks (this one is ${w} x ${l})`);
   return box;
 }
 
@@ -72,7 +79,7 @@ const hydrated = (isWater, x, gy, z) => {
 // Every column of the box: {x, z, gy, state, wet}. States: ripe (wheat age 7), growing (younger wheat),
 // plant (empty farmland), clear (soil with grass on it), till (soil with air on it), water, blocked
 // (anything else, also not loaded). `unloaded` counts the columns without a block. Protected columns are left out.
-function scan(blockAt, box, y0, areas) {
+function scan(blockAt, box, y0, areas, crop = CROPS.wheat) {
   // A waterlogged block wets farmland like water: the owner laid an oak slab over field 1's water, and bot3 left all
   // three fields as dry for a whole night (main server 2026-10-17).
   const isWater = (x, y, z) => { const b = blockAt(x, y, z); return b?.name === 'water' || b?.getProperties?.().waterlogged === true; };
@@ -88,7 +95,7 @@ function scan(blockAt, box, y0, areas) {
       if (base.name === 'water') state = 'water';
       else if (!above) unloaded++;
       else if (base.name === 'farmland') {
-        if (above.name === 'wheat') state = wheatAge(above) >= 7 ? 'ripe' : 'growing';
+        if (above.name === crop.block) state = wheatAge(above) >= crop.ripe ? 'ripe' : 'growing';
         else if (FREE.test(above.name)) state = 'plant';
       } else if (SOIL.test(base.name)) {
         if (above.name === 'air' || above.name === 'cave_air') state = 'till';
@@ -121,10 +128,10 @@ function chooseWork(cells, {me, seeds, hoe, skip = () => false, limit = 8}) {
 }
 
 // Dropped wheat, seeds and bread within a block of the box (entities with getDroppedItem()), nearest first.
-function pickups(entities, box, areas, me) {
+function pickups(entities, box, areas, me, wanted = WANTED_DROP) {
   const wide = {x1: box.x1 - 1, z1: box.z1 - 1, x2: box.x2 + 1, z2: box.z2 + 1};
   return entities
-    .filter((e) => e.name === 'item' && e.position && e.isValid !== false && WANTED_DROP.test(e.getDroppedItem?.()?.name || '')
+    .filter((e) => e.name === 'item' && e.position && e.isValid !== false && wanted.test(e.getDroppedItem?.()?.name || '')
       && inBox(wide, Math.floor(e.position.x), Math.floor(e.position.z)) && !insideAreas(areas, Math.floor(e.position.x), Math.floor(e.position.z)))
     .sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me));
 }
@@ -429,4 +436,4 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
   return {wheatfarm};
 }
 
-module.exports = {withFields, MAX_FIELDS, farmBox, centre, wheatAge, hydrated, scan, chooseWork, pickups, breadFrom, shouldDeposit, makeWheatFarm};
+module.exports = {CROPS, withFields, MAX_FIELDS, farmBox, centre, wheatAge, hydrated, scan, chooseWork, pickups, breadFrom, shouldDeposit, makeWheatFarm};
