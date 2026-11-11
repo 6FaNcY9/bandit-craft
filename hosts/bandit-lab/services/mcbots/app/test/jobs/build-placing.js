@@ -213,4 +213,39 @@ module.exports = async () => {
     await bot.placeBlock(under, new Vec3(0, 1, 0));
     assert.strictEqual(runner.pillars.size, 0, 'a block the job itself places (a build) is no pillar');
   }
+  { // a deferred cell whose item no chest holds (an observer under a comparator, no quartz) is not picked again at once:
+    // the loop said nothing and spun at full CPU for 25 minutes, nothing placed (sorter builders, 2026-11-11)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    palette[4] = {Name: str('minecraft:observer'), Properties: {type: 'compound', value: {facing: str('north'), powered: str('false')}}};
+    palette[5] = {Name: str('minecraft:comparator'), Properties: {type: 'compound', value: {facing: str('north'), mode: str('compare'), powered: str('false')}}};
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+    const packed = 4n | (5n << 5n); // two 5-bit states: the observer at the bottom, the comparator on top
+    const longs = [[Number(BigInt.asIntN(32, packed >> 32n)), Number(BigInt.asIntN(32, packed))]];
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 1, y: 2, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: longs}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-late-'));
+    fs.writeFileSync(path.join(dir, 'late.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('late')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const job = {t: {}, cancelled: false, args: {file: 'late.litematic', origin: {x: 0, y: 64, z: 0}, chests: []}};
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const bot = {game: {dimension: 'overworld'}, on() {}, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, equip: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(0.5, 64, 3.5), yaw: 0, pitch: 0},
+      inventory: {items: () => [], emptySlotCount: () => 36},
+      registry: {itemsByName: {observer: item(1), comparator: item(2), dirt: item(3), glass: item(4)}, blocksByName: {}},
+      pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+      blockAt: (p) => ({name: p.y <= 63 ? 'stone' : 'air', position: p, getProperties: () => ({}), boundingBox: p.y <= 63 ? 'block' : 'empty', shapes: []})};
+    const schematic = require('../../build').makeSchematic({goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt: async () => false, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir});
+    const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}}, job).catch((e) => e);
+    await new Promise((res) => setTimeout(res, 400)); // a spinning loop yields to timers, so this fires either way
+    const doing = job.t.doing;
+    job.cancelled = true;
+    const end = await Promise.race([run, new Promise((res) => setTimeout(() => res('hung'), 3000))]);
+    assert.ok(end instanceof Error && /stopped/.test(end.message), `the loop ends on Stop: ${end}`);
+    assert.match(String(doing), /^waiting for material: .*observer/, `it waits for the missing observer instead of spinning without a word (doing: ${doing})`);
+  }
 };
