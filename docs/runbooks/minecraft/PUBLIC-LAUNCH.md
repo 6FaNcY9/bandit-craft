@@ -51,6 +51,8 @@ Everything else is allowed. Griefing, raiding, stealing and hacked clients are p
 The server runs events by itself (supply drops, bosses, ruins, meteors, storms, blood nights) at random
 places, announced to everyone. Nobody can start, buy or steer one, and their loot is vanilla.
 Chat is not anarchy: Mojang's chat reporting is on, and reports to <REPORT-MAIL> are answered within 48 hours.
+Illegal content is removed once reported, in chat and in the world. That is the only thing the operator
+ever changes in the world.
 ```
 
 ## Server list entry
