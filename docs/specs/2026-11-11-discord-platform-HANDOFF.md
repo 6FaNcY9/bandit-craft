@@ -6,9 +6,8 @@ For any session that wants to pick this up, steer it or connect its own work to 
   "agent's call" items are open to change, the owner's choices are not.
 - **Branch / worktree:** `feat/discord-platform` in `~/src/bandit-craft-discord`, from
   `origin/main` 656e90c. Unsigned commits only; the owner signs and pushes.
-- **Live state tracker:** claude-mem work state list `discord-platform` (read it with
-  `work_state_read`, write with `work_state_write`). Put decisions and blockers there so both
-  sessions see them.
+- **Live state tracker:** this file (claude-mem was removed on 2026-11-11). Put decisions and
+  blockers here so both sessions see them.
 - **Laptop client:** Vesktop added in bandit-nix `modules/user/desktop/discord.nix`
   (uncommitted in `~/src/bandit-nix`, built OK, owner runs `git pull --ff-only && nrs`).
 
@@ -28,13 +27,14 @@ For any session that wants to pick this up, steer it or connect its own work to 
 1. Live since 2026-11-11 04:30: phases 1 and 2 (layout, lab alerts, teaser, rules, join and status texts),
    shipped as bandit-craft a6e76d5 and bandit-nix 513820c. Checked live: layout, a real alert in
    `#lab-alerts`, role preview (Moderator sees MODERATION, `@everyone` neither it nor ADMIN).
-2. Not shipped yet, on this branch on top of main: a660558 (refused server settings no longer stop the
-   bot; invite link in the launch material) and 8d1e6ac (launch target). Ship them with the next change;
-   `tools/craft-bump` needs the full 40-character sha (a short one goes through GitHub's rate-limited API).
+2. Shipped: everything up to e2be802 is on main and on the lab. Only docs commits wait on this branch
+   (no restart, no bump needed). `tools/craft-bump` needs the full 40-character sha (a short one goes
+   through GitHub's rate-limited API).
 3. Set by hand in the client, not by the bot: rules channel `#regeln-rules`, updates channel `#mod-log`,
    rules screening with four rules, the permanent invite. See the design's phase list.
-4. Launch: target and blockers are in the design ("Launch target"). The tunnel is the mc-public session's
-   work; the status ping still got no answer on 2026-11-11 04:55.
+4. Launch: target and blockers are in the design ("Launch target"). The tunnel (playit.gg) answers since
+   2026-11-11: the owner joined through `impairment-peterson.tun.ply.gg:24924` at 14:30. Open blockers:
+   tester round with real players, legal pages (item 11), whitelist off.
 5. Phase 4 (bot control) is live since 2026-11-11 05:29 (bandit-craft 4438bc9, bandit-nix cb7a165):
    `/bots status | stopp | weiter` in `#bot-kommando` through the hub's `/api/remote/` door. Checked live as
    the owner: `status` lists the eight bots; `stopp` and `weiter` with a name that does not exist are answered
@@ -65,16 +65,26 @@ For any session that wants to pick this up, steer it or connect its own work to 
 
 8. Privacy points checked by the agent on 2026-11-11 (written into `docs/public/DATENSCHUTZ.md`, points 13 and 15):
    Discord, Inc. is listed as active for the EU-U.S. Data Privacy Framework; the server log keeps only the line
-   shown in the game for a Discord message. Still the owner's call: an exception per player, joint controllership,
-   and a second look at the list on the day of publishing.
+   shown in the game for a Discord message. Decided by the agent on 2026-11-11 after the owner handed over the open points: no exception per
+   player for now (point 14). Still the owner's call: joint controllership, and a second look at the list
+   on the day of publishing.
 9. claude-mem was removed on 2026-11-11: this file is the live tracker now, not a work state list.
 
 10. Advertising: the owner asked for it on 2026-11-11. Posted that day with the owner's yes, from the owner's X
     account: the short English teaser (no date, no address, Discord invite). Not done: server lists (each needs an
     account the owner creates, and the address only makes sense once the whitelist is off), other Discord servers
     (the owner names server and channel). The owner's step list is `~/Downloads/bandit-werbung-plan.md`.
+    Agent's calls on 2026-11-11 under the owner's "decide yourself": no posting in other Discord servers and no
+    listing bot (Disboard and the like) before the opening; no German X post (the owner chose English).
+11. Legal drafts (`docs/public/`), 2026-11-11: server name and address are filled in. Found while filling
+    them: the privacy text said "relay in the EU, processor under Art. 28", but the server runs through the
+    free playit.gg tunnel of Developed Methods LLC, USA, which is not on the Data Privacy Framework list and
+    names no processing agreement. The text now says what is true and carries two `[OFFEN]` marks; open
+    point 4 gives the owner two ways (EU VPS relay from `docs/runbooks/minecraft/PUBLIC.md`, or stay and get
+    legal advice). This blocks publishing the privacy page. Still placeholders, only the owner can give
+    them: `<KONTAKT-MAIL>`, `<MELDE-MAIL>`, `<BETREIBER-NAME>`, `<BETREIBER-ANSCHRIFT>`, `<DATUM>`.
 
 ## How to reach this session
 
 Other local Claude sessions can message it with `SendMessage` (see `ListAgents`). If it is gone,
-the work state list and this file are the source of truth.
+this file is the source of truth.
