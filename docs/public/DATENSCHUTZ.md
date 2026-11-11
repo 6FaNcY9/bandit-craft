@@ -489,9 +489,10 @@ If the processing changes, we update this policy and the date at the top.
    Vertrag (Punkt 6 dieser Liste) greift lit. b gar nicht. Einwilligung (lit. a) ist keine bessere
    Wahl: Sie müsste ausdrücklich sein, und unter 14 ist sie fraglich (Art. 8 DSGVO, § 4 Abs. 4 DSG).
    Offen: (a) prüfen, ob Developed Methods LLC auf der DPF-Liste steht (dataprivacyframework.gov);
-   wenn ja, Art. 45 statt Art. 49 nennen. (b) Prüfen, ob der Proxy das PROXY protocol von playit
-   nutzt; wenn nicht, stehen in den Protokollen (Punkt 2) und bei Sperren (Punkt 3) nicht die
-   IP-Adressen der Spielenden, sondern die von playit, und Punkt 1 bis 3 müssen angepasst werden.
+   wenn ja, Art. 45 statt Art. 49 nennen. (b) PROXY protocol: Velocity verlangt es
+   (`haproxy-protocol = true`) und lehnt Verbindungen ohne ab; Joins und Status über playit klappen
+   (2026-11-11), playit schickt es also. Die echte Spieler-IP im Velocity-Log ist noch einmal mit Root
+   zu bestätigen; stünde dort playits Adresse, müssten Punkt 1 bis 3 angepasst werden.
    (c) Auf Dauer: ein Relay in der EU mit Vertrag nach Art. 28 DSGVO.
 5. **Beweissicherung über 30 Tage hinaus.** Kommt eine Meldung kurz vor Ablauf, sind die Protokolle
    weg. Wenn einzelne Einträge für eine laufende Meldung oder ein Verfahren länger aufbewahrt werden
