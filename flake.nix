@@ -21,6 +21,7 @@
       ./hosts/bandit-lab/services/ollama
       ./hosts/bandit-lab/services/llamacpp
       ./hosts/bandit-lab/services/mcagents
+      ./hosts/bandit-lab/services/discord-admin
     ];
 
     # The public world (docs/specs/2026-11-10-public-anarchy-world.md): the inside of bandit-nix's `mc-public`
@@ -43,6 +44,9 @@
       mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
       restart-warn-test = import ./ci/restart-warn-test.nix {inherit pkgs;};
       botui = import ./hosts/bandit-lab/services/minecraft/botui {inherit pkgs;};
+      discord-admin = pkgs.runCommand "discord-admin-tests" {nativeBuildInputs = [pkgs.nodejs_22];} ''
+        cp -r ${./hosts/bandit-lab/services/discord-admin/app} app && cd app && node --test && touch $out
+      '';
       inherit (self.packages.${system}) mcbots pc-admin;
     };
 
