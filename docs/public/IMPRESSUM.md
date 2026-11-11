@@ -10,7 +10,7 @@ deutsche Fassung ist maßgeblich; die englische Fassung steht darunter.
 <BETREIBER-NAME>
 <BETREIBER-ANSCHRIFT>
 
-Medieninhaber dieser Seiten und Betreiber des Minecraft-Servers <SERVERNAME>
+Medieninhaber dieser Seiten und Betreiber des Minecraft-Servers Bandit Anarchy
 (<ADRESSE-DES-SERVERS>).
 
 ## Kontakt
@@ -27,7 +27,7 @@ keine UID-Nummer.
 
 ## Grundlegende Richtung
 
-Information über den Minecraft-Server <SERVERNAME>, seine Regeln und seinen Betrieb.
+Information über den Minecraft-Server Bandit Anarchy, seine Regeln und seinen Betrieb.
 
 ## Weitere Seiten
 
@@ -51,7 +51,7 @@ Austrian E-Commerce Act (ECG).
 <BETREIBER-NAME>
 <BETREIBER-ANSCHRIFT>
 
-Media owner of these pages and operator of the Minecraft server <SERVERNAME>
+Media owner of these pages and operator of the Minecraft server Bandit Anarchy
 (<ADRESSE-DES-SERVERS>).
 
 ## Contact
@@ -67,7 +67,7 @@ supervisory authority, no chamber membership and no VAT number.
 
 ## Basic orientation
 
-Information about the Minecraft server <SERVERNAME>, its rules and its operation.
+Information about the Minecraft server Bandit Anarchy, its rules and its operation.
 
 ## Further pages
 

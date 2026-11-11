@@ -2,7 +2,7 @@
 
 Stand: <DATUM>
 
-Diese Erklärung gilt für den Minecraft-Server <SERVERNAME> (<ADRESSE-DES-SERVERS>) und für diese
+Diese Erklärung gilt für den Minecraft-Server Bandit Anarchy (<ADRESSE-DES-SERVERS>) und für diese
 Seiten. Sie sagt dir, welche Daten über dich anfallen, wofür, auf welcher Rechtsgrundlage und wie
 lange (Art. 13 und 14 DSGVO). Die deutsche Fassung ist maßgeblich; die englische Fassung steht
 darunter.
@@ -73,7 +73,7 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
   pro Person veröffentlicht und nicht weitergegeben.
 - **Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO. Unser berechtigtes Interesse: den Server mit
   begrenzten Mitteln stabil und planbar betreiben.
-- **Speicherdauer:** [OFFEN: Frist vom Betreiber festzulegen]. Auf Wunsch löschen wir deine Werte
+- **Speicherdauer:** höchstens 90 Tage. Auf Wunsch löschen wir deine Werte
   vorher.
 
 ### 5. Besuch dieser Seiten
@@ -149,7 +149,7 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 | Server- und Chatprotokolle (mit IP-Adressen und Befehlen) | etwa 30 Tage |
 | Spielstand (Position, Inventar, Statistiken) | solange die Welt besteht oder bis du die Löschung verlangst |
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
-| Betriebsstatistiken | [OFFEN: Frist vom Betreiber festzulegen] |
+| Betriebsstatistiken | höchstens 90 Tage |
 | Verbindungsdaten am Relay-Server | [OFFEN: vom Betreiber zu ergänzen] |
 | Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an <KONTAKT-MAIL>) |
 
@@ -286,7 +286,7 @@ been appointed; the conditions of Art. 37 GDPR are not met.
   person and not shared.
 - **Legal basis:** Art. 6(1)(f) GDPR. Our legitimate interest: running the server stably and
   predictably with limited resources.
-- **Retention:** [OPEN: period to be set by the operator]. On request we delete your figures sooner.
+- **Retention:** at most 90 days. On request we delete your figures sooner.
 
 ### 5. Visiting these pages
 
@@ -359,7 +359,7 @@ controllers in their own right; where they process data is set out in their priv
 | Server and chat logs (with IP addresses and commands) | about 30 days |
 | Game state (position, inventory, statistics) | as long as the world exists or until you ask for deletion |
 | Bans and mutes | as long as needed to enforce them |
-| Operating statistics | [OPEN: period to be set by the operator] |
+| Operating statistics | at most 90 days |
 | Connection data at the relay server | [OPEN: to be completed by the operator] |
 | Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to <KONTAKT-MAIL>) |
 

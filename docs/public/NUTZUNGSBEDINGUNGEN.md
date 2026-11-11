@@ -6,7 +6,7 @@ Die deutsche Fassung ist maßgeblich; die englische Fassung steht darunter.
 
 ## 1. Geltung
 
-Diese Bedingungen gelten für die Nutzung des Minecraft-Servers <SERVERNAME>
+Diese Bedingungen gelten für die Nutzung des Minecraft-Servers Bandit Anarchy
 (<ADRESSE-DES-SERVERS>). Betreiber ist <BETREIBER-NAME> (siehe [Impressum](IMPRESSUM.md)). Mit dem
 Verbinden zum Server stimmst du diesen Bedingungen zu. Wenn du nicht einverstanden bist, spiel bitte
 nicht auf dem Server. Die Nutzung ist kostenlos.
@@ -18,7 +18,7 @@ Die Lizenzbedingungen und Richtlinien von Mojang/Microsoft gelten daneben unver�
 
 ## 3. Was dich erwartet
 
-<SERVERNAME> ist eine „Anarchy“-Überlebenswelt mit 20 Plätzen. Die Welt wird nie zurückgesetzt.
+Bandit Anarchy ist eine „Anarchy“-Überlebenswelt mit 20 Plätzen. Die Welt wird nie zurückgesetzt.
 
 - **Erlaubt ist** alles, was nicht gegen eine der drei Regeln unten verstößt, insbesondere Griefing,
   Raiden, Stehlen und veränderte („gehackte“) Clients.
@@ -115,7 +115,7 @@ oder Microsoft verbunden.
 
 ## 1. Scope
 
-These terms apply to the use of the Minecraft server <SERVERNAME> (<ADRESSE-DES-SERVERS>). It is run
+These terms apply to the use of the Minecraft server Bandit Anarchy (<ADRESSE-DES-SERVERS>). It is run
 by <BETREIBER-NAME> (see the [legal notice](IMPRESSUM.md)). By connecting to the server you accept
 these terms. If you do not agree, please do not play on the server. Use is free of charge.
 
@@ -126,7 +126,7 @@ Mojang's and Microsoft's licence terms and guidelines continue to apply as well.
 
 ## 3. What to expect
 
-<SERVERNAME> is an "anarchy" survival world with 20 slots. The world is never reset.
+Bandit Anarchy is an "anarchy" survival world with 20 slots. The world is never reset.
 
 - **Allowed** is everything that does not break one of the three rules below, in particular griefing,
   raiding, stealing and modified ("hacked") clients.
