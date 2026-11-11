@@ -118,8 +118,9 @@ auf unserem öffentlichen Discord-Server.
 - **Tunneldienst (Relay):** Verbindungen zum Server laufen über den Tunneldienst playit.gg der
   Developed Methods LLC, USA. Er leitet die Verbindung nur weiter und sieht dabei deine IP-Adresse.
   Der Anbieter betreibt Standorte auf mehreren Kontinenten, auch in Europa; nach seinen Angaben
-  verbindest du dich über den Standort, der dir am nächsten ist.
-  [OFFEN: Rolle des Anbieters und Vertrag, siehe offener Punkt 4]
+  verbindest du dich über den Standort, der dir am nächsten ist. Einen Vertrag zur
+  Auftragsverarbeitung haben wir mit dem Anbieter nicht; er verarbeitet die Verbindungsdaten nach
+  seinen eigenen Bedingungen (playit.gg/privacy-policy).
 - **Mojang/Microsoft:** prüft deine Anmeldung und ist dafür selbst Verantwortlicher; es gilt deren
   Datenschutzerklärung. Die Chat-Meldefunktion von Mojang ist eingeschaltet: Meldest du eine
   Nachricht über das Spiel selbst, geht diese Meldung an Mojang/Microsoft, nicht an uns.
@@ -138,7 +139,10 @@ auf unserem öffentlichen Discord-Server.
 
 Der Spielserver läuft auf eigener Hardware des Betreibers in Österreich. Der Tunneldienst playit.gg
 wird von der Developed Methods LLC in den USA betrieben; deine IP-Adresse kann dabei auch außerhalb
-der EU verarbeitet werden. [OFFEN: Grundlage dieser Übermittlung, siehe offener Punkt 4]
+der EU verarbeitet werden. Für diesen Anbieter gibt es keinen Angemessenheitsbeschluss und keine
+Garantien nach Art. 46 DSGVO; dein Schutz kann dort geringer sein als in der EU. Ohne den Tunnel
+kannst du dich nicht mit dem Server verbinden; wir stützen die Übermittlung deshalb auf Art. 49
+Abs. 1 lit. b DSGVO (für die Erfüllung des Nutzungsvertrags erforderlich).
 Außerdem übermitteln wir Daten außerhalb der EU über die Chat-Brücke (Punkt 6): Sie schickt öffentliche
 Chatnachrichten, Minecraft-Namen, die Zeilen zum Betreten und Verlassen und Todesmeldungen an
 Discord Inc. in den USA. Discord Inc. ist unter dem EU-US Data Privacy Framework zertifiziert; die
@@ -154,7 +158,7 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 | Spielstand (Position, Inventar, Statistiken) | solange die Welt besteht oder bis du die Löschung verlangst |
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
 | Betriebsstatistiken | [OFFEN: Frist vom Betreiber festzulegen] |
-| Verbindungsdaten am Relay-Server | [OFFEN: vom Betreiber zu ergänzen] |
+| Verbindungsdaten beim Tunneldienst playit.gg | legt der Anbieter fest; er nennt keine Frist |
 | Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an <KONTAKT-MAIL>) |
 
 ## Löschung: was geht und was nicht
@@ -333,8 +337,8 @@ on our public Discord server.
 - **Tunnel service (relay):** connections to the server pass through the tunnel service playit.gg,
   run by Developed Methods LLC, USA. It only forwards the connection and sees your IP address while
   doing so. The provider runs locations on several continents, including Europe; according to the
-  provider you connect through the location nearest to you.
-  [OPEN: the provider's role and contract, see open point 4]
+  provider you connect through the location nearest to you. We have no data processing agreement
+  with the provider; it handles the connection data under its own terms (playit.gg/privacy-policy).
 - **Mojang/Microsoft:** checks your login and is a controller in its own right for that; its privacy
   policy applies. Mojang's chat reporting is enabled: if you report a message through the game itself,
   that report goes to Mojang/Microsoft, not to us.
@@ -353,7 +357,10 @@ on our public Discord server.
 
 The game server runs on the operator's own hardware in Austria. The tunnel service playit.gg is run
 by Developed Methods LLC in the USA; your IP address may be processed outside the EU there.
-[OPEN: basis for this transfer, see open point 4] We also
+For this provider there is no adequacy decision and there are no safeguards under Art. 46 GDPR;
+your protection there may be lower than in the EU. Without the tunnel you cannot connect to the
+server; we therefore base the transfer on Art. 49(1)(b) GDPR (necessary to perform the contract of
+use). We also
 transfer data outside the EU through the chat bridge (point 6): it sends public chat messages,
 Minecraft names, the join and leave lines and death messages to Discord Inc. in the USA. Discord Inc.
 is certified under the EU-U.S. Data Privacy Framework; the transfer is based on the European
@@ -368,7 +375,7 @@ controllers in their own right; where they process data is set out in their priv
 | Game state (position, inventory, statistics) | as long as the world exists or until you ask for deletion |
 | Bans and mutes | as long as needed to enforce them |
 | Operating statistics | [OPEN: period to be set by the operator] |
-| Connection data at the relay server | [OPEN: to be completed by the operator] |
+| Connection data at the tunnel service playit.gg | set by the provider; it names no period |
 | Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to <KONTAKT-MAIL>) |
 
 ## Deletion: what is possible and what is not
@@ -440,7 +447,10 @@ If the processing changes, we update this policy and the date at the top.
 
 1. **Speicherdauer der Betriebsstatistiken fehlt.** Art. 13 Abs. 2 lit. a DSGVO verlangt eine Frist
    oder klare Kriterien. Die Retention von Prometheus in bandit-nix prüfen und eintragen (Platzhalter
-   `[OFFEN: ...]` in beiden Fassungen ersetzen).
+   `[OFFEN: ...]` in beiden Fassungen ersetzen). Nachgesehen am 11.11.2026: Prometheus auf dem Lab
+   hält 30 Tage (`--storage.tsdb.retention.time=30d`). In diesem Zweig gibt es aber noch keinen
+   Sammler für die öffentliche Welt. Erst eintragen, wenn feststeht, wo die Werte liegen; werden
+   keine gesammelt, Abschnitt 4 und die Tabellenzeile streichen.
 2. **Dashboard-Spec geht über die genannten Fakten hinaus.**
    `docs/specs/2026-11-10-public-world-dashboard.md` sieht weitere Daten pro Person vor (Tode mit
    Ursache, Spielerkills, Distanz, abgebaute Blöcke, Fortschritte) und einen zweiten Zweck (die
@@ -460,11 +470,13 @@ If the processing changes, we update this policy and the date at the top.
    dataprivacyframework.gov hat keinen Eintrag für „Developed Methods“ oder „playit“. Der Anbieter
    nennt 19 Standorte, sechs davon in Europa; Spielende verbinden sich über den nächsten. Es fehlen
    also ein Vertrag nach Art. 28 DSGVO und eine Grundlage für die Übermittlung in die USA
-   (Art. 44 ff. DSGVO). Zwei Wege: (a) auf den VPS-Relay bei einem Hoster in der EU wechseln
-   (`docs/runbooks/minecraft/PUBLIC.md`, kostet Miete; dann gilt wieder: AV-Vertrag des Hosters
-   prüfen, klären, ob HAProxy Verbindungen protokolliert und wie lange) oder (b) bei playit.gg
-   bleiben und die `[OFFEN]`-Stellen zum Tunneldienst mit rechtlicher Beratung füllen. Die
-   Tabellenzeile „Verbindungsdaten am Relay-Server“ ist in beiden Fällen noch zu ersetzen.
+   (Art. 44 ff. DSGVO). Entschieden vom Betreiber am 11.11.2026: bei playit.gg bleiben, kein VPS-Relay. Der
+   Text nennt darum den Anbieter, das Fehlen eines Vertrags und eines Angemessenheitsbeschlusses
+   und stützt die Übermittlung auf Art. 49 Abs. 1 lit. b DSGVO (Formulierung vom Agenten, keine
+   Rechtsauskunft, nicht juristisch geprüft). Bleibendes Risiko: Art. 49 ist eine eng auszulegende
+   Ausnahme; ob „erforderlich“ trägt, wenn ein Relay in der EU möglich wäre
+   (`docs/runbooks/minecraft/PUBLIC.md`), kann eine Behörde anders sehen. Der Wechsel auf den
+   VPS-Relay bleibt der saubere Weg, falls es eine Beschwerde gibt.
 5. **Beweissicherung über 30 Tage hinaus.** Kommt eine Meldung kurz vor Ablauf, sind die Protokolle
    weg. Wenn einzelne Einträge für eine laufende Meldung oder ein Verfahren länger aufbewahrt werden
    sollen, muss das hier ergänzt werden. Ich habe es nicht aufgenommen, weil es nicht in den Fakten
