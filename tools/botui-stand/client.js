@@ -39,6 +39,7 @@ function connect(username, port = 25599) {
           c.writeRaw(Buffer.concat([varint(0x44), str(id), varint(tag.length), tag]));
         },
         command: (text) => c.write('chat_command', {command: text.replace(/^\//, '')}),
+        chat: (text) => c.write('chat_message', {message: text, timestamp: BigInt(Date.now()), salt: 0n, signature: undefined, offset: 0, acknowledged: Buffer.alloc(3), checksum: 0}), // unsigned: the stand does not enforce secure profiles
         sneak: (on) => c.write('player_input', {inputs: {shift: on}}),
         swap: () => c.write('block_dig', {status: 6, location: {x: 0, y: 0, z: 0}, face: 0, sequence: 0}), // swap hands (F)
         useItem: (hand = 'main_hand', rotation = {x: 0, y: 0}) => c.write('use_item', {hand, sequence: 0, rotation}), // right click with the item in hand

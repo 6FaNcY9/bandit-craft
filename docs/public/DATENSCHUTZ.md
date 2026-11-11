@@ -23,6 +23,9 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
 - Wir verarbeiten nur, was für den Betrieb des Servers nötig ist: deinen Minecraft-Namen, deine
   Konto-UUID, deine IP-Adresse, wann du spielst, was du im Chat schreibst und an Befehlen eingibst,
   und deinen Spielstand in der Welt.
+- Was du im öffentlichen Spielchat schreibst, wann du kommst und gehst und deine Todesmeldungen
+  erscheinen mit deinem Minecraft-Namen auch im öffentlichen Discord-Kanal #ingame-chat und bleiben
+  dort, bis sie gelöscht werden (Punkt 6).
 - Keine Cookies, kein Tracking, keine Analyse-Werkzeuge, kein Newsletter, keine Werbung. Wir
   verkaufen keine Daten und geben sie nur so weiter, wie unten beschrieben.
 - Server- und Chatprotokolle werden nach etwa 30 Tagen gelöscht.
@@ -79,6 +82,35 @@ Diese Seiten liegen auf GitHub (GitHub, Inc.). Beim Aufruf kann GitHub deine IP-
 technische Zugriffsdaten nach seiner eigenen Datenschutzerklärung verarbeiten. Wir selbst setzen
 dort keine Cookies und keine Analyse-Werkzeuge ein.
 
+### 6. Chat-Brücke zu Discord
+
+Eine Chat-Brücke auf dem Spielserver verbindet den Spielchat in Echtzeit mit dem Kanal #ingame-chat
+auf unserem öffentlichen Discord-Server.
+
+- **Daten aus dem Spiel nach Discord:** jede öffentliche Chatnachricht, die du im Spiel schreibst,
+  mit deinem Minecraft-Namen; eine Zeile, wenn du den Server betrittst oder verlässt (nur der Name);
+  deine Todesmeldung (Name und Ursache, wie das Spiel sie anzeigt). Sonst nichts: keine IP-Adresse,
+  keine UUID, keine Befehle, keine privaten Nachrichten, keine Position.
+- **Daten aus Discord ins Spiel:** Was Mitglieder in #ingame-chat schreiben, erscheint im Spielchat
+  als reiner Text mit ihrem Discord-Anzeigenamen. Nachrichten von Discord-Konten, die jünger als
+  7 Tage sind, Nachrichten von Bots und Anhänge werden nicht angezeigt; dafür prüft die Brücke das
+  Alter des Discord-Kontos.
+- **Zweck:** Spielende und die Discord-Gemeinschaft des Servers können miteinander reden, und wer
+  gerade nicht spielt, sieht, was auf dem Server los ist. Die Sperre für neue Konten und Bots
+  schützt den Spielchat vor Spam.
+- **Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO. Unser berechtigtes Interesse: Spiel und
+  Discord-Gemeinschaft des Servers zu verbinden. Deine Interessen überwiegen nach unserer Abwägung
+  nicht, weil nur übertragen wird, was im öffentlichen Spielchat ohnehin alle Spielenden sehen, und
+  IP-Adresse, UUID, Befehle, private Nachrichten und Position auf dem Server bleiben.
+- **Herkunft:** Nachrichten aus Discord und der Anzeigename kommen von Discord.
+- **Speicherdauer:** Nachrichten aus Discord speichert der Server nur im normalen Serverprotokoll
+  (etwa 30 Tage, Punkt 2). Die Kopien in Discord bleiben im Kanal, bis sie dort gelöscht werden.
+  Einzelne übertragene Nachrichten löschen wir auf Wunsch in Discord; schreib dafür an
+  <KONTAKT-MAIL>.
+- **Abschalten:** Für einzelne Spielende lässt sich die Brücke nicht abschalten. Was nicht in
+  Discord erscheinen soll, schreib nicht in den öffentlichen Spielchat. Die Zeilen zum Betreten und
+  Verlassen und die Todesmeldungen werden immer übertragen.
+
 ## Wer Daten erhält
 
 - **Relay-Anbieter:** Verbindungen zum Server laufen über einen gemieteten Weiterleitungsserver bei
@@ -90,14 +122,23 @@ dort keine Cookies und keine Analyse-Werkzeuge ein.
 - **Andere Spielende:** sehen deinen Namen, deine Chatnachrichten und was du in der Welt tust und
   baust. Das ist der Zweck eines Mehrspieler-Servers.
 - **Behörden und Gerichte:** nur wenn wir gesetzlich dazu verpflichtet sind.
-- **Discord** ist ein eigener Dienst mit eigener Datenschutzerklärung; diese Erklärung gilt dort
-  nicht.
+- **Discord:** Discord ist ein eigener Dienst von Discord Inc. mit eigener Datenschutzerklärung; für
+  deine Nutzung von Discord, auch auf unserem Discord-Server, gilt diese Erklärung nicht. Die
+  Chat-Brücke (Punkt 6) gibt aber Daten aus dem Spiel an Discord weiter: öffentliche
+  Chatnachrichten mit Minecraft-Namen, die Zeilen zum Betreten und Verlassen und Todesmeldungen.
+  Discord Inc. speichert sie als eigener Verantwortlicher. Im Kanal #ingame-chat sehen sie alle
+  Mitglieder unseres Discord-Servers; er ist öffentlich, Mitglied werden kann jeder mit dem
+  Einladungslink. Umgekehrt sehen die Spielenden im Spiel, was Mitglieder in #ingame-chat schreiben.
 
 ## Übermittlung außerhalb der EU
 
-Wir übermitteln keine Daten außerhalb der EU. Der Spielserver läuft auf eigener Hardware des
-Betreibers in Österreich, der Relay-Server in der EU. Mojang/Microsoft und GitHub handeln als
-eigene Verantwortliche; wo sie Daten verarbeiten, steht in ihren Datenschutzerklärungen.
+Der Spielserver läuft auf eigener Hardware des Betreibers in Österreich, der Relay-Server in der EU.
+Außerhalb der EU übermitteln wir Daten nur über die Chat-Brücke (Punkt 6): Sie schickt öffentliche
+Chatnachrichten, Minecraft-Namen, die Zeilen zum Betreten und Verlassen und Todesmeldungen an
+Discord Inc. in den USA. Discord Inc. ist unter dem EU-US Data Privacy Framework zertifiziert; die
+Übermittlung stützt sich auf den Angemessenheitsbeschluss der EU-Kommission vom 10. Juli 2023
+(Art. 45 DSGVO). Mojang/Microsoft und GitHub handeln als eigene Verantwortliche; wo sie Daten
+verarbeiten, steht in ihren Datenschutzerklärungen.
 
 ## Speicherdauer im Überblick
 
@@ -108,6 +149,7 @@ eigene Verantwortliche; wo sie Daten verarbeiten, steht in ihren Datenschutzerkl
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
 | Betriebsstatistiken | [OFFEN: Frist vom Betreiber festzulegen] |
 | Verbindungsdaten am Relay-Server | [OFFEN: vom Betreiber zu ergänzen] |
+| Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | bis sie in Discord gelöscht werden; einzelne Nachrichten löschen wir auf Wunsch (an <KONTAKT-MAIL>) |
 
 ## Löschung: was geht und was nicht
 
@@ -116,6 +158,7 @@ Die Welt wird nie zurückgesetzt; das ist der Sinn dieses Servers. Deshalb ehrli
 - **Löschen können wir** alles, was an dein Konto gebunden ist: deinen Spielstand (Position,
   Inventar, Statistiken) und deine Werte in den Betriebsstatistiken. Kommst du danach wieder,
   beginnst du von vorne. Protokolle werden ohnehin nach etwa 30 Tagen gelöscht.
+- **Kopien in Discord** (Punkt 6) löschen wir auf Wunsch einzeln im Kanal #ingame-chat.
 - **Nicht löschen können wir** Blöcke, die du in die gemeinsame Welt gesetzt hast. Sie lassen sich
   nicht einer Person zuordnen und nicht von den Bauten anderer trennen.
 - **Persönliche Angaben über andere** (zum Beispiel ein echter Name auf einem Schild) sind Doxxing.
@@ -136,8 +179,8 @@ die du widerrufen müsstest.
 ## Widerspruchsrecht (Art. 21 DSGVO)
 
 **Du kannst jederzeit aus Gründen, die sich aus deiner besonderen Situation ergeben, der
-Verarbeitung widersprechen, die auf Art. 6 Abs. 1 lit. f DSGVO beruht (Punkte 2 bis 4 und, wo
-zutreffend, Punkt 1). Wir verarbeiten die Daten dann nicht mehr, außer wir können zwingende
+Verarbeitung widersprechen, die auf Art. 6 Abs. 1 lit. f DSGVO beruht (Punkte 2 bis 4, Punkt 6 und,
+wo zutreffend, Punkt 1). Wir verarbeiten die Daten dann nicht mehr, außer wir können zwingende
 schutzwürdige Gründe nachweisen, die deine Interessen überwiegen, oder die Verarbeitung dient der
 Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen. Der Widerspruch geht formlos an
 <KONTAKT-MAIL>.**
@@ -193,6 +236,9 @@ been appointed; the conditions of Art. 37 GDPR are not met.
 - We process only what running the server needs: your Minecraft name, your account UUID, your IP
   address, when you play, what you write in chat and the commands you type, and your game state in
   the world.
+- What you write in the public game chat, when you join and leave, and your death messages also
+  appear with your Minecraft name in the public Discord channel #ingame-chat and stay there until
+  they are deleted (point 6).
 - No cookies, no tracking, no analytics, no newsletter, no advertising. We do not sell data and
   share it only as described below.
 - Server and chat logs are deleted after about 30 days.
@@ -245,6 +291,34 @@ These pages are hosted on GitHub (GitHub, Inc.). When you open them, GitHub may 
 address and technical access data under its own privacy statement. We use no cookies and no
 analytics there.
 
+### 6. Chat bridge to Discord
+
+A chat bridge on the game server connects the game chat in real time with the channel #ingame-chat
+on our public Discord server.
+
+- **Data from the game to Discord:** every public chat message you write in the game, with your
+  Minecraft name; a line when you join or leave the server (name only); your death message (name and
+  cause, as the game shows it). Nothing else: no IP address, no UUID, no commands, no private
+  messages, no position.
+- **Data from Discord into the game:** what members write in #ingame-chat appears in the game chat as
+  plain text with their Discord display name. Messages from Discord accounts younger than 7 days,
+  messages from bots and attachments are not shown; for this the bridge checks the age of the
+  Discord account.
+- **Purpose:** players and the server's Discord community can talk to each other, and people who are
+  not playing right now can see what is going on on the server. Blocking new accounts and bots keeps
+  spam out of the game chat.
+- **Legal basis:** Art. 6(1)(f) GDPR. Our legitimate interest: connecting the game and the server's
+  Discord community. In our assessment your interests do not override it, because only what all
+  players already see in the public game chat is passed on, and IP address, UUID, commands, private
+  messages and position stay on the server.
+- **Source:** messages from Discord and the display name come from Discord.
+- **Retention:** the server keeps messages from Discord only in the normal server log (about 30 days,
+  point 2). The copies in Discord stay in the channel until they are deleted there. On request we
+  delete individual bridged messages in Discord; write to <KONTAKT-MAIL>.
+- **Switching it off:** the bridge cannot be switched off for individual players. If something should
+  not appear in Discord, do not write it in the public game chat. The join and leave lines and death
+  messages are always passed on.
+
 ## Who receives data
 
 - **Relay provider:** connections to the server pass through a rented forwarding server at
@@ -256,13 +330,22 @@ analytics there.
 - **Other players:** see your name, your chat messages and what you do and build in the world. That is
   the purpose of a multiplayer server.
 - **Authorities and courts:** only where we are legally obliged.
-- **Discord** is a separate service with its own privacy policy; this policy does not apply there.
+- **Discord:** Discord is a separate service of Discord Inc. with its own privacy policy; this policy
+  does not apply to your use of Discord, including on our Discord server. The chat bridge (point 6)
+  does, however, pass data from the game to Discord: public chat messages with Minecraft names, the
+  join and leave lines and death messages. Discord Inc. stores them as a controller in its own right.
+  In the channel #ingame-chat they are visible to all members of our Discord server; it is public,
+  anyone with the invite link can join. In the other direction, players see in the game what members
+  write in #ingame-chat.
 
 ## Transfers outside the EU
 
-We transfer no data outside the EU. The game server runs on the operator's own hardware in Austria,
-the relay server in the EU. Mojang/Microsoft and GitHub act as controllers in their own right; where
-they process data is set out in their privacy policies.
+The game server runs on the operator's own hardware in Austria, the relay server in the EU. We
+transfer data outside the EU only through the chat bridge (point 6): it sends public chat messages,
+Minecraft names, the join and leave lines and death messages to Discord Inc. in the USA. Discord Inc.
+is certified under the EU-U.S. Data Privacy Framework; the transfer is based on the European
+Commission's adequacy decision of 10 July 2023 (Art. 45 GDPR). Mojang/Microsoft and GitHub act as
+controllers in their own right; where they process data is set out in their privacy policies.
 
 ## Retention at a glance
 
@@ -273,6 +356,7 @@ they process data is set out in their privacy policies.
 | Bans and mutes | as long as needed to enforce them |
 | Operating statistics | [OPEN: period to be set by the operator] |
 | Connection data at the relay server | [OPEN: to be completed by the operator] |
+| Chat bridge copies in the Discord channel #ingame-chat | until deleted in Discord; we delete individual messages on request (to <KONTAKT-MAIL>) |
 
 ## Deletion: what is possible and what is not
 
@@ -281,6 +365,7 @@ The world is never reset; that is the point of this server. So, honestly:
 - **We can delete** everything bound to your account: your game state (position, inventory,
   statistics) and your figures in the operating statistics. If you come back afterwards, you start
   from scratch. Logs are deleted after about 30 days in any case.
+- **Copies in Discord** (point 6) we delete individually in the channel #ingame-chat on request.
 - **We cannot delete** blocks you placed in the shared world. They cannot be attributed to a person or
   separated from what others built.
 - **Personal details about others** (for example a real name on a sign) are doxxing. We remove them as
@@ -299,10 +384,10 @@ No processing described here is based on consent, so there is no consent for you
 ## Right to object (Art. 21 GDPR)
 
 **You may object at any time, on grounds relating to your particular situation, to processing based
-on Art. 6(1)(f) GDPR (points 2 to 4 and, where applicable, point 1). We will then stop, unless we can
-demonstrate compelling legitimate grounds that override your interests, or the processing serves the
-establishment, exercise or defence of legal claims. Send your objection, in any form, to
-<KONTAKT-MAIL>.**
+on Art. 6(1)(f) GDPR (points 2 to 4, point 6 and, where applicable, point 1). We will then stop,
+unless we can demonstrate compelling legitimate grounds that override your interests, or the
+processing serves the establishment, exercise or defence of legal claims. Send your objection, in any
+form, to <KONTAKT-MAIL>.**
 
 ## Complaints to the supervisory authority
 
@@ -384,3 +469,21 @@ If the processing changes, we update this policy and the date at the top.
     auf Dauer folgt; bitte bestätigen.
 12. **Anrede.** Gewählt ist „du“ (Art. 12 Abs. 1 DSGVO: verständlich auch für Kinder), im
     Elternabsatz „Sie“. Bei Bedarf vereinheitlichen.
+13. **Chat-Brücke: DPF-Zertifizierung von Discord prüfen.** Die Übermittlung an Discord Inc. stützt
+    sich im Text auf den Angemessenheitsbeschluss zum EU-US Data Privacy Framework (Art. 45 DSGVO).
+    Vor dem Veröffentlichen auf dataprivacyframework.gov prüfen, ob Discord Inc. aktiv gelistet ist,
+    und ob der (gerichtlich angefochtene) Beschluss weiter gilt. Trifft eines nicht zu, trägt der
+    Satz nicht; eine Ersatzgrundlage nach Art. 46 oder 49 DSGVO ist für einen Bot in einem fremden
+    Dienst kaum verfügbar.
+14. **Chat-Brücke: Widerspruch, Kinder, Frist.** Die Brücke lässt sich nicht pro Person abschalten.
+    Bei einem Widerspruch nach Art. 21 DSGVO bleibt derzeit nur das Löschen in Discord; Betreten-,
+    Verlassen- und Todeszeilen laufen weiter. Bei Kindern wiegt ihr Interesse in der Abwägung nach
+    lit. f besonders schwer, und die Kopien sind ohne Frist öffentlich. Entscheiden, ob eine
+    Ausnahme pro Spieler (mindestens für Betreten, Verlassen und Tod) und ein automatisches Löschen
+    im Kanal nach einer Frist gebaut werden.
+15. **Chat-Brücke: Protokoll, Rolle, Zeitpunkt.** Prüfen, was das Serverprotokoll zu Nachrichten aus
+    Discord festhält (nur Anzeigename und Text oder auch die Discord-ID); steht dort mehr, Punkt 6
+    ergänzen. Ob der Betreiber für den eigenen Discord-Server neben Discord gemeinsam verantwortlich
+    ist (Art. 26 DSGVO, vgl. EuGH C-210/16 zu Facebook-Fanpages), ist nicht geklärt; der Text stellt
+    Discord als eigenen Verantwortlichen dar. Diese Fassung erst veröffentlichen, wenn die Brücke
+    live geht (mit der Öffnung).

@@ -16,6 +16,16 @@ test('open channels carry no overwrites', () => {
   assert.deepEqual(overwrites('open', ids), [])
 })
 
+test('the chat bridge bot is shut out of every open channel but #ingame-chat', () => {
+  const withBridge = { ...ids, bridge: '500' }
+  for (const cat of LAYOUT.categories) {
+    const o = overwrites(cat.access, withBridge).find(o => o.id === '500')
+    if (cat.channels.includes('ingame-chat')) assert.equal(o, undefined)
+    else if (cat.access === 'open') assert.deepEqual(o, { id: '500', type: 1, allow: '0', deny: '3072' })
+    else assert.ok(overwrites(cat.access, withBridge).some(x => x.id === '100' && BigInt(x.deny) & 3072n), ` is closed to everyone anyway`)
+  }
+})
+
 test('owner channels are hidden from moderators and everyone', () => {
   const ow = overwrites('owner', ids)
   assert.deepEqual(ow.map(o => o.id), ['100', '200', '400'])

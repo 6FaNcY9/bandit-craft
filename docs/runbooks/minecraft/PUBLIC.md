@@ -286,6 +286,34 @@ Real recovery: stop the container (`sudo systemctl stop container@mc-public`), r
 `paper` directory over `/srv/mc-public/data/paper` keeping the owner (the container's root, uid
 589824), start the container.
 
+## Discord chat bridge (ChatBridge)
+
+The public Paper loads one plugin of our own, `minecraft-public/chatbridge` (one Java class, built by Nix against
+the pinned Paper jar; its build runs `SelfTest`). Game chat, joins, leaves and deaths go to `#ingame-chat` of the
+guild; what members write there is shown in the game as `[Discord] name: text`. Nothing else: no commands, no
+console, no account linking.
+
+- Discord to game: plain text, one line, at most 256 characters; mention ids, colour codes and invisible
+  characters are removed; attachments, bots, webhooks and accounts younger than 7 days are not shown; at most 8
+  lines in 10 s.
+- Game to Discord: markdown from a player stays text, `@everyone` and other mentions do not ping
+  (`allowed_mentions` empty), no link previews and no clickable link (`:` is escaped); lines are sent in batches
+  every 2 s, a flood is cut at 200 lines.
+- Token: the sops value `discord-bridge-token` (application `bandit-bridge`, Message Content Intent on). bandit-nix
+  places it at `/var/lib/discord-bridge/token` in the box; `minecraft-public-secret` puts it into the generated
+  environment file as `CHATBRIDGE_TOKEN`. The channel id is `CHATBRIDGE_CHANNEL` in the Paper unit. Without a
+  token the plugin logs `chat bridge off` and does nothing.
+- What a stolen token can do: the token sits in the public game server. Set `BRIDGE_ID` (the application's id)
+  in `discord-admin/default.nix` once the bot is in the guild: the admin bot then denies it every open channel
+  but `#ingame-chat`. It can still write direct messages to members it sees and change its own name and picture.
+  If the public server was broken into, reset the token in the developer portal.
+- New token: change the sops value, deploy, then in the box
+  `systemctl restart minecraft-public-secret minecraft-server-paper` (players are disconnected).
+- Look: `journalctl -M mc-public -u minecraft-server-paper | grep -i "chat bridge"`. `gateway closed (4004)` means
+  a wrong token, `closed (4014)` that the Message Content Intent is off in the developer portal.
+- Test without Discord: `NODE_PATH=<mcbots node_modules> node tools/botui-stand/e2e-chat.js` starts the local
+  stand with the plugin against a made-up Discord and stops it again.
+
 ## Opening (phase 3, without the store)
 
 The whitelist is a server property that Nix rewrites on every start, so `mcp whitelist off` lasts until

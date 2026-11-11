@@ -1,0 +1,4 @@
+name: ChatBridge
+version: 1.0.0
+main: chatbridge.ChatBridge
+api-version: "26.1"

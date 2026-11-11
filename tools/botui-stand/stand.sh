@@ -29,6 +29,9 @@ up)
   fetch "$PAPER_URL" "$PAPER_SHA" "$D/paper.jar"
   via viaversion; via viabackwards
   cp -f "$jar" "$D/plugins/BotUi.jar"; chmod u+w "$D/plugins/BotUi.jar"
+  # The public world's chat bridge joins the stand only for e2e-chat.js, which sets its environment.
+  rm -f "$D/plugins/ChatBridge.jar"
+  [ -z "${CHATBRIDGE_TOKEN:-}" ] || { cp -f "$(nix build .#checks.x86_64-linux.chatbridge --no-link --print-out-paths)" "$D/plugins/ChatBridge.jar"; chmod u+w "$D/plugins/ChatBridge.jar"; }
   echo 'eula=true' >"$D/eula.txt"
   cat >"$D/server.properties" <<P
 online-mode=false

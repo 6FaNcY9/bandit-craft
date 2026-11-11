@@ -12,7 +12,7 @@ const LAYOUT = {
   categories: [
     { name: 'INFO', access: 'readonly', channels: ['regeln-rules', 'ankündigungen', 'server-status', 'adresse-join'] },
     { name: 'COMMUNITY', access: 'open', channels: ['chat', 'screenshots', 'bauprojekte', 'hilfe'] },
-    { name: 'INGAME', access: 'open', channels: ['ingame-chat'] },
+    { name: 'INGAME', access: 'bridge', channels: ['ingame-chat'] },
     { name: 'MODERATION', access: 'mods', channels: ['meldungen', 'mod-log'] },
     { name: 'ADMIN', access: 'owner', channels: ['lab-alerts', 'bot-kommando'] }
   ]
@@ -26,7 +26,10 @@ function overwrites (access, ids) {
   const bot = ow(ids.bot, 1, BOT, 0)
   const list = {
     readonly: [ow(ids.guild, 0, 0, SEND), bot],
-    open: [],
+    // The chat bridge's token sits in the public game server, so that bot is shut out of every open channel but
+    // its own (ids.bridge is unset until the bridge exists). It can still write direct messages and rename itself.
+    open: ids.bridge ? [ow(ids.bridge, 1, 0, VIEW | SEND)] : [],
+    bridge: [],
     mods: [ow(ids.guild, 0, 0, VIEW), ow(ids.owner, 0, VIEW, 0), ow(ids.moderator, 0, VIEW, 0), bot],
     owner: [ow(ids.guild, 0, 0, VIEW), ow(ids.owner, 0, VIEW, 0), bot]
   }[access]

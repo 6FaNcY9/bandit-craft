@@ -13,6 +13,10 @@
   ...
 }: let
   plugins = import ../minecraft/plugins.nix {inherit pkgs;};
+  # The Discord chat bridge (docs/specs/2026-11-11-discord-platform.md, phase 3), built here from ./chatbridge.
+  chatbridge = import ./chatbridge {inherit pkgs;};
+  # Where bandit-nix places the bridge bot's token inside the container (root-only); without it the bridge is off.
+  bridgeToken = "/var/lib/discord-bridge/token";
 
   dataDir = "/srv/minecraft"; # inside the container; bandit-nix binds the host's world directory here
   secretEnv = "/run/minecraft-public-secret/forwarding.env";
@@ -129,7 +133,8 @@ in {
     eula = true;
     openFirewall = false;
     inherit dataDir;
-    # One variable, VELOCITY_FORWARDING_SECRET, written by minecraft-public-secret below.
+    # VELOCITY_FORWARDING_SECRET and, when the bridge has a token, CHATBRIDGE_TOKEN, written by
+    # minecraft-public-secret below. Both servers read the file; Velocity loads no plugin that could use the token.
     environmentFile = secretEnv;
     managementSystem = {
       tmux.enable = false;
@@ -153,7 +158,10 @@ in {
       symlinks = {
         "plugins/${plugins.chunky.file}" = plugins.chunky.src; # pre-generation inside the border
         "plugins/${plugins.smoderation.file}" = plugins.smoderation.src; # mute and ban from the console
+        "plugins/ChatBridge.jar" = chatbridge; # game chat to and from #ingame-chat, nothing else
       };
+      # The id of #ingame-chat in the guild (not a secret). The bridge reads and writes this one channel.
+      environment.CHATBRIDGE_CHANNEL = "1569916752781905982";
       path = [pkgs.yq-go];
       # A new world has neither file on its first start: empty ones are patched and Paper fills in the rest
       # (the private sandbox starts the same way).
@@ -206,6 +214,8 @@ in {
         install -d -m 0700 /var/lib/minecraft-public-secret /run/minecraft-public-secret
         [ -s /var/lib/minecraft-public-secret/secret ] || head -c 32 /dev/urandom | sha256sum | cut -c1-64 > /var/lib/minecraft-public-secret/secret
         printf 'VELOCITY_FORWARDING_SECRET=%s\n' "$(cat /var/lib/minecraft-public-secret/secret)" > ${secretEnv}
+        # The chat bridge's Discord token, if bandit-nix placed one. After changing it: restart this unit, then Paper.
+        if [ -s ${bridgeToken} ]; then printf 'CHATBRIDGE_TOKEN=%s\n' "$(tr -d '\n' < ${bridgeToken})" >> ${secretEnv}; fi
       '';
     };
 

@@ -44,6 +44,7 @@
       mcagents-tests = import ./ci/mcagents-tests.nix {inherit pkgs;};
       restart-warn-test = import ./ci/restart-warn-test.nix {inherit pkgs;};
       botui = import ./hosts/bandit-lab/services/minecraft/botui {inherit pkgs;};
+      chatbridge = import ./hosts/bandit-lab/services/minecraft-public/chatbridge {inherit pkgs;};
       discord-admin = pkgs.runCommand "discord-admin-tests" {nativeBuildInputs = [pkgs.nodejs_22];} ''
         cp -r ${./hosts/bandit-lab/services/discord-admin/app} app && cd app && node --test && touch $out
       '';

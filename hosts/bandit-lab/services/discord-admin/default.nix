@@ -29,6 +29,8 @@ in {
       # no countdown. From this moment on Discord shows the address, so take the whitelist off by then.
       LAUNCH_AT = "";
       # The hub's dashboard port on the host's loopback. The bot's token opens only /api/remote/ there.
+      # BRIDGE_ID: the chat bridge application's id (public, not a secret). Set it once that bot is in the guild; it is
+      # then denied #chat and the other open channels (app/layout.js).
       HUB_URL = lib.mkIf hub "http://127.0.0.1:${config.virtualisation.oci-containers.containers.mcbots.environment.DASHBOARD_PORT}";
     };
     serviceConfig = {

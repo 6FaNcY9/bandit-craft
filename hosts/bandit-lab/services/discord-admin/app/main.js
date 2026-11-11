@@ -36,7 +36,7 @@ function makeApi (token, fetchImpl = fetch, base = 'https://discord.com/api/v10'
 
 // Creates what is missing, puts back parent and overwrites of declared channels, never deletes.
 // Returns the channel ids by name, the bot's user id and how many writes it sent.
-async function applyLayout (api, guildId) {
+async function applyLayout (api, guildId, bridgeId) {
   let writes = 0
   const write = (...args) => { writes++; return api(...args) }
   const me = await api('GET', '/users/@me')
@@ -47,7 +47,7 @@ async function applyLayout (api, guildId) {
     const have = roles.find(r => r.name === name)
     roleId[name] = (have || await write('POST', `/guilds/${guildId}/roles`, { name, permissions: '0' })).id
   }
-  const ids = { guild: guildId, owner: roleId.Owner, moderator: roleId.Moderator, bot: me.id }
+  const ids = { guild: guildId, owner: roleId.Owner, moderator: roleId.Moderator, bot: me.id, bridge: bridgeId || null }
 
   const channels = await api('GET', `/guilds/${guildId}/channels`)
   const ensure = async want => {
@@ -123,7 +123,7 @@ async function main () {
   const creds = process.env.CREDENTIALS_DIRECTORY
   const token = fs.readFileSync(`${creds}/token`, 'utf8').trim()
   const api = makeApi(token)
-  const { channels, botId, writes } = await applyLayout(api, process.env.GUILD_ID)
+  const { channels, botId, writes } = await applyLayout(api, process.env.GUILD_ID, process.env.BRIDGE_ID)
   console.log(`layout applied, ${writes} writes`)
   const alertsChannel = channels['lab-alerts']
   // Bot control only where a hub is configured; a failure there leaves layout, texts and alerts running.
