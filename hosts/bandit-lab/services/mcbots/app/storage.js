@@ -19,4 +19,31 @@ const overCap = (name, stock, delta = 0, caps = CAPS) => {
 const storeFor = (name, foods = () => false, over = () => false) => ((BASE_RE.test(name) || foods(name)) && !over(name) ? 'base' : 'room');
 
 const sameXYZ = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.z === b.z;
-module.exports = {storeFor, overCap, CAPS, sameXYZ};
+
+// Natural stone and ground the bots dig by the thousand (tossJunk drops them when full).
+const JUNK = new Set(['cobblestone', 'cobbled_deepslate', 'dirt', 'gravel', 'granite', 'diorite', 'andesite', 'tuff', 'netherrack', 'calcite', 'dripstone_block', 'rooted_dirt', 'leaf_litter']);
+// Hall caps per kind: the hall held 45,260 cobblestone and 26,129 wheat seeds and its full stone chests sent the
+// surplus back into the supply chest (main server 2026-11-11). Logs are capped for the tree farm pause, never dropped.
+const HALL_CAPS = {cobblestone: 6912, wheat_seeds: 1728, sapling: 1728, logs: 1728};
+const hallCap = (n) => HALL_CAPS[kindOf(n)] ?? (JUNK.has(n) ? 1728 : 0);
+// The owner's drop list (2026-11-11): cheap stone and ground, seeds and saplings; nothing else is ever dropped.
+const DROPPABLE = (n) => JUNK.has(n) || n === 'wheat_seeds' || n.endsWith('_sapling');
+// What the chest index (Map 'x,y,z' -> {items}) says the hall holds; null when no hall chest is indexed.
+function hallTotals(chests) {
+  const {SLOTS, keyOf} = require('./storage-layout');
+  const slots = new Set(SLOTS.map(keyOf));
+  let totals = null;
+  for (const [k, c] of chests || []) {
+    if (!slots.has(k)) continue;
+    totals ||= {};
+    for (const [n, count] of Object.entries(c.items || {})) totals[n] = (totals[n] || 0) + count;
+  }
+  return totals;
+}
+// How far the hall is above this kind's cap; 0 without a cap or without an index (a stale index errs toward keeping).
+const surplus = (name, totals) => {
+  const cap = hallCap(name);
+  if (!cap || !totals) return 0;
+  return Math.max(0, Object.entries(totals).reduce((s, [n, c]) => s + (kindOf(n) === kindOf(name) ? c : 0), 0) - cap);
+};
+module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus};

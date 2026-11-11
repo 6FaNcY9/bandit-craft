@@ -2227,16 +2227,16 @@ const ownSpare = (r, keep) => keepBackOf(r, r.bot.inventory.items().filter((it) 
 const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'hunt', 'produce', 'graves']);
 const shouldEmpty = (job, queue, prefs, spareCount) => EMPTIES.has(job.type) && (job.status === 'done' || job.status === 'failed') && !job.interrupted
   && Object.getPrototypeOf(job) === Object.prototype && !queue.length && !!prefs?.chest && spareCount > 0;
-const JUNK = new Set(['cobblestone', 'cobbled_deepslate', 'dirt', 'gravel', 'granite', 'diorite', 'andesite', 'tuff', 'netherrack', 'calcite', 'dripstone_block', 'rooted_dirt', 'leaf_litter']);
+const {JUNK} = storage;
 const jobWants = (job, item) => [job.args?.block, job.args?.item].some((n) => n && (n === item || (item === 'cobblestone' && n === 'stone')));
-async function tossJunk(r, job) {
+async function tossJunk(r, job, pick = (n) => JUNK.has(n)) {
   const {bot} = r;
   // one stack of pillar material is kept: cobblestone first, else the first scaffold block carried
   const held = bot.inventory.items().map((i) => i.name);
   const keep = PILLAR_BLOCKS.find((n) => held.includes(n));
   let kept = false;
   for (const it of bot.inventory.items()) {
-    if (!JUNK.has(it.name) || jobWants(job, it.name) || r.prefs?.keep?.[it.name]) continue;
+    if (!pick(it.name) || jobWants(job, it.name) || r.prefs?.keep?.[it.name]) continue;
     if (it.name === keep && !kept) { kept = true; continue; }
     await bot.tossStack(it).catch(() => {});
     guard(job);
@@ -3555,6 +3555,11 @@ const JOBS = {
     if (own && !r.prefs?.chest) throw new Error('keine Kiste zugewiesen');
     const target = own ? r.prefs.chest : job.args; // not written into job.args: the job may be shown or resumed
     const {x, y, z} = target;
+    // Far from the base chest, cheap surplus the hall is over its cap for is dropped here, never carried home (owner 2026-11-11).
+    if (!own && storage.sameXYZ(job.args, planConfig.BASE.chest) && Math.hypot(bot.entity.position.x - x, bot.entity.position.z - z) > 48) {
+      const totals = storage.hallTotals(r.world?.chests);
+      await tossJunk(r, job, (n) => storage.DROPPABLE(n) && storage.surplus(n, totals) > 0);
+    }
     await goNear(r, job, x, y, z, 3, {under: true, doing: `walking to ${place(r, target)} to deposit`}).catch((e) => { if (own && /^could not reach/.test(e.message)) (r.unreachableChests ||= new Map()).set(layout.keyOf(target), Date.now()); throw e; });
     job.t.doing = `depositing at ${place(r, target)}`;
     const Vec3 = require('vec3').Vec3;
@@ -3650,11 +3655,13 @@ const JOBS = {
         }));
       }
       // One-off tidy-up: carry up to 9 stacks of junk, and of surplus above the quota, already in the base chest to the hall too.
+      // Only what the index says the hall has room for: a carried stack the full hall rejects would come straight back (2026-11-11).
+      const hallRoom = (n) => [...layout.chestsFor(layout.categoryOf(n, isFood)), ...layout.BY_CAT.misc].some((c) => (r.world?.chests?.get(layout.keyOf(c))?.free ?? 0) > 0);
       let carried = 0;
       const held = {};
       for (const it of chest.containerItems()) held[it.name] = (held[it.name] || 0) + it.count;
       for (const it of chest.containerItems()) {
-        if (carried >= 9 || (storage.storeFor(it.name, isFood) !== 'room' && !storage.overCap(it.name, held, -it.count))) continue;
+        if (carried >= 9 || (storage.storeFor(it.name, isFood) !== 'room' && !storage.overCap(it.name, held, -it.count)) || !hallRoom(it.name)) continue;
         guard(job);
         try { await chest.withdraw(it.type, it.metadata, it.count); carried++; held[it.name] -= it.count; } catch { break; } // inventory full
       }
@@ -3677,12 +3684,18 @@ const JOBS = {
           chest = null;
         }
       }
-      // The rooms are full or unreachable: the base chest takes the rest. With `only`, that is the coal that
-      // did not fit before (the junk carried out stays with the bot, never goes back in).
+      // The rooms are full or unreachable: the base chest takes the rest up to its quotas. With `only`, that is the coal that
+      // did not fit before; room items and anything over a quota stay with the bot (they filled the supply chest, 2026-11-11).
       if (only ? eligible().length : junk().length) {
         await goNear(r, job, x, y, z, 3, {under: true, doing: `walking back to ${place(r, job.args)} to deposit`});
         chest = await openChest(r, job, bot.blockAt(new Vec3(x, y, z)));
-        const rest = await fill(chest, eligible());
+        const stock = {};
+        for (const it of chest.containerItems()) stock[it.name] = (stock[it.name] || 0) + it.count;
+        const rest = await fill(chest, eligible().filter((it) => {
+          if (storage.storeFor(it.name, isFood, (n) => storage.overCap(n, stock)) !== 'base') return false;
+          stock[it.name] = (stock[it.name] || 0) + it.count;
+          return true;
+        }));
         noteStock(r, job, chest);
         if (rest.length) throw fullError();
       }
