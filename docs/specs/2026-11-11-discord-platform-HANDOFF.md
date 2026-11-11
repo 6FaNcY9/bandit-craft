@@ -76,6 +76,10 @@ For any session that wants to pick this up, steer it or connect its own work to 
     (the owner names server and channel). The owner's step list is `~/Downloads/bandit-werbung-plan.md`.
     Agent's calls on 2026-11-11 under the owner's "decide yourself": no posting in other Discord servers and no
     listing bot (Disboard and the like) before the opening; no German X post (the owner chose English).
+    Tester round: the owner knows nobody to ask, so with the owner's yes a call "Looking for 5 testers" went
+    out on 2026-11-11 15:31 from the owner's accounts, on X and in `#ankündigungen` (no address; testers post
+    their Minecraft name in `#hilfe`). Next: watch `#hilfe`; the owner whitelists each name on the lab
+    (`mcp whitelist add <Name>`, runbook PUBLIC.md) and sends the address privately.
 11. Legal drafts (`docs/public/`), 2026-11-11: server name and address are filled in. Found while filling
     them: the privacy text said "relay in the EU, processor under Art. 28", but the server runs through the
     free playit.gg tunnel of Developed Methods LLC, USA, which is not on the Data Privacy Framework list and
