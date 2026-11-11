@@ -211,8 +211,9 @@ Send me your Minecraft name and I'll put you on the whitelist. It is still rough
 6. Footer: imprint, privacy policy, terms (including parental consent for minors), the report address,
    and "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft."
 
-## Not written yet
+## Not finished yet
 
-Imprint, privacy policy and terms: they need the owner's registered business details, the named adult
-for chat reports and the chat log retention (about 30 days in the design). Clips and screenshots come
-from the tester phase.
+Imprint, privacy policy and terms are drafted in `docs/public/` (`IMPRESSUM.md`, `DATENSCHUTZ.md`,
+`NUTZUNGSBEDINGUNGEN.md`). Their `[OFFEN ...]`/`[OPEN ...]` marks need the owner: the registered business
+details, the named adult for chat reports and the retention periods (chat log about 30 days in the
+design). Clips and screenshots come from the tester phase.
