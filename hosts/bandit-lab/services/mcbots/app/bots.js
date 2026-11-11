@@ -22,6 +22,7 @@ const gravesJob = require('./graves');
 const tradeJob = require('./trade');
 const treeFarmJob = require('./treefarm');
 const wheatFarmJob = require('./wheatfarm');
+const cropFarmJob = require('./cropfarm');
 const fluidsJob = require('./fluids');
 const unroofJob = require('./unroof');
 const homebedJob = require('./homebed');
@@ -69,9 +70,9 @@ const {makeRide} = require('./cartride');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
 const FOOD_BELOW = 14; // fetch food from the supply chest when hungry and carrying none
 const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
-const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'tidy', 'trade', 'highway']);
+const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'tidy', 'trade', 'highway']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
-const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'highway']); // a resumed build/excavate skips what is done
+const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'highway']); // a resumed build/excavate skips what is done
 const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
 // Above these a kept kind is filed like any other item (bot19 carried 448 sticks, 7 iron pickaxes, 3 tables, 2026-11-11).
@@ -130,7 +131,7 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 
 // Normalise and validate job arguments (throws on bad input).
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
-const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm']); // one run covers the area
+const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm', 'cropfarm']); // one run covers the area
 const ENCHANTABLE = /^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$/;
 const VALIDATE = {
   help: () => ({}),
@@ -362,6 +363,14 @@ const VALIDATE = {
     if (a.fields == null) return box;
     if (!Array.isArray(a.fields) || !a.fields.length || a.fields.length > wheatFarmJob.MAX_FIELDS) throw new Error(`fields must be a list of 1 to ${wheatFarmJob.MAX_FIELDS} fields`);
     return {...box, fields: a.fields.map((f) => wheatFarmJob.farmBox(f))};
+  },
+  // Keep a farm of at most 16 x 16 with carrots, potatoes, beetroot or sugar cane going until stopped.
+  cropfarm: (a) => {
+    const box = wheatFarmJob.farmBox(zoned(a), {max: 16, what: 'farm'});
+    if (!Object.hasOwn(cropFarmJob.CROP_KINDS, a.crop ?? '')) throw new Error(`crop must be one of ${Object.keys(cropFarmJob.CROP_KINDS).join(', ')}`);
+    box.crop = a.crop;
+    if (a.y != null) box.y = num(a.y, -64, 320, 'y'); // ground level to search around; default is the supply chest's y
+    return box;
   },
   say: (a) => {
     const text = String(a.text ?? '').trim();
@@ -938,8 +947,8 @@ class BotRunner {
     if (!this.online) return; // queued jobs (grave, orders) wait for the reconnect, the spawn handler pumps again
     const job = (this.current = this.queue.shift());
     job.status = 'running';
-    this.digOnly = ['excavate', 'clear', 'part', 'shaft', 'level', 'treefarm', 'wheatfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)
-    this.digBox = ['treefarm', 'wheatfarm'].includes(job.type) ? job.args : null; // ... and only inside the farm box
+    this.digOnly = ['excavate', 'clear', 'part', 'shaft', 'level', 'treefarm', 'wheatfarm', 'cropfarm'].includes(job.type) ? NATURAL : null; // the walk to the room may dig natural ground only (Codex R3-1); a farm walk never digs logs or leaves (R5-2)
+    this.digBox = ['treefarm', 'wheatfarm', 'cropfarm'].includes(job.type) ? job.args : null; // ... and only inside the farm box
     job.startedAt = Date.now();
     job.progress = '';
     job.t = {doing: '', done: 0, total: 0, open: false}; // live detail; sub-jobs share it through the prototype
@@ -1205,7 +1214,7 @@ async function waitCalm(r, job, until = Infinity) {
 // Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (odds.js)
-const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
+const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'cropfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 // Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.
 function inShelter(r) {
@@ -2237,7 +2246,7 @@ const keepBackOf = (r, items, keep) => {
 const ownSpare = (r, keep) => keepBackOf(r, r.bot.inventory.items().filter((it) => !(TOOL_RE.test(it.name) || /_(helmet|chestplate|leggings|boots)$/.test(it.name) || r.bot.registry.foodsByName[it.name])), keep);
 // Servants empty into their own chest when a top-level gathering job ends and nothing else is queued (Misa 2026-11-06).
 // A child job (Object.create(job)) never does; the next queued job may need the items.
-const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'hunt', 'produce', 'graves']);
+const EMPTIES = new Set(['mine', 'chop', 'get', 'shift', 'excavate', 'clear', 'treefarm', 'wheatfarm', 'cropfarm', 'hunt', 'produce', 'graves']);
 const shouldEmpty = (job, queue, prefs, spareCount) => EMPTIES.has(job.type) && (job.status === 'done' || job.status === 'failed') && !job.interrupted
   && Object.getPrototypeOf(job) === Object.prototype && !queue.length && !!prefs?.chest && spareCount > 0;
 const {JUNK} = storage;
@@ -3383,6 +3392,13 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
   },
 });
 
+const {cropfarm} = cropFarmJob.makeCropFarm({
+  goNear, guard, sleep, digAt, waitCalm, at,
+  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)), // 0 without an index: a stale one never pauses
+  deposit: async (r, job, only) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only}})); },
+  withdraw: async (r, job, item, count) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})); },
+});
+
 // Put what `left()` returns into the hall: each item to its category's chests (the ones holding it first,
 // known-full ones skipped), overflow to misc, and a "full: expand the hall" event when a run is out of room.
 async function fileToHall(r, job, {fill, left, isFood, hall}) {
@@ -3480,6 +3496,7 @@ const JOBS = {
   help: (r, job) => helpOnce(r, job),
   tidy,
   wheatfarm,
+  cropfarm,
   fluids,
   grave,
   graves,
