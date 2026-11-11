@@ -78,7 +78,12 @@ For any session that wants to pick this up, steer it or connect its own work to 
     listing bot (Disboard and the like) before the opening; no German X post (the owner chose English).
     Tester round: the owner knows nobody to ask, so with the owner's yes a call "Looking for 5 testers" went
     out on 2026-11-11 15:31 from the owner's accounts, on X and in `#ankündigungen` (no address; testers post
-    their Minecraft name in `#hilfe`). Next: watch `#hilfe`; the owner whitelists each name on the lab
+    their Minecraft name in `#hilfe`). Later that day on X: the tester call is pinned, the profile has a short
+    bio and the Discord invite as website. The profile then showed only one post (the tester call): the earlier
+    English teaser is not on the profile. A German tester call was typed into X but not sent (the agent's click
+    was refused by the auto-mode check; the owner may press Post). Checked for other places: Bluesky, Threads,
+    Planet Minecraft and Minecraft Forum have no logged-in account in the owner's Chrome; Disboard shows a
+    Cloudflare check. Reddit is blocked for the agent's browser. Next: watch `#hilfe`; the owner whitelists each name on the lab
     (laptop helper `sh ~/tester.sh <Name>`, not yet run against the lab; it sends the runbook's `whitelist add`
     to the console, PUBLIC.md) and sends the address privately.
 11. Legal drafts (`docs/public/`), 2026-11-11: server name and address are filled in. Found while filling
