@@ -177,6 +177,58 @@ edge of the radius for high values. Check before testers judge it: let one accou
 times and note the coordinates. If they cluster, the rule stays at its default and a spawn plugin becomes a
 design change (the exact plugin list is part of the contract check).
 
+## Phase 2: the relay and the public address
+
+The lab is behind CGNAT, so players reach a small VPS and the VPS reaches the server over the tailnet
+(`tools/minecraft-public-relay`: HAProxy, TCP only, PROXY v2, per-address connection limits). From this
+phase on Velocity drops every connection without a PROXY header: nobody joins over the tailnet address
+directly any more, the owner included.
+
+Before: every line of `mc-probe.sh` on the lab says `ok` (the checks above as one script; the agent
+copies it to the lab's home directory).
+
+1. Owner, the VPS: Debian or Ubuntu, one public IPv4, 1 GB of memory is enough, a location near Vienna.
+   Log in with an SSH key, not a password. Nothing else runs on it: an attack on the game address must
+   not take anything else down.
+2. Owner, Tailscale admin console:
+   - Access controls, tags: add `tag:mc-relay`, owned by the admins.
+   - Access controls, one more rule: source `tag:mc-relay`, destination `tag:mc-public`, port `tcp:25565`.
+     No rule may give `tag:mc-relay` anything else, and none may let anything reach `tag:mc-relay`.
+   - Settings, Keys: an auth key that is not reusable, pre-approved, tagged `tag:mc-relay`. It is typed
+     into the script's prompt once and stored nowhere.
+3. Laptop, copy the two files and run the script on the VPS (it asks for the key):
+
+   ```bash
+   scp -r tools/minecraft-public-relay root@<VPS address>:
+   ssh -t root@<VPS address> './minecraft-public-relay/setup.sh <tailnet address of mc-public>'
+   ```
+
+   Its last lines show the relay's sockets (22 and 25565) and `server reachable`. If it says
+   `CANNOT reach`, the rule in step 2 is missing or the container is down.
+4. Ship the Velocity change (`haproxy-protocol = true`) and the matching line in bandit-nix
+   `ci/lab-mc-public.nix` together, then `lab-apply`. This restarts the public pair only.
+5. Checks:
+   - Laptop: `nix shell nixpkgs#mcstatus -c mcstatus <VPS address>:25565 status` answers with Paper's
+     version and message; the same against the tailnet address times out.
+   - Join through the VPS address with a whitelisted account. Lab:
+     `sudo journalctl -M mc-public -u minecraft-server-velocity -n 20` shows the player's own public
+     address, not the relay's tailnet address.
+   - VPS: `timeout 3 bash -c '</dev/tcp/<lab tailnet address>/22' && echo OPEN || echo closed` -> `closed`.
+6. Owner, the domain: an `A` record `mc.<domain>` to the VPS address and, so the relay can move without
+   players noticing, `SRV _minecraft._tcp.<domain>` -> `0 5 25565 mc.<domain>`. Players then type the
+   bare domain.
+
+Not part of this step and still open: the backup job for the public world and its restore drill
+(the design wants both before the whitelist comes off).
+
+## Opening (phase 3, without the store)
+
+The whitelist is a server property that Nix rewrites on every start, so `mcp whitelist off` lasts until
+the next restart only. Opening for good is a change to `white-list` and `enforce-whitelist` in
+`minecraft-public/default.nix`, shipped like any other. Before it: the launch texts' conditions
+(`PUBLIC-LAUNCH.md`, "When to post what") hold, the legal pages are reachable from the listing, and the
+report address is read.
+
 ## Turn it off
 
 - Pause, lab: `sudo systemctl stop container@mc-public`. It returns at the next boot or the next deploy
