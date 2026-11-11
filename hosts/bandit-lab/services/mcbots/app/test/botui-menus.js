@@ -140,7 +140,7 @@ assert.ok(MENUS.has('ov'));
   for (const x of blocks) assert.ok(BLOCKS.includes(x.payload.block));
   assert.deepEqual(m.slots.filter((x) => x.glint).map((x) => x.item), ['oak_log']);
   assert.equal(m.slots.filter((x) => x.slot < 4).length, 4);
-  assert.ok(m.slots.some((x) => x.item === 'stick' && x.payload.kind === 'block') && m.slots.some((x) => x.payload.a === 'shiftm'));
+  assert.ok(m.slots.some((x) => x.item === 'blaze_rod' && x.payload.kind === 'block') && m.slots.some((x) => x.payload.a === 'shiftm'));
   assert.ok(g('erze').slots.some((x) => x.item === 'ancient_debris'));
   for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(new Set(m.slots.map((x) => x.slot)).size, m.slots.length);

@@ -68,7 +68,8 @@ function morePage(view, screen) {
   const go = (i, item, name, job, lore) => slot(i, item, name, {a: 'go', bot, job}, lore ? {lore: [lore]} : {});
   return {type: 'chest', title: `${safe(bot, 20)}: mehr`, rows: 1, slots: [
     slot(0, 'ender_eye', 'Hingehen…', {a: 'placem', mode: 'goto', bot}, {glint: GLINT[s.job?.type] === 'ender_eye'}),
-    go(1, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste'), go(2, 'red_bed', 'Heim', 'homebed'), go(3, 'bone', 'Gräber holen', 'graves'), go(4, 'totem_of_undying', 'Helfen', 'help'),
+    // a guest has no supply chest, so Ausrüsten always failed for one (menu crawl 2026-11-11)
+    ...(view.owner ? [go(1, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste')] : []), go(2, 'red_bed', 'Heim', 'homebed'), go(3, 'bone', 'Gräber holen', 'graves'), go(4, 'totem_of_undying', 'Helfen', 'help'),
     slot(5, 'diamond_shovel', 'Bereich…', {a: 'aream', bot}),
     back(8, 'botm', bot)]};
 }
@@ -205,7 +206,7 @@ function gridPage(view, screen) {
   const own = mode === 'enchant' ? enchantables(haveOf(snapOf(view, view.make?.bot))) : null;
   if (own && !own.length) slots.push(slot(22, 'barrier', 'Nichts zum Verzaubern dabei', {a: 'enchm', bot: view.make?.bot}));
   [...(mode === 'block' ? view.recent || [] : []), ...(own || g.tabs[tab])].forEach((b, i) => slots.push(slot(9 + i, b, germanName(b), {a: g.pick, [g.key]: b}, mode === 'get' ? {lore: ['Klick: 16 holen · Shift: 64']} : mode === 'withdraw' ? {lore: ['Klick: 16 · Shift: 64']} : {})));
-  if (mode === 'block') slots.push(slot(52, 'stick', 'Zeig drauf', {a: 'pick', kind: 'block'}));
+  if (mode === 'block') slots.push(slot(52, 'blaze_rod', 'Zeig drauf', {a: 'pick', kind: 'block'})); // the staff's own item (a blaze rod since c6f18fe)
   const to = screen.back || 'shiftm';
   slots.push(back(53, to, to === 'botm' || to === 'chestjobs' ? screen.bot : undefined));
   return {type: 'chest', title: mode === 'block' ? 'Welcher Block?' : 'Welches Item?', rows: 6, slots};
@@ -306,7 +307,7 @@ const AREA_ICON = {excavate: 'diamond_shovel', clear: 'diamond_pickaxe', shaft: 
 function areaPage(view) {
   const a = view.area, sel = view.sel || {}, size = dims(sel);
   const slots = [slot(0, 'player_head', a.bot, {a: 'botpick', back: 'aream'}, {head: a.bot, lore: ['Klick: anderer Bot']}),
-    slot(2, 'stick', 'Zwei Ecken zeigen', {a: 'pick', kind: 'area'}, {lore: ['Stab-Klick auf Ecke 1, dann Ecke 2']}),
+    slot(2, 'blaze_rod', 'Zwei Ecken zeigen', {a: 'pick', kind: 'area'}, {lore: ['Stab-Klick auf Ecke 1, dann Ecke 2']}),
     ...(view.mark?.area ? [slot(3, 'red_banner', 'Markierter Bereich', {a: 'areafrom', from: 'mark'})] : []),
     slot(5, 'clock', 'Danach', {a: 'setwhen', when: 'next', screen: 'aream'}, {glint: a.when === 'next'}), slot(6, 'clock', 'Jetzt (ersetzt die Arbeit)', {a: 'setwhen', when: 'now', screen: 'aream'}, {glint: a.when === 'now'}),
     slot(8, 'barrier', 'Abbrechen', {a: 'areaclear'}), back(26, 'botm', a.bot)];

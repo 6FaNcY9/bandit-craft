@@ -596,7 +596,7 @@ class BotUi {
         if (r.boot !== this.boot) { // first contact skips the backlog; after a plugin restart ids start over
           this.pushed = this.boot === null;
           if (this.boot !== null) for (const st of this.states.values()) { st.open = false; st.pick = null; } // the plugin lost its tracking and will not say `closed`
-          else for (const v of Object.keys(this.viewerBots)) outline(this, v, null); // a restarted hub forgot its picks: no ghost may outlive them
+          else for (const v of Object.keys(this.viewerBots)) this.call('/outline', {player: v, box: null}).catch(() => {}); // a restarted hub forgot its picks: no ghost may outlive them; offline viewers answer 400
           this.since = this.boot === null ? r.last : 0;
           this.boot = r.boot;
           continue;
@@ -664,7 +664,7 @@ class BotUi {
       try {
         if (act) await act(st, e.data, this, viewer);
         else this.flash(st, 'Unbekannte Aktion');
-      } catch (err) { this.flash(st, 'Fehler: ' + err.message); }
+      } catch (err) { this.flash(st, 'Fehler: ' + err.message); this.log(`botui ${viewer}: ${e.data?.a}: ${err.message}`); } // players' errors reach the hub log for monitoring
       if (!st.open) return;
     } else if (e.type === 'mapclick') {
       st.screen = {name: 'kartem'}; st.lastClick = this.now();
