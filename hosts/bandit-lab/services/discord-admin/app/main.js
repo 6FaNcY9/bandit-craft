@@ -68,28 +68,31 @@ async function applyLayout (api, guildId) {
     for (const name of cat.channels) channelId[name] = await ensure({ name, type: 0, parent_id, permission_overwrites })
   }
 
-  const guild = await api('GET', `/guilds/${guildId}`)
-  const settings = {
-    verification_level: 3,
-    explicit_content_filter: 2,
-    rules_channel_id: channelId['regeln-rules'],
-    public_updates_channel_id: channelId['mod-log']
-  }
-  const changed = Object.fromEntries(Object.entries(settings).filter(([k, v]) => guild[k] !== v))
-  if (Object.keys(changed).length) await write('PATCH', `/guilds/${guildId}`, changed)
+  // Settings and AutoMod are extras: a refusal there is logged and must not stop the texts and alerts.
+  // (The guild's rules and updates channels are set in the client: Discord answers the bot's PATCH for
+  // them with 403 although it holds Manage Guild; first deploy, 2026-11-11.)
+  const extra = step => step().catch(err => console.error(`skipped: ${err.message}`))
+  await extra(async () => {
+    const guild = await api('GET', `/guilds/${guildId}`)
+    const settings = { verification_level: 3, explicit_content_filter: 2 }
+    const changed = Object.fromEntries(Object.entries(settings).filter(([k, v]) => guild[k] !== v))
+    if (Object.keys(changed).length) await write('PATCH', `/guilds/${guildId}`, changed)
+  })
 
   // Discord allows one rule per trigger type for these three, and may already have made a default one.
-  const rules = await api('GET', `/guilds/${guildId}/auto-moderation/rules`)
-  const actions = [{ type: 1 }, { type: 2, metadata: { channel_id: channelId['mod-log'] } }]
-  const want = [
-    { name: 'Bandit: Wortlisten', trigger_type: 4, trigger_metadata: { presets: [1, 2, 3] } },
-    { name: 'Bandit: Spam', trigger_type: 3, trigger_metadata: {} },
-    { name: 'Bandit: Mentions', trigger_type: 5, trigger_metadata: { mention_total_limit: 5 } }
-  ]
-  for (const rule of want) {
-    if (rules.some(r => r.trigger_type === rule.trigger_type)) continue
-    await write('POST', `/guilds/${guildId}/auto-moderation/rules`, { ...rule, event_type: 1, actions, enabled: true })
-  }
+  await extra(async () => {
+    const rules = await api('GET', `/guilds/${guildId}/auto-moderation/rules`)
+    const actions = [{ type: 1 }, { type: 2, metadata: { channel_id: channelId['mod-log'] } }]
+    const want = [
+      { name: 'Bandit: Wortlisten', trigger_type: 4, trigger_metadata: { presets: [1, 2, 3] } },
+      { name: 'Bandit: Spam', trigger_type: 3, trigger_metadata: {} },
+      { name: 'Bandit: Mentions', trigger_type: 5, trigger_metadata: { mention_total_limit: 5 } }
+    ]
+    for (const rule of want) {
+      if (rules.some(r => r.trigger_type === rule.trigger_type)) continue
+      await write('POST', `/guilds/${guildId}/auto-moderation/rules`, { ...rule, event_type: 1, actions, enabled: true })
+    }
+  })
 
   return { channels: channelId, botId: me.id, writes }
 }

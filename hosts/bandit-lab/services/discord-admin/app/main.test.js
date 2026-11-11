@@ -39,12 +39,22 @@ test('builds the layout once; a second start writes nothing', async () => {
   assert.equal(g.channels.find(c => c.id === first.channels['lab-alerts']).name, 'lab-alerts')
   assert.equal(g.channels.filter(c => c.type === 4).length, 5)
   assert.equal(g.guild.verification_level, 3)
-  assert.equal(g.channels.find(c => c.id === g.guild.rules_channel_id).name, 'regeln-rules')
   assert.equal(g.rules.filter(r => r.trigger_type === 5).length, 1, 'Discord\'s own mention rule is kept, not doubled')
   assert.equal(g.rules.length, 3)
   const second = await applyLayout(g.api, '1')
   assert.equal(second.writes, 0)
   assert.equal(g.channels.length, 2 + 5 + 13)
+})
+
+test('refused server settings do not stop the bot', async () => {
+  const g = fakeGuild()
+  const api = async (method, path, body) => {
+    if (method === 'PATCH' && path === '/guilds/1') throw new Error('PATCH /guilds/1: 403 Missing Permissions')
+    return g.api(method, path, body)
+  }
+  const { channels } = await applyLayout(api, '1')
+  assert.ok(channels['lab-alerts'])
+  assert.equal(g.rules.length, 3, 'AutoMod still runs after the refusal')
 })
 
 test('a channel dragged into another category is moved back, not duplicated', async () => {

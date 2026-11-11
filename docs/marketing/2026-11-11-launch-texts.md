@@ -11,7 +11,7 @@ Every claim below is taken from `docs/specs/2026-11-10-public-anarchy-world.md` 
 
 | Placeholder | Value | State |
 | --- | --- | --- |
-| `<DISCORD>` | permanent invite link to the guild | owner creates it (server menu, invite, "never expires") |
+| Discord | https://discord.gg/gztQRPwkvj | permanent invite to `#regeln-rules`, created 2026-11-11, never expires |
 | `<DATUM>` / `<DATE>` | opening day and time | open; set `LAUNCH_AT` in the bot's module at the same time |
 | `<ADRESSE>` / `<ADDRESS>` | the public address | only in the texts marked "from the opening on" |
 | Version | Java 26.2 on 2026-11-11 | check against `#server-status` on the day |
@@ -63,7 +63,7 @@ Drei Regeln: keine illegalen Inhalte, Drohungen oder Doxxing; den Server nicht c
 und kein Echtgeldhandel. Mehr gibt es nicht.
 
 Das Startdatum und die Adresse werden im Discord enthüllt. Wer am ersten Tag dabei ist, hat die
-unberührte Welt vor sich: <DISCORD>
+unberührte Welt vor sich: https://discord.gg/gztQRPwkvj
 
 Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
 ```
@@ -89,7 +89,7 @@ Three rules: no illegal content, threats or doxxing; no crashing the server; no 
 real-money trading. That is all of them.
 
 The launch date and the address will be revealed on Discord. Whoever joins on day one gets the
-untouched world: <DISCORD>
+untouched world: https://discord.gg/gztQRPwkvj
 
 Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
 ```
@@ -101,7 +101,7 @@ Not an official Minecraft product. Not approved by or associated with Mojang or 
 ```
 Bandit Anarchy: Anarchie ohne Reset. Eine Welt, für immer.
 
-Adresse: <ADRESSE>   |   Java Edition   |   Discord: <DISCORD>
+Adresse: <ADRESSE>   |   Java Edition   |   Discord: https://discord.gg/gztQRPwkvj
 
 WAS DICH ERWARTET
 - Fast alles ist erlaubt: Griefen, Fallen, Hack-Clients. Keine Rollbacks.
@@ -134,7 +134,7 @@ Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt od
 ```
 Bandit Anarchy: anarchy without resets. One world, forever.
 
-Address: <ADDRESS>   |   Java Edition   |   Discord: <DISCORD>
+Address: <ADDRESS>   |   Java Edition   |   Discord: https://discord.gg/gztQRPwkvj
 
 WHAT TO EXPECT
 - Almost anything goes: griefing, traps, hacked clients. No rollbacks.

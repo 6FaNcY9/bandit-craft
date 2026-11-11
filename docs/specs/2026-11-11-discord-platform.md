@@ -68,7 +68,8 @@ here.
    Built 2026-11-11 (`hosts/bandit-lab/services/discord-admin`, plan
    `2026-11-11-discord-phase1-plan.md`): Discord REST through Node's `fetch`, no npm dependencies
    (discord.js arrives with the gateway in phase 4); alerts are read from ntfy topic `mcbots`
-   with the existing read-only user. Onboarding and rules screening are switched on in the client.
+   with the existing read-only user. The rules screening ("Serverregeln", four rules) and the guild's rules and updates channels are set in the client
+   (the bot's PATCH for the two channels got 403 on the first deploy); the permanent invite is https://discord.gg/gztQRPwkvj.
 2. **Status.** `#server-status` updates within one minute of the public world going down or up.
    Built 2026-11-11 together with the launch teaser the owner asked for: the bot keeps one message
    each in `#ankündigungen` (pitch), `#regeln-rules`, `#adresse-join` and `#server-status`
