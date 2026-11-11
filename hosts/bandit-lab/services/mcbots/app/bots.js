@@ -3403,16 +3403,16 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
 
 const {cropfarm} = cropFarmJob.makeCropFarm({
   goNear, guard, sleep, digAt, waitCalm, at,
-  // The hall cap, or the quota of the chest it hands in at (a guest's own chest, else the supply chest); 0 without an index.
-  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)) || storage.chestAbove(item, r.world?.chests, r.prefs?.chest || r.supplyChest),
+  // The hall cap, or the quota of the chest it hands in at (a guest's own chest, else the supply chest); 0 without a fresh reading: errs toward working.
+  enough: (r, item) => storage.farmEnough(item, r.world, r.prefs?.chest || r.supplyChest),
   deposit: async (r, job, only) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...c, only}})); },
   withdraw: async (r, job, item, count) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...c}})); },
 });
 
 const {animalfarm} = animalFarmJob.makeAnimalFarm({
   goNear, guard, sleep, waitCalm, crafting, at, engage,
-  // The hall cap, or the quota of the chest it hands in at (a guest's own chest, else the supply chest); 0 without an index.
-  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)) || storage.chestAbove(item, r.world?.chests, r.prefs?.chest || r.supplyChest),
+  // The hall cap, or the quota of the chest it hands in at (a guest's own chest, else the supply chest); 0 without a fresh reading: errs toward working.
+  enough: (r, item) => storage.farmEnough(item, r.world, r.prefs?.chest || r.supplyChest),
   deposit: async (r, job, only) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...c, only}})); },
   withdraw: async (r, job, item, count) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...c}})); },
 });

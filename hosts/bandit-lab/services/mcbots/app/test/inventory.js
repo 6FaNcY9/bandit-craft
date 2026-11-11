@@ -28,18 +28,31 @@ assert.strictEqual(S.surplus('egg', {egg: 433}), 1);
 assert.strictEqual(S.surplus('red_wool', {white_wool: 800, red_wool: 100}), 36, 'all wool is one kind');
 for (const n of ['potato', 'beetroot', 'beetroot_seeds', 'sugar_cane', 'beef', 'porkchop', 'mutton', 'chicken', 'leather', 'feather']) assert.strictEqual(S.surplus(n, {[n]: 865}), 1, n);
 assert.strictEqual(S.surplus('stick', {stick: 9999}), 0, 'sticks have no hall cap');
-// The chest a farm hands in at: 128 per kind (all wool one kind), eggs 32; no index entry or no quota: 0 (keep working).
+// The chest a farm hands in at, read from world.stocks (exact coordinates of the chest a job opened), never from the
+// double-chest index world.chests: 128 per kind (all wool one kind), eggs 32, strictly above; older than 30 min, no entry,
+// no chest or no world: 0 (keep working).
 {
-  const at = {x: 1, y: 64, z: 2}, idx = new Map([['1,64,2', {items: {carrot: 130, white_wool: 100, red_wool: 40, egg: 32, iron_ingot: 999}}]]);
-  assert.strictEqual(S.chestAbove('carrot', idx, at), 2);
-  assert.strictEqual(S.chestAbove('black_wool', idx, at), 12, 'all wool is one kind');
-  assert.strictEqual(S.chestAbove('egg', idx, at), 0, '32 eggs: at the quota, not above');
-  assert.strictEqual(S.chestAbove('egg', new Map([['1,64,2', {items: {egg: 40}}]]), at), 8);
-  assert.strictEqual(S.chestAbove('beef', idx, at), 0);
-  assert.strictEqual(S.chestAbove('iron_ingot', idx, at), 0, 'no quota');
-  assert.strictEqual(S.chestAbove('carrot', idx, {x: 9, y: 64, z: 9}), 0, 'no index entry for that chest');
-  assert.strictEqual(S.chestAbove('carrot', undefined, at), 0, 'no index');
-  assert.strictEqual(S.chestAbove('carrot', idx, null), 0, 'no chest');
+  const now = 1e9, min = 60000, at = {x: -271, y: 66, z: -214}, key = '-271,66,-214';
+  const stocks = new Map([[key, {items: {carrot: 130, white_wool: 150, red_wool: 50, egg: 32, iron_ingot: 999}, t: now - min}]]);
+  // the live shape: a ghost entry under the same key in the double-chest index (bread, cobblestone, no wool) does not count
+  const world = {stocks, chests: new Map([[key, {items: {bread: 96, cobblestone: 128}, t: now - 11 * 1440 * min}]])};
+  assert.strictEqual(S.farmEnough('white_wool', world, at, now), 72, 'all wool colours one kind');
+  assert.strictEqual(S.farmEnough('white_wool', {chests: world.chests}, at, now), 0, 'the ghost in world.chests never counts');
+  assert.strictEqual(S.farmEnough('white_wool', {chests: new Map([[key, {items: {white_wool: 999}}]])}, at, now), 0, 'world.chests is not read for the quota');
+  assert.strictEqual(S.farmEnough('carrot', world, at, now), 2);
+  assert.strictEqual(S.farmEnough('egg', world, at, now), 0, '32 eggs: at the quota, not above');
+  assert.strictEqual(S.farmEnough('egg', {stocks: new Map([[key, {items: {egg: 33}, t: now}]])}, at, now), 1);
+  assert.strictEqual(S.farmEnough('beef', world, at, now), 0);
+  assert.strictEqual(S.farmEnough('iron_ingot', world, at, now), 0, 'no quota');
+  // a reading older than 30 minutes is unknown: the next visit refreshes it
+  const aged = (m) => ({stocks: new Map([[key, {items: {carrot: 200}, t: now - m * min}]])});
+  assert.strictEqual(S.farmEnough('carrot', aged(31), at, now), 0);
+  assert.strictEqual(S.farmEnough('carrot', aged(29), at, now), 72);
+  assert.strictEqual(S.farmEnough('carrot', world, {x: 9, y: 64, z: 9}, now), 0, 'no entry for that chest');
+  assert.strictEqual(S.farmEnough('carrot', world, null, now), 0, 'no chest');
+  assert.strictEqual(S.farmEnough('carrot', undefined, at, now), 0, 'no world');
+  // the hall part works through the same function, with or without a chest
+  assert.strictEqual(S.farmEnough('carrot', {chests: new Map([['-263,58,-219', {items: {carrot: 900}}]])}, null, now), 36);
 }
 {
   const {categoryOf} = require('../storage-layout');

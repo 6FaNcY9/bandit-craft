@@ -53,10 +53,15 @@ const surplus = (name, totals) => {
 // Farm outputs the chest a farm hands in at may hold: the hall caps never see that chest, and raw food and wool would fill
 // it (no room for torches and coal, 2026-10-10). 128 per kind, eggs 32; all wool colours are one kind.
 const CHEST_QUOTA = {carrot: 128, potato: 128, beetroot: 128, sugar_cane: 128, beef: 128, porkchop: 128, mutton: 128, chicken: 128, leather: 128, feather: 128, wool: 128, egg: 32};
-// How far the indexed chest at pos is above this kind's quota; 0 without a quota, a chest or its index entry (errs toward working).
-const chestAbove = (name, chests, pos) => {
-  const quota = CHEST_QUOTA[kindOf(name)], c = pos && chests?.get(`${pos.x},${pos.y},${pos.z}`);
-  if (!quota || !c) return 0;
+const STOCK_TTL_MS = 1800000; // an older reading is unknown: the next visit to the chest refreshes it
+// How far the chest at pos is above this kind's quota, read from world.stocks (keyed by the exact chest a job opened; the
+// double-chest index keeps the smaller half and held an 11-day-old ghost under the supply chest's other half, 2026-11-11).
+// 0 without a quota, a chest, a reading or with one older than 30 minutes (errs toward working).
+const chestAbove = (name, stocks, pos, now = Date.now()) => {
+  const quota = CHEST_QUOTA[kindOf(name)], c = pos && stocks?.get(`${pos.x},${pos.y},${pos.z}`);
+  if (!quota || !c || !(now - c.t <= STOCK_TTL_MS)) return 0;
   return Math.max(0, Object.entries(c.items || {}).reduce((s, [n, k]) => s + (kindOf(n) === kindOf(name) ? k : 0), 0) - quota);
 };
-module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove};
+// A farm kind rests while the hall is above its cap or the chest the farm hands in at is above its quota.
+const farmEnough = (name, world, pos, now = Date.now()) => surplus(name, hallTotals(world?.chests)) || chestAbove(name, world?.stocks, pos, now);
+module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove, farmEnough};
