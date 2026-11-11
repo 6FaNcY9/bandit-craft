@@ -16,7 +16,7 @@ const OUTPUTS = new Set(Object.values(KINDS).flatMap((k) => k.outputs));
 const isOutput = (n) => OUTPUTS.has(n) || n.endsWith('_wool');
 const isOpen = (b) => String(b.getProperties?.().open) === 'true';
 
-// The closed fence gates on the box border (the edge ring and the ring just outside it), within 3 of box.y.
+// The fence gates, open or closed, on the box border (the edge ring and the ring just outside it), within 3 of box.y.
 function borderGates(blockAt, box) {
   const out = [];
   for (let x = box.x1 - 1; x <= box.x2 + 1; x++) {
@@ -24,7 +24,7 @@ function borderGates(blockAt, box) {
       if (x > box.x1 && x < box.x2 && z > box.z1 && z < box.z2) continue;
       for (let y = box.y - 3; y <= box.y + 3; y++) {
         const b = blockAt(x, y, z);
-        if (b && /_fence_gate$/.test(b.name) && !isOpen(b)) out.push({x, y, z});
+        if (b && /_fence_gate$/.test(b.name)) out.push({x, y, z});
       }
     }
   }
@@ -54,12 +54,11 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
     };
     const idle = async (n = 10) => { for (let i = 0; i < n; i++) { guard(job); await sleep(1000); } };
 
-    // shortcut: gates are noted once at the start; a pen not loaded then has none noted, re-order the job near it.
-    const gates = borderGates(look, {...box, y: y0});
     const inside = () => { const p = bot.entity.position.floored(); return p.x >= box.x1 && p.x <= box.x2 && p.z >= box.z1 && p.z <= box.z2; };
-    // Close the noted gates that stand open now; a failed close is left, the job goes on.
+    // Close every border gate that stands open now, read fresh (a pen unloaded at the start, a gate opened by a resume walk
+    // or left open by the owner: the animals must not get out); a failed close is left, the job goes on.
     async function shut() {
-      for (const g of gates) {
+      for (const g of borderGates(look, {...box, y: y0})) {
         const b = look(g.x, g.y, g.z);
         if (!b || !/_fence_gate$/.test(b.name) || !isOpen(b)) continue;
         try {

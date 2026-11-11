@@ -132,6 +132,8 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 
 // Normalise and validate job arguments (throws on bad input).
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
+// The walk back to a resumed job's area; a pen job walks in itself under its own rules (no digging, no pillars, gates shut).
+const walksBack = (job, at) => at.x !== undefined && job.type !== 'animalfarm';
 const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm']); // one run covers the area
 const ENCHANTABLE = /^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$/;
 const VALIDATE = {
@@ -977,7 +979,7 @@ class BotRunner {
       if (job.resume) {
         const at = job.resume;
         job.resume = null;
-        if (at.x !== undefined) {
+        if (walksBack(job, at)) {
           try {
             await goNear(this, job, at.x, at.y, at.z, 6, {doing: 'returning to the job area'});
           } catch (e) {
@@ -3401,16 +3403,18 @@ const {wheatfarm} = wheatFarmJob.makeWheatFarm({
 
 const {cropfarm} = cropFarmJob.makeCropFarm({
   goNear, guard, sleep, digAt, waitCalm, at,
-  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)), // 0 without an index: a stale one never pauses
-  deposit: async (r, job, only) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only}})); },
-  withdraw: async (r, job, item, count) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})); },
+  // The hall cap, or the quota of the chest it hands in at (a guest's own chest, else the supply chest); 0 without an index.
+  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)) || storage.chestAbove(item, r.world?.chests, r.prefs?.chest || r.supplyChest),
+  deposit: async (r, job, only) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...c, only}})); },
+  withdraw: async (r, job, item, count) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...c}})); },
 });
 
 const {animalfarm} = animalFarmJob.makeAnimalFarm({
   goNear, guard, sleep, waitCalm, crafting, at, engage,
-  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)), // 0 without an index: a stale one never pauses
-  deposit: async (r, job, only) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, only}})); },
-  withdraw: async (r, job, item, count) => { if (!r.supplyChest) throw new Error('no supply chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})); },
+  // The hall cap, or the quota of the chest it hands in at (a guest's own chest, else the supply chest); 0 without an index.
+  enough: (r, item) => storage.surplus(item, storage.hallTotals(r.world?.chests)) || storage.chestAbove(item, r.world?.chests, r.prefs?.chest || r.supplyChest),
+  deposit: async (r, job, only) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.deposit(r, child(job, {type: 'deposit', args: {...c, only}})); },
+  withdraw: async (r, job, item, count) => { const c = chestOf(r, job); if (!c) throw new Error('no chest'); return JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...c}})); },
 });
 
 // Put what `left()` returns into the hall: each item to its category's chests (the ones holding it first,
@@ -4299,4 +4303,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {MAX_QUEUE, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};

@@ -50,4 +50,13 @@ const surplus = (name, totals) => {
   if (!cap || !totals) return 0;
   return Math.max(0, Object.entries(totals).reduce((s, [n, c]) => s + (kindOf(n) === kindOf(name) ? c : 0), 0) - cap);
 };
-module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus};
+// Farm outputs the chest a farm hands in at may hold: the hall caps never see that chest, and raw food and wool would fill
+// it (no room for torches and coal, 2026-10-10). 128 per kind, eggs 32; all wool colours are one kind.
+const CHEST_QUOTA = {carrot: 128, potato: 128, beetroot: 128, sugar_cane: 128, beef: 128, porkchop: 128, mutton: 128, chicken: 128, leather: 128, feather: 128, wool: 128, egg: 32};
+// How far the indexed chest at pos is above this kind's quota; 0 without a quota, a chest or its index entry (errs toward working).
+const chestAbove = (name, chests, pos) => {
+  const quota = CHEST_QUOTA[kindOf(name)], c = pos && chests?.get(`${pos.x},${pos.y},${pos.z}`);
+  if (!quota || !c) return 0;
+  return Math.max(0, Object.entries(c.items || {}).reduce((s, [n, k]) => s + (kindOf(n) === kindOf(name) ? k : 0), 0) - quota);
+};
+module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove};

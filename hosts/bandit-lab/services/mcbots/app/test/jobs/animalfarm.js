@@ -14,11 +14,12 @@ module.exports = async () => {
     const gate = (open) => ({name: 'oak_fence_gate', getProperties: () => ({open})});
     const world = (gates = {}) => {
       const cell = new Map(Object.entries(gates));
-      return {cell, blockAt: (x, y, z) => cell.get(`${x},${y},${z}`) || (y <= 64 ? {name: 'grass_block'} : {name: 'air'})};
+      const w = {cell, hidden: false, blockAt: (x, y, z) => (w.hidden ? null : cell.get(`${x},${y},${z}`) || (y <= 64 ? {name: 'grass_block'} : {name: 'air'}))};
+      return w;
     };
-    // closed gates on the border only: an open one, an inner one and a plain fence are left out
+    // the gates on the border, open or closed: an inner one and a plain fence are left out
     let w = world({'2,65,0': gate(false), '4,65,2': gate(true), '2,65,2': gate(false), '0,65,0': {name: 'oak_fence'}});
-    assert.deepStrictEqual(A.borderGates(w.blockAt, {...box, y: 65}), [{x: 2, y: 65, z: 0}]);
+    assert.deepStrictEqual(A.borderGates(w.blockAt, {...box, y: 65}), [{x: 2, y: 65, z: 0}, {x: 4, y: 65, z: 2}]);
 
     const mob = (id, name, x, z, metadata = {}) => ({id, name, type: 'animal', isValid: true, height: 1, position: new Vec3(x + 0.5, 65, z + 0.5), metadata});
     const herd = (name, n, from = 1) => Array.from({length: n}, (_, i) => mob(from + i, name, i % 5, Math.floor(i / 5) % 5));
@@ -124,14 +125,27 @@ module.exports = async () => {
     assert.deepStrictEqual(f.calls.craft, ['shears'], 'one try at crafting them per 5 minutes');
     assert.match(f.job.t.doing, /no shears/);
 
-    // (d) gates: the one the bot opened on its way in is closed again, the one left open stays open, a failed close goes on
+    // (d) gates: after a crossing every open border gate is closed, the one the bot opened and the one open at the start; a failed close goes on
     const gates = () => world({'2,65,0': gate(false), '4,65,2': gate(true)});
     f = fake({mobs: herd('cow', 2), inv: [['wheat', 16]], blocks: (w = gates()), start: new Vec3(2.5, 65, -3.5)});
     f.bot.entities[1].position = new Vec3(2.5, 65, 3.5);
     await assert.rejects(f.run(), Cancelled);
-    assert.deepStrictEqual(f.calls.gate, ['2,0'], 'only the gate the bot opened');
+    assert.deepStrictEqual(f.calls.gate, ['2,0', '4,2']);
     assert.strictEqual(w.blockAt(2, 65, 0).getProperties().open, false);
-    assert.strictEqual(w.blockAt(4, 65, 2).getProperties().open, true);
+    assert.strictEqual(w.blockAt(4, 65, 2).getProperties().open, false, 'open at the start: closed too, the animals must not get out');
+    // a pen not loaded at the start: its gates are still closed after the crossing
+    w = gates();
+    w.hidden = true;
+    f = fake({mobs: herd('cow', 2), inv: [['wheat', 16]], blocks: w, start: new Vec3(2.5, 65, -3.5), onGoNear: () => { w.hidden = false; }});
+    f.bot.entities[1].position = new Vec3(2.5, 65, 3.5);
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.gate, ['2,0', '4,2']);
+    assert.strictEqual(w.blockAt(2, 65, 0).getProperties().open, false);
+    // a resumed pen job makes no walk of its own before the job walks in under its own dig rules
+    const {walksBack} = require('../../bots');
+    assert.strictEqual(walksBack({type: 'animalfarm'}, {x: 1, y: 65, z: 1}), false);
+    assert.strictEqual(walksBack({type: 'cropfarm'}, {x: 1, y: 65, z: 1}), true);
+    assert.strictEqual(walksBack({type: 'cropfarm'}, {}), false);
     w = gates();
     w.failClose = true;
     f = fake({mobs: herd('cow', 2), inv: [['wheat', 16]], blocks: w, start: new Vec3(2.5, 65, -3.5)});

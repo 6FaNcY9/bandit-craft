@@ -28,6 +28,19 @@ assert.strictEqual(S.surplus('egg', {egg: 433}), 1);
 assert.strictEqual(S.surplus('red_wool', {white_wool: 800, red_wool: 100}), 36, 'all wool is one kind');
 for (const n of ['potato', 'beetroot', 'beetroot_seeds', 'sugar_cane', 'beef', 'porkchop', 'mutton', 'chicken', 'leather', 'feather']) assert.strictEqual(S.surplus(n, {[n]: 865}), 1, n);
 assert.strictEqual(S.surplus('stick', {stick: 9999}), 0, 'sticks have no hall cap');
+// The chest a farm hands in at: 128 per kind (all wool one kind), eggs 32; no index entry or no quota: 0 (keep working).
+{
+  const at = {x: 1, y: 64, z: 2}, idx = new Map([['1,64,2', {items: {carrot: 130, white_wool: 100, red_wool: 40, egg: 32, iron_ingot: 999}}]]);
+  assert.strictEqual(S.chestAbove('carrot', idx, at), 2);
+  assert.strictEqual(S.chestAbove('black_wool', idx, at), 12, 'all wool is one kind');
+  assert.strictEqual(S.chestAbove('egg', idx, at), 0, '32 eggs: at the quota, not above');
+  assert.strictEqual(S.chestAbove('egg', new Map([['1,64,2', {items: {egg: 40}}]]), at), 8);
+  assert.strictEqual(S.chestAbove('beef', idx, at), 0);
+  assert.strictEqual(S.chestAbove('iron_ingot', idx, at), 0, 'no quota');
+  assert.strictEqual(S.chestAbove('carrot', idx, {x: 9, y: 64, z: 9}), 0, 'no index entry for that chest');
+  assert.strictEqual(S.chestAbove('carrot', undefined, at), 0, 'no index');
+  assert.strictEqual(S.chestAbove('carrot', idx, null), 0, 'no chest');
+}
 {
   const {categoryOf} = require('../storage-layout');
   const isFood = (n) => !!require('minecraft-data')('26.1').foodsByName[n];
