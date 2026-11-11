@@ -86,10 +86,11 @@ const assert = require('node:assert');
   world.noteStock('bot1', {oak_log: 1});
   world.noteBlock('bot1', 'spawner', {x: 5, y: 20, z: 5}, 'overworld');
   const zone = {name: 'Base', kind: 'base', dim: 'overworld', box: {x1: 0, y1: 60, z1: 0, x2: 8, y2: 64, z2: 8}};
-  const runner = {name: 'bot1', sent: [], idle: true, fit: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'lighting'}, queue: [], isDay: true, fit: this.fit}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }};
+  const runner = {name: 'bot1', sent: [], idle: true, fit: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'lighting'}, queue: [], isDay: true, fit: this.fit}; }, enqueue(type, args, opts) { this.sent.push([type, args]); this.opts = opts; this.idle = false; }};
   const keeper = new Keeper({runners: new Map([[runner.name, runner]]), world, chest: {x: 1, y: 2, z: 3}, quotas: [], places: () => ({list: [zone]}), now: () => now});
   keeper.setEnabled(true); keeper.tick(); now += IDLE_MS; keeper.tick();
   assert.deepStrictEqual(runner.sent[0], ['light', {...zone.box, zone: 'Base'}], 'daylight idle bot receives zone lighting');
+  assert.strictEqual(runner.opts.noFar, true, 'keeper jobs never search far (bot1 at an ocean monument, 2026-11-09)');
   keeper.tick(); // observe that the bot started its job
   runner.idle = true; keeper.tick(); // finish the zone job
   runner.fit = false;
@@ -212,3 +213,17 @@ const assert = require('node:assert');
   world.getColumn = () => ({sections: [{}]});
   assert.strictEqual(require('../bots').presentTypes(b2), null, 'a section without a palette: nothing can be ruled out');
 }
+(async () => { // a zone in unloaded chunks is walked to, never "lit" from afar (bot19 in a hole, 2026-11-11)
+  const {JOBS} = require('../bots');
+  const {Vec3} = require('vec3');
+  let walks = 0;
+  const bot = {
+    blockAt: () => null, entity: {position: new Vec3(-61, 33, 59), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20,
+    registry: {blocks: {}, blocksByName: {}, foodsByName: {}}, inventory: {items: () => [{name: 'torch', count: 30}], emptySlotCount: () => 1, slots: []},
+    pathfinder: {goto: async () => { walks++; throw new Error('No path to the goal!'); }, stop() {}, setGoal() {}, movements: {}}, findBlocks: () => [],
+  };
+  const r = {bot, world: {hostilesNear: () => [], snapshot: () => ({blocks: []})}, emit() {}, protectedAreas: [], supplyChest: null, combat: {fit: () => true}};
+  await assert.rejects(JOBS.light(r, {t: {}, cancelled: false, type: 'light', args: {x1: -262, y1: 58, z1: -250, x2: -254, y2: 72, z2: -242, zone: 'Wheat field'}}), /could not reach/);
+  assert.ok(walks > 0);
+  console.log('light: unloaded zone walked to ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });

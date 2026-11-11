@@ -115,7 +115,7 @@ const REASONS = [
   [/^no torches available/, () => 'keine Fackeln'],
   [/^inventory full: no room for the emeralds/, () => 'Inventar voll, kein Platz für Smaragde'],
   [/^no room for the emeralds/, () => 'kein Platz für die Smaragde'],
-  [/^inventory full and no supply chest/, () => 'Inventar voll, keine Kiste'],
+  [/^inventory full and no supply chest/, () => 'Inventar voll, keine Kiste: eine mit "Als Kiste merken" geben'],
 ];
 function germanReason(text) {
   for (const [re, say] of REASONS) { const m = re.exec(text); if (m) return say(m); }

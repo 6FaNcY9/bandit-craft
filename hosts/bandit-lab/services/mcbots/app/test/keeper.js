@@ -64,6 +64,30 @@ const {WorldModel} = require('../world');
     solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
     assert.deepStrictEqual(solo.sent, [['get', {item: 'diamond', count: 5}], ['deposit', {...chest, only: 'diamond'}]]);
   }
+  // 2026-11-11: a full supply chest is emptied to the hall by an idle bot with room, once per cooldown (1443 cobblestone, 1 slot free)
+  {
+    let t2 = Date.now();
+    const roomy = fake('bot7'), cramped = fake('bot8');
+    roomy.snapshot = function () { return {online: true, dead: false, job: this.idle ? null : {label: 'x'}, queue: [], freeSlots: 30}; };
+    cramped.snapshot = function () { return {online: true, dead: false, job: null, queue: [], freeSlots: 0}; };
+    const w2 = new WorldModel({now: () => t2});
+    const k2 = new Keeper({runners: new Map([[cramped.name, cramped], [roomy.name, roomy]]), world: w2, chest, quotas: [['logs', 64]], now: () => t2});
+    k2.setEnabled(true);
+    k2.tick();
+    w2.noteStock('bot7', {oak_log: 64, cobblestone: 1443}, 1, chest);
+    t2 += IDLE_MS; k2.tick();
+    assert.deepStrictEqual(roomy.sent, [['deposit', chest]]);
+    assert.deepStrictEqual(cramped.sent, [], 'a bot without room carries nothing');
+    roomy.idle = true; roomy.sent.length = 0;
+    k2.tick(); t2 += IDLE_MS; k2.tick();
+    assert.deepStrictEqual(roomy.sent, [], 'once per cooldown');
+    t2 += COOLDOWN_MS; k2.tick();
+    assert.deepStrictEqual(roomy.sent, [['deposit', chest]]);
+    w2.noteStock('bot7', {oak_log: 64, cobblestone: 1443}, 3, chest);
+    roomy.idle = true; roomy.sent.length = 0;
+    k2.tick(); t2 += COOLDOWN_MS + IDLE_MS; k2.tick();
+    assert.deepStrictEqual(roomy.sent, [], 'three free slots are not full');
+  }
   // 2026-10-23: the board's bots are never the keeper's, idle or not (it took them for light and treefarm in the spike)
   for (const skip of [['bot2'], []]) {
     let t2 = Date.now();

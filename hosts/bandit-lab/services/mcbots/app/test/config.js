@@ -55,6 +55,15 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.strictEqual(at('fail', 'failed: rearm -271 66 -214 - chest full'), null, 'a helper job is not the order');
   assert.strictEqual(at('info', 'failed: produce f'), null);
   assert.deepStrictEqual(A.orderOutcome({kind: 'fail', text: 'failed: produce f - x'}, {type: 'produce'}), {end: true}, 'saved without args (older file): ends');
+  // the same failure waits 5, 10, 20 ... at most 60 min and is reported once, the third time (EM_Trader, bot19, 2026-11-11)
+  let s;
+  const trapped = (x) => ({kind: 'fail', text: `failed: treefarm -323 -163 - could not reach ${x} 49 59: No path to the goal!`});
+  for (const [i, want] of [[1, 1], [2, 2], [3, 4], [4, 8], [5, 12], [6, 12]]) {
+    s = A.failStreak(s, trapped(-60 - i));
+    assert.deepStrictEqual([s.n, s.factor, s.alert], [i, want, i === 3], `failure ${i}`);
+  }
+  assert.strictEqual(A.ORDER_RETRY_MS * 12, A.ORDER_RETRY_MAX_MS);
+  assert.strictEqual(A.failStreak(s, {kind: 'fail', text: 'failed: treefarm -323 -163 - chest full'}).n, 1, 'another reason starts over');
   // a sweep starts idle bots' orders again, also after a restart forgot the failure (bot2 after the 11:19 deploy)
   const orders = new Map([['bot1', order], ['bot2', order], ['bot3', order], ['bot4', {type: 'produce'}], ['bot5', order], ['bot6', order]]);
   const snaps = {bot1: {online: true, job: null, queue: []}, bot2: {online: true, job: {type: 'produce'}, queue: []}, bot3: {online: false},

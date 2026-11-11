@@ -58,14 +58,22 @@ const idleHeld = new Set(); // bots the owner stopped: no "Wenn frei" start unti
 let idleStopAll = false; // Stop all: no idle start anywhere until the next non-stop job
 const orderRetryAt = new Map(); // bot -> before then a failed order does not start again
 const deathTimes = new Map(); // bot -> its recent deaths (orderloop.deathLoop)
+const orderFails = new Map(); // bot -> its order's or project's failure streak (orderloop.failStreak)
 const orderEnded = (e) => {
   const order = ownerOrders.get(e.bot), out = orderloop.orderOutcome(e, order);
-  if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); }
-  if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + out.retry)); // never cuts a death hold short
+  // A failed order or project waits longer the more often it failed the same way; the third time the owner hears of it.
+  const backoff = (retry, what) => {
+    const s = orderloop.failStreak(orderFails.get(e.bot), e);
+    orderFails.set(e.bot, s);
+    if (s.alert) events.add(e.bot, 'alert', `its ${what} failed ${s.n} times the same way, next try in ${Math.round(retry * s.factor / 60000)} min: ${String(e.text).slice(0, 120)}`);
+    return retry * s.factor;
+  };
+  if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); orderFails.delete(e.bot); }
+  if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + backoff(out.retry, `${order.type} order`))); // never cuts a death hold short
   // A project goes on by itself whenever its bot is idle (sweep below) until it finishes; a failure waits like an order's.
   const p = projects.get(e.bot), pout = p && !p.paused ? orderloop.orderOutcome(e, p) : null;
-  if (pout?.end) projects.forget(e.bot);
-  if (pout?.retry && !out) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + pout.retry));
+  if (pout?.end) { projects.forget(e.bot); orderFails.delete(e.bot); }
+  if (pout?.retry && !out) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + backoff(pout.retry, `${p.type} project`)));
   // A job of the bot's idle type that ends (done or failed) leaves a pause before the next idle start.
   const ic = idleStore.get(e.bot) && idleLib.choiceOf(idleStore.get(e.bot).id), iout = ic?.key && orderloop.orderOutcome(e, {type: ORDER_JOBS[ic.key].type, args: true});
   if (iout) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + (iout.retry || orderloop.ORDER_RETRY_MS)));
@@ -219,7 +227,7 @@ function submitJob({bots, type, args, replace, remember = true}) {
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
       r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' ? {first: true} : {})});
       if (remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
-      if (remember) { type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
+      if (remember) { orderFails.delete(r.name); type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {
         delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
         projects.pause(r.name);

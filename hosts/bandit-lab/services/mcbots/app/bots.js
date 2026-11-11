@@ -803,7 +803,7 @@ class BotRunner {
   // replace: drop the queue and the running job first, so a click means "do
   // this now" instead of waiting behind earlier clicks.
   // first: the job goes ahead of the running one, which is interrupted and goes on afterwards (as after a death).
-  enqueue(type, args = {}, {replace = false, first = false, at} = {}) {
+  enqueue(type, args = {}, {replace = false, first = false, at, noFar = false} = {}) {
     if (type === 'setchest') { // first, so replace never comes with it: it only stores a prefs entry and takes effect at once, whatever runs
       if (!this.online) throw new Error('ist nicht online');
       const c = this.setChest(this.bot, null, VALIDATE.setchest(args), true);
@@ -827,6 +827,7 @@ class BotRunner {
     }
     if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`);
     const job = {id: ++this.jobSeq, type, args: VALIDATE[type](args), status: 'queued'};
+    if (noFar) job.noFar = true; // the keeper's small fetches stay near the base (bot1 hunted 12 logs 600 blocks north, at an ocean monument: 40 deaths, 2026-11-09)
     // An area job the bot already runs or has queued is not queued again: bot2's agent ordered the same shaft
     // four more times while the first one ran, and every run walks all its layers again (lab, 2026-10-13).
     const same = (j) => j && j.type === type && JSON.stringify(j.args) === JSON.stringify(job.args);
@@ -3414,6 +3415,10 @@ const JOBS = {
       if (!/torch$/.test(bot.blockAt(new Vec3(spot.spot.x, spot.spot.y, spot.spot.z))?.name || '')) throw new Error('torch did not stay beside the spawner');
       return;
     }
+    // An unloaded box reads as all lit: walk there first (bot19 "lit" five zones 200 blocks away from a hole, 2026-11-11).
+    const cx = Math.floor((a.x1 + a.x2) / 2), cz = Math.floor((a.z1 + a.z2) / 2);
+    if (!bot.blockAt(new Vec3(cx, a.y1, cz))) await goNear(r, job, cx, a.y1, cz, 8, {xz: true, doing: `walking to ${a.zone || 'the box'} to light it`});
+    guard(job);
     const chestPoints = [r.supplyChest, ...(r.world?.snapshot().blocks || []).filter((b) => ['chest', 'trapped_chest', 'barrel'].includes(b.type))].filter(Boolean);
     const points = lightCandidates(a, (x, y, z) => bot.blockAt(new Vec3(x, y, z)), (x, z) => insideAreas(r.protectedAreas, x, z), (x, y, z) => {
       const ids = ['torch', 'wall_torch'].map((n) => bot.registry.blocksByName[n]?.id).filter((n) => n !== undefined);

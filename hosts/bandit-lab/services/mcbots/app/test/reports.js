@@ -18,7 +18,7 @@
     ['no chests within 6 blocks of 1 2 3', 'keine Kiste in der Nähe'], ['no pickaxe for iron_ore and could not make or fetch one: x', 'keine Spitzhacke für iron_ore'],
     ['needs a tool that can harvest obsidian: diamond_pickaxe', 'kein Werkzeug für obsidian'], ['no free stone within 128 blocks (collected 1/4)', 'kein stone in Reichweite'],
     ['5 6 is inside a protected area', 'liegt im Schutzgebiet'], ['bob is not visible and not on the map (offline, or BlueMap unavailable)', 'Spieler nicht zu finden'],
-    ['inventory full: no room for the emeralds of a trade','Inventar voll, kein Platz für Smaragde'], ['no room for the emeralds: no path to 1 2 3','kein Platz für die Smaragde'], ['inventory full and no supply chest to empty it into','Inventar voll, keine Kiste'], ['unknown block: foo', 'unbekannter Block: foo'], ['no torches available', 'keine Fackeln'], ['kaputt', 'kaputt']]) assert.equal(germanReason(en), de, en);
+    ['inventory full: no room for the emeralds of a trade','Inventar voll, kein Platz für Smaragde'], ['no room for the emeralds: no path to 1 2 3','kein Platz für die Smaragde'], ['inventory full and no supply chest to empty it into','Inventar voll, keine Kiste: eine mit "Als Kiste merken" geben'], ['unknown block: foo', 'unbekannter Block: foo'], ['no torches available', 'keine Fackeln'], ['kaputt', 'kaputt']]) assert.equal(germanReason(en), de, en);
   // FIFO sayer: in order, one per gap, 8 waiting at most
   const sent = [], fifo = makeSayer((t) => sent.push(t), {gapMs: 10, max: 5, queue: true});
   fifo('first'); for (let i = 1; i <= 10; i++) fifo(`l${i}xxxx`);

@@ -79,6 +79,7 @@ const assert = require('node:assert');
   assert.throws(() => AD.build('rm', {}), /unknown/);
   assert.deepStrictEqual(AD.parse.players('There are 3 of a max of 12 players online: bot1, Steve, bot2'), ['bot1', 'Steve', 'bot2']);
   assert.deepStrictEqual(AD.parse.players('There are 0 of a max of 12 players online: '), []);
+  assert.deepStrictEqual(AD.parse.players('There are 2 of a max of 16 players online: [Agent·Tunnelbau] bot2, MisaBot'), ['bot2', 'MisaBot']); // role prefixes
   assert.deepStrictEqual(AD.parse.bans('Bob was banned by Console: x\nAl was banned by Console: y'), ['Bob', 'Al']);
   const t = AD.parse.tps('§6TPS from last 1m, 5m, 15m: §a19.98, §a20.0, §a*20.0\nCurrent Memory Usage: 3,459/8,192 mb (Max: 8192 mb)');
   assert.deepStrictEqual([t.tps, t.memUsedMb, t.memTotalMb], [[19.98, 20, 20], 3459, 8192]);

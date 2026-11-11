@@ -418,6 +418,9 @@ const assert = require('node:assert');
     r6.enqueue('mine', {block: 'stone', count: 2});
     await until(() => got.length === 1, 'job reached the stub bot');
     assert.deepStrictEqual(got[0], ['mine', {block: 'stone', count: 2}, {replace: false}]);
+    r6.enqueue('chop', {count: 12}, {noFar: true}); // the keeper's fetch reaches the worker without a far search
+    await until(() => got.length === 2, 'keeper job reached the stub bot');
+    assert.deepStrictEqual(got[1], ['chop', {count: 12}, {replace: false, noFar: true}]);
     assert.strictEqual(await client.world.claim('bot6', 'overworld:40,60,5'), true);
     assert.ok(world.claimedByOther('bot1', 'overworld:40,60,5'));
     assert.ok(world.claim('bot1', 'overworld:41,60,5'));

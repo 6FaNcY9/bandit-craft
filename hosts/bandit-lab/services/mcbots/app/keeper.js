@@ -20,6 +20,7 @@ const COOLDOWN_MS = 10 * 60 * 1000; // after a chain that did not raise the stoc
 const ASSIGN_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_WANT = 4096;
 const MAX_JOB = 64; // items per chain: short chains, fresh numbers in between
+const FULL_SLOTS = 2, TIDY_ROOM = 12; // a chest this full gets emptied by a bot with this many free slots (9 stacks carried)
 
 const KINDS = {
   logs: (n) => n.endsWith('_log'),
@@ -184,6 +185,12 @@ class Keeper {
       this.planLighting(snaps, t, busy);
       return;
     }
+    // 1b. A full chest takes nothing in: an idle bot with room carries surplus to the hall (a deposit at the base chest takes 9
+    // stacks along). 1443 cobblestone left 1 slot, and bot19's deposits failed "chest full?" (main server 2026-11-11).
+    if (stock.free !== null && stock.free !== undefined && stock.free <= FULL_SLOTS && (this.tidyAt || 0) <= t && busy.size < MAX_BOTS) {
+      const r = [...this.runners.values()].find((x) => !busy.has(x.name) && this.idle(snaps.get(x.name)) && t - (this.idleSince.get(x.name) ?? t) >= IDLE_MS && (snaps.get(x.name).freeSlots ?? 0) >= TIDY_ROOM);
+      if (r) this.assign(r, [['deposit', {...this.chest}]], () => { this.tidyAt = t + COOLDOWN_MS; busy.add(r.name); }, `${r.name}: the supply chest is full (${stock.free} free slots), carrying surplus to the hall`);
+    }
     // 2. the quota that is shortest relative to its want and has nobody on it (the order of the list breaks a tie).
     // shortcut: urgency only, not the plan's cost or the bots' travel time; weigh those once the archive shows which plans run long.
     this.notes.clear();
@@ -243,7 +250,7 @@ class Keeper {
 
   assign(r, chain, onOk, text) {
     try {
-      for (const [type, args] of chain) r.enqueue(type, args, {replace: false});
+      for (const [type, args] of chain) r.enqueue(type, args, {replace: false, noFar: true}); // a quota is not worth a trip far out
     } catch (e) {
       r.enqueue('stop', {}, {});
       this.say(`could not give ${r.name} the job: ${e.message}`);
