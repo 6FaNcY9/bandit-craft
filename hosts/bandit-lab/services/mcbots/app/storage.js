@@ -12,7 +12,7 @@ const BASE_RE = /^(stick|[a-z_]+_(log|planks|sapling|wool|bed|pickaxe|axe|shovel
 // shortcut: planks 256 across all wood kinds is a guess; raise it if builds starve for planks in the chest.
 const CAPS = [['logs', 64], ['cobblestone', 128], ['stone_bricks', 128], ['coal', 32], ['torch', 64], ['raw_iron', 32], ['sapling', 32],
   ['bread', 128], ['iron_pickaxe', 2], ['stick', 64], ['planks', 256]];
-const kindOf = (n) => (n.endsWith('_log') ? 'logs' : n.endsWith('_sapling') ? 'sapling' : n.endsWith('_planks') ? 'planks' : n === 'charcoal' ? 'coal' : n);
+const kindOf = (n) => (n.endsWith('_log') ? 'logs' : n.endsWith('_sapling') ? 'sapling' : n.endsWith('_planks') ? 'planks' : n.endsWith('_wool') ? 'wool' : n === 'charcoal' ? 'coal' : n);
 // Is the chest already at (or, with delta < 0, would it stay at) the cap of this item's kind? stock: {name: count}.
 const overCap = (name, stock, delta = 0, caps = CAPS) => {
   const cap = caps.find(([k]) => k === kindOf(name));
@@ -26,7 +26,9 @@ const sameXYZ = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.z === b.
 const JUNK = new Set(['cobblestone', 'cobbled_deepslate', 'dirt', 'gravel', 'granite', 'diorite', 'andesite', 'tuff', 'netherrack', 'calcite', 'dripstone_block', 'rooted_dirt', 'leaf_litter']);
 // Hall caps per kind: the hall held 45,260 cobblestone and 26,129 wheat seeds and its full stone chests sent the
 // surplus back into the supply chest (main server 2026-11-11). Logs are capped for the tree farm pause, never dropped.
-const HALL_CAPS = {cobblestone: 6912, wheat_seeds: 1728, sapling: 1728, logs: 1728};
+const HALL_CAPS = {cobblestone: 6912, wheat_seeds: 1728, sapling: 1728, logs: 1728,
+  // Farm outputs (animals and crops plan): the farms pause at the cap; all wool colours are one kind.
+  carrot: 864, potato: 864, beetroot: 864, beetroot_seeds: 864, sugar_cane: 864, beef: 864, porkchop: 864, mutton: 864, chicken: 864, leather: 864, feather: 864, wool: 864, egg: 432};
 const hallCap = (n) => HALL_CAPS[kindOf(n)] ?? (JUNK.has(n) ? 1728 : 0);
 // The owner's drop list (2026-11-11): cheap stone and ground, seeds and saplings; nothing else is ever dropped.
 const DROPPABLE = (n) => JUNK.has(n) || n === 'wheat_seeds' || n.endsWith('_sapling');

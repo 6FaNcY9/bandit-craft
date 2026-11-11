@@ -22,6 +22,19 @@ assert.strictEqual(S.surplus('iron_ingot', {iron_ingot: 99999}), 0, 'kinds witho
 assert.strictEqual(S.DROPPABLE('oak_log'), false, 'logs are never dropped');
 assert.strictEqual(S.DROPPABLE('oak_sapling') && S.DROPPABLE('wheat_seeds') && S.DROPPABLE('cobblestone'), true);
 assert.strictEqual(S.surplus('cobblestone', null), 0, 'no index: keep');
+// Farm outputs (animals and crops plan): crops, meat and drops cap at 864 per kind, eggs at 432, all wool is one kind.
+assert.strictEqual(S.surplus('carrot', {carrot: 865}), 1);
+assert.strictEqual(S.surplus('egg', {egg: 433}), 1);
+assert.strictEqual(S.surplus('red_wool', {white_wool: 800, red_wool: 100}), 36, 'all wool is one kind');
+for (const n of ['potato', 'beetroot', 'beetroot_seeds', 'sugar_cane', 'beef', 'porkchop', 'mutton', 'chicken', 'leather', 'feather']) assert.strictEqual(S.surplus(n, {[n]: 865}), 1, n);
+assert.strictEqual(S.surplus('stick', {stick: 9999}), 0, 'sticks have no hall cap');
+{
+  const {categoryOf} = require('../storage-layout');
+  const isFood = (n) => !!require('minecraft-data')('26.1').foodsByName[n];
+  for (const n of ['carrot', 'potato', 'beetroot', 'beetroot_seeds', 'sugar_cane', 'beef', 'porkchop', 'mutton', 'chicken']) assert.strictEqual(categoryOf(n, isFood), 'farm_food', n);
+  assert.strictEqual(categoryOf('white_wool', isFood), 'build');
+  for (const n of ['egg', 'feather', 'leather']) assert.strictEqual(categoryOf(n, isFood), 'mobs', n);
+}
 assert.strictEqual(S.hallTotals(new Map([['1,2,3', {items: {cobblestone: 9}}]])), null, 'chests outside the hall do not count');
 assert.strictEqual(S.hallTotals(undefined), null);
 
