@@ -221,6 +221,8 @@ state (`/var/lib/playit/playit.toml`, the `playit` user), no sops key.
      version and message; the same against the tailnet address times out. Ping the **name**, never the
      edge's IP: playit routes by the hostname in the Minecraft handshake and resets a connection that
      carries the bare IP (`BrokenPipe`/`ECONNRESET`), also when the tunnel is healthy.
+     Give players `<name>:<port>`: the bare name needs the SRV lookup, which fails on some resolvers
+     ("Unknown host"), and a pasted trailing space fails the same way.
    - One `control session expired; reconnecting reason=SessionNotSetup` line right after `playit
      connected; tunnels loaded` is harmless when nothing follows it.
    - Join through the playit address with a whitelisted account. Lab:
