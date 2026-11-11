@@ -70,8 +70,11 @@
     [forced-hosts]
 
     [advanced]
-    # Phase 2 turns this on for the relay (PROXY v2). In phase 1 testers reach the tailnet address directly.
-    haproxy-protocol = false
+    # Phase 2: every connection comes from the relay (tools/minecraft-public-relay) and carries the player's
+    # address in a PROXY v2 header. A connection without the header is dropped, so nobody joins over the
+    # tailnet address directly any more; the tailnet policy admits the relay's tag to this port.
+    # Checked locally against this build: a status ping through HAProxy answers, a direct one does not.
+    haproxy-protocol = true
   '';
 
   # Aikar's G1 flags around a fixed heap, as on the private server.
