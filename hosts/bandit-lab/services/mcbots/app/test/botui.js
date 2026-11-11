@@ -1057,4 +1057,5 @@ async function fake() {
     end();
   }
   console.log('botui ok');
+  require('./botui-crawl'); // the menu crawler blocks the loop for a second: it runs here, alone, after the timing asserts
 })().catch((e) => { console.error(e); process.exit(1); });
