@@ -180,7 +180,7 @@ Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/super
   Right-click emits `open` with the gaze (block, and `entity` from `getTargetEntity(32)`): aimed at a bot the viewer commands → that
   bot's screen; any other hit → Auftrag with `contextJobs` rows; nothing hit and no corner → Lagebild. Left-click emits `lage`.
   Shift + F sends the same `open`; `/bots` emits `lage` (always the Lagebild).
-- Wenn frei (`app/idle.js`, `STATE_DIR/idle.json`): per bot one of holz, stein, wache, baumfarm (keeper for the owner's bots). The
+- Wenn frei (`app/idle.js`, `STATE_DIR/idle.json`): per bot one of holz, stein, wache, baumfarm, tiere, feld (keeper for the owner's bots). The
   minute sweep starts it after 60 s idle when the bot has no owner order, project, keeper work or board slice; `remember:false`, so it
   never becomes a standing order. A `stop` holds the bot's Wenn frei until its next order; Stop-all holds all. An idle job's end waits
   `ORDER_RETRY_MS`. Holds are in memory (a hub restart clears them).
@@ -223,7 +223,7 @@ Chest and hopper windows with item icons replace the text dialogs as the main su
 - Open: `/bots` or staff left click → overview `ov` (a head per bot with a health bar, a badge for its job, bottom row Alle: Stopp, Alle: Komm,
   Karte, Bauplan hochladen, Einstellungen). Staff right click on a bot, or a head → bot page `botm`.
 - Bot page icons: lead Folg mir, ender pearl Komm her, sword Bewach diesen Ort, chest Einlagern, barrier Stopp, pickaxe Abbauen…, axe Holz holen,
-  bricks Bauen…, sapling Baumfarm, clock Wenn frei… (`idlem`), hopper Kiste merken, barrel Inventar (`invm`), arrow Zurück. A glint marks the active job.
+  bricks Bauen…, sapling Baumfarm, carrot Tiere & Felder… (`farmm`, see Farms), clock Wenn frei… (`idlem`), hopper Kiste merken, barrel Inventar (`invm`), arrow Zurück. A glint marks the active job.
 - Shift window `shiftm` (hopper, staff right click on a minable block opens it pre-filled): five slots Wer → Was → Wie viel (16/64/256/∞) → Wohin → Los.
   Was opens the block grid `gridm` (tabs, recently used first, pages); a log gives `shiftlogs` or `chop`, infinite gives `shift`/`shiftlogs`.
 - Pointing: `Zeig drauf` (grid) and `Kiste merken` / Wohin close the menu and take the viewer's next staff right click as the answer (60 s,
@@ -650,6 +650,8 @@ Each bot runs its queue one job at a time. Chat is never read as a command.
 | `seal` | x1 z1 x2 z2, y1, y2 | walls over the cave openings in the four side faces of a box (at most 24 x 24, 160 high; the shaft plus a margin): see "Sealing cave openings" |
 | `treefarm` | x1 z1 x2 z2 | tree farm in an area of 3 x 3 to 24 x 24 until stopped: plants saplings (oak first, then birch, spruce, acacia, cherry, jungle; never dark oak or pale oak, which need a 2x2) on a 3-block grid on grass/dirt cells with 4 free blocks above, takes saplings from the supply chest when it has none, chops grown trees (only natural `*_log` blocks inside the area whose base stands on soil and that carry leaves; leaves stay), picks up saplings, apples and logs that fall inside the area, replants, uses bone meal if it has some, and puts the logs into the supply chest when the inventory fills or there is nothing to do. Fails with `no saplings` when the chest has none and nothing grows. Protected areas are skipped; the pathfinder may dig only logs and leaves on the way. Needs room in the supply chest (a full chest fails the job with `destination full`). Live (laptop, 2026-10-10): 4 saplings planted in 90 s, a grown oak chopped (4 logs), its drops and the saplings from decaying leaves picked up and replanted, Stop ends it as `stopped`. Agent command `!tendTreeFarm(x1, z1, x2, z2)` |
 | `wheatfarm` | x1 z1 x2 z2 [fields] | wheat field in an area of at most 9 x 9 until stopped (y is the ground the bot finds; a field that is one of the dashboard's wheat zones brings all of them, up to 4, tended in turn, and a field with a dry centre gets a water bucket filled outside the fields and poured there): harvests wheat at age 7, picks up wheat and seeds, clears grass off soil, tills dirt/grass with a hoe (crafts a wooden or stone hoe when it has none), plants `wheat_seeds`, crafts bread from every 3 wheat (at a crafting table; walks to the base chest first when none is near) and hands bread and wheat in at the base chest (`BASE.chest`) at 16 bread or a nearly full inventory (all bread goes, so the bot keeps none to eat). Water is not placed by the job: only soil within 4 blocks of water on its level or one above is tilled; with no water at all it fails with `no water in the field: place a water source at x y z`, except that a `water_bucket` in the inventory is poured into the dug-out centre cell. No seeds: breaks short/tall grass within 24 blocks (at most 2 minutes, then a 5 minute pause). Waits (`waiting for the wheat to grow`) when nothing is ripe. Protected areas are skipped; the walk digs natural ground inside the area only. The plan objective `wheat-farm` uses `BASE.wheat` (placeholder, confirm the terrain). Live (sandbox, 2026-10-15, after the farmland arrival fix): 3 ripe wheat harvested, bread baked, soil tilled with a hoe, 24 seeds planted, grass broken for more seeds; the bucket pour is unverified. Agent command `!tendWheatField(x1, z1, x2, z2)` |
+| `cropfarm` | x1 z1 x2 z2, crop, optional y | carrots, potatoes, beetroot or sugar cane in a box of at most 16 x 16 until stopped; see Farms |
+| `animalfarm` | x1 z1 x2 z2, optional y | tends a fenced pen of at most 16 x 16 (cows, sheep, pigs, chickens) until stopped; see Farms |
 | `get` | item, count (1-256) | gets `count` more of any item by whatever way the game offers, worked out by `app/acquire.js` (see below); dashboard card "Besorgen" |
 | `say` | text | up to 200 characters; text starting with `/` is rejected |
 | `stop` | | clears the queue and stops walking/digging |
@@ -976,6 +978,52 @@ These rules come from Codex's MC-3 review (2026-10-10).
 - **Tests first**: pure functions for validation (bounds, protected areas,
   allowed blocks), ordering and the "has a neighbour" rule, with a fake world,
   before any bot places a block.
+
+## Farms (`animalfarm`, `cropfarm`, 2026-11-11)
+
+Spec `docs/superpowers/specs/2026-11-11-animals-crops-design.md`. Both jobs run until stopped, like `treefarm`, and are
+kept over restarts. Code: `app/animalfarm.js` (decisions in `app/animals.js`), `app/cropfarm.js`; checks `VALIDATE` in
+`app/bots.js`; menu `farmPage` in `app/botui-menus.js`, `ACTIONS.farmm` / `ACTIONS.farmgo` in `app/botui.js`.
+
+| Job | Arguments | Does |
+| --- | --- | --- |
+| `cropfarm` | x1 z1 x2 z2 (at most 16 x 16), `crop` = `carrot`, `potato`, `beetroot` or `sugar_cane` (`CROP_KINDS` in `cropfarm.js`), optional y | harvests ripe crops, picks the drops up, replants the same cell from the drops (else 16 from the chest), clears grass off wet soil and tills it with a hoe (asks the chest for an iron, stone or wooden hoe when it has none). Sugar cane: cuts only the block above the base; cane is never planted. |
+| `animalfarm` | x1 z1 x2 z2 (at most 16 x 16), optional y (ground level of the gates) | per kind (cow, sheep, pig, chicken; `KINDS` in `animals.js`): feeds two unfed adults to breed (cows/sheep wheat, pigs carrot, chickens wheat_seeds; 16 from the chest when short), shears woolly sheep (crafts shears when it has none), picks up eggs and drops, culls adults above the kept number. Never a named animal, never a baby. |
+
+**Start (picture menu).** Bot page → carrot **Tiere & Felder…** (slot 21) → page `farmm`.
+- First time: **Zwei Ecken zeigen** (menu closes, two staff clicks, the page comes back) or **Markierter Bereich**, then one
+  picture: **Tiere** (wheat) or a crop (Karotten, Kartoffeln, Rote Bete, Zuckerrohr). From the bot page that is 3 menu clicks
+  (plus the 2 staff clicks for the corners). The box is saved as a place `Tiere x z` (kind `pen`) or `Feld x z` (kind `field`,
+  with its crop; `ZONE_KINDS` in `places.js`).
+- After that: the saved farm is a picture in the bottom row of `farmm` (at most 8 shown) and starts with one click, so 2
+  clicks from the bot page.
+- A box over 16 x 16 is refused with `zu groß: höchstens 16 x 16`; the corners stay selected.
+- Wenn frei: **Tiere** / **Feld** start the first saved pen / field (`zone: 'first'` in `app/idle.js`); without one the
+  choice does nothing (`keine Tier-Zone` / `keine Feld-Zone`). Guests see the page too; `ground()` limits them to their ground.
+- Stopp and Weiter work as for any job.
+
+**Numbers (checkable in the code).**
+- Retry: a missing input (food, shears, seeds, hoe) or a failed hand-in never fails the job; that chore waits
+  `RETRY_MS` = 300000 ms (5 minutes) in `animalfarm.js` and `cropfarm.js`. `job.t.doing` says what it waits for.
+- Kept animals: `KEEP` = 8 adults per kind; at most `CULL_MAX` = 4 culled per round (`animals.js`).
+- Pen bound: no breeding once a kind has `PEN_MAX` = 16 (adults plus babies) in the pen (`animals.js`), so at most 64 over
+  the four kinds. Fed and shorn animals are remembered `MEMORY_MS` = 300000 ms (`animals.js`).
+- Hall caps: `HALL_CAPS` in `app/storage.js`: 864 each of carrot, potato, beetroot, beetroot_seeds, sugar_cane, beef,
+  porkchop, mutton, chicken, leather, feather, wool (all colours); egg 432.
+- Pause: `cropfarm` waits while the hall holds more than the cap of its crop; `animalfarm` leaves a kind alone while any of
+  its outputs is above the cap. With nothing left to do: `enough in the hall, waiting`, checked again every 60 s, never a
+  failure. Outputs go to the supply chest (owner bots: the hall; guests: their own chest).
+
+**Owner rules (the bots only tend).**
+- Fence the pen and give it a fence gate. The bot notes the closed gates on the box border at the start and closes them again
+  after it walks through; a gate you left open stays open. On a pen walk it digs nothing and builds no pillars.
+- Put the first two animals of a kind in by hand: breeding needs 2 adults.
+- Protect pets with a name tag: named animals are never fed, shorn or culled. A lead does not protect an animal inside
+  the box (the code does not look at leads).
+- Make the field by hand, with its water: the bots never place water (they till only wet soil).
+
+**Not done by the bots:** building pens, catching or leading animals, placing water, planting sugar cane, cooking meat,
+horses, wolves, cats or any other animal.
 
 ## Limits
 
