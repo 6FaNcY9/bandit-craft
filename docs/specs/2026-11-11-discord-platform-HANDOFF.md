@@ -51,9 +51,6 @@ For any session that wants to pick this up, steer it or connect its own work to 
    `#ingame-chat`, `@everyone` typed in the game does not ping, the private world is untouched.
 7. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
    switch "Public Bot" off for `bandit-admin` in the developer portal.
-8. Open from the bridge's security review: `discord-admin/app/gateway.js` puts its wait back to 5 s on every READY, so a
-   connection that drops again and again after READY could pass Discord's 1000 identifies a day (token reset). The
-   bridge plugin keeps logins 90 s apart; the admin bot does not yet.
 
 ## How to reach this session
 
