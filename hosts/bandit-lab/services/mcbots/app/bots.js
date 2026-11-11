@@ -3025,7 +3025,7 @@ async function helpOnce(r, job) {
     try {
       // What the helper carries goes first; get makes only the rest.
       const want = Math.min(need.count, 64), carried = r.bot ? crafting.count(r.bot, need.item) : 0;
-      const childJob = child(job, {type: 'get', args: {item: need.item, count: want - carried}});
+      const childJob = child(job, {type: 'get', args: {item: need.item, count: want - carried}, noFar: true}); // a builder's help never walks off on a far search
       try { if (carried < want) await JOBS.get(r, childJob); }
       catch (e) {
         guard(job);
@@ -3302,6 +3302,9 @@ const produceStep = (p, r, job) => p.step().catch((e) => {
   return {idle: 'the way to the chests is blocked'};
 });
 async function produce(r, job) {
+  // A gather that finds nothing near rests 10 min; far hops of 96-768 blocks walked bot2 into an ocean monument (died at z -817,
+  // 2026-11-11, as bot1 on 2026-11-09) and bot19 600 blocks south for snow.
+  job.noFar = true;
   const p = producer(r, job, job.args);
   for (;;) {
     guard(job);
