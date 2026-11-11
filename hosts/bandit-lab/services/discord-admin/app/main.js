@@ -1,10 +1,13 @@
-// bandit-admin: keeps the public guild's layout and mirrors lab alerts from ntfy into #lab-alerts.
+// bandit-admin: keeps the public guild's layout and its INFO texts (teaser, rules, address, server status)
+// and mirrors lab alerts from ntfy into #lab-alerts.
 // Discord REST only (no gateway until slash commands arrive in phase 4).
 
 const fs = require('node:fs')
 const { setTimeout: sleep } = require('node:timers/promises')
 const { LAYOUT, overwrites, diffChannel } = require('./layout')
 const { toDiscord, readCredentials, subscribe } = require('./alerts')
+const { ping, resolveAddress, tracker, keeper } = require('./status')
+const texts = require('./texts')
 
 function makeApi (token, fetchImpl = fetch, base = 'https://discord.com/api/v10') {
   return async function api (method, path, body) {
@@ -30,7 +33,7 @@ function makeApi (token, fetchImpl = fetch, base = 'https://discord.com/api/v10'
 }
 
 // Creates what is missing, puts back parent and overwrites of declared channels, never deletes.
-// Returns the id of #lab-alerts and how many writes it sent.
+// Returns the channel ids by name, the bot's user id and how many writes it sent.
 async function applyLayout (api, guildId) {
   let writes = 0
   const write = (...args) => { writes++; return api(...args) }
@@ -88,14 +91,37 @@ async function applyLayout (api, guildId) {
     await write('POST', `/guilds/${guildId}/auto-moderation/rules`, { ...rule, event_type: 1, actions, enabled: true })
   }
 
-  return { alertsChannel: channelId['lab-alerts'], writes }
+  return { channels: channelId, botId: me.id, writes }
+}
+
+// Every 30 s: ping the public world and keep the four INFO texts current (they change with the status,
+// and all at once when LAUNCH_AT passes).
+async function infoLoop (api, channels, botId, { address, launchAt }) {
+  const track = tracker()
+  const set = {
+    announcement: keeper(api, channels['ankündigungen'], botId),
+    rules: keeper(api, channels['regeln-rules'], botId),
+    join: keeper(api, channels['adresse-join'], botId),
+    status: keeper(api, channels['server-status'], botId)
+  }
+  for (;;) {
+    const result = await resolveAddress(address).then(a => ping(a.host, a.port)).catch(() => null)
+    const now = Math.floor(Date.now() / 1000)
+    for (const [name, text] of Object.entries(texts.all({ launchAt, now, state: track(result), address }))) {
+      await set[name](text).catch(err => console.error(`${name}: ${err.message}`))
+    }
+    await sleep(30000)
+  }
 }
 
 async function main () {
   const creds = process.env.CREDENTIALS_DIRECTORY
   const api = makeApi(fs.readFileSync(`${creds}/token`, 'utf8').trim())
-  const { alertsChannel, writes } = await applyLayout(api, process.env.GUILD_ID)
+  const { channels, botId, writes } = await applyLayout(api, process.env.GUILD_ID)
   console.log(`layout applied, ${writes} writes`)
+  const alertsChannel = channels['lab-alerts']
+  // LAUNCH_AT: unix seconds of the public opening; unset means "soon" and no countdown.
+  infoLoop(api, channels, botId, { address: process.env.MC_ADDRESS, launchAt: Number(process.env.LAUNCH_AT) || null })
   await subscribe({
     url: process.env.NTFY_URL,
     auth: readCredentials(fs.readFileSync(`${creds}/ntfy`, 'utf8')),

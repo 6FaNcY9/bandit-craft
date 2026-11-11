@@ -1,5 +1,6 @@
-# bandit-admin, the public guild's admin bot (docs/specs/2026-11-11-discord-platform.md, phase 1): keeps the
-# guild layout and mirrors the lab's ntfy alerts into the owner-only #lab-alerts. The bridge bot (phase 3) is a
+# bandit-admin, the public guild's admin bot (docs/specs/2026-11-11-discord-platform.md, phases 1 and 2): keeps the
+# guild layout and the INFO texts (teaser with countdown, rules, address, server status) and mirrors the lab's ntfy
+# alerts into the owner-only #lab-alerts. The bridge bot (phase 3) is a
 # separate application inside mc-public; this token never enters that container.
 {
   config,
@@ -16,6 +17,11 @@
     environment = {
       GUILD_ID = "1569890251738980352";
       NTFY_URL = "http://127.0.0.1:2586/mcbots";
+      # The public world's address (playit tunnel, port from its SRV record). Shown in Discord only from the opening on.
+      MC_ADDRESS = "impairment-peterson.tun.ply.gg";
+      # The public opening in unix seconds (`date -d '2026-11-28 18:00' +%s`). Empty: the texts say "soon" and show
+      # no countdown. From this moment on Discord shows the address, so take the whitelist off by then.
+      LAUNCH_AT = "";
     };
     serviceConfig = {
       ExecStart = "${pkgs.nodejs_22}/bin/node ${./app}/main.js";

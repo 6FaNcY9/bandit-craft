@@ -36,7 +36,7 @@ test('builds the layout once; a second start writes nothing', async () => {
   const g = fakeGuild()
   const first = await applyLayout(g.api, '1')
   assert.ok(first.writes > 0)
-  assert.equal(g.channels.find(c => c.id === first.alertsChannel).name, 'lab-alerts')
+  assert.equal(g.channels.find(c => c.id === first.channels['lab-alerts']).name, 'lab-alerts')
   assert.equal(g.channels.filter(c => c.type === 4).length, 5)
   assert.equal(g.guild.verification_level, 3)
   assert.equal(g.channels.find(c => c.id === g.guild.rules_channel_id).name, 'regeln-rules')

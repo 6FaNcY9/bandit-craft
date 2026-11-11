@@ -70,6 +70,13 @@ here.
    (discord.js arrives with the gateway in phase 4); alerts are read from ntfy topic `mcbots`
    with the existing read-only user. Onboarding and rules screening are switched on in the client.
 2. **Status.** `#server-status` updates within one minute of the public world going down or up.
+   Built 2026-11-11 together with the launch teaser the owner asked for: the bot keeps one message
+   each in `#ankündigungen` (pitch), `#regeln-rules`, `#adresse-join` and `#server-status`
+   (`app/texts.js`, German and English). Until the opening they tease and hide the address; the
+   opening is the one value `LAUNCH_AT` in the module (unix seconds; empty means "soon", a date
+   gives Discord's own live countdown `<t:…:R>`). From that moment the address and the live status
+   show, so the whitelist must be off by then. Two lost pings in a row mean offline (30 s apart).
+   Launch texts for server lists and the teaser page: `docs/marketing/`.
 3. **Chat bridge.** Bridge application and SOPS value; plugin pinned in `plugins.nix`. This
    changes the public world's "exact plugin list", so bandit-nix `ci/lab-mc-public.nix` gains the
    plugin in the same change. Runtime check: chat both ways, mentions are stripped, the private
