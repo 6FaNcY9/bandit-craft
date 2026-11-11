@@ -23,8 +23,9 @@ in {
     environment = {
       GUILD_ID = "1569890251738980352";
       NTFY_URL = "http://127.0.0.1:2586/mcbots";
-      # The public world's address (playit tunnel, port from its SRV record). Shown in Discord only from the opening on.
-      MC_ADDRESS = "impairment-peterson.tun.ply.gg";
+      # The public world's address: an SRV record at Cloudflare that points to the playit tunnel (owner's
+      # ~/bandit-domain.sh). Shown in Discord only from the opening on.
+      MC_ADDRESS = "bandit.atmosphaere.at";
       # The public opening in unix seconds (`date -d '2026-11-28 18:00' +%s`). Empty: the texts say "soon" and show
       # no countdown. From this moment on Discord shows the address, so take the whitelist off by then.
       LAUNCH_AT = "";
