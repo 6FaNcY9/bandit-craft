@@ -113,8 +113,10 @@ For any session that wants to pick this up, steer it or connect its own work to 
     through `bandit.atmosphaere.at` (SRV, node-minecraft-protocol) answered "Paper 26.2, 0/20". The legal texts
     and the ad plan now use `bandit.atmosphaere.at`. Not yet: a real join through the name, a test mail to
     admin@, and the deploy of 66c1ca4 (the admin bot's `MC_ADDRESS` is now `bandit.atmosphaere.at`; its status ping
-    resolves the SRV to the same tunnel; lab built with it on 2026-11-11; the owner ships it with
-    `sh ~/bandit-address-deploy.sh`, which restarts only discord-admin).
+    resolves the SRV to the same tunnel; lab built with it on 2026-11-11; the branch went into craft main
+    on 2026-11-11 through the session that collected all work before a laptop reboot (bandit-nix main locks
+    craft f77b5aa); that session deploys the lab, `~/bandit-address-deploy.sh` is obsolete. Check after the
+    deploy: `systemctl show discord-admin -p Environment` on the lab shows `MC_ADDRESS=bandit.atmosphaere.at`).
 
 ## How to reach this session
 
