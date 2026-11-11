@@ -24,8 +24,8 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
   Konto-UUID, deine IP-Adresse, wann du spielst, was du im Chat schreibst und an Befehlen eingibst,
   und deinen Spielstand in der Welt.
 - Was du im öffentlichen Spielchat schreibst, wann du kommst und gehst und deine Todesmeldungen
-  erscheinen mit deinem Minecraft-Namen auch im öffentlichen Discord-Kanal #ingame-chat und bleiben
-  dort, bis sie gelöscht werden (Punkt 6).
+  erscheinen mit deinem Minecraft-Namen auch im öffentlichen Discord-Kanal #ingame-chat und werden
+  dort nach 30 Tagen automatisch gelöscht (Punkt 6).
 - Keine Cookies, kein Tracking, keine Analyse-Werkzeuge, kein Newsletter, keine Werbung. Wir
   verkaufen keine Daten und geben sie nur so weiter, wie unten beschrieben.
 - Server- und Chatprotokolle werden nach etwa 30 Tagen gelöscht.
@@ -104,9 +104,11 @@ auf unserem öffentlichen Discord-Server.
   IP-Adresse, UUID, Befehle, private Nachrichten und Position auf dem Server bleiben.
 - **Herkunft:** Nachrichten aus Discord und der Anzeigename kommen von Discord.
 - **Speicherdauer:** Nachrichten aus Discord speichert der Server nur im normalen Serverprotokoll
-  (etwa 30 Tage, Punkt 2). Die Kopien in Discord bleiben im Kanal, bis sie dort gelöscht werden.
-  Einzelne übertragene Nachrichten löschen wir auf Wunsch in Discord; schreib dafür an
-  <KONTAKT-MAIL>.
+  (etwa 30 Tage, Punkt 2). Die Kopien in Discord löscht die Brücke nach 30 Tagen automatisch aus
+  dem Kanal. Sie sucht dafür alle sechs Stunden und nur, solange der Spielserver läuft; es kann
+  also etwas länger dauern. Was Mitglieder selbst in #ingame-chat schreiben, löscht die Brücke
+  nicht. Einzelne übertragene Nachrichten löschen wir auf Wunsch früher in Discord; schreib dafür
+  an <KONTAKT-MAIL>.
 - **Abschalten:** Für einzelne Spielende lässt sich die Brücke nicht abschalten. Was nicht in
   Discord erscheinen soll, schreib nicht in den öffentlichen Spielchat. Die Zeilen zum Betreten und
   Verlassen und die Todesmeldungen werden immer übertragen.
@@ -149,7 +151,7 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
 | Betriebsstatistiken | [OFFEN: Frist vom Betreiber festzulegen] |
 | Verbindungsdaten am Relay-Server | [OFFEN: vom Betreiber zu ergänzen] |
-| Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | bis sie in Discord gelöscht werden; einzelne Nachrichten löschen wir auf Wunsch (an <KONTAKT-MAIL>) |
+| Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an <KONTAKT-MAIL>) |
 
 ## Löschung: was geht und was nicht
 
@@ -158,7 +160,8 @@ Die Welt wird nie zurückgesetzt; das ist der Sinn dieses Servers. Deshalb ehrli
 - **Löschen können wir** alles, was an dein Konto gebunden ist: deinen Spielstand (Position,
   Inventar, Statistiken) und deine Werte in den Betriebsstatistiken. Kommst du danach wieder,
   beginnst du von vorne. Protokolle werden ohnehin nach etwa 30 Tagen gelöscht.
-- **Kopien in Discord** (Punkt 6) löschen wir auf Wunsch einzeln im Kanal #ingame-chat.
+- **Kopien in Discord** (Punkt 6) werden nach 30 Tagen automatisch gelöscht; einzelne löschen wir
+  auf Wunsch früher im Kanal #ingame-chat.
 - **Nicht löschen können wir** Blöcke, die du in die gemeinsame Welt gesetzt hast. Sie lassen sich
   nicht einer Person zuordnen und nicht von den Bauten anderer trennen.
 - **Persönliche Angaben über andere** (zum Beispiel ein echter Name auf einem Schild) sind Doxxing.
@@ -237,8 +240,8 @@ been appointed; the conditions of Art. 37 GDPR are not met.
   address, when you play, what you write in chat and the commands you type, and your game state in
   the world.
 - What you write in the public game chat, when you join and leave, and your death messages also
-  appear with your Minecraft name in the public Discord channel #ingame-chat and stay there until
-  they are deleted (point 6).
+  appear with your Minecraft name in the public Discord channel #ingame-chat and are deleted there
+  automatically after 30 days (point 6).
 - No cookies, no tracking, no analytics, no newsletter, no advertising. We do not sell data and
   share it only as described below.
 - Server and chat logs are deleted after about 30 days.
@@ -313,8 +316,10 @@ on our public Discord server.
   messages and position stay on the server.
 - **Source:** messages from Discord and the display name come from Discord.
 - **Retention:** the server keeps messages from Discord only in the normal server log (about 30 days,
-  point 2). The copies in Discord stay in the channel until they are deleted there. On request we
-  delete individual bridged messages in Discord; write to <KONTAKT-MAIL>.
+  point 2). The bridge deletes the copies in Discord from the channel automatically after 30 days.
+  It looks for them every six hours and only while the game server runs, so it can take a little
+  longer. The bridge does not delete what members write in #ingame-chat themselves. On request we
+  delete individual bridged messages in Discord earlier; write to <KONTAKT-MAIL>.
 - **Switching it off:** the bridge cannot be switched off for individual players. If something should
   not appear in Discord, do not write it in the public game chat. The join and leave lines and death
   messages are always passed on.
@@ -356,7 +361,7 @@ controllers in their own right; where they process data is set out in their priv
 | Bans and mutes | as long as needed to enforce them |
 | Operating statistics | [OPEN: period to be set by the operator] |
 | Connection data at the relay server | [OPEN: to be completed by the operator] |
-| Chat bridge copies in the Discord channel #ingame-chat | until deleted in Discord; we delete individual messages on request (to <KONTAKT-MAIL>) |
+| Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to <KONTAKT-MAIL>) |
 
 ## Deletion: what is possible and what is not
 
@@ -365,7 +370,8 @@ The world is never reset; that is the point of this server. So, honestly:
 - **We can delete** everything bound to your account: your game state (position, inventory,
   statistics) and your figures in the operating statistics. If you come back afterwards, you start
   from scratch. Logs are deleted after about 30 days in any case.
-- **Copies in Discord** (point 6) we delete individually in the channel #ingame-chat on request.
+- **Copies in Discord** (point 6) are deleted automatically after 30 days; on request we delete
+  individual ones earlier in the channel #ingame-chat.
 - **We cannot delete** blocks you placed in the shared world. They cannot be attributed to a person or
   separated from what others built.
 - **Personal details about others** (for example a real name on a sign) are doxxing. We remove them as
@@ -478,9 +484,9 @@ If the processing changes, we update this policy and the date at the top.
 14. **Chat-Brücke: Widerspruch, Kinder, Frist.** Die Brücke lässt sich nicht pro Person abschalten.
     Bei einem Widerspruch nach Art. 21 DSGVO bleibt derzeit nur das Löschen in Discord; Betreten-,
     Verlassen- und Todeszeilen laufen weiter. Bei Kindern wiegt ihr Interesse in der Abwägung nach
-    lit. f besonders schwer, und die Kopien sind ohne Frist öffentlich. Entscheiden, ob eine
-    Ausnahme pro Spieler (mindestens für Betreten, Verlassen und Tod) und ein automatisches Löschen
-    im Kanal nach einer Frist gebaut werden.
+    lit. f besonders schwer. Entschieden am 11.11.2026: Die Brücke löscht ihre Kopien im Kanal
+    nach 30 Tagen automatisch (gebaut, Punkt 6). Noch zu entscheiden: ob eine Ausnahme pro Spieler
+    (mindestens für Betreten, Verlassen und Tod) gebaut wird.
 15. **Chat-Brücke: Protokoll, Rolle, Zeitpunkt.** Prüfen, was das Serverprotokoll zu Nachrichten aus
     Discord festhält (nur Anzeigename und Text oder auch die Discord-ID); steht dort mehr, Punkt 6
     ergänzen. Ob der Betreiber für den eigenen Discord-Server neben Discord gemeinsam verantwortlich

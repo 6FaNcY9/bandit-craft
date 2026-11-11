@@ -299,6 +299,10 @@ console, no account linking.
 - Game to Discord: markdown from a player stays text, `@everyone` and other mentions do not ping
   (`allowed_mentions` empty), no link previews and no clickable link (`:` is escaped); lines are sent in batches
   every 2 s, a flood is cut at 200 lines.
+- Old copies: the plugin deletes its own messages in `#ingame-chat` once they are 30 days old (`KEEP_MS`; the
+  privacy policy names this time). It needs no extra right for that, a bot may always delete what it sent itself.
+  It searches every six hours and after each start, one request every 5 s; what members wrote themselves stays.
+  While the public server is down nothing is deleted.
 - Token: the sops value `discord-bridge-token` (application `bandit-bridge`, Message Content Intent on). bandit-nix
   places it at `/var/lib/discord-bridge/token` in the box; `minecraft-public-secret` puts it into the generated
   environment file as `CHATBRIDGE_TOKEN`. The channel id is `CHATBRIDGE_CHANNEL` in the Paper unit. Without a

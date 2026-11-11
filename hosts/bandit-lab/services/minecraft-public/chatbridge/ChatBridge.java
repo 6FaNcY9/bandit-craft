@@ -1,5 +1,6 @@
 package chatbridge;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -40,6 +41,8 @@ public final class ChatBridge extends JavaPlugin implements Listener {
   static final int MAX_GAME_TEXT = 256; // characters of one Discord message shown in the game
   static final long MIN_IDENTIFY_GAP_MS = 90_000;
   static final long MIN_ACCOUNT_AGE_MS = 7L * 24 * 3600 * 1000;
+  static final long KEEP_MS = 30L * 24 * 3600 * 1000; // how long a copy of game chat stays in Discord (privacy policy, point 6)
+  static final long SEARCH_EVERY_MS = 6L * 3600 * 1000;
   // GUILD_MESSAGES | MESSAGE_CONTENT (the second is switched on for the application in the developer portal)
   static final int INTENTS = (1 << 9) | (1 << 15);
 
@@ -62,6 +65,12 @@ public final class ChatBridge extends JavaPlugin implements Listener {
   private long waitMs = 5000;
   private long identified; // when this bot last logged in
 
+  private String self = ""; // this bot's user id, from READY
+  private final ArrayDeque<String> old = new ArrayDeque<>(); // own messages past KEEP_MS, waiting to be deleted
+  private String before; // where the search for them goes on; null: the next search starts at the limit
+  private long searchAt; // no search step before this
+  private long sweepPausedUntil; // Discord asked us to wait (429)
+
   @Override
   public void onEnable() {
     // The token comes through the server's root-only environment file, the channel id from the unit.
@@ -80,6 +89,7 @@ public final class ChatBridge extends JavaPlugin implements Listener {
     });
     Bukkit.getPluginManager().registerEvents(this, this);
     io.scheduleWithFixedDelay(guard(this::flush), 2, 2, TimeUnit.SECONDS);
+    io.scheduleWithFixedDelay(guard(this::sweep), 5, 5, TimeUnit.SECONDS);
     io.execute(guard(this::open));
   }
 
@@ -165,19 +175,11 @@ public final class ChatBridge extends JavaPlugin implements Listener {
     body.add("allowed_mentions", none); // a player's "@everyone" stays text
     body.addProperty("flags", 4); // no link previews
     HttpResponse<String> res;
-    CompletableFuture<HttpResponse<String>> call = null;
     try {
-      call = http.sendAsync(HttpRequest.newBuilder(URI.create(api + "/channels/" + channel + "/messages"))
-          .timeout(Duration.ofSeconds(10))
-          .header("authorization", "Bot " + token)
-          .header("content-type", "application/json")
-          .header("user-agent", "DiscordBot (https://github.com/6FaNcY9/bandit-craft, 1)")
-          .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
-      res = call.get(15, TimeUnit.SECONDS); // the request's own timeout ends at the headers: a body that hangs must not hold this thread
+      res = discord("POST", "/channels/" + channel + "/messages", body.toString());
     } catch (InterruptedException e) {
       return; // the server is stopping
     } catch (Exception e) {
-      if (call != null) call.cancel(true);
       // Discord not reachable: the lines wait, the queue stays capped at 200.
       pausedUntil = System.currentTimeMillis() + 10_000;
       synchronized (out) {
@@ -186,18 +188,96 @@ public final class ChatBridge extends JavaPlugin implements Listener {
       return;
     }
     if (res.statusCode() == 429) {
-      double wait = 5;
-      try {
-        wait = JsonParser.parseString(res.body()).getAsJsonObject().get("retry_after").getAsDouble();
-      } catch (Exception ignored) {
-        // keep the default
-      }
-      pausedUntil = System.currentTimeMillis() + (long) (Math.min(wait, 600) * 1000);
+      pausedUntil = System.currentTimeMillis() + retryMs(res.body());
       synchronized (out) {
         out.addFirst(content); // sent again after the wait
       }
     } else if (res.statusCode() >= 300) {
       getLogger().warning("chat bridge: Discord answered " + res.statusCode() + " to a chat message"); // the lines are dropped
+    }
+  }
+
+  private HttpResponse<String> discord(String method, String path, String body) throws Exception {
+    CompletableFuture<HttpResponse<String>> call = http.sendAsync(HttpRequest.newBuilder(URI.create(api + path))
+        .timeout(Duration.ofSeconds(10))
+        .header("authorization", "Bot " + token)
+        .header("content-type", "application/json")
+        .header("user-agent", "DiscordBot (https://github.com/6FaNcY9/bandit-craft, 1)")
+        .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+    try {
+      return call.get(15, TimeUnit.SECONDS); // the request's own timeout ends at the headers: a body that hangs must not hold this thread
+    } catch (Exception e) {
+      call.cancel(true);
+      throw e;
+    }
+  }
+
+  /** How long a 429 asks to wait, at most ten minutes. */
+  static long retryMs(String body) {
+    double wait = 5;
+    try {
+      wait = JsonParser.parseString(body).getAsJsonObject().get("retry_after").getAsDouble();
+    } catch (Exception ignored) {
+      // keep the default
+    }
+    return (long) (Math.min(wait, 600) * 1000);
+  }
+
+  // ---- old copies ----
+
+  /** The id Discord gives a message sent at this time. */
+  static long snowflake(long ms) {
+    return (ms - 1420070400000L) << 22;
+  }
+
+  /**
+   * One page of the channel's messages, newest first: this bot's own with an id below `limit` go into `into`.
+   * Returns the id to search on from, or null after the last page. What members wrote themselves stays theirs.
+   */
+  static String ownOld(String page, String self, long limit, ArrayDeque<String> into) {
+    JsonArray list = JsonParser.parseString(page).getAsJsonArray();
+    String last = null;
+    for (JsonElement e : list) {
+      JsonObject m = e.getAsJsonObject();
+      last = text(m, "id");
+      // The age is read here again: nothing younger is deleted, whatever the answer holds.
+      if (self.equals(text(object(m, "author"), "id")) && Long.parseUnsignedLong(last) < limit) into.add(last);
+    }
+    return list.size() < 100 ? null : last;
+  }
+
+  // One small step every 5 s, so the gateway's heartbeat never waits long: delete one old copy, or look for more.
+  private void sweep() {
+    long now = System.currentTimeMillis();
+    String id = old.peek();
+    if (self.isEmpty() || now < sweepPausedUntil || (id == null && now < searchAt)) return;
+    long limit = snowflake(now - KEEP_MS);
+    HttpResponse<String> res;
+    try {
+      res = id != null
+          ? discord("DELETE", "/channels/" + channel + "/messages/" + id, null)
+          : discord("GET", "/channels/" + channel + "/messages?limit=100&before=" + (before != null ? before : Long.toUnsignedString(limit)), null);
+    } catch (InterruptedException e) {
+      return; // the server is stopping
+    } catch (Exception e) {
+      sweepPausedUntil = now + 60_000;
+      return;
+    }
+    if (res.statusCode() == 429) {
+      sweepPausedUntil = now + retryMs(res.body());
+    } else if (id != null) {
+      old.poll(); // deleted, or already gone (404); after any other answer the next search finds it again
+      if (res.statusCode() >= 300 && res.statusCode() != 404) getLogger().warning("chat bridge: Discord answered " + res.statusCode() + " to deleting an old message");
+    } else {
+      // A refused or unreadable answer ends this search too: the next one starts in six hours, not in 5 s.
+      before = null;
+      searchAt = now + SEARCH_EVERY_MS;
+      if (res.statusCode() != 200) {
+        getLogger().warning("chat bridge: Discord answered " + res.statusCode() + " to the search for old messages");
+        return;
+      }
+      before = ownOld(res.body(), self, limit, old);
+      if (before != null) searchAt = 0;
     }
   }
 
@@ -373,6 +453,8 @@ public final class ChatBridge extends JavaPlugin implements Listener {
       drop(gen, "op " + op);
     } else if (op == 0 && "READY".equals(text(f, "t"))) {
       waitMs = 5000;
+      JsonObject d = object(f, "d");
+      if (d != null) self = text(object(d, "user"), "id");
     } else if (op == 0 && "MESSAGE_CREATE".equals(text(f, "t")) && f.get("d").isJsonObject()) {
       show(f.getAsJsonObject("d"));
     }

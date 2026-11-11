@@ -49,8 +49,16 @@ For any session that wants to pick this up, steer it or connect its own work to 
    chat both ways, `@everyone` typed in the game does not ping, links from the game are not clickable. The plugin's
    log needs root: `sudo journalctl -M mc-public -u minecraft-server-paper | grep -i "chat bridge"`. The privacy
    policy draft names the bridge; its open points 13-15 are the owner's call.
-7. Owner's open calls: delete Discord's default channels (`rules`, `moderator-only`, both `Allgemein`);
-   switch "Public Bot" off for `bandit-admin` in the developer portal.
+   Not shipped yet: the bridge deletes its own messages in `#ingame-chat` after 30 days (owner's decision
+   2026-11-11; no new right for any bot). Tried in `SelfTest` and `e2e-chat.js`, not against the real Discord:
+   deleting messages older than two weeks one by one is slow there (429), the plugin waits as told.
+7. Done in the client 2026-11-11 with the owner's yes: Discord's default channels `rules` and the voice
+   `Allgemein` are deleted (both were empty); "Public Bot" is off for `bandit-admin` (its install link had to be
+   set to "None" first). Still there, the owner's call: the text channel `Allgemein` (Discord's system channel,
+   holds the two "added a bot" lines; everyone and the bridge bot can see and write there, the layout does not
+   cover it) and `moderator-only` (private; Discord sends its community and safety notices there, move those to
+   `#mod-log` in the server settings before deleting it). The empty categories `Textkanäle` and `Sprachkanäle`
+   are left as well.
 
 ## How to reach this session
 

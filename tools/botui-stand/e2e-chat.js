@@ -9,7 +9,7 @@ const {execFileSync} = require('node:child_process');
 const {WebSocketServer} = require('ws');
 const {connect} = require('./client');
 
-const PORT = 18200, CHANNEL = '4242', TOKEN = 'stand-bridge-token';
+const PORT = 18200, CHANNEL = '4242', TOKEN = 'stand-bridge-token', SELF = '777';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn, what, ms = 15000) {
   for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (fn()) return;
@@ -19,15 +19,24 @@ async function waitFor(fn, what, ms = 15000) {
 const born = (daysAgo) => String((BigInt(Date.now() - daysAgo * 86400000) - 1420070400000n) << 22n);
 
 (async () => {
-  const posts = [], identifies = [];
+  const posts = [], identifies = [], searches = [], deleted = [];
+  // What the channel holds from before the limit: one copy of the bridge's own, one message a member wrote.
+  const history = [{id: born(31), author: {id: SELF}}, {id: born(32), author: {id: born(400)}}];
   let refuse = 1, gateway = null, seq = 0;
   // Java's client offers HTTP/2 on plain http ("Upgrade: h2c"); only a real WebSocket upgrade goes to ws (Node 24).
   const server = http.createServer({shouldUpgradeCallback: (req) => req.headers.upgrade === 'websocket'}, (req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
-      assert.equal(`${req.method} ${req.url}`, `POST /channels/${CHANNEL}/messages`);
       assert.equal(req.headers.authorization, `Bot ${TOKEN}`);
+      // the search for old copies, and their deletion
+      const url = new URL(req.url, 'http://x');
+      if (req.method === 'GET' && url.pathname === `/channels/${CHANNEL}/messages`) {
+        searches.push(url.searchParams.get('before'));
+        return res.writeHead(200, {'content-type': 'application/json'}).end(JSON.stringify(history));
+      }
+      if (req.method === 'DELETE') { deleted.push(req.url); return res.writeHead(204).end(); }
+      assert.equal(`${req.method} ${req.url}`, `POST /channels/${CHANNEL}/messages`);
       if (refuse-- > 0) return res.writeHead(429, {'content-type': 'application/json'}).end('{"retry_after": 0.3}');
       posts.push(JSON.parse(body));
       res.writeHead(200, {'content-type': 'application/json'}).end('{"id":"1"}');
@@ -38,7 +47,7 @@ const born = (daysAgo) => String((BigInt(Date.now() - daysAgo * 86400000) - 1420
     ws.send(JSON.stringify({op: 10, d: {heartbeat_interval: 1000}}));
     ws.on('message', (raw) => {
       const m = JSON.parse(raw);
-      if (m.op === 2) { identifies.push(m.d); ws.send(JSON.stringify({op: 0, t: 'READY', s: ++seq, d: {}})); }
+      if (m.op === 2) { identifies.push(m.d); ws.send(JSON.stringify({op: 0, t: 'READY', s: ++seq, d: {user: {id: SELF}}})); }
       if (m.op === 1) ws.send(JSON.stringify({op: 11}));
     });
   });
@@ -86,6 +95,13 @@ const born = (daysAgo) => String((BigInt(Date.now() - daysAgo * 86400000) - 1420
     await waitFor(() => posts.some((m) => /💀 Tester /.test(m.content)), 'death line');
     await p.end();
     await waitFor(() => posts.some((m) => m.content.includes('⬅️ **Tester**')), 'leave line');
+    // old copies: the bridge's own message past 30 days is deleted, the member's stays; one search, from the limit
+    await waitFor(() => deleted.length, 'an old copy deleted', 20000);
+    await sleep(6000);
+    assert.deepEqual(deleted, [`/channels/${CHANNEL}/messages/${history[0].id}`]);
+    assert.equal(searches.length, 1);
+    const limit = Number((BigInt(searches[0]) >> 22n) + 1420070400000n);
+    assert.ok(Math.abs(Date.now() - 30 * 86400000 - limit) < 600000, `search from 30 days back, got ${new Date(limit).toISOString()}`);
     assert.equal(identifies.length, 1, 'the gateway connection held');
     console.log('chat bridge e2e ok');
   } finally {

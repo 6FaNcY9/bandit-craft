@@ -25,6 +25,10 @@ final class SelfTest {
     return "{\"channel_id\":\"C\",\"type\":0,\"content\":\"hallo\",\"author\":{\"id\":\"" + ID + "\",\"username\":\"vino\"}" + more + "}";
   }
 
+  private static String sent(long id, String author) {
+    return "{\"id\":\"" + id + "\",\"author\":{\"id\":\"" + author + "\"}}";
+  }
+
   public static void main(String[] args) {
     // Discord to game: plain, one line, no ids, no colour sign, cut to length
     same("a b c", ChatBridge.clean("a\nb\r\n\tc", 256));
@@ -62,6 +66,20 @@ final class SelfTest {
     same("\\*\\*fett\\*\\* \\[x\\](http\\://a) \\`c\\` \\> q", ChatBridge.escape("**fett** [x](http://a) `c` > q"));
     same("a b", ChatBridge.escape("a\nb"));
     same("https\\://x.example/a 12\\:30", ChatBridge.escape("https://x.example/a 12:30")); // no clickable link from the game
+
+    // old copies: only this bot's own messages below the limit are taken, and a full page is searched on from its end
+    same(ID, Long.toUnsignedString(ChatBridge.snowflake(BORN)));
+    long limit = ChatBridge.snowflake(NOW);
+    ArrayDeque<String> old = new ArrayDeque<>();
+    String page = "[" + sent(limit + 1, "me") + "," + sent(limit - 1, "me") + "," + sent(limit - 2, "you") + ",{\"id\":\"" + (limit - 3) + "\"}]";
+    same(null, ChatBridge.ownOld(page, "me", limit, old));
+    same(List.of(String.valueOf(limit - 1)), List.copyOf(old));
+    String full = "[" + String.join(",", java.util.Collections.nCopies(100, sent(limit - 9, "you"))) + "]";
+    same(limit - 9, ChatBridge.ownOld(full, "me", limit, old));
+    same(1, old.size());
+    same(2500L, ChatBridge.retryMs("{\"retry_after\":2.5}"));
+    same(600000L, ChatBridge.retryMs("{\"retry_after\":86400}"));
+    same(5000L, ChatBridge.retryMs("<html>"));
 
     // batching: lines are joined up to Discord's limit, a put-back message of full length still goes out
     ArrayDeque<String> q = new ArrayDeque<>(List.of("a", "b", "x".repeat(1900), "c"));
