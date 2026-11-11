@@ -108,8 +108,11 @@ For any session that wants to pick this up, steer it or connect its own work to 
     tested only against a fake API) and confirms Cloudflare's verification mail. The script deletes the domain's
     old MX and SPF records of a former host (TheHost; owner: nobody uses them), enables Email Routing, forwards
     both addresses to the owner's inbox and adds the SRV record `_minecraft._tcp.bandit.atmosphaere.at` -> the
-    playit address. Untested: whether playit accepts a join through `bandit.atmosphaere.at` (it routes by
-    handshake host); only then may the legal texts and ads use that name.
+    playit address. Done the same evening: the owner ran the script (with a token already in the laptop shell),
+    confirmed the destination address; MX now points to Cloudflare, both rules exist, and a status ping
+    through `bandit.atmosphaere.at` (SRV, node-minecraft-protocol) answered "Paper 26.2, 0/20". The legal texts
+    and the ad plan now use `bandit.atmosphaere.at`. Not yet: a real join through the name, a test mail to
+    admin@, and the admin bot's `#adresse-join` text (still the playit address, code in discord-admin).
 
 ## How to reach this session
 

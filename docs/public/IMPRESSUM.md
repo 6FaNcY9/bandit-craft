@@ -11,7 +11,7 @@ Maximilian Philip Wein
 Wien, Österreich
 
 Medieninhaber dieser Seiten und Betreiber des Minecraft-Servers Bandit Anarchy
-(`impairment-peterson.tun.ply.gg:24924`).
+(`bandit.atmosphaere.at`).
 
 ## Kontakt
 
@@ -52,7 +52,7 @@ Maximilian Philip Wein
 Vienna, Austria
 
 Media owner of these pages and operator of the Minecraft server Bandit Anarchy
-(`impairment-peterson.tun.ply.gg:24924`).
+(`bandit.atmosphaere.at`).
 
 ## Contact
 

@@ -7,7 +7,7 @@ Die deutsche Fassung ist maßgeblich; die englische Fassung steht darunter.
 ## 1. Geltung
 
 Diese Bedingungen gelten für die Nutzung des Minecraft-Servers Bandit Anarchy
-(`impairment-peterson.tun.ply.gg:24924`). Betreiber ist Maximilian Philip Wein (siehe [Impressum](IMPRESSUM.md)). Mit dem
+(`bandit.atmosphaere.at`). Betreiber ist Maximilian Philip Wein (siehe [Impressum](IMPRESSUM.md)). Mit dem
 Verbinden zum Server stimmst du diesen Bedingungen zu. Wenn du nicht einverstanden bist, spiel bitte
 nicht auf dem Server. Die Nutzung ist kostenlos.
 
@@ -113,7 +113,7 @@ oder Microsoft verbunden.
 
 ## 1. Scope
 
-These terms apply to the use of the Minecraft server Bandit Anarchy (`impairment-peterson.tun.ply.gg:24924`). It is run
+These terms apply to the use of the Minecraft server Bandit Anarchy (`bandit.atmosphaere.at`). It is run
 by Maximilian Philip Wein (see the [legal notice](IMPRESSUM.md)). By connecting to the server you accept
 these terms. If you do not agree, please do not play on the server. Use is free of charge.
 

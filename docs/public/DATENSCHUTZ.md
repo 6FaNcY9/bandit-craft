@@ -2,7 +2,7 @@
 
 Stand: 11.11.2026
 
-Diese Erklärung gilt für den Minecraft-Server Bandit Anarchy (`impairment-peterson.tun.ply.gg:24924`) und für diese
+Diese Erklärung gilt für den Minecraft-Server Bandit Anarchy (`bandit.atmosphaere.at`) und für diese
 Seiten. Sie sagt dir, welche Daten über dich anfallen, wofür, auf welcher Rechtsgrundlage und wie
 lange (Art. 13 und 14 DSGVO). Die deutsche Fassung ist maßgeblich; die englische Fassung steht
 darunter.
@@ -533,7 +533,9 @@ If the processing changes, we update this policy and the date at the top.
     ist (Art. 26 DSGVO, vgl. EuGH C-210/16 zu Facebook-Fanpages), ist nicht geklärt; der Text stellt
     Discord als eigenen Verantwortlichen dar. Diese Fassung erst veröffentlichen, wenn die Brücke
     live geht (mit der Öffnung).
-16. **Adresse des Servers.** Eingetragen ist die Adresse des kostenlosen playit.gg-Tunnels vom
-    11.11.2026 (`impairment-peterson.tun.ply.gg:24924`), auch im Impressum und in den
-    Nutzungsbedingungen. Sie kann sich ändern (anderer Tunnel, Wechsel auf den VPS-Relay). Am Tag
-    der Veröffentlichung in allen drei Dateien prüfen.
+16. **Adresse des Servers.** Eingetragen ist `bandit.atmosphaere.at` (seit 11.11.2026), auch im
+    Impressum und in den Nutzungsbedingungen. Das ist ein SRV-Eintrag bei Cloudflare, der auf den
+    playit.gg-Tunnel zeigt (`impairment-peterson.tun.ply.gg:24924`); ein Status-Ping über den Namen
+    hat am 11.11.2026 geantwortet. Ändert sich die playit-Adresse, nur den SRV-Eintrag anpassen
+    (`TUNNEL=<neu> TUNNEL_PORT=<neu> bash ~/bandit-domain.sh` legt keinen zweiten an; den alten vorher
+    im Cloudflare-Dashboard ändern). Die Texte bleiben dann gleich.
