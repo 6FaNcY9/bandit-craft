@@ -15,8 +15,8 @@ Medieninhaber dieser Seiten und Betreiber des Minecraft-Servers Bandit Anarchy
 
 ## Kontakt
 
-- Allgemein und Datenschutz: <KONTAKT-MAIL>
-- Meldungen zu Inhalten, Einwände gegen Sperren: <MELDE-MAIL>
+- Allgemein und Datenschutz: admin@atmosphaere.at
+- Meldungen zu Inhalten, Einwände gegen Sperren: help@atmosphaere.at
 
 ## Art des Angebots
 
@@ -56,8 +56,8 @@ Media owner of these pages and operator of the Minecraft server Bandit Anarchy
 
 ## Contact
 
-- General and data protection: <KONTAKT-MAIL>
-- Reports about content, objections to bans: <MELDE-MAIL>
+- General and data protection: admin@atmosphaere.at
+- Reports about content, objections to bans: help@atmosphaere.at
 
 ## Nature of the service
 

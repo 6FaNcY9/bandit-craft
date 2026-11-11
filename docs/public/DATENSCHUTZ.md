@@ -13,7 +13,7 @@ Verantwortlicher im Sinne von Art. 4 Z 7 DSGVO:
 
 Maximilian Philip Wein
 Wien, Österreich
-E-Mail: <KONTAKT-MAIL>
+E-Mail: admin@atmosphaere.at
 
 Der Server wird von einer Privatperson in Österreich unentgeltlich betrieben. Ein
 Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGVO liegen nicht vor.
@@ -108,7 +108,7 @@ auf unserem öffentlichen Discord-Server.
   dem Kanal. Sie sucht dafür alle sechs Stunden und nur, solange der Spielserver läuft; es kann
   also etwas länger dauern. Was Mitglieder selbst in #ingame-chat schreiben, löscht die Brücke
   nicht. Einzelne übertragene Nachrichten löschen wir auf Wunsch früher in Discord; schreib dafür
-  an <KONTAKT-MAIL>.
+  an admin@atmosphaere.at.
 - **Abschalten:** Für einzelne Spielende lässt sich die Brücke nicht abschalten. Was nicht in
   Discord erscheinen soll, schreib nicht in den öffentlichen Spielchat. Die Zeilen zum Betreten und
   Verlassen und die Todesmeldungen werden immer übertragen.
@@ -159,7 +159,7 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
 | Betriebsstatistiken | [OFFEN: Frist vom Betreiber festzulegen] |
 | Verbindungsdaten beim Tunneldienst playit.gg | legt der Anbieter fest; er nennt keine Frist |
-| Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an <KONTAKT-MAIL>) |
+| Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an admin@atmosphaere.at) |
 
 ## Löschung: was geht und was nicht
 
@@ -173,7 +173,7 @@ Die Welt wird nie zurückgesetzt; das ist der Sinn dieses Servers. Deshalb ehrli
 - **Nicht löschen können wir** Blöcke, die du in die gemeinsame Welt gesetzt hast. Sie lassen sich
   nicht einer Person zuordnen und nicht von den Bauten anderer trennen.
 - **Persönliche Angaben über andere** (zum Beispiel ein echter Name auf einem Schild) sind Doxxing.
-  Wir entfernen sie, sobald sie an <MELDE-MAIL> gemeldet werden.
+  Wir entfernen sie, sobald sie an help@atmosphaere.at gemeldet werden.
 - **Sperren** löschen wir nicht, solange sie gelten, weil unser Interesse an ihrer Durchsetzung
   überwiegt.
 
@@ -181,7 +181,7 @@ Die Welt wird nie zurückgesetzt; das ist der Sinn dieses Servers. Deshalb ehrli
 
 Du hast das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17),
 Einschränkung der Verarbeitung (Art. 18) und Datenübertragbarkeit (Art. 20; gilt für die Daten
-aus Punkt 1). Schreib dafür an <KONTAKT-MAIL>. Wir antworten kostenlos und innerhalb eines Monats
+aus Punkt 1). Schreib dafür an admin@atmosphaere.at. Wir antworten kostenlos und innerhalb eines Monats
 (Art. 12 Abs. 3 DSGVO). Wir können dich bitten zu zeigen, dass dir das Minecraft-Konto gehört.
 
 Keine Verarbeitung auf dieser Seite beruht auf einer Einwilligung; es gibt daher keine Einwilligung,
@@ -194,7 +194,7 @@ Verarbeitung widersprechen, die auf Art. 6 Abs. 1 lit. f DSGVO beruht (Punkte 2 
 wo zutreffend, Punkt 1). Wir verarbeiten die Daten dann nicht mehr, außer wir können zwingende
 schutzwürdige Gründe nachweisen, die deine Interessen überwiegen, oder die Verarbeitung dient der
 Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen. Der Widerspruch geht formlos an
-<KONTAKT-MAIL>.**
+admin@atmosphaere.at.**
 
 ## Beschwerde bei der Datenschutzbehörde
 
@@ -220,7 +220,7 @@ Verarbeitungen. Kinder und Jugendliche können ihre Rechte selbst ausüben; Elte
 gesetzliche Vertreter für sie tun.
 
 **Für Eltern:** Wenn Sie nicht möchten, dass Ihr Kind auf diesem Server spielt, oder wissen wollen,
-welche Daten wir über Ihr Kind haben, schreiben Sie an <KONTAKT-MAIL>. Auf Wunsch sperren wir das
+welche Daten wir über Ihr Kind haben, schreiben Sie an admin@atmosphaere.at. Auf Wunsch sperren wir das
 Konto und löschen die an das Konto gebundenen Daten.
 
 ## Änderungen
@@ -237,7 +237,7 @@ Controller within the meaning of Art. 4(7) GDPR:
 
 Maximilian Philip Wein
 Vienna, Austria
-Email: <KONTAKT-MAIL>
+Email: admin@atmosphaere.at
 
 The server is run free of charge by a private individual in Austria. No data protection officer has
 been appointed; the conditions of Art. 37 GDPR are not met.
@@ -327,7 +327,7 @@ on our public Discord server.
   point 2). The bridge deletes the copies in Discord from the channel automatically after 30 days.
   It looks for them every six hours and only while the game server runs, so it can take a little
   longer. The bridge does not delete what members write in #ingame-chat themselves. On request we
-  delete individual bridged messages in Discord earlier; write to <KONTAKT-MAIL>.
+  delete individual bridged messages in Discord earlier; write to admin@atmosphaere.at.
 - **Switching it off:** the bridge cannot be switched off for individual players. If something should
   not appear in Discord, do not write it in the public game chat. The join and leave lines and death
   messages are always passed on.
@@ -376,7 +376,7 @@ controllers in their own right; where they process data is set out in their priv
 | Bans and mutes | as long as needed to enforce them |
 | Operating statistics | [OPEN: period to be set by the operator] |
 | Connection data at the tunnel service playit.gg | set by the provider; it names no period |
-| Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to <KONTAKT-MAIL>) |
+| Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to admin@atmosphaere.at) |
 
 ## Deletion: what is possible and what is not
 
@@ -390,14 +390,14 @@ The world is never reset; that is the point of this server. So, honestly:
 - **We cannot delete** blocks you placed in the shared world. They cannot be attributed to a person or
   separated from what others built.
 - **Personal details about others** (for example a real name on a sign) are doxxing. We remove them as
-  soon as they are reported to <MELDE-MAIL>.
+  soon as they are reported to help@atmosphaere.at.
 - **Bans** are not deleted while they apply, because our interest in enforcing them prevails.
 
 ## Your rights
 
 You have the right of access (Art. 15 GDPR), rectification (Art. 16), erasure (Art. 17), restriction
 of processing (Art. 18) and data portability (Art. 20; applies to the data under point 1). Write to
-<KONTAKT-MAIL>. We answer free of charge and within one month (Art. 12(3) GDPR). We may ask you to
+admin@atmosphaere.at. We answer free of charge and within one month (Art. 12(3) GDPR). We may ask you to
 show that the Minecraft account is yours.
 
 No processing described here is based on consent, so there is no consent for you to withdraw.
@@ -408,7 +408,7 @@ No processing described here is based on consent, so there is no consent for you
 on Art. 6(1)(f) GDPR (points 2 to 4, point 6 and, where applicable, point 1). We will then stop,
 unless we can demonstrate compelling legitimate grounds that override your interests, or the
 processing serves the establishment, exercise or defence of legal claims. Send your objection, in any
-form, to <KONTAKT-MAIL>.**
+form, to admin@atmosphaere.at.**
 
 ## Complaints to the supervisory authority
 
@@ -434,7 +434,7 @@ Protection Act, DSG) therefore does not concern any of it. Children and young pe
 their rights themselves; parents may do so for them as their legal representatives.
 
 **For parents:** if you do not want your child to play on this server, or want to know what data we
-hold about your child, write to <KONTAKT-MAIL>. On request we ban the account and delete the data
+hold about your child, write to admin@atmosphaere.at. On request we ban the account and delete the data
 bound to it.
 
 ## Changes

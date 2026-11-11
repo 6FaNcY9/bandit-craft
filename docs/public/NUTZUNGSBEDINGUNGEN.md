@@ -50,7 +50,7 @@ Der Chat ist keine Anarchy: Regel 1 gilt dort uneingeschränkt.
 
 - Die Chat-Meldefunktion von Mojang ist eingeschaltet. Meldungen über das Spiel selbst gehen an
   Mojang/Microsoft.
-- Meldungen an uns gehen an <MELDE-MAIL>. Bitte nenne, was passiert ist, wann, wo und wer beteiligt
+- Meldungen an uns gehen an help@atmosphaere.at. Bitte nenne, was passiert ist, wann, wo und wer beteiligt
   war. Wir antworten innerhalb von 48 Stunden.
 - Rechtswidrige Inhalte entfernen wir, sobald wir davon erfahren.
 
@@ -58,7 +58,7 @@ Der Chat ist keine Anarchy: Regel 1 gilt dort uneingeschränkt.
 
 Bei einem Verstoß kann der Betreiber nach eigenem Ermessen stummschalten, vorübergehend oder dauerhaft
 sperren und den betreffenden Inhalt entfernen. Es besteht kein Anspruch darauf, wieder zugelassen zu
-werden. Einwände gegen eine Maßnahme richtest du an <MELDE-MAIL>.
+werden. Einwände gegen eine Maßnahme richtest du an help@atmosphaere.at.
 
 ## 7. Verfügbarkeit
 
@@ -83,7 +83,7 @@ Verhalten anderer Spielender.
 Es gibt keine Altersprüfung. Das Spielgeschehen ist rau (siehe Punkt 3). Bist du jünger als 14 Jahre,
 spiel hier bitte nur mit Zustimmung deiner Eltern oder anderer Erziehungsberechtigter.
 
-**Für Eltern:** Wenn Sie nicht möchten, dass Ihr Kind hier spielt, schreiben Sie an <KONTAKT-MAIL>.
+**Für Eltern:** Wenn Sie nicht möchten, dass Ihr Kind hier spielt, schreiben Sie an admin@atmosphaere.at.
 Auf Wunsch sperren wir das Konto und löschen die an das Konto gebundenen Daten.
 
 ## 11. Datenschutz
@@ -154,7 +154,7 @@ Everything else in the game is allowed.
 Chat is not anarchy: rule 1 applies there in full.
 
 - Mojang's chat reporting is enabled. Reports made through the game itself go to Mojang/Microsoft.
-- Reports to us go to <MELDE-MAIL>. Please say what happened, when, where and who was involved. We
+- Reports to us go to help@atmosphaere.at. Please say what happened, when, where and who was involved. We
   answer within 48 hours.
 - We remove illegal content as soon as we learn of it.
 
@@ -162,7 +162,7 @@ Chat is not anarchy: rule 1 applies there in full.
 
 If a rule is broken, the operator may at their discretion mute, ban temporarily or permanently, and
 remove the content concerned. There is no right to be readmitted. Send objections to a measure to
-<MELDE-MAIL>.
+help@atmosphaere.at.
 
 ## 7. Availability
 
@@ -186,7 +186,7 @@ far as the law permits. This also applies to the conduct of other players.
 There is no age check. Gameplay is rough (see point 3). If you are under 14, please only play here
 with the consent of your parents or other guardians.
 
-**For parents:** if you do not want your child to play here, write to <KONTAKT-MAIL>. On request we
+**For parents:** if you do not want your child to play here, write to admin@atmosphaere.at. On request we
 ban the account and delete the data bound to it.
 
 ## 11. Data protection

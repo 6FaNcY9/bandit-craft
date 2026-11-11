@@ -102,11 +102,14 @@ For any session that wants to pick this up, steer it or connect its own work to 
     collector for the public world exists in this branch). Name, town (owner's choice: town only, no
     street, because of doxxing) and date are filled in. Still placeholders: `<KONTAKT-MAIL>` and `<MELDE-MAIL>`;
     the owner makes one new mailbox for both (not the private one; agents may not create accounts).
-    Plan since 2026-11-11 evening: own domain `banditanarchy.com` (free at whois that day; .com is the cheapest to keep at Cloudflare, about 10 USD a year), the owner buys it at
-    Cloudflare; `~/bandit-domain.sh` (laptop, asks for a Cloudflare API token, tested only against a fake API)
-    enables Email Routing, forwards `admin@` and `help@` to the owner's inbox and adds the SRV record
-    `_minecraft._tcp.play` -> the playit address. Then `<KONTAKT-MAIL>` = admin@, `<MELDE-MAIL>` = help@.
-    Untested: whether playit accepts a join through the SRV name (it routes by handshake host).
+    Decided 2026-11-11 evening: the owner's existing Cloudflare domain `atmosphaere.at` (no website with personal
+    data, per the owner). The legal texts now say `admin@atmosphaere.at` (contact) and `help@atmosphaere.at`
+    (reports). They work only after the owner runs `~/bandit-domain.sh` (laptop, asks for a Cloudflare API token;
+    tested only against a fake API) and confirms Cloudflare's verification mail. The script deletes the domain's
+    old MX and SPF records of a former host (TheHost; owner: nobody uses them), enables Email Routing, forwards
+    both addresses to the owner's inbox and adds the SRV record `_minecraft._tcp.bandit.atmosphaere.at` -> the
+    playit address. Untested: whether playit accepts a join through `bandit.atmosphaere.at` (it routes by
+    handshake host); only then may the legal texts and ads use that name.
 
 ## How to reach this session
 
