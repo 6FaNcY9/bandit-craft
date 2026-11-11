@@ -480,7 +480,12 @@ If the processing changes, we update this policy and the date at the top.
     Vor dem Veröffentlichen auf dataprivacyframework.gov prüfen, ob Discord Inc. aktiv gelistet ist,
     und ob der (gerichtlich angefochtene) Beschluss weiter gilt. Trifft eines nicht zu, trägt der
     Satz nicht; eine Ersatzgrundlage nach Art. 46 oder 49 DSGVO ist für einen Bot in einem fremden
-    Dienst kaum verfügbar.
+    Dienst kaum verfügbar. Stand 11.11.2026 (vom Agenten nachgesehen, keine Rechtsauskunft): Die
+    Liste führt „Discord, Inc.“, San Francisco, für das EU-U.S. Data Privacy Framework als
+    „Active - Re-certification under Review“, erfasste Daten „Non-HR“. Das Gericht der EU hat die
+    Klage gegen den Beschluss am 3.9.2025 abgewiesen (T-553/23, Latombe); das Rechtsmittel beim
+    EuGH (C-703/25 P) war nach einer Meldung vom Juni 2026 noch offen, ein Urteil habe ich nicht
+    gefunden. Am Tag der Veröffentlichung beides noch einmal ansehen.
 14. **Chat-Brücke: Widerspruch, Kinder, Frist.** Die Brücke lässt sich nicht pro Person abschalten.
     Bei einem Widerspruch nach Art. 21 DSGVO bleibt derzeit nur das Löschen in Discord; Betreten-,
     Verlassen- und Todeszeilen laufen weiter. Bei Kindern wiegt ihr Interesse in der Abwägung nach
@@ -489,7 +494,8 @@ If the processing changes, we update this policy and the date at the top.
     (mindestens für Betreten, Verlassen und Tod) gebaut wird.
 15. **Chat-Brücke: Protokoll, Rolle, Zeitpunkt.** Prüfen, was das Serverprotokoll zu Nachrichten aus
     Discord festhält (nur Anzeigename und Text oder auch die Discord-ID); steht dort mehr, Punkt 6
-    ergänzen. Ob der Betreiber für den eigenen Discord-Server neben Discord gemeinsam verantwortlich
+    ergänzen. Geprüft am 11.11.2026 auf dem lokalen Testserver: Das Protokoll enthält nur die
+    Zeile, die auch im Spiel steht (`[Discord] Anzeigename: Text`), keine Discord-ID. Ob der Betreiber für den eigenen Discord-Server neben Discord gemeinsam verantwortlich
     ist (Art. 26 DSGVO, vgl. EuGH C-210/16 zu Facebook-Fanpages), ist nicht geklärt; der Text stellt
     Discord als eigenen Verantwortlichen dar. Diese Fassung erst veröffentlichen, wenn die Brücke
     live geht (mit der Öffnung).

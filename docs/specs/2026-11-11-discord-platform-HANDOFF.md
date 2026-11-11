@@ -49,14 +49,21 @@ For any session that wants to pick this up, steer it or connect its own work to 
    chat both ways, `@everyone` typed in the game does not ping, links from the game are not clickable. The plugin's
    log needs root: `sudo journalctl -M mc-public -u minecraft-server-paper | grep -i "chat bridge"`. The privacy
    policy draft names the bridge; its open points 13-15 are the owner's call.
-   Not shipped yet: the bridge deletes its own messages in `#ingame-chat` after 30 days (owner's decision
-   2026-11-11; no new right for any bot). Tried in `SelfTest` and `e2e-chat.js`, not against the real Discord:
+   Live since 2026-11-11 14:12 (bandit-craft e2be802, bandit-nix 7e69748): the bridge deletes its own messages in
+   `#ingame-chat` after 30 days (owner's decision 2026-11-11; no new right for any bot). The bot was online in
+   Discord again after that restart. Tried in `SelfTest` and `e2e-chat.js`, not against the real Discord:
    deleting messages older than two weeks one by one is slow there (429), the plugin waits as told.
 7. Done in the client 2026-11-11 with the owner's yes: all four of Discord's default channels are deleted
    (`rules`, `moderator-only`, both `Allgemein`), the safety notifications channel is `#mod-log` (it was unset),
    and "Public Bot" is off for `bandit-admin` (its install link had to be set to "None" first). The guild has no
    system channel now, so Discord posts no "joined" lines. Left: the empty categories `Textkanäle` and
    `Sprachkanäle`.
+
+8. Privacy points checked by the agent on 2026-11-11 (written into `docs/public/DATENSCHUTZ.md`, points 13 and 15):
+   Discord, Inc. is listed as active for the EU-U.S. Data Privacy Framework; the server log keeps only the line
+   shown in the game for a Discord message. Still the owner's call: an exception per player, joint controllership,
+   and a second look at the list on the day of publishing.
+9. claude-mem was removed on 2026-11-11: this file is the live tracker now, not a work state list.
 
 ## How to reach this session
 
