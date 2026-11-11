@@ -227,3 +227,27 @@ const assert = require('node:assert');
   assert.ok(walks > 0);
   console.log('light: unloaded zone walked to ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+(async () => { // a spot the server refused a torch on is skipped for 24 h, not tried on every keeper round (2026-11-11)
+  const {JOBS} = require('../bots');
+  const {Vec3} = require('vec3');
+  const blocks = new Map();
+  for (let x = 0; x < 5; x++) for (let z = 0; z < 5; z++) { blocks.set(`${x},0,${z}`, {name: 'stone', boundingBox: 'block', light: 0}); blocks.set(`${x},1,${z}`, {name: 'air', boundingBox: 'empty', light: 0}); blocks.set(`${x},2,${z}`, {name: 'air', boundingBox: 'empty', light: 0}); }
+  const placed = [];
+  const bot = {
+    blockAt: (p) => { const b = blocks.get(`${p.x},${p.y},${p.z}`); return b ? {...b, position: new Vec3(p.x, p.y, p.z)} : null; },
+    entity: {position: new Vec3(2, 1, 2), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, health: 20,
+    registry: {blocks: {}, blocksByName: {torch: {id: 1}, wall_torch: {id: 2}}, foodsByName: {}}, inventory: {items: () => [{name: 'torch', count: 30}], emptySlotCount: () => 20, slots: []},
+    pathfinder: {goto: async (g) => { bot.entity.position = new Vec3(g.x, g.y, g.z); }, stop() {}, setGoal() {}, movements: {}}, findBlocks: () => [],
+    equip: async () => {},
+    placeBlock: async (ref, face) => { placed.push(`${ref.position.x},${ref.position.y + face.y},${ref.position.z}`); throw new Error('Server refused to place torch'); },
+  };
+  const r = {bot, world: {hostilesNear: () => [], snapshot: () => ({blocks: []})}, emit() {}, protectedAreas: [], supplyChest: null, combat: {fit: () => true}};
+  const job = () => ({t: {}, cancelled: false, type: 'light', args: {x1: 0, y1: 0, z1: 0, x2: 4, y2: 2, z2: 4, zone: 'Test'}});
+  await JOBS.light(r, job()).catch(() => {});
+  assert.ok(placed.length > 0, 'the first run tries');
+  const first = [...placed];
+  placed.length = 0;
+  await JOBS.light(r, job()).catch(() => {});
+  assert.deepStrictEqual(placed.filter((k) => first.includes(k)), [], 'refused spots are not tried again within 24 h');
+  console.log('light: refused spot waits ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });

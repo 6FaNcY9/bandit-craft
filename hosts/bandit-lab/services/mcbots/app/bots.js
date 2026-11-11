@@ -1275,8 +1275,11 @@ async function nightShelter(r, job) {
       const lidItem = () => bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name));
       for (let i = 0; i < 20 && !lidItem(); i++) await sleep(100); // the dug dirt drops into the hole
       if (!lidItem()) throw new Error('no block for the lid');
-      await bot.equip(lidItem(), 'hand');
-      await bot.placeBlock(wall, lidAt.minus(wall.position));
+      // Combat may put the sword back in hand between equip and place: check right before placing, retry once (2026-11-11).
+      for (let i = 0; ; i++) {
+        if (bot.heldItem?.name !== lidItem()?.name) await bot.equip(lidItem(), 'hand');
+        try { await bot.placeBlock(wall, lidAt.minus(wall.position)); break; } catch (e) { if (i || !lidItem()) throw e; guard(job); }
+      }
       r.shelterAt = lidAt;
     }
     const top = r.shelterAt;
@@ -3453,8 +3456,11 @@ const JOBS = {
       return bot.findBlocks({matching: ids, maxDistance: 9, count: 64}).some((v) => new Vec3(x, y, z).distanceTo(v) <= 7);
     }, (x, z) => chestPoints.some((c) => Math.hypot(c.x - x, c.z - z) < 2));
     let lit = 0;
+    // A spot the server refused a torch on waits 24 h, not every keeper round (2026-11-11).
+    const refused = (r.refusedLight ||= new Map()), key = (p) => `${p.x},${p.y},${p.z}`;
     for (const p of points) {
       guard(job);
+      if ((refused.get(key(p)) || 0) > Date.now()) continue;
       if (!await getTorch()) break;
       try { await goNear(r, job, p.x, p.y, p.z, 2); } catch { guard(job); continue; }
       guard(job);
@@ -3466,7 +3472,7 @@ const JOBS = {
         await bot.placeBlock(below, new Vec3(0, 1, 0));
         await sleep(200);
         if (/^torch$/.test(bot.blockAt(new Vec3(p.x, p.y, p.z))?.name || '')) lit++;
-      } catch (e) { guard(job); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z}: ${e.message.slice(0, 60)}`); }
+      } catch (e) { guard(job); refused.set(key(p), Date.now() + 24 * 3600000); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z} for 24 h: ${e.message.slice(0, 60)}`); }
     }
     if (!count() && lit === 0) throw new Error('no torches available');
     r.emit('info', `lit ${a.zone || `box ${a.x1},${a.y1},${a.z1}..${a.x2},${a.y2},${a.z2}`}: ${lit} torches`);

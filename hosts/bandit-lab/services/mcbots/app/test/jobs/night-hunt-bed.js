@@ -27,6 +27,14 @@ module.exports = async () => {
       await nightShelter(b.r, job);
       assert.strictEqual(b.dug.size, 0, why);
     }
+    // combat put a sword back in hand between equip and place: the lid goes back in hand and is placed on the second try
+    const sw = mk();
+    let equips = 0;
+    sw.r.bot.equip = async (it) => { sw.r.bot.heldItem = ++equips === 1 ? {name: 'iron_sword'} : it; };
+    const placeLid = sw.r.bot.placeBlock;
+    sw.r.bot.placeBlock = async (ref, face) => { if (sw.r.bot.heldItem?.name !== 'dirt') throw new Error('No block has been placed : the block is still air'); return placeLid(ref, face); };
+    await nightShelter(sw.r, job);
+    assert.deepStrictEqual(sw.placed, [90], 'the lid is placed after the sword swap');
     const c = mk();
     await nightShelter(c.r, {...job, type: 'goto'});
     assert.strictEqual(c.dug.size, 0, 'an owner\'s walk is not paused');
