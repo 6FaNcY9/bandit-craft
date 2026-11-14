@@ -54,6 +54,22 @@ const assert = require('node:assert');
   t += STUCK_MS; m.watch([snap('bot3', [8, 64, 0], 'walking to 1 2 3')]);
   await settle();
   assert.strictEqual(sent.length, 1, 'a bot that moves is not stuck');
+  // stuck with changing texts: bot2 in a hole, its climb and the producer's lines in turn, a failed walk every other minute (main server 2026-11-14)
+  online = ['bot2', 'bot3', 'bot5', 'bot6']; sent.length = 0; said.length = 0;
+  const texts = ['climbing to Y 76 towards -303 111 6', 'producing: craft 64 oak_planks', 'waiting: nothing to make'];
+  for (let i = 0; i <= 8; i++, t += 60000) {
+    if (i % 2) m.event({bot: 'bot5', kind: 'info', text: 'produce: could not reach -294 76 -44: no progress for 30 s; trying again in a minute'});
+    m.watch([snap('bot5', [-294, 60, -44], texts[i % 3])]);
+    await settle();
+    assert.strictEqual(sent.length, i < 8 ? 0 : 1, `poll ${i}`);
+  }
+  assert.match(sent[0], /tp bot5 /);
+  assert.match(said[0], /rescued: stuck 8 min at -294 60 -44/);
+  // one failed walk, then waiting and short walks in place: left alone (a shelter, a smelter, a builder)
+  m.event({bot: 'bot6', kind: 'info', text: 'gear: no iron_ingot from storage: could not reach -294 66 -44: no path (cached, 15 s ago)'});
+  for (let i = 0; i < 12; i++, t += 60000) m.watch([snap('bot6', [8, 64, 0], i % 4 ? 'night: waiting in a shelter' : 'walking to place stone at 8 64 2')]);
+  await settle();
+  assert.strictEqual(sent.length, 1, 'a bot that works in place is not stuck');
 })();
 
 (async () => { // litematic: packed states cross longs; signed sizes locate the min corner
