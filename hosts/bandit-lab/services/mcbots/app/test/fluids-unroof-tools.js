@@ -285,6 +285,15 @@
   const {supportStock} = require('../bots');
   const hop = (n) => ({targets: Array.from({length: n}, () => ({name: 'hopper'})).concat([{name: 'cobblestone'}])});
   assert.deepStrictEqual([supportStock(hop(9)).glass, supportStock(hop(40)).glass, supportStock(hop(347)).glass, supportStock(hop(0)).dirt], [16, 40, 320, 128]);
+  // supports are topped up only below half the target: 4 missing glass sent bot19 into a skeleton dungeon (2026-11-14)
+  {
+    const {addSupports} = require('../bots');
+    const p = hop(347); // glass 320, dirt 128
+    assert.deepStrictEqual(addSupports({hopper: 5}, {glass: 316, dirt: 120}, p), {hopper: 5}, 'a few short: no trip');
+    assert.deepStrictEqual(addSupports({hopper: 5}, {glass: 100, dirt: 63}, p), {hopper: 5, glass: 320, dirt: 128}, 'below half: the full target again');
+    assert.deepStrictEqual(addSupports({stone: 10}, {stone: 10, glass: 0, dirt: 200}, p), {stone: 10, glass: 320}, 'only the low one');
+    assert.deepStrictEqual(addSupports({}, {}, p), {}, 'a finished build wants no supports');
+  }
   {
     const {helpOnce, JOBS} = require('../bots');
     const needs = [

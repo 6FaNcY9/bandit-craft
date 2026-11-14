@@ -2970,6 +2970,14 @@ const SUPPORT_STOCK = {glass: 320, dirt: 128}; // the crew climbs on glass over 
 // Glass only as the hoppers call for it: the iron farm's 9 hoppers would have had 320 glass made beside its own 68
 // (2026-10-16). One per hopper, 16 at least, the sorter's 320 at most.
 const supportStock = (plan) => ({...SUPPORT_STOCK, glass: Math.min(SUPPORT_STOCK.glass, Math.max(16, plan.targets.filter((t) => t.name === 'hopper').length))});
+// Supports: glass over hoppers (it drops nothing), dirt elsewhere; used up as the build goes. Topped up only once the
+// spare stock is below half: a shortfall of a few glass sent bot19 into a skeleton dungeon for 4 sand while the builders
+// carried some 60 glass each (main server 2026-11-14).
+function addSupports(need, stock, plan) {
+  if (!Object.keys(need).length) return need;
+  for (const [item, n] of Object.entries(supportStock(plan))) if ((stock[item] || 0) - (need[item] || 0) < n / 2) need[item] = (need[item] || 0) + n;
+  return need;
+}
 
 const PROJECT_MATERIALS_MS = 60000;
 const PROJECT_MATERIALS = new WeakMap();
@@ -3253,9 +3261,8 @@ function producer(r, job, args) {
   async function step() {
     plan ||= await buildJob.schematicPlan(SCHEMATIC_DIR, args);
     const need = buildJob.stillNeeded(r.bot, plan);
-    // Supports: glass over hoppers (it drops nothing), dirt elsewhere; used up as the build goes.
-    if (Object.keys(need).length) for (const [item, n] of Object.entries(supportStock(plan))) need[item] = (need[item] || 0) + n;
     const stock = await buildJob.readStock(r, job, chests, {goNear, guard});
+    addSupports(need, stock, plan);
     const now = Date.now();
     for (const [k, t] of PRODUCING) if (t.until < now || t.by === r.name) PRODUCING.delete(k);
     const taken = new Set(PRODUCING.keys());
@@ -4325,4 +4332,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
