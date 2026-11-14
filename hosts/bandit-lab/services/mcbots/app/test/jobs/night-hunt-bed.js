@@ -52,6 +52,31 @@ module.exports = async () => {
     await nightShelter(fitC.r, job);
     await nightShelter(bareC.r, job);
     assert.deepStrictEqual([fitC.dug.size, bareC.placed], [0, [90]], 'a fit bot chops on, an unfit one shelters');
+    // The night rearm walk only for missing gear: bot20 in full iron at 6 hp walked 240 blocks through the dark from
+    // the sorter site (main server 2026-11-14); it heals in a hole on the spot instead.
+    {
+      const B = require('../../bots');
+      const realRearm = B.JOBS.rearm;
+      const walks = [];
+      B.JOBS.rearm = async (r) => { walks.push(r.name); };
+      try {
+        const geared = (name, {armour = true, sword = true, food = true} = {}) => {
+          const m = mk();
+          const inv = [{name: 'dirt'}, ...(sword ? [{name: 'iron_sword'}] : []), ...(food ? [{name: 'bread'}] : [])];
+          Object.assign(m.r.bot.inventory, {items: () => inv, slots: armour ? {5: {name: 'iron_helmet'}, 6: {name: 'iron_chestplate'}, 7: {name: 'iron_leggings'}, 8: {name: 'iron_boots'}} : {}});
+          m.r.bot.getEquipmentDestSlot = (s) => ({head: 5, torso: 6, legs: 7, feet: 8})[s];
+          m.r.bot.registry = {foodsByName: {bread: {}}};
+          Object.assign(m.r, {name, combat: {fit: () => false}, supplyChest: {x: 100, y: 64, z: 100}});
+          return m;
+        };
+        const full = geared('full'), noArmour = geared('noArmour', {armour: false}), noSword = geared('noSword', {sword: false}), noFood = geared('noFood', {food: false});
+        for (const m of [full, noArmour, noSword, noFood]) await nightShelter(m.r, {...job, type: 'schematic'});
+        assert.deepStrictEqual(walks, ['noArmour', 'noSword', 'noFood'], 'only a bot missing armour, a weapon or food walks to the supply chest');
+        assert.deepStrictEqual(full.placed, [90], 'the bot in full gear shelters on the spot');
+      } finally {
+        B.JOBS.rearm = realRearm;
+      }
+    }
     // An agent's new job replaced the waiting one (main server 2026-10-14): back in tonight's hole it waits on
     // without digging a new one, and digs only the lid out in the morning.
     const d = mk({sky: 0});

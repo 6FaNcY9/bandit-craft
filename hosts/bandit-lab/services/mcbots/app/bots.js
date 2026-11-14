@@ -1234,6 +1234,13 @@ const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOf
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
 // without armour and died six times in six minutes at the iron farm (main server 2026-10-17); with gear they build on.
 const UNFIT_NIGHT_JOBS = new Set(['schematic', 'produce']);
+// What a night rearm walk could bring: an armour slot empty, no sword or axe, or no food in the bag.
+function gearMissing(bot) {
+  const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots?.[bot.getEquipmentDestSlot?.(s)]);
+  const names = bot.inventory.items().map((i) => i.name);
+  return worn.some((i) => !i) || !names.some((n) => /_(sword|axe)$/.test(n)) || !names.some((n) => bot.registry?.foodsByName?.[n] && !AVOID_FOOD.has(n));
+}
+
 async function nightShelter(r, job) {
   const {bot} = r;
   if (r.sheltered || !bot?.entity || !isNight(bot)) return;
@@ -1258,7 +1265,9 @@ async function nightShelter(r, job) {
   if (!NIGHT_JOBS.has(job.type) && !UNFIT_NIGHT_JOBS.has(job.type)) return;
   if (r.combat?.fit?.()) return;
   // Gear first, the hole only when the supply chest has none (owner 2026-11-05: the bots work through the night).
-  if (r.combat && r.supplyChest && Date.now() - (r.nightRearmAt || 0) > FOOD_RETRY_MS) {
+  // Only for missing gear: low health makes a bot in full iron unfit too, and the walk sent bot20 at 6 hp 240 blocks
+  // through the dark from the sorter site (main server 2026-11-14); healing in a hole on the spot is the safer step.
+  if (r.combat && r.supplyChest && gearMissing(bot) && Date.now() - (r.nightRearmAt || 0) > FOOD_RETRY_MS) {
     r.nightRearmAt = Date.now();
     r.emit('info', 'night: fetching gear from the supply chest before going on');
     await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => { guard(job); r.emit('info', `night: no gear fetched: ${e.message.slice(0, 80)}`); });
