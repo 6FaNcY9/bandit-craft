@@ -251,3 +251,26 @@ const assert = require('node:assert');
   assert.deepStrictEqual(placed.filter((k) => first.includes(k)), [], 'refused spots are not tried again within 24 h');
   console.log('light: refused spot waits ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+(async () => { // eating swapped the torch for bread between equip and place: re-equip and place, no 24 h refusal (2026-11-14)
+  const {JOBS} = require('../bots');
+  const {Vec3} = require('vec3');
+  const blocks = new Map([['0,0,0', {name: 'stone', boundingBox: 'block', light: 0}], ['0,1,0', {name: 'air', boundingBox: 'empty', light: 0}], ['0,2,0', {name: 'air', boundingBox: 'empty', light: 0}]]);
+  let equips = 0;
+  const infos = [];
+  const bot = {
+    blockAt: (p) => { const b = blocks.get(`${p.x},${p.y},${p.z}`); return b ? {...b, position: new Vec3(p.x, p.y, p.z)} : null; },
+    entity: {position: new Vec3(0, 1, 0), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, health: 20, heldItem: null,
+    registry: {blocks: {}, blocksByName: {torch: {id: 1}, wall_torch: {id: 2}}, foodsByName: {}}, inventory: {items: () => [{name: 'torch', count: 30}, {name: 'bread', count: 5}], emptySlotCount: () => 20, slots: []},
+    pathfinder: {goto: async (g) => { bot.entity.position = new Vec3(g.x, g.y, g.z); }, stop() {}, setGoal() {}, movements: {}}, findBlocks: () => [],
+    equip: async (it) => { bot.heldItem = ++equips === 1 ? {name: 'bread'} : it; },
+    placeBlock: async (ref, face) => {
+      if (bot.heldItem?.name !== 'torch') throw new Error(`Server refused to place ${bot.heldItem?.name} at (0, 1, 0)`);
+      blocks.set(`${ref.position.x},${ref.position.y + face.y},${ref.position.z}`, {name: 'torch', boundingBox: 'empty', light: 14});
+    },
+  };
+  const r = {bot, world: {hostilesNear: () => [], snapshot: () => ({blocks: []})}, emit: (k, t) => infos.push(t), protectedAreas: [], supplyChest: null, combat: {fit: () => true}};
+  await JOBS.light(r, {t: {}, cancelled: false, type: 'light', args: {x1: 0, y1: 0, z1: 0, x2: 0, y2: 2, z2: 0, zone: 'Swap'}});
+  assert.strictEqual(blocks.get('0,1,0').name, 'torch', infos.join('|'));
+  assert.ok(!infos.some((m) => /skipped light point/.test(m)), infos.join('|'));
+  console.log('light: hand swap re-equips ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });

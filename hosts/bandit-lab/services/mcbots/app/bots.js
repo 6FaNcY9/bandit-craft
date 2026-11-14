@@ -3520,8 +3520,12 @@ const JOBS = {
       const here = bot.blockAt(new Vec3(p.x, p.y, p.z)), below = bot.blockAt(new Vec3(p.x, p.y - 1, p.z));
       if (!here || !below || !['air', 'cave_air'].includes(here.name) || below.boundingBox !== 'block' || (here.light ?? 15) >= LIGHT_GOAL) continue;
       try {
-        await bot.equip(bot.inventory.items().find((i) => i.name === 'torch'), 'hand');
-        await bot.placeBlock(below, new Vec3(0, 1, 0));
+        // Eating or combat may swap the hand between equip and place: bot1 "placed" bread and every such spot stayed dark
+        // for 24 h (main server 2026-11-14). Check right before placing, retry once, as the shelter lid does.
+        for (let i = 0; ; i++) {
+          if (bot.heldItem?.name !== 'torch') await bot.equip(bot.inventory.items().find((it) => it.name === 'torch'), 'hand');
+          try { await bot.placeBlock(below, new Vec3(0, 1, 0)); break; } catch (e) { if (i || !count()) throw e; guard(job); }
+        }
         await sleep(200);
         if (/^torch$/.test(bot.blockAt(new Vec3(p.x, p.y, p.z))?.name || '')) lit++;
       } catch (e) { guard(job); refused.set(key(p), Date.now() + 24 * 3600000); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z} for 24 h: ${e.message.slice(0, 60)}`); }
