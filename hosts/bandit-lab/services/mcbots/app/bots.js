@@ -2941,11 +2941,11 @@ const SCHEMATIC_DIR = process.env.SCHEMATIC_DIR || require('node:path').join(pro
 const schematic = buildJob.makeSchematic({goNear, guard, sleep, goals, digAt, natural: NATURAL,
   light: (r, job) => lightUp(r, job).catch((e) => { guard(job); r.emit('info', `no torch placed: ${e.message.slice(0, 80)}`); }),
   dir: SCHEMATIC_DIR, care,
-  // Waiting for material, the builder makes some itself: one production step for its own project.
+  // Waiting for material, the builder makes some itself: one production step for its own project, never on a far search.
   help: async (r, job) => {
     const a = job.args;
     if (!a.chests?.length) return false;
-    const s = await producer(r, child(job, {type: 'produce', t: {}}), {...a, store: a.chests[0]}).step();
+    const s = await producer(r, child(job, {type: 'produce', t: {}, noFar: true}), {...a, store: a.chests[0]}).step();
     return !s.idle;
   },
   deposit: (r, job, c, only, keep) => JOBS.deposit(r, child(job, {type: 'deposit', args: {x: c.x, y: c.y, z: c.z, ...(only ? {only} : {}), ...(keep ? {keep} : {})}}))});
@@ -3043,7 +3043,7 @@ async function helpOnce(r, job) {
     try {
       // What the helper carries goes first; get makes only the rest.
       const want = Math.min(need.count, 64), carried = r.bot ? crafting.count(r.bot, need.item) : 0;
-      const childJob = child(job, {type: 'get', args: {item: need.item, count: want - carried}});
+      const childJob = child(job, {type: 'get', args: {item: need.item, count: want - carried}, noFar: true}); // a builder's help never walks off on a far search
       try { if (carried < want) await JOBS.get(r, childJob); }
       catch (e) {
         guard(job);
@@ -3252,10 +3252,11 @@ function producer(r, job, args) {
     const taken = new Set(PRODUCING.keys());
     for (const [k, until] of TURNS) if (until < now) TURNS.delete(k);
     const resting = new Set(TURNS.keys());
-    let next = productionLib.nextChain({need, stock, taken, resting, store});
+    const slots = r.bot.inventory.emptySlotCount();
+    let next = productionLib.nextChain({need, stock, taken, resting, store, slots});
     while (!next.idle && r.world && !(await r.world.claim(r.name, `produce:${next.key}`))) {
       taken.add(next.key); // another worker's bot has it
-      next = productionLib.nextChain({need, stock, taken, resting, store});
+      next = productionLib.nextChain({need, stock, taken, resting, store, slots});
     }
     // What these chains cannot make, the planner may (acquire.js: white beds from sheep's wool), up to 16 a step.
     if (next.idle) next = getStep(next.left || [], need, stock, taken, store) || next;
@@ -3295,6 +3296,11 @@ function producer(r, job, args) {
       guard(job);
       r.emit('info', `produce: ${next.label} failed, resting it 10 min: ${e.message.slice(0, 100)}`);
       PRODUCING.set(next.key, {by: '-', until: Date.now() + 10 * 60000});
+      // What the chain took out or made stays in the bag and crowds it: bot19 then walked 200 blocks to the base chest and
+      // filed 108 ingots and 10 shears in the hall (2026-11-11). One failed trip ends the give-back.
+      for (const item of productionLib.chainItems(next.chain).filter((i) => craftingLib.count(r.bot, i))) {
+        try { await viaChests('deposit', {only: item}); } catch { guard(job); break; }
+      }
       return {ran: null};
     } finally {
       clearInterval(hold);
@@ -3314,6 +3320,9 @@ const produceStep = (p, r, job) => p.step().catch((e) => {
   return {idle: 'the way to the chests is blocked'};
 });
 async function produce(r, job) {
+  // A gather that finds nothing near rests 10 min; far hops of 96-768 blocks walked bot2 into an ocean monument (died at z -817,
+  // 2026-11-11, as bot1 on 2026-11-09) and bot19 600 blocks south for snow.
+  job.noFar = true;
   const p = producer(r, job, job.args);
   for (;;) {
     guard(job);

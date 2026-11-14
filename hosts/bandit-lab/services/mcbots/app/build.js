@@ -1171,7 +1171,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               const ct = plan.byKey.get(keyOf(c));
               if (ct?.late && !skip.has(keyOf(c)) && free(stateAt(c.x, c.y, c.z)?.name ?? 'stone')) {
                 const cw = ct.p.ways.find((u) => solid(stateAt(c.x + u.against[0], c.y + u.against[1], c.z + u.against[2])?.name));
-                if (cw && (!best || best.height > 0)) best = {real: {t: ct, w: cw}, height: 0};
+                // In no chest: picked again at once it spun the loop at full CPU with nothing placed (sorter builders, 2026-11-11).
+                if ((lacking.get(ct.p.item) || 0) > Date.now()) waiting.add(ct.p.item);
+                else if (cw && (!best || best.height > 0)) best = {real: {t: ct, w: cw}, height: 0};
                 continue;
               }
               if (ct && ATTACHED.test(t.name)) continue;
