@@ -361,6 +361,24 @@ function bycatch(items, uses, natural) {
   if ((n[SCAFFOLD] || 0) <= SCAFFOLD_KEEP) delete n[SCAFFOLD];
   return Object.keys(n);
 }
+// What stays with a builder that makes room for a restock, by item name: dirt and glass to climb, and the kinds the
+// open cells use (`open`: item -> cells, in build order) but for the ones used last, as many as `short` slots take.
+// A plain deposit put the whole bag back 5 times in 5 min, and with the depot full a trip brought one block
+// (sorter builders, main server 2026-11-14).
+// shortcut: kinds in bots.js KEEP_RE/TOOL_STOCK (torch, planks, 6 cobblestone) never fully leave on a deposit, so room
+// can come out one slot short; the reserve-slot fallback in restock covers it. Count them here if that starts to bite.
+function roomKeep(items, open, uses, short, support) {
+  const keep = Object.fromEntries(support.map((n) => [n, 128]));
+  const of = (item) => items.filter((it) => placing.itemOf(it.name) === item);
+  for (const item of uses) if (!open.has(item) && !support.includes(item)) short -= of(item).length; // goes anyway
+  for (const item of [...open.keys()].reverse()) {
+    if (support.includes(item)) continue;
+    const its = of(item);
+    if (short > 0 && its.length) short -= its.length;
+    else for (const it of its) keep[it.name] = (keep[it.name] || 0) + it.count;
+  }
+  return keep;
+}
 // The cells to dig for a bot walled in by its own build: head first, through the thinnest wall, towards the site when walls tie.
 // bot50 stood in the apse's light slot as the wall rose, and all that was left was "could not reach" (sandbox 2026-11-04).
 function breakOut(feet, open, towards, max = 3) {
@@ -750,6 +768,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // could not reach and had no slot left for blocks or dirt (sandbox 2026-10-13).
     const FILLS = new Set(plan.targets.flatMap((t) => (t.items || []).map((it) => it.name)));
     const freeSlots = () => 36 - bot.inventory.items().length - RESERVE_SLOTS;
+    const stackOf = (item) => bot.registry.itemsByName[item]?.stackSize || 64;
     // Into the first chest with room: the material chest filled up and took 18 of 96 shears (one a slot).
     const fullUntil = new Map(); // chest key -> until: a deposit found it full or out of reach
     async function stow(only, keep) {
@@ -766,11 +785,12 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         }
       }
     }
-    async function makeRoom(slots = 8) {
+    // `open` (restock only): the build blocks that still have a cell stay but for the kinds used last (roomKeep).
+    async function makeRoom(slots = 8, open = null) {
       const spare = new Set(bot.inventory.items().map((it) => it.name).filter((n) => FILLS.has(n)));
       for (const only of [...spare, null]) {
         if (only === null && freeSlots() >= slots) break; // the build blocks it carries stay when that made room
-        await stow(only);
+        await stow(only, only === null && open ? roomKeep(bot.inventory.items(), open, uses, slots - freeSlots(), hoppers ? [SCAFFOLD, GLASS] : [SCAFFOLD]) : undefined);
       }
     }
 
@@ -781,26 +801,33 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const uses = new Set(plan.targets.map((t) => t.p.item));
     async function restock(want) {
       if (chests.length) for (const only of bycatch(bot.inventory.items(), uses, natural)) await stow(only, only === SCAFFOLD ? {[SCAFFOLD]: SCAFFOLD_KEEP} : undefined);
-      let slots = freeSlots();
-      if (slots < 2 && chests.length) {
-        await makeRoom();
-        slots = freeSlots();
-      }
-      const need = new Map();
-      let stacks = 0;
+      // The open cells by item, in build order. A cell in an unloaded chunk counts: its kind is still used.
+      const open = new Map();
       for (const t of plan.targets) {
         const h = stateAt(t.x, t.y, t.z);
-        if (!h || placing.matches(t, h) || (lacking.get(t.p.item) || 0) > Date.now()) continue;
-        const stack = bot.registry.itemsByName[t.p.item]?.stackSize || 64;
-        // At most two stacks of a kind: a crew shares the chests (one bot took 268 of 334 chests, the
-        // others then walked all 57 filler chests for one). One kind alone (a fill) takes up to 8.
-        const was = need.get(t.p.item) || 0, n = Math.min(was + (t.p.again ? 2 : 1), perKind * stack);
-        const more = Math.ceil(n / stack) - Math.ceil(was / stack);
-        if (stacks + more > slots) break;
-        stacks += more;
-        need.set(t.p.item, n);
+        if (!h || !placing.matches(t, h)) open.set(t.p.item, (open.get(t.p.item) || 0) + (t.p.again ? 2 : 1));
       }
-      if (!need.has(want)) need.set(want, want === GLASS ? 16 : 1);
+      // At most two stacks of a kind: a crew shares the chests (one bot took 268 of 334 chests, the
+      // others then walked all 57 filler chests for one). One kind alone (a fill) takes up to 8.
+      const wanted = (item) => Math.min(open.get(item) || 0, perKind * stackOf(item));
+      const room = Math.ceil(wanted(want) / stackOf(want)) || 1;
+      let slots = freeSlots();
+      if (slots < room && chests.length) {
+        await makeRoom(room, open);
+        slots = freeSlots();
+      }
+      // The wanted kind first, then in build order; a started stack fills up without a slot.
+      const need = new Map(), have = count();
+      for (const item of [want, ...open.keys()]) {
+        if (need.has(item) || (lacking.get(item) || 0) > Date.now()) continue;
+        const stack = stackOf(item), held = Math.ceil((have[item] || 0) / stack);
+        const n = Math.min(wanted(item), (held + Math.max(0, slots)) * stack);
+        if (n <= (have[item] || 0)) continue;
+        slots -= Math.ceil(n / stack) - held;
+        need.set(item, n);
+      }
+      // No room made (depot full): one stack into a reserve slot, not one block a trip.
+      if (!need.has(want)) need.set(want, Math.min(wanted(want) || (want === GLASS ? 16 : 1), stackOf(want)));
       if ((count()[SCAFFOLD] || 0) < 32) need.set(SCAFFOLD, Math.max(need.get(SCAFFOLD) || 0, 64)); // to climb and to prop
       if (hoppers && (count()[GLASS] || 0) < 16) need.set(GLASS, Math.max(need.get(GLASS) || 0, 64)); // to climb over hoppers
       for (const [item, n] of need) {
@@ -850,7 +877,6 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         return;
       }
       // Room first: 27 shears are 27 slots, and a bot full of build blocks carried 9 a trip.
-      const stackOf = (item) => bot.registry.itemsByName[item]?.stackSize || 64;
       const slots = [...want].reduce((sum, [item, n]) => sum + Math.ceil(Math.max(0, n - (count()[item] || 0)) / stackOf(item)), 0);
       // All of them, the wanted ones too: 32 shears for a chest of 27 left no slot for the dirt.
       // Room for all of it, build blocks stowed too: with them a trip carried 12-15 shears, and every chest high in
@@ -1437,6 +1463,7 @@ module.exports = {
   finishOf,
   stacksPerKind,
   bycatch,
+  roomKeep,
   surplusRock,
   breakOut,
   validate,

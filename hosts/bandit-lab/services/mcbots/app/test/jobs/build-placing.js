@@ -41,6 +41,15 @@ module.exports = async () => {
       assert.deepStrictEqual(B.bycatch(inv, new Set(['cobblestone']), NAT), ['andesite', 'diorite', 'dirt']);
       assert.deepStrictEqual(B.bycatch([{name: 'dirt', count: 64}], new Set(['cobblestone']), NAT), [], 'one stack of dirt stays');
       assert.deepStrictEqual(B.bycatch(inv, new Set(['andesite', 'dirt']), NAT), ['diorite'], 'what the build uses stays');
+      { // a full bag makes room for a restock with what no open cell uses, then the kinds used last (sorter builders, 2026-11-14)
+        const s = (name, count) => ({name, count});
+        const bag = [s('stone', 64), s('stone', 41), s('hopper', 64), s('hopper', 37), s('glass', 64), s('dirt', 64), s('dropper', 64), s('comparator', 12), s('rotten_flesh', 3)];
+        const open = new Map([['hopper', 300], ['stone', 200], ['glass', 40], ['dropper', 9]]); // build order; every comparator stands
+        const kinds = new Set(['hopper', 'stone', 'glass', 'dropper', 'comparator']), sup = ['dirt', 'glass'];
+        assert.deepStrictEqual(B.roomKeep(bag, open, kinds, 1, sup), {dirt: 128, glass: 128, dropper: 64, stone: 105, hopper: 101}, 'the unused comparators make the slot: nothing it will place goes');
+        assert.deepStrictEqual(B.roomKeep(bag, open, kinds, 2, sup), {dirt: 128, glass: 128, stone: 105, hopper: 101}, 'then the kind used last');
+        assert.deepStrictEqual(B.roomKeep(bag, open, kinds, 4, sup), {dirt: 128, glass: 128, hopper: 101}, 'the kind placed next stays to the end, dirt and glass always');
+      }
       {
         // The apse's light slot: one wide, walled in by the bot's own build; the nave lies past one wall to the east.
         const open = (x, y, z) => (x === 0 && z >= -1 && z <= 1) || x >= 2;
