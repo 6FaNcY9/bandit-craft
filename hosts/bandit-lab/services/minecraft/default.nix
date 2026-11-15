@@ -156,6 +156,42 @@ in {
         '';
       };
 
+      # The world's own data packs (datapacks/: sortcart runs the sorter cart), installed live like the menus; reload
+      # enables a new pack. `minecraft:reload`, never Paper's `/reload` (that reloads the plugins).
+      minecraft-datapacks = {
+        description = "Install the world data packs and reload them";
+        after = ["minecraft-server-paper.service"];
+        wantedBy = ["minecraft-server-paper.service" "multi-user.target"]; # multi-user: a deploy starts it the first time
+        partOf = ["minecraft-server-paper.service"];
+        path = [pkgs.coreutils pkgs.mcrcon];
+        environment = {
+          PACKS = ./datapacks;
+          MCRCON_HOST = "127.0.0.1";
+          MCRCON_PORT = "25575"; # servers.paper rcon.port, loopback
+        };
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          TimeoutStartSec = "10min";
+        };
+        script = ''
+          d=/srv/minecraft/paper/world/datapacks
+          [ -d "$d" ] || { echo "no world yet; the next start installs the packs" >&2; exit 0; }
+          for pack in "$PACKS"/*; do
+            rm -rf "$d/$(basename "$pack")"
+            cp -r --no-preserve=mode,ownership "$pack" "$d/"
+            chown -R minecraft:minecraft "$d/$(basename "$pack")"
+          done
+          MCRCON_PASS=$(cat ${config.sops.secrets."minecraft-rcon-password".path})
+          export MCRCON_PASS
+          for _ in $(seq 50); do
+            timeout 60 mcrcon "minecraft:reload" >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "Minecraft is not running; it reads the packs when it starts" >&2
+        '';
+      };
+
       # RCON password for the Docker container, made once on this host (root-only). The nix-minecraft
       # server and mcbots-seed read the sops secret minecraft-rcon-password instead.
       # shortcut: dormant like minecraft-plugins (no consumer left); delete it with /var/lib/minecraft-rcon.

@@ -39,6 +39,10 @@ The bots build it themselves from schematics; Claude designs the modules, orders
 
 - **Sorter**: x -308..-295, z 11..50, y 111..129 stays untouched. No `clear` box may overlap it. The shell keeps
   one block of air to it and leaves every input/output/chest face open.
+- **Sorter cart**: the hopper minecart tagged `sortcart` needs the `sortcart` data pack
+  (`hosts/bandit-lab/services/minecraft/datapacks/`), since `minecart_improvements` stops its two drop-throughs.
+  Its chunks must be loaded while it runs. Farm lines end in the 5 input chests or the hoppers -303 124 20/21, never on
+  the cart loop. After a rebuild the cart is summoned and tagged by RCON (schematics drop entities).
 - **Sorter access** (read from `sorter.litematic`, origin -308 111 11):
   - Output: 137 double chests at x -308/-307, y 116..120, z 11..50, opened from the west (x -309). The shell's west
     side is therefore a covered **chest gallery**: floor y 115, 3 wide (x -311..-309); the shell's west wall moves
