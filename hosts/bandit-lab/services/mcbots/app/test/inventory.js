@@ -65,12 +65,13 @@ assert.strictEqual(S.surplus('stick', {stick: 9999}), 0, 'sticks have no hall ca
   assert.strictEqual(S.sorterRoom('spruce_log', top({spruce_log: 64}), now), false, 'slice at 80 %');
   assert.strictEqual(S.sorterRoom('spruce_log', top({}, now - 31 * 60000), now), false, 'stale = unknown');
   assert.strictEqual(S.sorterRoom('spruce_log', new Map(), now), false, 'never read');
-  assert.strictEqual(S.sorterRoom('jungle_log', top({}), now), false, 'no slice');
+  assert.strictEqual(S.sorterRoom('mangrove_log', top({}), now), false, 'no slice');
   const pos = {x: 1, y: 110, z: 2}, at = (items) => new Map([['1,110,2', {items, t: now}]]);
   assert.strictEqual(S.haulCount('spruce_log', at({spruce_log: 1800, oak_log: 10}), pos, now), 64, '82 above quota -> 1 stack');
   assert.strictEqual(S.haulCount('spruce_log', at({spruce_log: 3000}), pos, now), 640, 'at most 10 stacks');
   assert.strictEqual(S.haulCount('oak_log', at({spruce_log: 1800, oak_log: 10}), pos, now), 0, 'only 10 oak: no full stack');
-  assert.strictEqual(S.haulCount('jungle_log', at({jungle_log: 3000}), pos, now), 0, 'no slice');
+  assert.strictEqual(S.haulCount('mangrove_log', at({mangrove_log: 3000}), pos, now), 0, 'no slice');
+  assert.strictEqual(S.haulCount('cherry_log', at({cherry_log: 1856}), pos, now), 128, 'cherry has slice 32');
   assert.strictEqual(S.haulCount('spruce_log', at({spruce_log: 1728}), pos, now), 0, 'at quota');
 }
 {

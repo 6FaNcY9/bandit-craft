@@ -68,7 +68,7 @@ const chestAbove = (name, stocks, pos, now = Date.now()) => {
 const farmEnough = (name, world, pos, now = Date.now()) => surplus(name, hallTotals(world?.chests)) || chestAbove(name, world?.stocks, pos, now);
 // The castle sorter (2026-11-15-sorter-flow-design.md): loose items go into the inbox; each kind fills one slice z,
 // whose top chest -308 120 z is the 80 % mark. A kind is fed only while that reading is fresh and empty.
-const SORTER = {inbox: {x: -307, y: 117, z: 12}, slices: {oak_log: 25, birch_log: 44, spruce_log: 47}, top: (z) => ({x: -308, y: 120, z})};
+const SORTER = {inbox: {x: -307, y: 117, z: 12}, slices: {oak_log: 25, birch_log: 44, spruce_log: 47, jungle_log: 30, acacia_log: 31, cherry_log: 32}, top: (z) => ({x: -308, y: 120, z})};
 const sorterRoom = (name, stocks, now = Date.now()) => {
   const z = SORTER.slices[name], c = z != null && stocks?.get(`-308,120,${z}`);
   return !!c && now - c.t <= STOCK_TTL_MS && !Object.values(c.items || {}).some((k) => k > 0);
