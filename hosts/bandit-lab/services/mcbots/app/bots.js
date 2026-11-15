@@ -256,7 +256,7 @@ const VALIDATE = {
     const p = xyz({x: a.x1, y: a.y1, z: a.z1}), q = xyz({x: a.x2, y: a.y2, z: a.z2});
     const box = {x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), z1: Math.min(p.z, q.z), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y), z2: Math.max(p.z, q.z)};
     if (box.x2 - box.x1 > 31 || box.z2 - box.z1 > 31 || box.y2 - box.y1 > 23) throw new Error('zu gross: höchstens 32 x 32 Blöcke und 24 hoch');
-    return box;
+    return a.anywhere === true ? {...box, anywhere: true} : box; // anywhere: the owner's own order (set by the hub only)
   },
   // One slice of a board job (board.js): at most 4 wide, 64 long and 32 high. The part id leads the label,
   // which is how the board knows its part in the status snapshot.
@@ -4110,7 +4110,7 @@ const JOBS = {
 
   // Misa's "abbau": the excavate loop over every block but containers, and only where the area rule (misa.js) allows.
   async clear(r, job) {
-    const bad = misa.boxRule(r.allAreas, r.name, job.args);
+    const bad = misa.boxRule(r.allAreas, r.name, job.args, job.args.anywhere === true);
     if (bad) throw new Error(bad);
     const run = child(job, {args: {...job.args, all: true}});
     await JOBS.excavate(r, run);

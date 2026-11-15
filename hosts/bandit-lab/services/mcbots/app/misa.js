@@ -8,10 +8,10 @@ const forBot = (areas, name) => (areas.some((a) => a[6]) ? areas.filter((a) => !
 const overlaps = (a, b) => b.x1 <= a[2] && b.x2 >= a[0] && b.z1 <= a[3] && b.z2 >= a[1] && (a[4] == null || a[5] == null || (b.y1 <= a[5] && b.y2 >= a[4]));
 
 // Why `box` {x1,y1,z1,x2,y2,z2} is not this bot's to change, or null: it must lie inside one area that names the bot
-// and touch no area that does not.
-function boxRule(areas, name, box) {
+// and touch no area that does not. `free` (an order of the owner, server.js submitFor) drops the first half.
+function boxRule(areas, name, box, free) {
   const own = areas.filter((a) => a[6]?.includes(name));
-  if (!own.some((a) => box.x1 >= a[0] && box.x2 <= a[2] && box.z1 >= a[1] && box.z2 <= a[3])) return 'das liegt nicht ganz in deinem Bereich';
+  if (!free && !own.some((a) => box.x1 >= a[0] && box.x2 <= a[2] && box.z1 >= a[1] && box.z2 <= a[3])) return 'das liegt nicht ganz in deinem Bereich';
   if (forBot(areas, name).some((a) => overlaps(a, box))) return 'dort ist gesperrtes Gebiet';
   return null;
 }

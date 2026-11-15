@@ -39,6 +39,11 @@
   assert.match(misa.boxRule([base], 'MisaBot', box(100, 380, 130, 390)), /nicht ganz in deinem Bereich/);
   assert.match(misa.boxRule([base], 'bot1', box(120, 380, 130, 390)), /nicht ganz/); // not her area
   assert.match(misa.boxRule([base, hall], 'MisaBot', box(140, 390, 155, 405)), /gesperrt/);
+  // the owner's own order (free): any bot, outside the named ground too, but never into ground closed to that bot
+  assert.equal(misa.boxRule([base], 'bot1', box(-124, -25, -120, -24), true), null);
+  assert.equal(misa.boxRule([base], 'MisaBot', box(-124, -25, -120, -24), true), null);
+  assert.match(misa.boxRule([base, hall], 'MisaBot', box(140, 390, 155, 405), true), /gesperrt/);
+  assert.match(misa.boxRule([base], 'bot1', box(120, 380, 130, 390), true), /gesperrt/, 'her ground stays closed to the other bots');
   assert.equal(misa.boxRule([base, hall], 'MisaBot', box(140, 390, 155, 405, 80, 90)), null, 'a zone keeps its height');
   assert.equal(misa.boxRule([base, hall], 'MisaBot', box(120, 380, 130, 390)), null);
 
@@ -91,6 +96,7 @@
 
   // clear: size limit, and the job digs everything but containers (and nothing outside the area rule)
   assert.deepEqual(VALIDATE.clear({x1: 31, y1: 23, z1: 31, x2: 0, y2: 0, z2: 0}), box(0, 0, 31, 31, 0, 23));
+  assert.equal(VALIDATE.clear({x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1, anywhere: true}).anywhere, true); assert.equal('anywhere' in VALIDATE.clear({x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1, anywhere: 'yes'}), false);
   for (const a of [{x1: 0, y1: 0, z1: 0, x2: 32, y2: 0, z2: 0}, {x1: 0, y1: 0, z1: 0, x2: 0, y2: 24, z2: 0}, {x1: 0, y1: 0, z1: 0, x2: 0, y2: 0, z2: 32}]) assert.throws(() => VALIDATE.clear(a), /zu gross/);
   assert.equal(VALIDATE.schematic({file: 'a.litematic', origin: {x: 1, y: 2, z: 3}, confine: true}).confine, true);
   await assert.rejects(JOBS.clear({allAreas: [base], name: 'MisaBot'}, {args: box(0, 0, 5, 5)}), /nicht ganz in deinem Bereich/);
