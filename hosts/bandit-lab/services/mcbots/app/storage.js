@@ -66,4 +66,17 @@ const chestAbove = (name, stocks, pos, now = Date.now()) => {
 };
 // A farm kind rests while the hall is above its cap or the chest the farm hands in at is above its quota.
 const farmEnough = (name, world, pos, now = Date.now()) => surplus(name, hallTotals(world?.chests)) || chestAbove(name, world?.stocks, pos, now);
-module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove, farmEnough};
+// The castle sorter (2026-11-15-sorter-flow-design.md): loose items go into the inbox; each kind fills one slice z,
+// whose top chest -308 120 z is the 80 % mark. A kind is fed only while that reading is fresh and empty.
+const SORTER = {inbox: {x: -307, y: 117, z: 12}, slices: {oak_log: 25, birch_log: 44, spruce_log: 47}, top: (z) => ({x: -308, y: 120, z})};
+const sorterRoom = (name, stocks, now = Date.now()) => {
+  const z = SORTER.slices[name], c = z != null && stocks?.get(`-308,120,${z}`);
+  return !!c && now - c.t <= STOCK_TTL_MS && !Object.values(c.items || {}).some((k) => k > 0);
+};
+// Full stacks of exactly this kind above the chest's quota, at most 10 (the inbox buffers 54).
+const haulCount = (name, stocks, pos, now = Date.now()) => {
+  if (SORTER.slices[name] == null) return 0;
+  const have = stocks?.get(pos && `${pos.x},${pos.y},${pos.z}`)?.items?.[name] || 0;
+  return Math.min(640, Math.floor(Math.min(chestAbove(name, stocks, pos, now), have) / 64) * 64);
+};
+module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove, farmEnough, SORTER, sorterRoom, haulCount};
