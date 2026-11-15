@@ -3437,6 +3437,24 @@ const {treefarm} = treeFarmJob.makeTreeFarm({
   enoughWood: (r, job) => (job.args.chest ? storage.chestAbove('oak_log', r.world?.stocks, job.args.chest) : storage.surplus('oak_log', storage.hallTotals(r.world?.chests))),
   deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...(job.args.chest || r.supplyChest), ...(only ? {only} : {})}})),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...(job.args.chest || r.supplyChest)}})),
+  // castle sorter (2026-11-15-sorter-flow-design.md): full stacks above the farm chest's quota go into the inbox while
+  // the kind's slice has room; no room or a failure rests the haul for 30 min
+  haulSurplus: async (r, job) => {
+    const chest = job.args.chest, stocks = r.world?.stocks;
+    if (!chest || job.t.sorterUntil > Date.now()) return false;
+    const items = stocks?.get(`${chest.x},${chest.y},${chest.z}`)?.items || {};
+    const kind = Object.keys(items).filter((n) => storage.SORTER.slices[n] != null).sort((a, b) => items[b] - items[a])[0];
+    const n = kind ? storage.haulCount(kind, stocks, chest) : 0;
+    if (!n) return false;
+    job.t.sorterUntil = Date.now() + 30 * 60000; // set first, so a throw below also rests the haul
+    await JOBS.stock(r, child(job, {type: 'stock', args: storage.SORTER.top(storage.SORTER.slices[kind])}));
+    if (!storage.sorterRoom(kind, r.world?.stocks)) return false;
+    job.t.doing = `taking ${n} ${kind} to the sorter`;
+    await JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item: kind, count: n, ...chest}}));
+    await JOBS.deposit(r, child(job, {type: 'deposit', args: {...storage.SORTER.inbox, only: kind}}));
+    job.t.sorterUntil = 0;
+    return true;
+  },
 });
 
 const {fluids, emptyBucket, fillAt} = fluidsJob.makeFluids({

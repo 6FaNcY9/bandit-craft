@@ -68,7 +68,7 @@ module.exports = async () => {
 
     // the job: a 9 x 9 farm, 9 cells; the chest holds saplings; a grown tree is cut and replanted
     const small = {x1: 0, z1: 0, x2: 8, z2: 8};
-    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood, args = small}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood, haulSurplus, args = small}) => {
       const events = [], infos = [], calls = {deposit: 0, withdraw: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const bot = {
@@ -83,6 +83,7 @@ module.exports = async () => {
       let sleeps = 0;
       const tf = T.makeTreeFarm({
         ...(enoughWood ? {enoughWood} : {}),
+        ...(haulSurplus ? {haulSurplus} : {}),
         goNear: async (r, j, x, y, z) => { bot.entity.position = new Vec3(x, y, z); },
         guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
         sleep: async () => { if (++sleeps > stopAfterSleeps) job.cancelled = true; },
@@ -171,6 +172,20 @@ module.exports = async () => {
     f = fake({world: w, inv: [{name: 'oak_sapling', count: 9, type: 1}], stopAfterSleeps: 100, enoughWood: () => { const n = wood; wood = 0; return n; }});
     await assert.rejects(f.run(), Cancelled);
     assert.strictEqual(f.calls.dig.length, 36, 'all 9 trees cut after the wait');
+    // over quota and the sorter has room: haul instead of waiting, then farm on (2026-11-15-sorter-flow-design.md)
+    const w2 = flat();
+    for (const c of T.gridCells(small)) tree(w2, c.x, c.z, 4);
+    let hauls = 0, wood2 = 500;
+    f = fake({world: w2, inv: [{name: 'oak_sapling', count: 9, type: 1}], stopAfterSleeps: 100,
+      enoughWood: () => { const n = wood2; wood2 = 0; return n; }, haulSurplus: async () => (++hauls, true)});
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(hauls, 1, 'one haul');
+    assert.strictEqual(f.calls.dig.length, 36, 'farmed after the haul');
+    // the haul throws: reported, the farm waits as before and does not fail
+    f = fake({world: w2, inv: [{name: 'oak_sapling', count: 9, type: 1}], enoughWood: () => 500, haulSurplus: async () => { throw new Error('could not reach'); }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(f.job.t.doing, 'enough wood in the hall, waiting');
+    assert.ok(f.infos.some((t) => /sorter: could not reach/.test(t)), 'error reported');
     // still full after the logs-only deposit (sticks, tools, seeds): one plain deposit, then the farm goes on
     let free = 3;
     const onlys = [];
