@@ -193,6 +193,12 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '1,2,3'}));
     assert.deepStrictEqual([sent.length, sent.at(-1).headers.Priority, sent.at(-1).body], [before + 1, 'high', 'highway: east stopped at 40 m: chest at 40 0 0']);
     h.event({bot: 'bot2', kind: 'alert', text: 'something else'});
     assert.strictEqual(sent.length, before + 1);
+    // a death loop holds the bot's order, so it reaches the phone too, once per dying bot (the event's bot is 'base')
+    const loop = require('../orderloop').deathLoopAlert;
+    h.event({bot: 'base', kind: 'alert', text: loop('bot1', {type: 'produce'}, 0)});
+    h.event({bot: 'base', kind: 'alert', text: loop('bot3', undefined, 2)});
+    h.event({bot: 'base', kind: 'alert', text: loop('bot1', undefined, 0)});
+    assert.deepStrictEqual([sent.length, sent.at(-1).headers.Priority, sent.at(-1).body], [before + 3, 'high', 'bot3 died 3 times in 30 min: its 2 queued jobs are dropped']);
   }
   assert.doesNotThrow(() => new NtfyNotifier({...options, fetcher: () => Promise.reject(Error('offline'))}).send('bot1', 'x', 'x'));
   // Both local and sanitized remote events share this callback; notification errors cannot stop logging.
