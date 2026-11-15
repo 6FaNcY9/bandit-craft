@@ -85,7 +85,10 @@ Each line names its host. `sudo` on the lab asks for the password.
    ```
 4. Lab, the rules and the caps:
    `sudo iptables -S nixos-fw | sed -n 2p` (the first rule refuses `ve-mc-public`)
-   `sudo iptables -S DOCKER-USER | grep ve-mc-public` (four DROP rules)
+   `sudo iptables -t mangle -S FORWARD | grep ve-mc-public` (seven DROP rules)
+   `sudo ip6tables -S nixos-fw | head -3` (the `ve-mc-public` refuse on top)
+   (since bandit-nix f3a0ad9 the isolation is in mangle FORWARD plus the IPv6 refuse, not DOCKER-USER; see bandit-nix
+   `docs/runbooks/mc-public-firewall.md`)
    `systemctl show container@mc-public -p MemoryMax -p MemorySwapMax -p CPUQuotaPerSecUSec -p TasksMax -p IOWeight`
    `sudo machinectl status mc-public | grep -i uid` (user namespace base 589824)
 5. The game port is on the container's `tailscale0` (testers) and, over the veth, from the host only (the
@@ -106,7 +109,8 @@ Each line names its host. `sudo` on the lab asks for the password.
    whitelisted is refused by Paper. An offline-mode client (a Mineflayer bot with `auth: 'offline'`, or a
    cracked launcher) is refused at login by Velocity. Lab:
    `sudo journalctl -M mc-public -u minecraft-server-velocity -n 30`
-8. Lab, the private world did not notice: `systemctl is-active minecraft-server-paper minecraft-server-sandbox minecraft-server-velocity`,
+8. Lab, the private world did not notice: `systemctl is-active minecraft-server-paper minecraft-server-velocity`
+   (the sandbox is on demand: `minecraft-server-sandbox` runs only after `sudo systemctl start minecraft-server-sandbox`),
    `systemctl show -p ActiveEnterTimestamp minecraft-server-paper` (older than the deploy), `bandit-lab-health`,
    the bots on the dashboard.
 9. Pre-generation size, see below.
