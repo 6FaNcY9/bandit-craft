@@ -195,7 +195,7 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
     const skip = new Map(); // key -> time until which that log, cell or item is left alone
     const skipped = (k) => (skip.get(k) || 0) > Date.now();
     const later = (k) => skip.set(k, Date.now() + RETRY_MS);
-    let cut = job.cut || 0, planted = job.planted || 0, chestTriedAt = 0, chestHadNone = false, dirtTriedAt = 0, noDirt = false;
+    let cut = job.cut || 0, planted = job.planted || 0, chestTriedAt = 0, chestHadNone = false, dirtTriedAt = 0, noDirt = false, loadWaits = 0;
     job.t.open = true; // no end: the dashboard shows a count, not a bar
     job.t.area = {x: Math.round((box.x1 + box.x2) / 2), y: y0, z: Math.round((box.z1 + box.z2) / 2)}; // where a resumed job walks back to
     const report = () => {
@@ -218,6 +218,20 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
         continue;
       }
       if (r.world?.unreachable) throw new Error('hub unreachable: not chopping without block reservations');
+      // The box not loaded: right after a restart (T1 and T2 failed "nothing to farm", 2026-11-15 10:42) or after a food
+      // trip to the far supply chest. Walk back from afar, else wait; after 6 tries the checks below decide as before.
+      const {x: cx, z: cz} = job.t.area;
+      if (!blockAt(cx, y0, cz) && loadWaits < 6) {
+        loadWaits++;
+        if (Math.hypot(cx - bot.entity.position.x, cz - bot.entity.position.z) > 64) {
+          await goNear(r, job, cx, y0, cz, 16, {doing: 'walking back to the farm'}).catch((e) => { guard(job); r.emit('info', `treefarm: ${e.message}`); });
+        } else {
+          job.t.doing = 'waiting for the farm area to load';
+          for (let i = 0; i < 10; i++) { guard(job); await sleep(1000); }
+        }
+        continue;
+      }
+      if (blockAt(cx, y0, cz)) loadWaits = 0;
       const dim = normDim(bot.game?.dimension);
       const s = scan(blockAt, box, y0, r.protectedAreas);
       const me = bot.entity.position;

@@ -144,6 +144,19 @@ module.exports = async () => {
     await assert.rejects(f.run(), Cancelled);
     assert.strictEqual(f.events.filter((e) => e.startsWith('plant')).length, 9, f.events.join('|'));
     assert.deepStrictEqual(seen, {x: -3, y: 65, z: -3}, 'the pause reads the farm chest');
+    // the box not loaded yet (right after a restart, T1/T2 2026-11-15 10:42): wait, then farm, no "nothing to farm"
+    const wl = flat(), realAt = wl.blockAt;
+    let loaded = false; // the whole world is unloaded until the farm has waited once
+    wl.blockAt = (x, y, z) => ((loaded ||= f.job.t.doing === 'waiting for the farm area to load') ? realAt(x, y, z) : null);
+    f = fake({world: wl, inv: [{name: 'oak_sapling', count: 9, type: 1}], stopAfterSleeps: 30});
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(f.events.filter((e) => e.startsWith('plant')).length, 9, 'farmed once loaded: ' + f.events.join('|'));
+    // unloaded and far (back from the supply chest): it walks back to the box first
+    loaded = false;
+    f = fake({world: wl, inv: [{name: 'oak_sapling', count: 9, type: 1}], stopAfterSleeps: 30});
+    f.r.bot.entity.position = new Vec3(200, 65, 0);
+    await assert.rejects(f.run(), Cancelled);
+    assert.ok(Math.hypot(f.r.bot.entity.position.x - 4, f.r.bot.entity.position.z - 4) < 64, 'walked back to the farm');
     // one wood per farm (castle T5 planted birch from wild trees, 2026-11-15): only `sapling` is planted and fetched
     const one = {...small, chest: {x: -3, y: 65, z: -3}, sapling: 'birch_sapling'};
     f = fake({world: flat(), inv: [{name: 'oak_sapling', count: 4, type: 1}, {name: 'birch_sapling', count: 9, type: 2}], args: one});
