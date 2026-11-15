@@ -327,6 +327,35 @@ console, no account linking.
 - Test without Discord: `NODE_PATH=<mcbots node_modules> node tools/botui-stand/e2e-chat.js` starts the local
   stand with the plugin against a made-up Discord and stops it again.
 
+### Chat bridge opt-out
+
+The privacy policy promises: on request the bridge sends nothing for an account. The list is
+`/srv/mc-public/data/paper/plugins/ChatBridge/opt-out.txt` on the lab (`/srv/minecraft/paper/plugins/ChatBridge/` in
+the box; in the world directory, so it survives restarts, deploys and the backup restore). One UUID per line, `#`
+starts a comment. For a listed account no chat line, join, leave or death message goes to Discord, also when it is
+the killer in someone else's death message; a new name changes nothing (UUID). Discord to game is unchanged. The
+plugin checks the file on every event: no restart, no deploy. A malformed line is skipped, the others stay in force;
+if the file exists but cannot be read, no player is named in Discord until it can.
+
+On the lab (the name is looked up in the server's `usercache.json`; refuses when it finds none or more than one):
+
+```bash
+f=/srv/mc-public/data/paper/plugins/ChatBridge/opt-out.txt
+optout() { u=$(sudo jq -r --arg n "$1" '.[] | select((.name|ascii_downcase) == ($n|ascii_downcase)) | .uuid' /srv/mc-public/data/paper/usercache.json); [ -n "$u" ] && [ "$(wc -l <<<"$u")" = 1 ] && echo "$u # $(date +%F)" | sudo tee -a "$f" || echo "not exactly one UUID for $1: '$u'"; }
+optout <Name>                       # add
+sudo sed -i '/^<uuid>/d' "$f"       # remove (the UUID from the file)
+sudo cat "$f"
+```
+
+An account that never joined is not in `usercache.json`: take its id from
+`curl -s https://api.mojang.com/users/profiles/minecraft/<Name>`, write it with dashes (8-4-4-4-12) and append it
+with `echo '<uuid> # <date>' | sudo tee -a "$f"`.
+
+Verify: the next game event logs the read, e.g. `sudo journalctl -M mc-public -u minecraft-server-paper | grep
+opt-out` shows `opt-out list read, 1 accounts, 0 malformed lines skipped`; a chat line of that account then does
+not appear in `#ingame-chat`. Copies already in Discord are not touched by this: delete them in the channel by hand
+if asked, otherwise the 30-day cleanup above removes them.
+
 ## Opening (phase 3, without the store)
 
 The whitelist is a server property that Nix rewrites on every start, so `mcp whitelist off` lasts until

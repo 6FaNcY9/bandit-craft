@@ -10,19 +10,30 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -35,7 +46,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  * The chat bridge of the public world (docs/specs/2026-11-11-discord-platform.md, phase 3): game chat, joins,
  * leaves and deaths go to one Discord channel, and what people write in that channel goes into the game as
  * plain text. Nothing else: no commands, no console, no account linking. Its token can post in that channel
- * and read it; it is the only Discord secret inside this server.
+ * and read it; it is the only Discord secret inside this server. For an account on the opt-out list
+ * (plugins/ChatBridge/opt-out.txt, see OptOut) nothing goes to Discord.
  */
 public final class ChatBridge extends JavaPlugin implements Listener {
   static final int MAX_GAME_TEXT = 256; // characters of one Discord message shown in the game
@@ -47,6 +59,7 @@ public final class ChatBridge extends JavaPlugin implements Listener {
   static final int INTENTS = (1 << 9) | (1 << 15);
 
   private String token;
+  private OptOut optOut;
   private String channel;
   private String api;
   private String gateway;
@@ -80,6 +93,8 @@ public final class ChatBridge extends JavaPlugin implements Listener {
       getLogger().info("chat bridge off: CHATBRIDGE_TOKEN or CHATBRIDGE_CHANNEL is not set");
       return;
     }
+    getDataFolder().mkdirs(); // made by the server's own user, so the operator only adds the file
+    optOut = new OptOut(getDataFolder().toPath().resolve("opt-out.txt"), getLogger());
     api = env("CHATBRIDGE_API", "https://discord.com/api/v10");
     gateway = env("CHATBRIDGE_GATEWAY", "wss://gateway.discord.gg/?v=10&encoding=json");
     io = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -120,22 +135,96 @@ public final class ChatBridge extends JavaPlugin implements Listener {
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onChat(AsyncChatEvent e) {
-    say("**" + escape(e.getPlayer().getName()) + "**: " + escape(plain(e.message())));
+    say(chatLine(optOut, e.getPlayer().getUniqueId(), e.getPlayer().getName(), plain(e.message())));
   }
 
   @EventHandler(priority = EventPriority.MONITOR)
   public void onJoin(PlayerJoinEvent e) {
-    say("➡️ **" + escape(e.getPlayer().getName()) + "**");
+    say(joinLine(optOut, e.getPlayer().getUniqueId(), e.getPlayer().getName()));
   }
 
   @EventHandler(priority = EventPriority.MONITOR)
   public void onQuit(PlayerQuitEvent e) {
-    say("⬅️ **" + escape(e.getPlayer().getName()) + "**");
+    say(quitLine(optOut, e.getPlayer().getUniqueId(), e.getPlayer().getName()));
   }
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onDeath(PlayerDeathEvent e) {
-    if (e.deathMessage() != null) say("💀 " + escape(plain(e.deathMessage())));
+    Player killer = e.getPlayer().getKiller();
+    if (e.deathMessage() != null) say(deathLine(optOut, e.getPlayer().getUniqueId(), killer == null ? null : killer.getUniqueId(), plain(e.deathMessage())));
+  }
+
+  // What each event sends, or null when it names an opted-out account. Keyed by UUID: a new name changes nothing.
+  static String chatLine(OptOut o, UUID id, String name, String text) {
+    return o.has(id) ? null : "**" + escape(name) + "**: " + escape(text);
+  }
+
+  static String joinLine(OptOut o, UUID id, String name) {
+    return o.has(id) ? null : "➡️ **" + escape(name) + "**";
+  }
+
+  static String quitLine(OptOut o, UUID id, String name) {
+    return o.has(id) ? null : "⬅️ **" + escape(name) + "**";
+  }
+
+  /** A death message names the victim and, when a player killed it, the killer: either one on the list keeps it back. */
+  static String deathLine(OptOut o, UUID victim, UUID killer, String message) {
+    return o.has(victim) || (killer != null && o.has(killer)) ? null : "💀 " + escape(message);
+  }
+
+  /**
+   * The accounts the bridge sends nothing for: one UUID per line (as in usercache.json), `#` starts a comment.
+   * The file is checked on every event and read again when its time or size changed, so a change needs no restart.
+   * Each read is logged with its counts. A malformed line is skipped, the others stay in force. A file that exists but cannot be read
+   * holds back every player's message until it can be read again; no file means nobody opted out.
+   */
+  static final class OptOut {
+    private static final Pattern UUID_FORM = Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    private final Path file;
+    private final Logger log;
+    private Set<UUID> ids = Set.of();
+    private String stamp = ""; // time and size of the version read; "" before the first read or after a failure
+    private boolean unreadable;
+
+    OptOut(Path file, Logger log) {
+      this.file = file;
+      this.log = log;
+    }
+
+    synchronized boolean has(UUID id) {
+      reload();
+      return unreadable || ids.contains(id);
+    }
+
+    private void reload() {
+      try {
+        BasicFileAttributes a = Files.readAttributes(file, BasicFileAttributes.class);
+        String now = a.lastModifiedTime() + "/" + a.size();
+        if (now.equals(stamp)) return;
+        Set<UUID> read = new HashSet<>();
+        int bad = 0;
+        // Latin-1 reads any bytes: a stray character spoils its own line only, never the whole file.
+        for (String line : Files.readAllLines(file, StandardCharsets.ISO_8859_1)) {
+          int hash = line.indexOf('#');
+          String t = (hash < 0 ? line : line.substring(0, hash)).strip();
+          if (t.isEmpty()) continue;
+          if (UUID_FORM.matcher(t).matches()) read.add(UUID.fromString(t));
+          else bad++;
+        }
+        ids = Set.copyOf(read);
+        stamp = now;
+        log.info("chat bridge: opt-out list read, " + ids.size() + " accounts, " + bad + " malformed lines skipped");
+        unreadable = false;
+      } catch (NoSuchFileException e) {
+        ids = Set.of();
+        stamp = "";
+        unreadable = false;
+      } catch (Exception e) {
+        if (!unreadable) log.warning("chat bridge: opt-out list unreadable, no player is named in Discord until it is: " + e);
+        stamp = "";
+        unreadable = true;
+      }
+    }
   }
 
   private static String plain(Component c) {
@@ -148,6 +237,7 @@ public final class ChatBridge extends JavaPlugin implements Listener {
   }
 
   private void say(String line) {
+    if (line == null) return;
     synchronized (out) {
       if (out.size() < 200) out.add(line.length() > 500 ? line.substring(0, 500) : line); // a flood is cut, not queued for ever
     }

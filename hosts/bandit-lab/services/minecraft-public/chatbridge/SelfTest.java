@@ -2,8 +2,13 @@ package chatbridge;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayDeque;
 import java.util.List;
+import java.util.UUID;
+import java.util.logging.Logger;
 
 /** Run by the build, not shipped in the jar: what may cross the bridge and in which form. */
 final class SelfTest {
@@ -29,7 +34,7 @@ final class SelfTest {
     return "{\"id\":\"" + id + "\",\"author\":{\"id\":\"" + author + "\"}}";
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     // Discord to game: plain, one line, no ids, no colour sign, cut to length
     same("a b c", ChatBridge.clean("a\nb\r\n\tc", 256));
     same("hi @… and @… in #… :wave:", ChatBridge.clean("hi <@123> and <@&45> in <#6> <a:wave:789>", 256));
@@ -87,6 +92,42 @@ final class SelfTest {
     same(1900, ChatBridge.batch(q).length());
     same("c", ChatBridge.batch(q));
     same("", ChatBridge.batch(q));
+    // opt-out: a listed account is named in no line, an unlisted one as before (made-up UUIDs)
+    UUID a = UUID.fromString("00000000-0000-4000-8000-00000000000a");
+    UUID b = UUID.fromString("00000000-0000-4000-8000-00000000000b");
+    UUID c = UUID.fromString("00000000-0000-4000-8000-00000000000c");
+    Path dir = Files.createTempDirectory("chatbridge");
+    Path list = dir.resolve("opt-out.txt");
+    ChatBridge.OptOut o = new ChatBridge.OptOut(list, Logger.getLogger("selftest"));
+    same("**A**: hi", ChatBridge.chatLine(o, a, "A", "hi")); // no file: nobody opted out
+    Files.writeString(list, "# test\n" + a.toString().toUpperCase() + "  # A\nnot-a-uuid\n1-1-1-1-1\n\n");
+    Files.setLastModifiedTime(list, FileTime.fromMillis(1_000_000));
+    same(null, ChatBridge.chatLine(o, a, "A", "hi"));
+    same(null, ChatBridge.joinLine(o, a, "A"));
+    same(null, ChatBridge.quitLine(o, a, "A"));
+    same(null, ChatBridge.deathLine(o, a, null, "A fell"));
+    same(null, ChatBridge.deathLine(o, b, a, "B was slain by A")); // the killer is named too
+    same(null, ChatBridge.chatLine(o, a, "A_renamed", "hi")); // a new name, the same account
+    same("**B**: hi", ChatBridge.chatLine(o, b, "B", "hi"));
+    same("➡️ **B**", ChatBridge.joinLine(o, b, "B"));
+    same("⬅️ **B**", ChatBridge.quitLine(o, b, "B"));
+    same("💀 B fell", ChatBridge.deathLine(o, b, null, "B fell"));
+    same("💀 B was slain by C", ChatBridge.deathLine(o, b, c, "B was slain by C"));
+    // a change is read without a restart: b added, a removed
+    Files.writeString(list, b + "\n");
+    Files.setLastModifiedTime(list, FileTime.fromMillis(2_000_000));
+    same(null, ChatBridge.chatLine(o, b, "B", "hi"));
+    same("**A**: hi", ChatBridge.chatLine(o, a, "A", "hi"));
+    // a list that exists but cannot be read holds back everybody; readable again, only the listed
+    Files.delete(list);
+    Files.createDirectory(list);
+    same(null, ChatBridge.chatLine(o, c, "C", "hi"));
+    Files.delete(list);
+    same("**C**: hi", ChatBridge.chatLine(o, c, "C", "hi"));
+    Files.writeString(list, c + "\n");
+    same(null, ChatBridge.chatLine(o, c, "C", "hi"));
+    Files.delete(list);
+    Files.delete(dir);
     System.out.println("chatbridge self-test ok");
   }
 }
