@@ -36,10 +36,16 @@ Placement and code path: architect (Fable) 2026-11-15.
 - **T1 spruce farm (now):** box x -332..-319, z -55..-42, on the flat terrace north of the gatehouse, outside every wall.
   - 16 trunks on the 3-grid.
   - bot1 runs it as one endless treefarm job. The other bots keep building.
-- **Reserved for later woods:**
-  - T2: x -351..-338, z -55..-42.
-  - T3: x -305..-292, z -55..-42. It has low spots near z -54..-51.
-  - A wood gets a box once its saplings exist.
+- **Later woods (live 2026-11-15, saplings given by RCON on the owner's word, architect placement):**
+  - T2 birch: x -351..-338, z -55..-42.
+  - T3 jungle: x -305..-292, z -55..-42, 3-grid. Its low spots near z -54..-51 (y 85-87) lie outside the farm's
+    ground search (chest y 112 ± 20) and stay empty.
+  - T4 acacia: x -362..-343, z -37..-18 (20x20), 9 trunks 6 apart; T5 cherry: x -371..-348, z -12..11 (24x24),
+    4 trunks 9 apart. Their crowns spread, so every other 3-grid cell has a `stone_bricks` top (neither soil nor bare
+    ground, so the farm skips it). No code change.
+  - North of z -55 the ground falls to y 31-92 (a ravine near x -349 z -78): no farm there with a chest at y 112.
+  - Each farm has its own depot chest holding only its own sapling (the bot plants the first kind in `SAPLINGS` it
+    carries).
 - **Spacing rule:** trunks at least 6 blocks from any planned wall or roof, and 5 clear blocks beside paths.
 - **Delivery:** one dedicated depot double chest, not the sorter.
   - Builders and producers already fetch from depot chests.

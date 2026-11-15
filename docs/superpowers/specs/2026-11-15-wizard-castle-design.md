@@ -127,8 +127,10 @@ Core wall: 3 thick, wall-walk at +8. Turrets 7 x 7 x 16 centred on (-336,-14), (
 | A8 | Sorter path | -314 | 8 | -312 | 31 | 109 | – | |
 | A9 | Tower path | -291 | 8 | -286 | 12 | 111 | – | |
 | T1 | Spruce tree farm | -332 | -55 | -319 | -42 | 95 | – | outside the walls, bot1 `treefarm` with its own depot chest (`2026-11-15-castle-tree-farms-design.md`) |
-| T2 | Tree farm (reserved) | -351 | -55 | -338 | -42 | 95 | – | next wood once saplings exist |
-| T3 | Tree farm (reserved) | -305 | -55 | -292 | -42 | 95 | – | low spots y 85-87 near z -54..-51 |
+| T2 | Birch tree farm | -351 | -55 | -338 | -42 | 95 | – | bot19, chest -299 112 6 |
+| T3 | Jungle tree farm | -305 | -55 | -292 | -42 | 95 | – | bot20, chest -303 112 6; low spots y 85-87 near z -54..-51 are not planted (13 of 16 cells) |
+| T4 | Acacia tree farm | -362 | -37 | -343 | -18 | 92-106 | – | bot21, chest -302 112 6; trunks x -358/-352/-346 × z -33/-27/-21, other grid cells are stone_bricks |
+| T5 | Cherry tree farm | -371 | -12 | -348 | 11 | 103-112 | – | bot2, chest -301 112 6; trunks x -364/-355 × z -5/4, other grid cells are stone_bricks |
 
 A2/M1 also keeps the air above it free up to y 140 (later TNT tree machine: no roof, bridge or wall-walk across it,
 and a free corridor from its west edge to the shell at x -292).
