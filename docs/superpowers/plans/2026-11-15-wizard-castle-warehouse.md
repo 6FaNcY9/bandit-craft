@@ -188,8 +188,10 @@ Moves (`clone <from> <to> <dest> filtered <block> move`; dest = lowest corner):
   (`execute if data block X Y Z Items[]` → `Test passed, count: N`, empty → `Test failed` = 0), and at the cuts
   x -334/-333 the `type` state (`execute if block -334 110 34 minecraft:chest[type=right]` etc.). Write
   `x y z slots` lines to `before.tsv`. Expect: 209 chest + 6 shulker + 1 ender lines.
-- [ ] **Step 2: Destinations empty**: for each move, `execute if blocks <dest box> <same box at y 300> all` must pass
-  (the sky above is air). Stop if one fails.
+- [ ] **Step 2: Destinations empty**: bots leave torches, crafting tables, scaffolding and dirt while they build
+  (bot1 put a crafting table at -320 110 -1, in row 3): first `fill <dest box> minecraft:air replace <block>` for
+  each of those four, then for each move `execute if blocks <dest box> <same box at y 300> all` must pass (the sky
+  above is air). Stop if one still fails and look at what is there.
 - [ ] **Step 3: Run the 9 clones** one by one with a bot near (bot1 at -311 111 1 keeps the chunks loaded). Expect:
   each reply `Successfully cloned N blocks` with N = the source count of that move.
 - [ ] **Step 4: Record after** at the moved coordinates (source + (dest − from)) into `after.tsv`; `diff` against
