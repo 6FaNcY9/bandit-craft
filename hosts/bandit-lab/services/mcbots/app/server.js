@@ -91,7 +91,7 @@ const orderEnded = (e) => {
       projects.pause(e.bot);
       orderRetryAt.set(e.bot, Infinity); // no idle, project or keeper start; submitJob lifts it with the owner's next order
       delete toResume[e.bot];
-      r?.enqueue('stop');
+      try { r?.enqueue('stop'); } catch {} // a remote runner throws when its worker is away; the event must still be archived
     }
   }
 };
