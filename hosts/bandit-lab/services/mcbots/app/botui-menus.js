@@ -48,41 +48,45 @@ const back = (i, a, bot) => slot(i, 'arrow', 'Zurück', {a, ...(bot ? {bot} : {}
 // The running job type -> the slot that started it (Abbauen and Bauen have no badge slot to light up here).
 const GLINT = {follow: 'lead', goto: 'ender_eye', guard: 'iron_sword', enchant: 'enchanting_table', deposit: 'chest', chop: 'iron_axe', treefarm: 'oak_sapling', craft: 'crafting_table', smelt: 'furnace', get: 'chest_minecart'};
 
-// One bot, 5 rows: head, moving and guarding on top; below four boxes split by black panes, each under a coloured strip
-// that names it (the strips are the only headings visible without hovering).
+// One bot, 3 rows: come, follow and stop on top; the six everyday orders in the middle; the rest under Mehr…
+// (the owner found ~20 buttons too many, 2026-11-15).
 function botPage(view, screen) {
   const s = snapOf(view, screen.bot), bot = s.name, hp = s.online ? Math.max(0, Math.min(20, Math.round(s.health) || 0)) : 0;
   const food = s.online ? Math.max(0, Math.min(20, Math.round(s.food) || 0)) : 0;
-  const idle = view.idle?.get(bot), label = (idle && choiceOf(idle.id)?.label) || 'Nichts';
   const lore = [safe(s.online ? s.activity || 'frei' : 'offline', 40), `♥ ${hp}/20 · Essen ${food}/20`, s.chest ? `Kiste: ${s.chest.x} ${s.chest.y} ${s.chest.z}` : 'Kiste: keine'];
-  const go = (i, item, name, job) => slot(i, item, name, {a: 'go', bot, job}, {glint: GLINT[s.job?.type] === item});
-  const self = {a: 'botm', bot}, strip = (from, color, name) => [0, 1, 2, 3].map((k) => pane(from + k, color, name, self));
-  return {type: 'chest', title: safe(bot, 30), rows: 5, slots: [
+  const go = (i, item, name, job, say) => slot(i, item, name, {a: 'go', bot, job}, {glint: GLINT[s.job?.type] === item, lore: [say]});
+  const self = {a: 'botm', bot};
+  return {type: 'chest', title: safe(bot, 30), rows: 3, slots: [
     slot(0, 'player_head', bot, self, {head: bot, maxDamage: 20, damage: 20 - hp, lore}),
-    go(2, 'lead', 'Folg mir', 'followme'), go(3, 'ender_pearl', 'Komm her', 'summon'),
-    go(5, 'iron_sword', 'Bewach diesen Ort', 'guardhere'), slot(6, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}), ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}),
-    ...[4, 13, 22, 31, 40].map((i) => pane(i, 'black', '·', self)),
-    ...strip(9, 'lime', 'Sammeln'), ...strip(14, 'orange', 'Herstellen & Bauen'),
-    slot(18, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Klick: Block abbauen', 'Shift: Bereich']}), go(19, 'iron_axe', 'Holz holen', 'chop'), go(20, 'oak_sapling', 'Baumfarm', 'treefarm'),
-    slot(21, 'carrot', 'Tiere & Felder…', {a: 'farmm', bot}, {glint: ['animalfarm', 'cropfarm'].includes(s.job?.type)}),
-    slot(23, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(24, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
-    slot(25, 'enchanting_table', 'Verzaubern…', {a: 'enchm', bot}, {glint: s.job?.type === 'enchant'}), slot(26, 'bricks', 'Bauen…', {a: 'schemm', bot}),
-    ...strip(27, 'brown', 'Lager'), ...strip(32, 'light_blue', 'Einstellungen'),
-    go(36, 'chest', 'Einlagern', 'deposit'), slot(37, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
-    slot(38, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(39, 'barrel', 'Inventar', {a: 'invm', bot}),
-    slot(41, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]}), slot(42, 'book', 'Mehr…', {a: 'morem', bot}), back(44, 'ov')]};
+    go(2, 'ender_pearl', 'Komm her', 'summon', 'Der Bot kommt zu dir'), go(3, 'lead', 'Folg mir', 'followme', 'Der Bot läuft dir nach'),
+    ...(view.projects?.[bot]?.paused ? [slot(7, 'lime_dye', 'Weiter', {a: 'resume', bot}, {lore: ['Setzt das gestoppte Projekt fort']})] : []), slot(8, 'barrier', 'Stopp', {a: 'stop', bot}, {lore: ['Hört sofort auf']}),
+    go(10, 'iron_axe', 'Holz holen', 'chop', '64 Stämme, nur in der Nähe'),
+    slot(11, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Erz, Stein, Erde: du wählst']}),
+    slot(12, 'diamond_shovel', 'Bereich…', {a: 'aream', bot}, {lore: ['Zwei Ecken zeigen, Arbeit wählen']}),
+    slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}, {lore: ['Einen Bauplan bauen']}),
+    go(15, 'chest', 'Einlagern', 'deposit', 'Legt alles in seine Kiste'),
+    slot(22, 'book', 'Mehr…', {a: 'morem', bot}, {lore: ['Farmen, Herstellen, Bewachen, Kiste']}), back(26, 'ov')]};
 }
 
-// Mehr…: the rarer orders and Hingehen….
+// Mehr…: everything the bot page no longer shows, each slot as it was there.
 function morePage(view, screen) {
   const s = snapOf(view, screen.bot), bot = s.name;
-  const go = (i, item, name, job, lore) => slot(i, item, name, {a: 'go', bot, job}, lore ? {lore: [lore]} : {});
-  return {type: 'chest', title: `${safe(bot, 20)}: mehr`, rows: 1, slots: [
-    slot(0, 'ender_eye', 'Hingehen…', {a: 'placem', mode: 'goto', bot}, {glint: GLINT[s.job?.type] === 'ender_eye'}),
+  const idle = view.idle?.get(bot), label = (idle && choiceOf(idle.id)?.label) || 'Nichts';
+  const go = (i, item, name, job, lore) => slot(i, item, name, {a: 'go', bot, job}, lore ? {lore: [lore]} : {glint: GLINT[s.job?.type] === item});
+  return {type: 'chest', title: `${safe(bot, 20)}: mehr`, rows: 3, slots: [
+    go(0, 'oak_sapling', 'Baumfarm', 'treefarm'),
+    slot(1, 'carrot', 'Tiere & Felder…', {a: 'farmm', bot}, {glint: ['animalfarm', 'cropfarm'].includes(s.job?.type)}),
+    slot(2, 'crafting_table', 'Herstellen…', {a: 'craftm', bot}, {glint: s.job?.type === 'craft'}), slot(3, 'furnace', 'Schmelzen…', {a: 'smeltm', bot}, {glint: s.job?.type === 'smelt'}),
+    slot(4, 'enchanting_table', 'Verzaubern…', {a: 'enchm', bot}, {glint: s.job?.type === 'enchant'}),
+    slot(5, 'chest_minecart', 'Holen…', {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot}, {glint: s.job?.type === 'get'}),
+    back(8, 'botm', bot),
+    slot(9, 'ender_eye', 'Hingehen…', {a: 'placem', mode: 'goto', bot}, {glint: GLINT[s.job?.type] === 'ender_eye'}),
+    go(10, 'iron_sword', 'Bewach diesen Ort', 'guardhere'), slot(11, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}),
+    go(12, 'red_bed', 'Heim', 'homebed'), go(13, 'bone', 'Gräber holen', 'graves'),
     // a guest has no supply chest, so Ausrüsten always failed for one (menu crawl 2026-11-11)
-    ...(view.owner ? [go(1, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste')] : []), go(2, 'red_bed', 'Heim', 'homebed'), go(3, 'bone', 'Gräber holen', 'graves'), go(4, 'totem_of_undying', 'Helfen', 'help'),
-    slot(5, 'diamond_shovel', 'Bereich…', {a: 'aream', bot}),
-    back(8, 'botm', bot)]};
+    ...(view.owner ? [go(14, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste')] : []),
+    slot(18, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(19, 'barrel', 'Inventar', {a: 'invm', bot}),
+    slot(20, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]})]};
 }
 
 // Bewachen…: four radii; click guards where the viewer stands, Shift where they look, the marked spot has its own slot.

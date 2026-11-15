@@ -57,27 +57,31 @@ assert.ok(MENUS.has('ov'));
   const w = page({zed: {paused: true}}).find((x) => x.name === 'Weiter');
   assert.deepEqual(w.payload, {a: 'resume', bot: 'zed'}); assert.ok(Object.hasOwn(ACTIONS, 'resume'));
 }
-{ // bot page: head lore, glint on the running job, Abbauen and Kiste merken slots, every payload a real action
+{ // bot page: head lore, glint on the running job, the everyday orders with their lore, every payload a real action
   const bv = (s, o = {}) => view({snaps: [s], ...o});
   const page = (s, o) => menu({name: 'botm', bot: s.name}, bv(s, o)).menu;
   const chopper = {name: 'zed', online: true, health: 18, food: 15, activity: 'chopping', job: {type: 'chop'}, chest: {x: 1, y: 2, z: 3}};
-  const m = page(chopper), s = m.slots;
-  assert.equal(m.rows, 5);
+  const m = page(chopper), s = m.slots, at = (i) => s.find((x) => x.slot === i);
+  assert.equal(m.rows, 3);
   assert.match(s.find((x) => x.head === 'zed').lore.join('|'), /♥ 18\/20 · Essen 15\/20.*Kiste: 1 2 3/);
   assert.deepEqual(s.filter((x) => x.glint).map((x) => x.item), ['iron_axe']);
   assert.match(page({name: 'zed', online: true, job: null}).slots[0].lore.join('|'), /Kiste: keine/);
-  assert.deepEqual(s.find((x) => x.slot === 18).payload, {a: 'shiftm', bot: 'zed'}); assert.ok(!s.find((x) => x.slot === 18).glint);
-  assert.deepEqual(s.find((x) => x.slot === 38).payload, {a: 'pick', kind: 'chest', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 38).item, 'hopper');
-  assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 18).glint, true);
-  assert.deepEqual(s.find((x) => x.slot === 23).payload, {a: 'craftm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 23).item, 'crafting_table');
-  assert.deepEqual(s.find((x) => x.slot === 24).payload, {a: 'smeltm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 24).item, 'furnace');
-  assert.deepEqual(s.find((x) => x.slot === 25).payload, {a: 'enchm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 25).item, 'enchanting_table');
-  assert.deepEqual(s.find((x) => x.slot === 37).payload, {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'zed'}); assert.equal(s.find((x) => x.slot === 37).item, 'chest_minecart');
-  assert.deepEqual(s.find((x) => x.slot === 19).payload, {a: 'go', bot: 'zed', job: 'chop'}); assert.equal(s.find((x) => x.slot === 26).item, 'bricks'); assert.equal(s.find((x) => x.slot === 20).item, 'oak_sapling');
-  for (const [type, slot] of [['craft', 23], ['smelt', 24], ['get', 37]]) assert.deepEqual(page({...chopper, job: {type}}).slots.filter((x) => x.glint).map((x) => x.slot), [slot]);
+  assert.deepEqual(s.map((x) => [x.slot, x.name]), [[0, 'zed'], [2, 'Komm her'], [3, 'Folg mir'], [8, 'Stopp'], [10, 'Holz holen'], [11, 'Abbauen…'], [12, 'Bereich…'], [14, 'Bauen…'], [15, 'Einlagern'], [22, 'Mehr…'], [26, 'Zurück']]);
+  assert.deepEqual([at(2), at(3), at(8), at(10), at(11), at(12), at(14), at(15), at(22)].map((x) => x.lore[0]), ['Der Bot kommt zu dir', 'Der Bot läuft dir nach', 'Hört sofort auf', '64 Stämme, nur in der Nähe', 'Erz, Stein, Erde: du wählst', 'Zwei Ecken zeigen, Arbeit wählen', 'Einen Bauplan bauen', 'Legt alles in seine Kiste', 'Farmen, Herstellen, Bewachen, Kiste']);
+  assert.deepEqual(at(11).payload, {a: 'shiftm', bot: 'zed'}); assert.ok(!at(11).glint);
+  assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 11).glint, true);
+  assert.deepEqual(at(10).payload, {a: 'go', bot: 'zed', job: 'chop'}); assert.equal(at(14).item, 'bricks'); assert.deepEqual(at(12).payload, {a: 'aream', bot: 'zed'});
   for (const x of s) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.equal(new Set(s.map((x) => x.slot)).size, s.length);
   assert.deepEqual(s.find((x) => x.item === 'ender_pearl').payload, {a: 'go', bot: 'zed', job: 'summon'});
+  // Mehr: the moved slots keep their payloads and glints
+  const more = (j) => menu({name: 'morem', bot: 'zed'}, bv({...chopper, job: j && {type: j}})).menu.slots, mo = more(null), ma = (i) => mo.find((x) => x.slot === i);
+  assert.deepEqual(ma(18).payload, {a: 'pick', kind: 'chest', bot: 'zed'}); assert.equal(ma(18).item, 'hopper');
+  assert.deepEqual([ma(2).payload, ma(3).payload, ma(4).payload], [{a: 'craftm', bot: 'zed'}, {a: 'smeltm', bot: 'zed'}, {a: 'enchm', bot: 'zed'}]);
+  assert.deepEqual(ma(5).payload, {a: 'gridm', mode: 'get', tab: 'werkzeug', page: 0, back: 'botm', bot: 'zed'}); assert.equal(ma(0).item, 'oak_sapling');
+  for (const [type, slot] of [['craft', 2], ['smelt', 3], ['get', 5], ['treefarm', 0], ['guard', [10, 11]]]) assert.deepEqual(more(type).filter((x) => x.glint).map((x) => x.slot), [slot].flat(), type);
+  assert.ok(!mo.some((x) => x.name === 'Helfen' || x.name === 'Bereich…'));
+  for (const x of mo) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }
 { // Bereich: without corners only the header slots; with a 3x3x3 box the five jobs; a huge box greys excavate; a marked area adds slot 3
   const ar = (o = {}) => menu({name: 'aream'}, view({area: {bot: 'zed', when: 'next'}, sel: {}, ...o})).menu;
@@ -115,7 +119,7 @@ assert.ok(MENUS.has('ov'));
     for (const x of m.slots) { assert.ok(x.slot >= 0 && x.slot < 27); assert.ok(items[x.item], x.item); assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a); }
   }
   assert.deepEqual(fm().slots, fm().slots);
-  const b = menu({name: 'botm', bot: 'zed'}, view()).menu.slots.find((x) => x.slot === 21);
+  const b = menu({name: 'morem', bot: 'zed'}, view()).menu.slots.find((x) => x.slot === 1);
   assert.deepEqual(b.payload, {a: 'farmm', bot: 'zed'}); assert.equal(b.item, 'carrot');
 }
 { // Wenn frei: Tiere and Feld fit the one row with Nichts and back, for the owner's bot and a guest's
@@ -247,11 +251,12 @@ assert.ok(MENUS.has('ov'));
   const pg = (name, o = {}, extra = {}) => menu({name, bot: 'zed', ...extra}, view(o)).menu;
   const at = (m, i) => m.slots.find((x) => x.slot === i);
   const b = pg('botm');
-  assert.deepEqual([at(b, 6).item, at(b, 6).payload, at(b, 42).item, at(b, 42).payload], ['shield', {a: 'guardm', bot: 'zed'}, 'book', {a: 'morem', bot: 'zed'}]);
+  assert.deepEqual([at(b, 22).item, at(b, 22).payload], ['book', {a: 'morem', bot: 'zed'}]);
   const more = pg('morem');
-  assert.equal(more.rows, 1); assert.match(more.title, /zed: mehr/);
-  assert.deepEqual(more.slots.filter((x) => x.slot < 5).map((x) => x.payload.a), ['placem', 'go', 'go', 'go', 'go']);
-  assert.deepEqual(at(more, 0).payload, {a: 'placem', mode: 'goto', bot: 'zed'}); assert.deepEqual(at(more, 1).lore, ['aus der Vorratskiste']);
+  assert.equal(more.rows, 3); assert.match(more.title, /zed: mehr/);
+  assert.deepEqual([at(more, 11).item, at(more, 11).payload], ['shield', {a: 'guardm', bot: 'zed'}]);
+  assert.deepEqual(more.slots.filter((x) => x.slot >= 9 && x.slot < 15).map((x) => x.payload.a), ['placem', 'go', 'guardm', 'go', 'go', 'go']);
+  assert.deepEqual(at(more, 9).payload, {a: 'placem', mode: 'goto', bot: 'zed'}); assert.deepEqual(at(more, 14).lore, ['aus der Vorratskiste']);
   assert.deepEqual(at(more, 8).payload, {a: 'botm', bot: 'zed'});
   const guard = pg('guardm');
   assert.deepEqual([0, 1, 2, 3].map((i) => at(guard, i).count), [8, 16, 32, 48]); assert.deepEqual(at(guard, 2).payload, {a: 'guardgo', bot: 'zed', radius: 32});
