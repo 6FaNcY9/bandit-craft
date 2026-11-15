@@ -33,7 +33,7 @@
 <body>
 
 <h1>Deine Bots</h1>
-<p class="lead">Eine Anleitung für Misa: wie du mit deinen zwei Bots sprichst, was sie für dich tun und was sie nicht dürfen.</p>
+<p class="lead">Eine Anleitung für Misa: wie du deine zwei Bots im Menü und im Chat steuerst, was sie für dich tun und was sie nicht dürfen.</p>
 
 <div class="cards">
   <div class="card">
@@ -44,7 +44,7 @@
   <div class="card">
     <h3>EM_Trader – dein Händler</h3>
     <p>Arbeitet von allein: <b>jeden Tag ab 18 Uhr</b> eine Stunde lang in deiner Handelshalle.
-    Er verkauft Sticks an deine Villager und legt die Smaragdblöcke in deine Truhe.</p>
+    Er verkauft Sticks an deine Villager und legt die Smaragdblöcke in deine Truhe. Früher hieß er bot23.</p>
   </div>
 </div>
 
@@ -81,8 +81,8 @@ Wenn du dich einloggst, bekommst du eine kurze Zusammenfassung: <b>Seit du weg w
 <p>Du flüsterst ihm. Drück <b>T</b> (Chat), schreib <code>/msg MisaBot</code> und dahinter den Befehl, dann <b>Enter</b>.
 Den Namen kannst du nach <code>/msg Mi</code> mit der <b>Tab</b>-Taste ergänzen lassen.</p>
 <div class="box">
-  <b>Beispiel:</b> <code>/msg MisaBot komm</code> – MisaBot antwortet geflüstert <code>start: komm</code> und läuft zu dir.
-  Wenn er fertig ist, flüstert er <code>fertig: komm, 12 s</code>.
+  <b>Beispiel:</b> <code>/msg MisaBot komm</code> – im Chat erscheint nur für dich <code>[MisaBot] start: komm</code>, und er läuft zu dir.
+  Wenn er fertig ist, kommt <code>[MisaBot] fertig: komm, 12 s</code>. Sonst bleibt der Chat ruhig: Du siehst nur Antworten auf deine eigenen Befehle.
 </div>
 <p>Der Bot muss auf dem Server sein (in der Spielerliste mit <b>Tab</b> zu sehen). Groß- und Kleinschreibung ist egal.</p>
 <p>Die Bots verstehen <b>nur genau diese Wörter</b> und nur in dieser Reihenfolge, ein Befehl pro Nachricht. Bei <code>hol</code>
@@ -167,7 +167,7 @@ Im Kommandostand kannst du für deine Bots Abbauen, Holz, Hingehen, Bewachen, He
 <h2>4. Etwas bauen lassen (Schematic)</h2>
 <ol>
   <li><b>Schematic besorgen:</b> Ein Schematic ist eine Bauplan-Datei (<code>.litematic</code>, z.&nbsp;B. aus Litematica).
-      Schick die Datei dem Server-Besitzer und sag ihm, wie sie heißen soll, z.&nbsp;B. <code>haus</code>. Er lädt sie hoch.</li>
+      Schick die Datei dem Server-Besitzer mit dem Namen, den sie haben soll, z.&nbsp;B. <code>haus</code>. Von dort kommt sie auf den Server.</li>
   <li><b>Material bereitlegen:</b> Stell eine Truhe mit allen Blöcken, die das Bauwerk braucht, <b>höchstens 8 Blöcke</b>
       von der Baustelle entfernt hin. Mehrere Truhen sind ok.</li>
   <li><b>Platz frei machen:</b> Der Bauplatz muss leer sein (nur Luft). Steht dort etwas, lass es vorher mit
@@ -185,6 +185,8 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <li>Er kommt <b>jeden Tag um 18 Uhr</b> in deine Handelshalle, handelt eine Stunde und hört dann von selbst auf.</li>
   <li>Er nimmt die Sticks aus den Stick-Truhen deiner Halle, verkauft sie an deine Villager und legt die <b>Smaragdblöcke in deine Truhe</b>.</li>
   <li>Du musst nur dafür sorgen, dass genug Sticks in den Truhen sind.</li>
+  <li><b>Er braucht eine eigene Kiste</b> (wie in „Seine Kiste“ oben, am besten nah an der Halle): Was er unterwegs im Kampf aufsammelt, legt er dort ab.
+      Ohne Kiste läuft sein Inventar voll, und er hört mit <code>inventory full and no supply chest to empty it into</code> auf.</li>
   <li>In der Halle baut kein Bot etwas ab oder hin – auch MisaBot nicht.</li>
   <li>Du kannst ihn auch ansprechen: <code>/msg EM_Trader status</code> oder <code>/msg EM_Trader stopp</code>.</li>
   <li>Auf Zuruf geht es mit jedem Bot: <code>/msg MisaBot handel sticks</code>. Die Sticks müssen in der Kiste des Bots oder in den Truhen der Halle liegen;
@@ -209,7 +211,7 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
     <code>dort ist gesperrtes Gebiet</code> – der Bereich berührt deine Handelshalle oder eine fremde Basis.<br>
     <code>kenne haus nicht</code> – dieses Schematic gibt es (noch) nicht.<br>
     <code>ich sehe dich nicht</code> – geh näher zum Bot.</td></tr>
-  <tr><td><code>kenne ich nicht: …</code></td><td>Tippfehler, falsche Reihenfolge oder ein Wort zu viel. Er zählt dir die Befehle auf, die er kennt.</td></tr>
+  <tr><td><code>kenne ich nicht: …</code></td><td>Tippfehler, falsche Reihenfolge oder ein Wort zu viel. Der Bot zählt dir die Befehle auf, die er kennt.</td></tr>
 </table>
 
 <h2>7. Was die Bots nicht tun</h2>
@@ -229,8 +231,12 @@ Kennt er den Namen nicht, antwortet er <code>geht nicht: kenne haus nicht</code>
   <tr><td>Er ist weit weg</td><td><code>komm</code> – er läuft den ganzen Weg, das kann dauern. <code>status</code> zeigt, was er tut.</td></tr>
   <tr><td><code>Problem: …: kein Weg zu …</code></td><td>Er hat 30 Sekunden keinen Weg zu dir gefunden (Klippe, Wasser, Eisentür). Geh ihm ein Stück entgegen und sag nochmal <code>komm</code>. Hinunter springt er bis zu 12 Blöcke, wenn er genug Leben hat.</td></tr>
   <tr><td>Er reißt das Falsche ab</td><td>Sofort <code>alles stopp</code> (mit <code>stopp</code> macht er sonst mit dem nächsten Auftrag der Liste weiter).</td></tr>
+  <tr><td>Er tut nach mehreren Toden eine halbe Stunde nichts</td><td>Stirbt ein Bot dreimal in 30 Minuten, wartet sein Auftrag 30 Minuten und seine Liste wird geleert; danach macht er von selbst weiter. Zu seinem Grab läuft er nicht, wenn er dort schon einmal gestorben ist. Gib ihm bessere Rüstung oder schick ihn an einen anderen Ort.</td></tr>
+  <tr><td>Bei EM_Trader steht <code>Stick-Kisten leer, wartet</code></td><td>Die Stick-Truhen sind leer. Er macht von selbst weiter, sobald neue Sticks da sind.</td></tr>
+  <tr><td>Bei EM_Trader steht <code>every villager is sold out</code></td><td>Alle Villager sind ausverkauft. Er wartet, bis sie wieder auffüllen (höchstens rund 20 Minuten).</td></tr>
+  <tr><td>EM_Trader meldet <code>inventory full and no supply chest</code></td><td>Er hat keine eigene Kiste. Gib ihm eine (siehe „Seine Kiste“), dann handelt er wieder.</td></tr>
 </table>
-<p class="small">Stand: 03.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
+<p class="small">Stand: 15.11.2026. Fragen und Wünsche an den Server-Besitzer.</p>
 
 </body>
 </html>

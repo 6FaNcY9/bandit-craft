@@ -122,12 +122,31 @@ Restock, measured 2026-11-03 from the villagers' `LastRestock` and `RestocksToda
 - **After tick 9000:** nothing until the next morning. A villager sold out then waits for the wave.
 
 So one Minecraft day offers up to 3072 trades and the bot makes about 1500 (1.3 per second). It waits only when every
-villager is sold out, and then by the game's clock (`soldOutUntil` in `app/trade.js`), not by a fixed time.
+villager is sold out, and then by the game's clock (`soldOutUntil` in `app/trade.js`), not by a fixed time. The prices stay
+at 32 sticks: all 64 fletchers had a demand between -34208 and -24324 on 2026-11-03, far below where the price would rise.
+
+Stick supply, measured 2026-11-03 over 100 s (the 8 minutes before agree): 126 sticks per minute reach the chests through
+the hoppers under the floors (x -24 y 68 and x -22 y 65, both flowing north). The upper line starts on the top floor around
+`-23 69 -94`; the farm behind it was not traced, and nearly nothing arrived between 04:29 and about 05:41 for a reason not
+known. The numbers that follow from it:
+
+| What | Sticks | Emerald blocks |
+| --- | --- | --- |
+| One hour of production | 7560 | 26 |
+| 24 hours of production | 181000 | 630 |
+| The bot's 60 minutes (about 2500 sticks per minute) | up to 150000 | 520 |
+| The 60 chests when full (after almost 14 hours) | 103680 | 360 |
+
+One window a day stops at about 385 blocks, because the chests are full before the next one and the hoppers back up. Two
+windows 12 hours apart, 40 minutes each, would sell all of it; `TRADE_SCHEDULE` still has the one window. A hopper moves at most
+150 items per minute, so more production than that needs a second line.
 
 `GUEST_BOTS` keeps them out of the keeper, board, plan, agent and help jobs, and their worker gets no supply chest (no
 rearm from the owner's chest). Protected areas still apply (no bot digs the main base or the owner's other areas).
 MidariBread gets no dashboard: a Tailscale login there is full admin (RCON console). The owner can still stop them
-(`alle alles stopp` in chat, or the main dashboard's "⏹ Alle" button; plain `stopp` only ends one bot's running job and its list goes on). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays.
+(`alle alles stopp` in chat, or the main dashboard's "⏹ Alle" button; plain `stopp` only ends one bot's running job and its list goes on). Deploying adds a name to BotGate, which restarts Velocity: ship it when nobody plays. After a rename the
+inventory stays with the old name and the skin must be set again from the Velocity console:
+`skin set shopkeeper EM_Trader` once the bot is online.
 
 ## In the game: sidebar, replies (2026-11-02), the menus are the Kommandostand (below)
 
