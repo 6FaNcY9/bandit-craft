@@ -15,9 +15,10 @@ buildNpmPackage {
   nodejs = nodejs_22;
   npmDepsHash = "sha256-SOL02ZbK1HktrP+Nb9LwXvwCHe+9mNkEP2Ui/I7Gde4=";
   dontNpmBuild = true;
-  # test.js: unit tests plus a loopback hub/worker round trip (no Minecraft
-  # server involved), so a broken token check or reservation fails the build.
-  doCheck = true;
+  # test.js: unit tests plus a loopback hub/worker round trip (no Minecraft server involved). Off here so a deploy
+  # does not wait 3-5 min for it twice (laptop and lab); the flake check `mcbots-tests` turns it on and bandit-nix's
+  # tools/craft-bump refuses a bump whose check fails.
+  doCheck = false;
   checkPhase = ''
     runHook preCheck
     node test.js

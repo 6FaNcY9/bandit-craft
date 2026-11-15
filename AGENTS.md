@@ -57,8 +57,10 @@ those PCs (slayer watcher, PC manager). Split out of `bandit-nix` on 2026-10-12 
 - Nix: `nix fmt -- <files>`, `nix flake check` here, and in bandit-nix with this checkout:
   `nix build --override-input bandit-craft git+file://$PWD .#nixosConfigurations.bandit-lab.config.system.build.toplevel`
   plus its checks. Evaluation alone is not enough: build the lab before handing over.
-- Node: mcbots `app/test.js` (see BOTS.md for the
-  NODE_PATH line); one topic alone: `node app/test/<topic>.js`.
+- Node: the package build skips mcbots `app/test.js`; the flake check runs it. Before handing over, commit and run
+  `nix build --no-link "git+file://$PWD?rev=$(git rev-parse HEAD)#checks.x86_64-linux.mcbots-tests"` (3-5 min)
+  instead of `node test.js`: it is the same derivation bandit-nix's `tools/craft-bump` builds for that commit, so the
+  bump finds it in the store. One topic alone: `node app/test/<topic>.js`.
 - Windows: copy the scripts to a temp folder on the PC and run `test-watch.ps1`, `test-install.ps1`
   (and the winpc tests); regenerate installer payloads after editing an embedded script.
 - Kits: `tools/minecraft-kit-check` tries every give command on the server.

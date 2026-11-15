@@ -32,8 +32,8 @@
     # (tools/winpc/README.md). bandit-nix imports it into the laptop host.
     nixosModules.pc-admin = ./tools/winpc/pc-admin.nix;
 
-    # The bot runner and dashboard; its build runs app/test.js. mcbots-worker needs bandit-nix's
-    # repoConfig (lab address, hub port), so bandit-nix builds that one (mcbots/worker.nix).
+    # The bot runner and dashboard; the package skips app/test.js, checks.mcbots-tests runs it. mcbots-worker needs
+    # bandit-nix's repoConfig (lab address, hub port), so bandit-nix builds that one (mcbots/worker.nix).
     packages.${system} = {
       mcbots = pkgs.callPackage ./hosts/bandit-lab/services/mcbots/package.nix {};
       pc-admin = pkgs.callPackage ./tools/winpc/pc-admin-package.nix {};
@@ -46,7 +46,8 @@
       discord-admin = pkgs.runCommand "discord-admin-tests" {nativeBuildInputs = [pkgs.nodejs_22];} ''
         cp -r ${./hosts/bandit-lab/services/discord-admin/app} app && cd app && node --test && touch $out
       '';
-      inherit (self.packages.${system}) mcbots pc-admin;
+      mcbots-tests = self.packages.${system}.mcbots.overrideAttrs {doCheck = true;};
+      inherit (self.packages.${system}) pc-admin;
     };
 
     formatter.${system} = pkgs.alejandra;
