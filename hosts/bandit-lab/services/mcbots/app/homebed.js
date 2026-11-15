@@ -9,10 +9,12 @@ const {Vec3} = require('vec3');
 const {insideAreas} = require('./world');
 const {bedCells, bedCheck, standable, woolColour} = require('./hunt');
 
-// Storage room 1: x -272..-266, beds' feet on z -213 (floor y 58); room 2 lies 8 blocks further south
-// (z -205) the same way. One slot per x, seven per room.
-const ROOM = {x: -272, y: 58, z: -213, width: 7, step: 8};
-const SLOTS = ROOM.width * 2;
+// Barracks 1 (castle A3a, spec 2026-11-15-castle-armoury): room x -332..-326, z -29..-21, floor y 104. Row 1: seven
+// beds with their heads on the north wall (feet z -28); row 2: six with their heads on the south wall (feet z -22),
+// leaving the door column x -329 free. Before 2026-11-15 the beds stood in the storage room under the base chest.
+const ROOM = {x: -332, y: 105, width: 7, rows: [{z: -28, facing: 'north'}, {z: -22, facing: 'south', skip: -329}]};
+const SPOTS = ROOM.rows.flatMap((row) => Array.from({length: ROOM.width}, (_, i) => ROOM.x + i).filter((x) => x !== row.skip).map((x) => ({x, y: ROOM.y, z: row.z, facing: row.facing})));
+const SLOTS = SPOTS.length;
 // Who sleeps where when a job names no slot (the other bots pass a slot or x, y, z).
 const CREW = ['bot1', 'bot2', 'bot3'];
 // Look direction (mineflayer yaw: 0 faces -z) that makes the server turn the bed that way.
@@ -21,7 +23,7 @@ const YAW = {north: 0, west: Math.PI / 2, south: Math.PI, east: -Math.PI / 2};
 // Stops of the sheep search: a ring around the base, 70 and 140 blocks out (animals are sent ~48 blocks far).
 const searchRing = (c) => [70, 140].flatMap((d) => [[d, 0], [0, d], [-d, 0], [0, -d]].map(([dx, dz]) => ({x: Math.floor(c.x) + dx, z: Math.floor(c.z) + dz})));
 
-const slotSpot = (slot) => ({x: ROOM.x + (slot % ROOM.width), y: ROOM.y, z: ROOM.z + ROOM.step * Math.floor(slot / ROOM.width), facing: 'north'});
+const slotSpot = (slot) => ({...SPOTS[slot]});
 
 // The bed spot for a job: explicit x,y,z(,facing), else its slot, else the bot's place in the crew.
 function homeSpot(name, a) {

@@ -1,19 +1,23 @@
 'use strict';
 const assert = require('node:assert');
 module.exports = async () => {
-  { // homebed: one bed slot per bot in the storage rooms - slots, needs, the job against a fake bot
+  { // homebed: one bed slot per bot in Barracks 1 (castle A3a) - slots, needs, the job against a fake bot
     const {JOBS, VALIDATE, Cancelled} = require('../../bots');
     const HB = require('../../homebed');
     const {Vec3} = require('vec3');
-    assert.deepStrictEqual(HB.slotSpot(0), {x: -272, y: 58, z: -213, facing: 'north'});
-    assert.deepStrictEqual(HB.slotSpot(6), {x: -266, y: 58, z: -213, facing: 'north'}, 'room 1 ends at x -266');
-    assert.deepStrictEqual(HB.slotSpot(7), {x: -272, y: 58, z: -205, facing: 'north'}, 'the 8th goes to room 2');
+    // Barracks 1 (A3a, spec 2026-11-15-castle-armoury): heads to the north wall in row 1, to the south wall in row 2,
+    // the door column x -329 stays free in row 2
+    assert.deepStrictEqual(HB.slotSpot(0), {x: -332, y: 105, z: -28, facing: 'north'});
+    assert.deepStrictEqual(HB.slotSpot(6), {x: -326, y: 105, z: -28, facing: 'north'}, 'row 1 ends at x -326');
+    assert.deepStrictEqual(HB.slotSpot(7), {x: -332, y: 105, z: -22, facing: 'south'}, 'the 8th goes to row 2');
+    assert.ok(Array.from({length: HB.SLOTS}, (_, i) => HB.slotSpot(i)).every((p) => !(p.x === -329 && p.z === -22)), 'the door column stays free');
+    assert.strictEqual(HB.SLOTS, 13);
     assert.strictEqual(new Set(Array.from({length: HB.SLOTS}, (_, i) => JSON.stringify(HB.slotSpot(i)))).size, HB.SLOTS, 'every slot differs');
-    assert.deepStrictEqual(HB.CREW.map((n) => HB.homeSpot(n, {}).x), [-272, -271, -270], 'the crew gets different x');
+    assert.deepStrictEqual(HB.CREW.map((n) => HB.homeSpot(n, {}).x), [-332, -331, -330], 'the crew gets different x');
     assert.deepStrictEqual(HB.homeSpot('bot3', {slot: 8}), HB.slotSpot(8), 'an explicit slot wins');
     assert.deepStrictEqual(HB.homeSpot('bot3', {x: 1, y: 60, z: 2}), {x: 1, y: 60, z: 2, facing: 'north'});
     assert.throws(() => HB.homeSpot('bot99', {}), /no bed slot/);
-    assert.throws(() => HB.homeSpot('bot1', {slot: 14}), /no bed slot/);
+    assert.throws(() => HB.homeSpot('bot1', {slot: 13}), /no bed slot/);
     const have = (o) => Object.entries(o).map(([name, count]) => ({name, count}));
     assert.deepStrictEqual(HB.bedNeeds(have({red_bed: 1})), {wool: false, planks: false});
     assert.deepStrictEqual(HB.bedNeeds(have({white_wool: 3, oak_planks: 3})), {wool: false, planks: false});
@@ -27,23 +31,23 @@ module.exports = async () => {
     assert.throws(() => VALIDATE.homebed({slot: 14}), /slot/);
     assert.throws(() => VALIDATE.homebed({x: 1, y: 60, z: 2, facing: 'up'}), /facing/);
 
-    // bot3's slot is x -270: floor y 57, air 58..61, rows z -214 (head) and -213 (foot)
+    // bot3's slot is x -330 in Barracks 1: floor y 104, air 105..106, rows z -29 (head) and -28 (foot)
     const room = (extra = {}) => {
       const c = {};
-      for (const z of [-214, -213]) { c[`-270,57,${z}`] = {name: 'stone', boundingBox: 'block'}; for (const y of [58, 59]) c[`-270,${y},${z}`] = {name: 'air', boundingBox: 'empty'}; }
+      for (const z of [-29, -28]) { c[`-330,104,${z}`] = {name: 'stone', boundingBox: 'block'}; for (const y of [105, 106]) c[`-330,${y},${z}`] = {name: 'air', boundingBox: 'empty'}; }
       return {...c, ...extra};
     };
     const fakeHome = ({inv = [], blocks = room(), areas = []} = {}) => {
       const events = [], infos = [], listeners = new Set(), cell = new Map(Object.entries(blocks));
       const bot = {
         entities: {}, inventory: {items: () => inv}, heldItem: null, game: {dimension: 'overworld'}, time: {timeOfDay: 1000}, isSleeping: false,
-        entity: {position: new Vec3(-270, 58, -216), onGround: true},
+        entity: {position: new Vec3(-330, 105, -31), onGround: true},
         pathfinder: {goto: async (g) => { events.push(`goto ${g.x ?? ''} ${g.z ?? ''}`.trim()); }, setGoal() {}, stop() {}, isMoving: () => false},
         equip: async (item) => { bot.heldItem = item; events.push(`equip ${item.name}`); },
         look: async (yaw) => { events.push(`look ${yaw}`); },
         lookAt: async () => {},
         blockAt: (p) => { const c = cell.get(`${p.x},${p.y},${p.z}`); return c ? {position: p, ...c} : null; },
-        _placeBlockWithOptions: async (ref, face, o) => { events.push(`place ${ref.position.x},${ref.position.y + 1},${ref.position.z} ${o.forceLook}`); cell.set('-270,58,-213', {name: 'red_bed'}); cell.set('-270,58,-214', {name: 'red_bed'}); },
+        _placeBlockWithOptions: async (ref, face, o) => { events.push(`place ${ref.position.x},${ref.position.y + 1},${ref.position.z} ${o.forceLook}`); cell.set('-330,105,-28', {name: 'red_bed'}); cell.set('-330,105,-29', {name: 'red_bed'}); },
         activateBlock: async (b) => { events.push(`click ${b.name}`); for (const l of listeners) l('Respawn point set'); },
         on: (n, f) => n === 'messagestr' && listeners.add(f), off: (n, f) => listeners.delete(f),
       };
@@ -53,51 +57,51 @@ module.exports = async () => {
     const bed = {name: 'red_bed', count: 1, type: 5};
     let f = fakeHome({inv: [{...bed}]});
     await JOBS.homebed(f.r, job());
-    assert.deepStrictEqual(f.events.filter((e) => /^(equip|look|place|click)/.test(e)), ['equip red_bed', 'look 0', 'place -270,58,-213 ignore', 'click red_bed'], 'looks north, places on the foot cell, clicks');
-    assert.ok(f.events.includes('goto -270 -214'), 'stands in the head cell to place');
-    assert.ok(f.infos.some((m) => /placed red_bed at -270 58 -213/.test(m)) && f.infos.some((m) => /spawn set at -270 58 -213/.test(m)), f.infos.join('|'));
-    f = fakeHome({blocks: room({'-270,58,-213': {name: 'red_bed'}, '-270,58,-214': {name: 'red_bed'}})}); // slot taken by a bed: click only, nothing fetched
+    assert.deepStrictEqual(f.events.filter((e) => /^(equip|look|place|click)/.test(e)), ['equip red_bed', 'look 0', 'place -330,105,-28 ignore', 'click red_bed'], 'looks north, places on the foot cell, clicks');
+    assert.ok(f.events.includes('goto -330 -29'), 'stands in the head cell to place');
+    assert.ok(f.infos.some((m) => /placed red_bed at -330 105 -28/.test(m)) && f.infos.some((m) => /spawn set at -330 105 -28/.test(m)), f.infos.join('|'));
+    f = fakeHome({blocks: room({'-330,105,-28': {name: 'red_bed'}, '-330,105,-29': {name: 'red_bed'}})}); // slot taken by a bed: click only, nothing fetched
     await JOBS.homebed(f.r, job());
     assert.deepStrictEqual(f.events.filter((e) => /^(equip|look|place|click)/.test(e)), ['click red_bed']);
     // a bed already stands on one cell only (other colour, turned another way): clicked, never "in the way" (lab 2026-10-10)
-    f = fakeHome({blocks: room({'-270,58,-213': {name: 'white_bed'}, '-270,58,-214': {name: 'air', boundingBox: 'empty'}})});
+    f = fakeHome({blocks: room({'-330,105,-28': {name: 'white_bed'}, '-330,105,-29': {name: 'air', boundingBox: 'empty'}})});
     await JOBS.homebed(f.r, job());
     assert.deepStrictEqual(f.events.filter((e) => /^(equip|look|place|click)/.test(e)), ['click white_bed']);
     // the bot places a bed and the head lands east, not north: the spawn is still set, and the log says what is there
     f = fakeHome({inv: [{...bed}]});
-    f.bot._placeBlockWithOptions = async () => { f.cells.set('-270,58,-213', {name: 'red_bed'}); f.cells.set('-269,58,-213', {name: 'red_bed'}); };
+    f.bot._placeBlockWithOptions = async () => { f.cells.set('-330,105,-28', {name: 'red_bed'}); f.cells.set('-329,105,-28', {name: 'red_bed'}); };
     await JOBS.homebed(f.r, job());
-    assert.ok(f.events.includes('click red_bed') && f.infos.some((m) => /did not land facing north: foot red_bed, head cell air, beds next to the foot: -269 58 -213/.test(m)), f.infos.join('|'));
+    assert.ok(f.events.includes('click red_bed') && f.infos.some((m) => /did not land facing north: foot red_bed, head cell air, beds next to the foot: -329 105 -28/.test(m)), f.infos.join('|'));
     { // natural blocks in the slot or the standing cell are dug, placed ones refuse
       const dug = [];
       const mk = (blocks) => {
         const cell = new Map(Object.entries(blocks));
         const bot = {blockAt: (p) => { const c = cell.get(`${p.x},${p.y},${p.z}`); return c ? {position: p, ...c} : null; }, inventory: {items: () => [{name: 'red_bed', count: 1}]}, entity: {}, equip: async () => {}, look: async () => {},
-          _placeBlockWithOptions: async () => { cell.set('-270,58,-213', {name: 'red_bed'}); cell.set('-270,58,-214', {name: 'red_bed'}); }};
+          _placeBlockWithOptions: async () => { cell.set('-330,105,-28', {name: 'red_bed'}); cell.set('-330,105,-29', {name: 'red_bed'}); }};
         const {homebed} = HB.makeHomebed({goNear: async () => {}, guard() {}, sleep: async () => {}, goals: {GoalBlock: function () {}}, crafting: {}, at: (c) => `${c.x} ${c.y} ${c.z}`, NATURAL: require('../../bots').NATURAL,
           digAt: async (r, j, p, want) => { const b = bot.blockAt(p); if (!want(b.name)) return false; dug.push(b.name); cell.set(`${p.x},${p.y},${p.z}`, {name: 'air', boundingBox: 'empty'}); return true; },
           run: async (r, j, type) => { dug.push(type); }});
         return {homebed, r: {name: 'bot3', bot, emit() {}, protectedAreas: []}};
       };
-      let h = mk(room({'-270,58,-213': {name: 'grass_block', boundingBox: 'block'}, '-270,59,-214': {name: 'dirt', boundingBox: 'block'}}));
+      let h = mk(room({'-330,105,-28': {name: 'grass_block', boundingBox: 'block'}, '-330,106,-29': {name: 'dirt', boundingBox: 'block'}}));
       await h.homebed(h.r, job());
       assert.deepStrictEqual(dug.splice(0), ['grass_block', 'dirt', 'bed'], 'natural blocks dug before the check, then placed and clicked');
-      h = mk(room({'-270,58,-213': {name: 'oak_planks', boundingBox: 'block'}}));
+      h = mk(room({'-330,105,-28': {name: 'oak_planks', boundingBox: 'block'}}));
       await assert.rejects(h.homebed(h.r, job()), /oak_planks is in the way/);
       assert.deepStrictEqual(dug, [], 'a placed block is never dug');
-      h = mk(room({'-270,58,-213': {name: 'red_bed'}, '-270,58,-214': {name: 'dirt', boundingBox: 'block'}}));
+      h = mk(room({'-330,105,-28': {name: 'red_bed'}, '-330,105,-29': {name: 'dirt', boundingBox: 'block'}}));
       await h.homebed(h.r, job());
       assert.deepStrictEqual(dug.splice(0), ['bed'], 'a bed in the slot: nothing is dug');
     }
-    f = fakeHome({areas: [[-280, -220, -260, -200]]});
+    f = fakeHome({areas: [[-340, -40, -320, -20]]});
     await assert.rejects(JOBS.homebed(f.r, job()), /protected/);
     assert.deepStrictEqual(f.events, [], 'a protected slot is refused before walking');
-    f = fakeHome({blocks: room({'-270,58,-214': {name: 'chest', boundingBox: 'block'}}), inv: [{...bed}]});
+    f = fakeHome({blocks: room({'-330,105,-29': {name: 'chest', boundingBox: 'block'}}), inv: [{...bed}]});
     await assert.rejects(JOBS.homebed(f.r, job()), /chest is in the way/);
     f = fakeHome({inv: [{...bed}]});
     f.r.name = 'bot99';
     await assert.rejects(JOBS.homebed(f.r, job()), /no bed slot/);
-    await JOBS.homebed(f.r, job({args: {x: -270, y: 58, z: -213}})); // an explicit spot needs no crew slot
+    await JOBS.homebed(f.r, job({args: {x: -330, y: 105, z: -28}})); // an explicit spot needs no crew slot
     f = fakeHome({inv: [{...bed}]});
     const stopped = job();
     f.bot.equip = async () => { stopped.cancelled = true; };
