@@ -3432,7 +3432,7 @@ const {highway} = roadJob.makeRoad({
 });
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
-  goNear, guard, sleep, digAt, waitCalm, at, unpillar,
+  goNear, guard, sleep, digAt, waitCalm, at, unpillar, care,
   // every *_log is one kind; a farm with its own chest reads that chest (the hall index never sees it)
   enoughWood: (r, job) => (job.args.chest ? storage.chestAbove('oak_log', r.world?.stocks, job.args.chest) : storage.surplus('oak_log', storage.hallTotals(r.world?.chests))),
   deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...(job.args.chest || r.supplyChest), ...(only ? {only} : {})}})),

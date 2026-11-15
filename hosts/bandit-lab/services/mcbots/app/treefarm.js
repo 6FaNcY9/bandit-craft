@@ -133,7 +133,7 @@ function pickups(entities, box, areas, me) {
 // The sapling to plant (oak and birch first) among inventory items, or undefined.
 const pickSapling = (items) => SAPLINGS.map((n) => items.find((i) => i.name === n)).find(Boolean);
 
-function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw, at, unpillar = async () => {}, enoughWood = () => 0, haulSurplus = async () => false}) {
+function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw, at, unpillar = async () => {}, enoughWood = () => 0, haulSurplus = async () => false, care = async () => {}}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
 
   // Use bone meal on a sapling until it is a tree (or the meal or the tries are gone).
@@ -206,6 +206,8 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
     for (;;) {
       guard(job);
       await waitCalm(r, job);
+      // food and gear: an endless farm never got a job's upkeep again (bot19 at 8.6 health with no food, 2026-11-15)
+      try { await care(r, job); } catch (e) { guard(job); r.emit('info', `treefarm: care: ${e.message}`); }
       // The hall holds enough logs (15,485 oak logs, 2026-11-11): wait, never fail, go on when it falls below the cap.
       if (enoughWood(r, job) > 0) {
         // the surplus above the farm chest's quota goes into the castle sorter while its slice has room

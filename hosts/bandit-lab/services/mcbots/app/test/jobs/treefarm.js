@@ -68,7 +68,7 @@ module.exports = async () => {
 
     // the job: a 9 x 9 farm, 9 cells; the chest holds saplings; a grown tree is cut and replanted
     const small = {x1: 0, z1: 0, x2: 8, z2: 8};
-    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood, haulSurplus, args = small}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood, haulSurplus, care, args = small}) => {
       const events = [], infos = [], calls = {deposit: 0, withdraw: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const bot = {
@@ -84,6 +84,7 @@ module.exports = async () => {
       const tf = T.makeTreeFarm({
         ...(enoughWood ? {enoughWood} : {}),
         ...(haulSurplus ? {haulSurplus} : {}),
+        ...(care ? {care} : {}),
         goNear: async (r, j, x, y, z) => { bot.entity.position = new Vec3(x, y, z); },
         guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
         sleep: async () => { if (++sleeps > stopAfterSleeps) job.cancelled = true; },
@@ -186,6 +187,13 @@ module.exports = async () => {
     await assert.rejects(f.run(), Cancelled);
     assert.strictEqual(f.job.t.doing, 'enough wood in the hall, waiting');
     assert.ok(f.infos.some((t) => /sorter: could not reach/.test(t)), 'error reported');
+    // food: care runs every round, also while the farm waits for wood; a care error is reported, the farm goes on
+    let cares = 0;
+    f = fake({world: w2, inv: [{name: 'oak_sapling', count: 9, type: 1}], stopAfterSleeps: 130, enoughWood: () => 500,
+      care: async () => { if (++cares === 1) throw new Error('no food fetched'); }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(cares, 3, 'care in each of the 3 rounds');
+    assert.ok(f.infos.some((t) => /treefarm: care: no food fetched/.test(t)), 'care error reported');
     // still full after the logs-only deposit (sticks, tools, seeds): one plain deposit, then the farm goes on
     let free = 3;
     const onlys = [];
