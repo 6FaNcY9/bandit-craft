@@ -98,6 +98,19 @@ const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
 
 const dims = (sel) => (sel.a && sel.b ? [Math.abs(sel.a.x - sel.b.x) + 1, Math.abs(sel.a.y - sel.b.y) + 1, Math.abs(sel.a.z - sel.b.z) + 1] : null);
 
+// Abbauen (Bereich) takes 32 x 32 x 24 per order: a bigger box goes out as several orders, the top layer first
+// (the owner marked 21 x 4 x 80 and saw only grey panes, 2026-11-15).
+const CLEAR_PARTS = 24;
+function clearTiles(sel) {
+  const cuts = (k, max) => {
+    const lo = Math.min(sel.a[k], sel.b[k]), size = Math.abs(sel.a[k] - sel.b[k]) + 1, n = Math.ceil(size / max), len = Math.ceil(size / n);
+    return Array.from({length: n}, (_, i) => [lo + i * len, Math.min(lo + size - 1, lo + (i + 1) * len - 1)]);
+  };
+  const out = [];
+  for (const [y1, y2] of cuts('y', 24).reverse()) for (const [x1, x2] of cuts('x', 32)) for (const [z1, z2] of cuts('z', 32)) out.push({...sel, a: {...sel.a, x: x1, y: y1, z: z1}, b: {...sel.b, x: x2, y: y2, z: z2}});
+  return out;
+}
+
 // The area jobs once both corners are set; a box over the limit (VALIDATE says so) or across worlds is not ok.
 function areaJobs(sel) {
   if (!sel?.a || !sel.b) return [];
@@ -105,6 +118,11 @@ function areaJobs(sel) {
   return AREA.map((key) => {
     const job = JOBS[key];
     if (crossed) return {key, ok: false, why: 'Ecken in verschiedenen Welten'};
+    if (key === 'clear') {
+      const parts = clearTiles(sel).length;
+      if (parts > CLEAR_PARTS) return {key, ok: false, why: `zu groß: höchstens ${CLEAR_PARTS} Teile`};
+      if (parts > 1) return {key, ok: true, parts};
+    }
     try { VALIDATE[job.type](job.args({}, {sel})); return {key, ok: true}; } catch { return {key, ok: false, why: `zu groß oder zu klein: ${job.limit}`}; }
   });
 }
@@ -248,4 +266,4 @@ function build(key, data, env) {
   return {type: job.type, args, bots, replace: key !== 'setchest' && data.when === 'now', say: job.say(v), area: !!has('area')};
 }
 
-module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, areaJobs, dims, AREA, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};
+module.exports = {isChest, mayOrder, JOBS, BLOCKS, ITEMS, CRAFTS, SMELTS, germanName, areaJobs, clearTiles, CLEAR_PARTS, dims, AREA, resolveTarget, resolveBots, supplyOf, presetOf, hasJob, build, dimOf};

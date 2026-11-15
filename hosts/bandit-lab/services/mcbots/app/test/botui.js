@@ -1095,6 +1095,16 @@ async function fake() {
     const nsm = submits.length; await ev('Fancy', {a: 'shiftgo'});
     assert.equal(ui.state('Fancy').flash.text, 'Markierter Bereich: jetzt Los!'); assert.equal(menus().at(-1).slots.find((x) => x.slot === 22).name, 'Los!'); assert.equal(submits.length, nsm);
     await ev('Fancy', {a: 'areaclear'});
+    { // a marked box over 32 x 32 x 24 (the owner's 21 x 4 x 80): Abbauen (Bereich) goes out in parts, the first replaces, the rest queue
+      ui.marks.set('Fancy', {spot: null, area: {a: {x: 0, y: 64, z: 0, dim: 'overworld'}, b: {x: 20, y: 67, z: 79, dim: 'overworld'}}, at: t});
+      await ev('Fancy', {a: 'botm', bot: 'bot1'}); await ev('Fancy', {a: 'aream', bot: 'bot1', key: 'clear'});
+      assert.equal(menus().at(-1).title, 'Bereich: 21 × 4 × 80'); assert.equal(menus().at(-1).slots.find((x) => x.slot === 22).name, 'Los!');
+      const n0 = submits.length; await ev('Fancy', {a: 'areago'});
+      const parts = submits.slice(n0);
+      assert.deepEqual(parts.map((p) => [p.type, !!p.replace, p.args.z1, p.args.z2]), [['clear', true, 0, 26], ['clear', false, 27, 53], ['clear', false, 54, 79]]);
+      assert.equal(ui.state('Fancy').flash.text, 'bot1: Bereich abbauen (3 Teile)');
+      ui.marks.set('Fancy', {spot: null, area: {a: {x: 1, y: 64, z: 1, dim: 'overworld'}, b: {x: 3, y: 65, z: 2, dim: 'overworld'}}, at: t});
+    }
     // guest: only her bots; her order fails in ground(), the ghost stays
     await ev('Midari', {a: 'aream', bot: 'bot1'}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nicht dein Bot');
     await ev('Midari', {a: 'shiftm', bot: 'bot1', shift: true}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nicht dein Bot');

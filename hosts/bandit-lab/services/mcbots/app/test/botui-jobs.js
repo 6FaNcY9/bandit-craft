@@ -93,7 +93,15 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: {x: -271, y: 
   r = by(areaJobs(sel({x: 20, y: 60, z: 20})));
   assert.equal(r.excavate.ok, false); assert.match(r.excavate.why, /9 x 9 x 5/); assert.equal(r.clear.ok, true);
   r = by(areaJobs(sel({x: 40, y: 60, z: 40})));
-  assert.equal(r.clear.ok, false); assert.equal(r.light.ok, true);
+  assert.deepEqual([r.clear.ok, r.clear.parts], [true, 4], 'a big Abbauen box goes out in parts'); assert.equal(r.light.ok, true);
+  { // clearTiles: every part within 32 x 32 x 24, together the whole box, the top layer first; too many parts is refused
+    const {clearTiles} = require('../botui-jobs'), s = sel({x: 20, y: 67, z: 79}), t = clearTiles(s), size = (q) => ['x', 'y', 'z'].map((k) => Math.abs(q.a[k] - q.b[k]) + 1);
+    assert.equal(t.length, 3); assert.ok(t.every((q) => size(q)[0] <= 32 && size(q)[1] <= 24 && size(q)[2] <= 32 && q.a.dim === s.a.dim));
+    assert.equal(t.reduce((n, q) => n + size(q).reduce((a, b) => a * b), 0), size(s).reduce((a, b) => a * b));
+    const tall = clearTiles(sel({x: 3, y: 110, z: 3})); assert.ok(tall[0].a.y > tall.at(-1).a.y, 'top first');
+    assert.equal(clearTiles(sel({x: 8, y: 64, z: 8})).length, 1);
+    const huge = by(areaJobs(sel({x: 300, y: 60, z: 300}))); assert.equal(huge.clear.ok, false); assert.match(huge.clear.why, /höchstens 24 Teile/);
+  }
   r = by(areaJobs(sel({x: 1, y: 60, z: 1})));
   assert.equal(r.shaft.ok, false); // 2 x 2 is under the minimum
   assert.ok(areaJobs(sel({x: 8, y: 64, z: 8, dim: 'the_nether'})).every((j) => !j.ok && j.why === 'Ecken in verschiedenen Welten'));

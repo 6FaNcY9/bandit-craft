@@ -255,12 +255,18 @@ const ACTIONS = {
     if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Bereich ist in einer anderen Welt');
     const bot = oneBot(ui, viewer, {bot: st.area.bot});
     try { // a refusal keeps the selection
-      const o = jobs.build(key, {who: bot, when: st.area.when}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
-      done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+      // A big Abbauen (Bereich) box goes out in parts (jobs.clearTiles): the first as chosen, the rest queued behind it.
+      const sels = key === 'clear' ? jobs.clearTiles(st.sel) : [st.sel];
+      if (sels.length > jobs.CLEAR_PARTS) throw new Error('Bereich zu groß');
+      let o;
+      sels.forEach((sel, i) => {
+        o = jobs.build(key, {who: bot, when: i ? 'next' : st.area.when}, {ctx: st.ctx, sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+        done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+      });
       await clearSel(st, ui, viewer);
       st.area.key = null;
       st.screen = {name: 'botm', bot};
-      ui.flash(st, `${bot}: ${o.say}`, true);
+      ui.flash(st, `${bot}: ${o.say}${sels.length > 1 ? ` (${sels.length} Teile)` : ''}`, true);
     } catch (e) { throw new Error(explain(e.message)); }
   },
   // Tiere & Felder: st.farm is the bot, st.sel the same corners as Bereich.
