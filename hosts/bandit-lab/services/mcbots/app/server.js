@@ -120,7 +120,7 @@ setInterval(() => {
   idleLib.trackIdle(snaps, idleSince);
   const busy = new Set([...ownerOrders.keys(), ...started, ...Object.entries(projects.all).filter(([, p]) => !p.paused).map(([n]) => n),
     ...(board?.parts() || []).filter((p) => p.state === 'claimed').map((p) => p.claim.bot)]);
-  if (keeper) { const k = keeper.state(); for (const b of [k.counting, ...k.quotas.map((q) => q.bot), ...k.lighting.map((l) => l.bot)]) if (b) busy.add(b); }
+  if (keeper) { const k = keeper.state(); for (const b of [k.counting, k.countingArmoury, ...k.quotas.map((q) => q.bot), ...(k.armoury || []).map((q) => q.bot), ...k.lighting.map((l) => l.bot)]) if (b) busy.add(b); }
   for (const {bot, choice} of idleStopAll ? [] : idleLib.idleToStart({snaps, store: idleStore, busy: new Set([...busy, ...idleHeld]), retryAt: orderRetryAt, idleSince})) {
     started.add(bot);
     try {
@@ -388,6 +388,7 @@ function applyPlaces() {
   if (hub) { Object.assign(hub, {supplyChest, gearChest, wheatField, places: places.list}); hub.broadcastPolicy(); }
   if (keeper) {
     keeper.chest = supplyChest;
+    keeper.armoury = gearChest; // filled from the supply chest (keeper.js ARMOURY_STOCK)
     keeper.site = site ? {x: site.x, y: site.y, z: site.z} : cfg.keeperSite;
   }
 }

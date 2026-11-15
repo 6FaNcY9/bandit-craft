@@ -64,6 +64,8 @@ Spec `docs/superpowers/specs/2026-11-15-castle-armoury-design.md`. A dashboard m
 `ensureGear` go there; the `supply` chest stays the material store and the fallback when the armoury lacks something.
 At the armoury a bot hands back duplicates (1 sword, 1 axe, 2 pickaxes, 1 shield, worn armour stay; `gear.js handBack`).
 Guests get it only when named in `GEAR_GUESTS` (MisaBot), only within 250 blocks, and never hand back. No marker: as before.
+The keeper (when on) also keeps the gear-point chest at `keeper.js ARMOURY_STOCK` (64 ingots, 64 bread, 32 torches, 16 logs,
+2 of each set piece), carried and crafted from the supply chest after its own quotas; `/api/keeper` shows it as `armoury`.
 
 ## Guest bot (MidariBread, 2026-10-29)
 

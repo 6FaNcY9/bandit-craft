@@ -239,3 +239,54 @@ const {WorldModel} = require('../world');
   assert.strictEqual(old.enabled, true); assert.deepStrictEqual(old.state().quotas.map((q) => q.want), [64, 32]);
   fs.rmSync(dir, {recursive: true});
 }
+{ // the armoury (spec 2026-11-15-castle-armoury): filled from the base chest, its own count first, nothing without one
+  const {Keeper, IDLE_MS, armouryPlan, ARMOURY_STOCK} = require('../keeper');
+  const {VALIDATE: V} = require('../bots');
+  assert.deepStrictEqual(ARMOURY_STOCK, [['iron_ingot', 64], ['bread', 64], ['torch', 32], ['logs', 16], ['iron_helmet', 2], ['iron_chestplate', 2], ['iron_leggings', 2], ['iron_boots', 2], ['iron_sword', 2], ['iron_axe', 2], ['iron_pickaxe', 2], ['shield', 2]]);
+  const base = {x: -271, y: 66, z: -214}, arm = {x: -322, y: 105, z: -26};
+  const plenty = {iron_ingot: 600, oak_log: 200, bread: 100, torch: 64};
+  const plate = armouryPlan('iron_chestplate', 2, base, arm, plenty);
+  assert.deepStrictEqual(plate[0], ['withdraw', {item: 'iron_ingot', count: 16, ...base}]);
+  assert.ok(plate.some(([type, a]) => type === 'craft' && a.item === 'iron_chestplate' && a.count === 2));
+  assert.deepStrictEqual(plate.slice(-2), [['deposit', {...arm, only: 'iron_chestplate'}], ['deposit', {...arm, only: 'iron_ingot'}]]);
+  assert.ok(armouryPlan('iron_chestplate', 2, base, arm, {iron_ingot: 3, oak_log: 9}).blocked, 'too little iron in the base chest');
+  assert.deepStrictEqual(armouryPlan('bread', 64, base, arm, {bread: 10}), [['withdraw', {item: 'bread', count: 10, ...base}], ['deposit', {...arm, only: 'bread'}]], 'what the base has');
+  assert.ok(armouryPlan('bread', 64, base, arm, {}).blocked);
+  for (const [item] of ARMOURY_STOCK) for (const [type, a] of armouryPlan(item, 2, base, arm, plenty)) assert.ok(V[type](a), `${item}: ${type}`);
+  let t = 1e6;
+  const w = new WorldModel({now: () => t});
+  const fake = (name) => ({name, sent: [], idle: true, online: true, snapshot() { return {online: this.online, dead: false, job: this.idle ? null : {label: 'x'}, queue: []}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }});
+  const bots = [fake('bot1'), fake('bot2'), fake('bot3')];
+  const k = new Keeper({runners: new Map(bots.map((b) => [b.name, b])), world: w, chest: base, quotas: [['logs', 64]], now: () => t});
+  k.setEnabled(true);
+  w.noteStock('bot1', plenty, 10, base);
+  k.tick(); // the bots count as idle from here
+  t += IDLE_MS;
+  k.tick();
+  assert.ok(bots.every((b) => !b.sent.length), 'no armoury: nothing to do');
+  k.armoury = arm;
+  k.tick();
+  assert.deepStrictEqual(bots.filter((b) => b.sent.length).map((b) => b.sent), [[['stock', arm]]], 'counted first');
+  const counter = bots.find((b) => b.sent.length);
+  w.noteStock(counter.name, {}, 54, arm);
+  counter.idle = true;
+  counter.sent = [];
+  t += IDLE_MS;
+  k.tick();
+  const sent = bots.map((b) => b.sent).filter((s) => s.length);
+  assert.strictEqual(sent.length, 2, 'two bots at most');
+  assert.deepStrictEqual(sent[0], [['withdraw', {item: 'iron_ingot', count: 64, ...base}], ['deposit', {...arm, only: 'iron_ingot'}]]);
+  assert.strictEqual(k.state().armoury.find((q) => q.item === 'iron_ingot').have, 0);
+  // the main quotas first: logs short in the base chest take a bot before the armoury
+  const b2 = [fake('bot4'), fake('bot5')];
+  const k2 = new Keeper({runners: new Map(b2.map((b) => [b.name, b])), world: w, chest: base, quotas: [['logs', 300]], now: () => t});
+  k2.setEnabled(true);
+  k2.armoury = arm;
+  w.noteStock('bot1', {...plenty, oak_log: 0}, 10, base);
+  w.noteStock('bot2', {}, 54, arm);
+  k2.tick();
+  t += IDLE_MS;
+  k2.tick();
+  assert.ok(b2.some((b) => b.sent[0]?.[0] === 'chop'), 'logs first');
+  assert.strictEqual(b2.filter((b) => b.sent.length).length, 2);
+}
