@@ -2402,13 +2402,14 @@ async function care(r, job) {
   const {bot} = r;
   // Hurt and below food 18 it does not heal (bot2 stayed at 2.2 health at food 16 with none on it, 2026-10-16): food then too.
   const needFood = bot.food < FOOD_BELOW || (bot.health <= 10 && bot.food < 18);
-  if (needFood && r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
+  // Without a supply chest (MisaBot starved so, 2026-11-15 08:34) the site, stored wheat, the field and the hunt still feed it.
+  if (needFood && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
     r.foodTriedAt = Date.now();
     // Shown in the snapshot while this runs.
     r.gettingFood = true;
     try {
       await siteFood(r, job);
-      if (!bot.inventory.items().some((i) => edible(bot, i))) {
+      if (r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i))) {
         r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from the supply chest`);
         await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
           guard(job);
@@ -2477,7 +2478,7 @@ async function upkeep(r, job, ids) {
 // to do. Its own `t`, so the field never becomes where the interrupted job resumes.
 // Bread baked from stored wheat: 106 wheat lay in storage, and no bread, while the bots went hungry 104 times in
 // 48 h (main server, 2026-10-16). 12 wheat make 4 bread; a short or empty store is no failure.
-const withdrawFrom = (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}}));
+const withdrawFrom = (r, job, item, count) => (r.supplyChest ? JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})) : Promise.reject(new Error('no supply chest')));
 async function storedBread(r, job, {withdraw = withdrawFrom, bake = (rr, j, n) => crafting.ensureItem(rr, child(j), 'bread', n)} = {}) {
   const wheat = () => craftingLib.count(r.bot, 'wheat');
   if (wheat() < 12) await withdraw(r, job, 'wheat', 12 - wheat()).catch(() => guard(job));

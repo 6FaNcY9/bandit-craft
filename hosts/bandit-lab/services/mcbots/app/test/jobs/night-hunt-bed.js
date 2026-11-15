@@ -367,6 +367,14 @@ module.exports = async () => {
       for (const m of [near, empty, far]) await B.care(m.r, {t: {}, cancelled: false, type: 'schematic', args: m.r.current.args});
       assert.deepStrictEqual(walks, ['empty', 'far'], 'the supply chest only when the project chests hold no food or lie farther off');
       assert.deepStrictEqual([near.inv[0]?.count, empty.chest.opened, far.chest.opened], [32, 1, 0], '32 bread from the depot; an empty depot is looked into once; a far one not at all');
+      // no supply chest (MisaBot starved, 2026-11-15 08:34): no rearm walk, but the hunt is still tried
+      const misa = hungry('misa'), said = [];
+      Object.assign(misa.r, {supplyChest: null, current: {type: 'chop', args: {}}, emit: (k, t) => said.push(t)});
+      misa.r.bot.food = 5;
+      walks.length = 0;
+      await B.care(misa.r, {t: {}, cancelled: false, type: 'chop', args: {}});
+      assert.deepStrictEqual(walks, [], 'no supply chest: no rearm walk');
+      assert.ok(said.some((t) => /hungry: no cow, pig or cookable chicken/.test(t)), 'the hunt is still tried: ' + said.join('|'));
     } finally {
       B.JOBS.rearm = realRearm;
     }
