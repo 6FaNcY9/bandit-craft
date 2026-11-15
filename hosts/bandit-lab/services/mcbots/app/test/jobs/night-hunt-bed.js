@@ -73,6 +73,17 @@ module.exports = async () => {
         for (const m of [full, noArmour, noSword, noFood]) await nightShelter(m.r, {...job, type: 'schematic'});
         assert.deepStrictEqual(walks, ['noArmour', 'noSword', 'noFood'], 'only a bot missing armour, a weapon or food walks to the supply chest');
         assert.deepStrictEqual(full.placed, [90], 'the bot in full gear shelters on the spot');
+        // with an armoury: there first, the supply chest only while gear is still missing (review 2026-11-16)
+        const at = [];
+        B.JOBS.rearm = async (r, j) => { at.push(`${r.name}@${j.args.x}`); };
+        const emptyArm = geared('emptyArm', {sword: false});
+        emptyArm.r.gearChest = {x: -50, y: 64, z: 0};
+        await nightShelter(emptyArm.r, {...job, type: 'schematic'});
+        const stocked = geared('stocked', {sword: false});
+        stocked.r.gearChest = {x: -50, y: 64, z: 0};
+        B.JOBS.rearm = async (r, j) => { at.push(`${r.name}@${j.args.x}`); if (j.args.x === -50) r.bot.inventory.items = () => [{name: 'iron_sword'}, {name: 'bread'}]; };
+        await nightShelter(stocked.r, {...job, type: 'schematic'});
+        assert.deepStrictEqual(at, ['emptyArm@-50', 'emptyArm@100', 'stocked@-50'], 'the supply chest as the fallback, not a second walk when the armoury had it');
       } finally {
         B.JOBS.rearm = realRearm;
       }
@@ -375,8 +386,51 @@ module.exports = async () => {
       await B.care(misa.r, {t: {}, cancelled: false, type: 'chop', args: {}});
       assert.deepStrictEqual(walks, [], 'no supply chest: no rearm walk');
       assert.ok(said.some((t) => /hungry: no cow, pig or cookable chicken/.test(t)), 'the hunt is still tried: ' + said.join('|'));
+      // with an armoury: food there first, the supply chest when it has none (review 2026-11-16)
+      const at = [];
+      B.JOBS.rearm = async (r, j) => { at.push(`${r.name}@${j.args.x}`); };
+      const armEmpty = hungry('armEmpty');
+      Object.assign(armEmpty.r, {gearChest: {x: -20, y: 64, z: 0}, current: {type: 'chop', args: {}}});
+      await B.care(armEmpty.r, {t: {}, cancelled: false, type: 'chop', args: {}});
+      const armFood = hungry('armFood');
+      Object.assign(armFood.r, {gearChest: {x: -20, y: 64, z: 0}, current: {type: 'chop', args: {}}});
+      B.JOBS.rearm = async (r, j) => { at.push(`${r.name}@${j.args.x}`); if (j.args.x === -20) armFood.inv.push({name: 'bread', type: 7, count: 32}); };
+      await B.care(armFood.r, {t: {}, cancelled: false, type: 'chop', args: {}});
+      assert.deepStrictEqual(at, ['armEmpty@-20', 'armEmpty@240', 'armFood@-20'], 'the supply chest as the fallback for food');
     } finally {
       B.JOBS.rearm = realRearm;
+    }
+  }
+  { // ensureGear at the armoury (review 2026-11-16): a 1-ingot gap (the shield) is fetched while standing there, and a
+    // visit that got nothing waits 30 minutes instead of walking back every 5; without an armoury nothing changes
+    const B = require('../../bots');
+    const {Vec3} = require('vec3');
+    const real = {rearm: B.JOBS.rearm, withdraw: B.JOBS.withdraw};
+    const calls = [];
+    B.JOBS.rearm = async (r, j) => { calls.push(`rearm@${j.args.x}`); };
+    B.JOBS.withdraw = async (r, j) => { calls.push(`${j.args.item}@${j.args.x}`); };
+    try {
+      const mk2 = (gearChest) => {
+        const inv = [{name: 'iron_pickaxe', count: 1}, {name: 'iron_sword', count: 1}, {name: 'iron_axe', count: 1}, {name: 'bread', count: 10}];
+        const slots = {5: {name: 'iron_helmet'}, 6: {name: 'iron_chestplate'}, 7: {name: 'iron_leggings'}, 8: {name: 'iron_boots'}};
+        const bot = {food: 20, health: 20, entity: {position: new Vec3(-20, 64, 0), onGround: true}, game: {dimension: 'overworld'}, entities: {},
+          registry: {foodsByName: {bread: {}}, blocksByName: {}}, pathfinder: {goto: async () => {}, stop() {}, setGoal() {}},
+          inventory: {items: () => inv, slots}, getEquipmentDestSlot: (s) => ({head: 5, torso: 6, legs: 7, feet: 8, 'off-hand': 45})[s]};
+        return {name: 'bot2', bot, world: {hostilesNear: () => [], dropNeed() {}, postNeed() {}}, emit() {}, protectedAreas: [], supplyChest: {x: 240, y: 64, z: 0}, gearChest, pickaxeTriedAt: Date.now(), current: {type: 'chop', args: {}}};
+      };
+      const job2 = {t: {}, cancelled: false, type: 'chop', args: {}};
+      const r = mk2({x: -20, y: 64, z: 0});
+      await B.care(r, job2);
+      assert.deepStrictEqual(calls.slice(0, 2), ['rearm@-20', 'iron_ingot@-20'], 'the shield ingot is taken at the armoury: ' + calls.join(' '));
+      calls.length = 0;
+      r.gearTriedAt = Date.now() - 6 * 60000; // six minutes later
+      await B.care(r, job2);
+      assert.deepStrictEqual(calls, [], 'a visit that got nothing waits 30 minutes');
+      const old = mk2(null);
+      await B.care(old, job2);
+      assert.deepStrictEqual(calls, [], 'no armoury: a 1-ingot gap fetches nothing, as before');
+    } finally {
+      Object.assign(B.JOBS, real);
     }
   }
 };

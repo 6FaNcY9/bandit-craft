@@ -11,13 +11,14 @@ module.exports = async () => {
     assert.deepStrictEqual(HB.slotSpot(6), {x: -326, y: 105, z: -28, facing: 'north'}, 'row 1 ends at x -326');
     assert.deepStrictEqual(HB.slotSpot(7), {x: -332, y: 105, z: -22, facing: 'south'}, 'the 8th goes to row 2');
     assert.ok(Array.from({length: HB.SLOTS}, (_, i) => HB.slotSpot(i)).every((p) => !(p.x === -329 && p.z === -22)), 'the door column stays free');
-    assert.strictEqual(HB.SLOTS, 13);
+    assert.strictEqual(HB.SLOTS, 14, 'spec: at least 14');
+    assert.deepStrictEqual(HB.slotSpot(13), {x: -331, y: 105, z: -25, facing: 'west'}, 'the 14th in the aisle, head on the west wall');
     assert.strictEqual(new Set(Array.from({length: HB.SLOTS}, (_, i) => JSON.stringify(HB.slotSpot(i)))).size, HB.SLOTS, 'every slot differs');
     assert.deepStrictEqual(HB.CREW.map((n) => HB.homeSpot(n, {}).x), [-332, -331, -330], 'the crew gets different x');
     assert.deepStrictEqual(HB.homeSpot('bot3', {slot: 8}), HB.slotSpot(8), 'an explicit slot wins');
     assert.deepStrictEqual(HB.homeSpot('bot3', {x: 1, y: 60, z: 2}), {x: 1, y: 60, z: 2, facing: 'north'});
     assert.throws(() => HB.homeSpot('bot99', {}), /no bed slot/);
-    assert.throws(() => HB.homeSpot('bot1', {slot: 13}), /no bed slot/);
+    assert.throws(() => HB.homeSpot('bot1', {slot: 14}), /no bed slot/);
     const have = (o) => Object.entries(o).map(([name, count]) => ({name, count}));
     assert.deepStrictEqual(HB.bedNeeds(have({red_bed: 1})), {wool: false, planks: false});
     assert.deepStrictEqual(HB.bedNeeds(have({white_wool: 3, oak_planks: 3})), {wool: false, planks: false});

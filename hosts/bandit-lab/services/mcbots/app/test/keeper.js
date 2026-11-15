@@ -209,6 +209,7 @@ const {WorldModel} = require('../world');
   assert.deepStrictEqual(back([{name: 'diamond_pickaxe', count: 1}, {name: 'iron_pickaxe', count: 2}]), {iron_pickaxe: 1}, 'best two pickaxes stay');
   assert.deepStrictEqual(back([{name: 'wooden_axe', count: 1}, {name: 'stone_axe', count: 1}, {name: 'iron_axe', count: 1}]), {wooden_axe: 1, stone_axe: 1});
   assert.deepStrictEqual(back([{name: 'wooden_axe', count: 1}]), {}, 'the only axe stays');
+  assert.deepStrictEqual(back([{name: 'iron_pickaxe', count: 1}, {name: 'stone_pickaxe', count: 1}]), {}, 'a stone spare pickaxe stays: a spare beats none underground (review 2026-11-16)');
   assert.deepStrictEqual(back([{name: 'iron_helmet', count: 1}, {name: 'shield', count: 1}], ['iron_helmet', 'shield']), {iron_helmet: 1, shield: 1}, 'carried armour and a second shield go back when one is worn');
   assert.deepStrictEqual(back([{name: 'iron_helmet', count: 1}], []), {}, 'an unworn helmet with an empty head slot stays (rearm wears it)');
   assert.deepStrictEqual(back([{name: 'diamond_helmet', count: 1}], ['iron_helmet']), {}, 'a better carried piece stays (rearm wears it)');

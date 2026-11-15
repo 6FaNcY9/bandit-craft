@@ -11,9 +11,11 @@ const {bedCells, bedCheck, standable, woolColour} = require('./hunt');
 
 // Barracks 1 (castle A3a, spec 2026-11-15-castle-armoury): room x -332..-326, z -29..-21, floor y 104. Row 1: seven
 // beds with their heads on the north wall (feet z -28); row 2: six with their heads on the south wall (feet z -22),
-// leaving the door column x -329 free. Before 2026-11-15 the beds stood in the storage room under the base chest.
+// leaving the door column x -329 free; the 14th lies in the aisle, head on the west wall (spec: at least 14). Before
+// 2026-11-15 the beds stood in the storage room under the base chest.
 const ROOM = {x: -332, y: 105, width: 7, rows: [{z: -28, facing: 'north'}, {z: -22, facing: 'south', skip: -329}]};
-const SPOTS = ROOM.rows.flatMap((row) => Array.from({length: ROOM.width}, (_, i) => ROOM.x + i).filter((x) => x !== row.skip).map((x) => ({x, y: ROOM.y, z: row.z, facing: row.facing})));
+const SPOTS = [...ROOM.rows.flatMap((row) => Array.from({length: ROOM.width}, (_, i) => ROOM.x + i).filter((x) => x !== row.skip).map((x) => ({x, y: ROOM.y, z: row.z, facing: row.facing}))),
+  {x: -331, y: ROOM.y, z: -25, facing: 'west'}];
 const SLOTS = SPOTS.length;
 // Who sleeps where when a job names no slot (the other bots pass a slot or x, y, z).
 const CREW = ['bot1', 'bot2', 'bot3'];

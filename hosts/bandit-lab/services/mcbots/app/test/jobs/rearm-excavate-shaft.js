@@ -192,6 +192,19 @@ module.exports = async () => {
     const near = {t: {}, cancelled: false, args: {x: 500, y: 64, z: 500, nearest: true}};
     await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: {x: 0, y: 64, z: 0}, gearChest: {x: 500, y: 64, z: 500}}, near);
     assert.ok(goals.length && goals.every((g) => Math.hypot(g.x, g.z) < 10), JSON.stringify(goals[0]));
+    // 11. a guest that died near the castle and woke at its own base ~720 blocks away: the death rearm ends, no walk (review 2026-11-16)
+    goals.length = 0;
+    const guestJob = {t: {}, cancelled: false, args: {x: 720, y: 64, z: 0, nearest: true}};
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: null, gearChest: {x: 720, y: 64, z: 0}, gearRange: 250}, guestJob);
+    assert.deepStrictEqual(goals, [], 'no walk across the map');
+    assert.match(guestJob.progress, /out of reach/);
+    // 12. at the armoury without wood: no 200-block trip to the supply chest for logs afterwards (review 2026-11-16)
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword')]});
+    const woodGoals = [];
+    b.bot.pathfinder.goto = async (g) => { woodGoals.push(g); };
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: {x: 500, y: 64, z: 500}, gearChest: {x: 0, y: 64, z: 0}}, {t: {}, cancelled: false, args: {x: 0, y: 64, z: 0}});
+    assert.ok(woodGoals.every((g) => Math.hypot(g.x, g.z) < 10), JSON.stringify(woodGoals.at(-1)));
     assert.strictEqual(chest.items.length, 0, 'not the armoury: nothing handed back');
   }
   { // excavate: digs natural ground top-down, leaves placed blocks and protected areas alone

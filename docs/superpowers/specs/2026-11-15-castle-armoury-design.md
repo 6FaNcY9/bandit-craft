@@ -153,7 +153,7 @@ Needed for the automatic behaviour (architect's list, smallest changes):
 | Take only a better tier than what is held | exists (`rearm`) |
 | Gear from the grave comes back and is worn again | exists (`grave` job; AxGraves keeps a grave 24 h) |
 | Take a ready piece before crafting a new one | new (change 5) |
-| Hand back at each armoury visit: keep 1 sword, 1 axe, 2 pickaxes, 1 shield and the worn armour; drop wooden and stone tools once an iron one of that kind is held | new (change 6) |
+| Hand back at each armoury visit: keep 1 sword, 1 axe, 2 pickaxes, 1 shield and the worn armour; a lower tool of a kind goes back with the count, but the second pickaxe stays whatever its tier (the spare against being stranded underground; ruling after the review, 2026-11-16) | new (change 6) |
 | Iron axe in the plan | new (change 7) |
 | 2 ready sets in stock, the rest as ingots | new (change 8) |
 
