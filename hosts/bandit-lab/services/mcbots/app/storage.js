@@ -52,7 +52,9 @@ const surplus = (name, totals) => {
 };
 // Farm outputs the chest a farm hands in at may hold: the hall caps never see that chest, and raw food and wool would fill
 // it (no room for torches and coal, 2026-10-10). 128 per kind, eggs 32; all wool colours are one kind.
-const CHEST_QUOTA = {carrot: 128, potato: 128, beetroot: 128, sugar_cane: 128, beef: 128, porkchop: 128, mutton: 128, chicken: 128, leather: 128, feather: 128, wool: 128, egg: 32};
+// logs: a tree farm's own chest (castle T1). shortcut: a stale reading (30 min) lets one round in; a never-drained chest
+// fails "chest full" after hours, haul surplus then.
+const CHEST_QUOTA = {carrot: 128, potato: 128, beetroot: 128, sugar_cane: 128, beef: 128, porkchop: 128, mutton: 128, chicken: 128, leather: 128, feather: 128, wool: 128, egg: 32, logs: 1728};
 const STOCK_TTL_MS = 1800000; // an older reading is unknown: the next visit to the chest refreshes it
 // How far the chest at pos is above this kind's quota, read from world.stocks (keyed by the exact chest a job opened; the
 // double-chest index keeps the smaller half and held an 11-day-old ghost under the supply chest's other half, 2026-11-11).

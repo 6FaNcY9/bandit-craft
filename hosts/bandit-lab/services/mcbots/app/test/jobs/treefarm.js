@@ -8,6 +8,8 @@ module.exports = async () => {
     assert.deepStrictEqual(VALIDATE.treefarm({x1: 8, z1: 0, x2: 0, z2: 8}), {x1: 0, z1: 0, x2: 8, z2: 8}, 'corners in any order');
     for (const bad of [{x1: 0, z1: 0, x2: 24, z2: 5}, {x1: 0, z1: 0, x2: 1, z2: 5}, {x1: 0, z1: 0, x2: 5}, {x1: 'a', z1: 0, x2: 5, z2: 5}, {x1: 0.5, z1: 0, x2: 5, z2: 5}]) assert.throws(() => VALIDATE.treefarm(bad), JSON.stringify(bad));
     assert.ok(VALIDATE.treefarm({x1: 0, z1: 0, x2: 23, z2: 23}), '24 x 24 is the limit');
+    assert.deepStrictEqual(VALIDATE.treefarm({x1: 8, z1: 0, x2: 0, z2: 8, chest: {x: 1, y: 110, z: 2}}), {x1: 0, z1: 0, x2: 8, z2: 8, chest: {x: 1, y: 110, z: 2}}, 'farm chest kept');
+    assert.throws(() => VALIDATE.treefarm({x1: 0, z1: 0, x2: 8, z2: 8, chest: {x: 1}}), 'chest needs x y z');
     assert.deepStrictEqual([T.gridCells({x1: 0, z1: 0, x2: 14, z2: 14}).length, T.gridCells({x1: 0, z1: 0, x2: 23, z2: 23}).length, T.gridCells({x1: 0, z1: 0, x2: 2, z2: 2})], [25, 64, [{x: 1, z: 1}]]);
     assert.deepStrictEqual(T.gridCells({x1: -5, z1: 10, x2: 3, z2: 12}).map((c) => `${c.x},${c.z}`), ['-4,11', '-1,11', '2,11'], 'a 3-block grid, one block in from the edge');
     assert.strictEqual(T.pickSapling([{name: 'jungle_sapling'}, {name: 'birch_sapling'}, {name: 'dark_oak_sapling'}, {name: 'oak_sapling'}]).name, 'oak_sapling', 'oak first, never dark_oak');
@@ -66,7 +68,7 @@ module.exports = async () => {
 
     // the job: a 9 x 9 farm, 9 cells; the chest holds saplings; a grown tree is cut and replanted
     const small = {x1: 0, z1: 0, x2: 8, z2: 8};
-    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood}) => {
+    const fake = ({inv = [], world, stopAfterSleeps = 3, chest = true, deposit, enoughWood, args = small}) => {
       const events = [], infos = [], calls = {deposit: 0, withdraw: [], dig: []};
       const it = (name, count) => ({name, count, type: name.length});
       const bot = {
@@ -77,7 +79,7 @@ module.exports = async () => {
         placeBlock: async (ref) => { const held = bot.heldItem; held.count--; world.put(ref.position.x, ref.position.y + 1, ref.position.z, held.name); events.push(`plant ${held.name} ${ref.position.x},${ref.position.z}`); },
         activateBlock: async () => { events.push('bonemeal'); },
       };
-      const job = {type: 'treefarm', args: small, t: {}, cancelled: false};
+      const job = {type: 'treefarm', args, t: {}, cancelled: false};
       let sleeps = 0;
       const tf = T.makeTreeFarm({
         ...(enoughWood ? {enoughWood} : {}),
@@ -133,6 +135,13 @@ module.exports = async () => {
     f = fake({world: flat()});
     f.r.supplyChest = null;
     await assert.rejects(f.run(), /needs the supply chest/);
+    // its own chest (castle T1): no supply chest needed, the ground and the pause come from that chest
+    let seen;
+    f = fake({world: flat(), inv: [{name: 'oak_sapling', count: 9, type: 1}], args: {...small, chest: {x: -3, y: 65, z: -3}}, enoughWood: (r2, j) => { seen = j.args.chest; return 0; }});
+    f.r.supplyChest = null;
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(f.events.filter((e) => e.startsWith('plant')).length, 9, f.events.join('|'));
+    assert.deepStrictEqual(seen, {x: -3, y: 65, z: -3}, 'the pause reads the farm chest');
     // a farm mined down to stone (the main base's, 2026-10-15): dirt from the chest on every spot, then saplings
     const stony = () => { const w2 = flat(); for (let x = 0; x <= 8; x++) for (let z = 0; z <= 8; z++) w2.put(x, 64, z, (x + z) % 2 ? 'stone' : 'andesite'); return w2; };
     assert.deepStrictEqual([T.cellState(stony().blockAt, {x: 1, z: 1}, 64), T.scan(stony().blockAt, small, 64, []).bare.length], ['bare', 9]);

@@ -362,8 +362,8 @@ const VALIDATE = {
     }
     return a.slot === undefined ? {} : {slot: num(a.slot, 0, homebedJob.SLOTS - 1, 'slot')};
   },
-  // Plant and chop trees in an area of at most 24 x 24 until stopped; logs go to the supply chest.
-  treefarm: (a) => treeFarmJob.farmBox(zoned(a)),
+  // Plant and chop trees in an area of at most 24 x 24 until stopped; logs go to the supply chest, or to `chest`.
+  treefarm: (a) => ({...treeFarmJob.farmBox(zoned(a)), ...(a.chest ? {chest: xyz(a.chest)} : {})}),
   // Keep a wheat field of at most 9 x 9 going until stopped: harvest, till, plant, bake bread, hand it in at the base chest.
   wheatfarm: (a) => {
     const box = wheatFarmJob.farmBox(zoned(a));
@@ -3433,9 +3433,10 @@ const {highway} = roadJob.makeRoad({
 
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar,
-  enoughWood: (r) => storage.surplus('oak_log', storage.hallTotals(r.world?.chests)), // every *_log is one kind
-  deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...r.supplyChest, ...(only ? {only} : {})}})),
-  withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...r.supplyChest}})),
+  // every *_log is one kind; a farm with its own chest reads that chest (the hall index never sees it)
+  enoughWood: (r, job) => (job.args.chest ? storage.chestAbove('oak_log', r.world?.stocks, job.args.chest) : storage.surplus('oak_log', storage.hallTotals(r.world?.chests))),
+  deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...(job.args.chest || r.supplyChest), ...(only ? {only} : {})}})),
+  withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...(job.args.chest || r.supplyChest)}})),
 });
 
 const {fluids, emptyBucket, fillAt} = fluidsJob.makeFluids({

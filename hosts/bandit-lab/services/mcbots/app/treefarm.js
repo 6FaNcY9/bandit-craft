@@ -187,9 +187,10 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
   async function treefarm(r, job) {
     const {bot} = r;
     const box = job.args;
-    if (!r.supplyChest) throw new Error('a tree farm needs the supply chest for its logs and saplings');
+    const home = box.chest || r.supplyChest; // the farm's own chest (castle T1) or the supply chest
+    if (!home) throw new Error('a tree farm needs the supply chest for its logs and saplings');
     const blockAt = (x, y, z) => bot.blockAt(new Vec3(x, y, z));
-    const y0 = r.supplyChest.y;
+    const y0 = home.y;
     const skip = new Map(); // key -> time until which that log, cell or item is left alone
     const skipped = (k) => (skip.get(k) || 0) > Date.now();
     const later = (k) => skip.set(k, Date.now() + RETRY_MS);
@@ -206,7 +207,7 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
       guard(job);
       await waitCalm(r, job);
       // The hall holds enough logs (15,485 oak logs, 2026-11-11): wait, never fail, go on when it falls below the cap.
-      if (enoughWood(r) > 0) {
+      if (enoughWood(r, job) > 0) {
         job.t.doing = 'enough wood in the hall, waiting';
         for (let i = 0; i < 60; i++) { guard(job); await sleep(1000); }
         continue;

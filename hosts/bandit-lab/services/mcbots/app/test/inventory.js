@@ -54,6 +54,11 @@ assert.strictEqual(S.surplus('stick', {stick: 9999}), 0, 'sticks have no hall ca
   // the hall part works through the same function, with or without a chest
   assert.strictEqual(S.farmEnough('carrot', {chests: new Map([['-263,58,-219', {items: {carrot: 900}}]])}, null, now), 36);
 }
+{ // tree farm chest (castle T1): all logs one kind, quota 1728, stale reading = unknown
+  const now = 1e12, pos = {x: 1, y: 110, z: 2}, at = (t) => new Map([['1,110,2', {items: {spruce_log: 1800, oak_log: 10}, t}]]);
+  assert.strictEqual(S.chestAbove('spruce_log', at(now), pos, now), 82);
+  assert.strictEqual(S.chestAbove('spruce_log', at(now - 31 * 60000), pos, now), 0, '31 minutes old');
+}
 {
   const {categoryOf} = require('../storage-layout');
   const isFood = (n) => !!require('minecraft-data')('26.1').foodsByName[n];
