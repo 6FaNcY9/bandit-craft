@@ -31,6 +31,8 @@ function makeJoins({projects, orders, viewerBots, viewers, ground, submit, relea
     const out = new Map();
     for (const [name, p] of Object.entries(projects.all).sort(([a], [b]) => a.localeCompare(b))) {
       if (name === bot || p.paused || !TYPES.has(p.type)) continue;
+      // A guest only joins builds of bots it controls: the args carry the owner's site and supply chests.
+      if (viewerBots[viewer] !== '*' && !viewerBots[viewer].includes(name)) continue;
       try { check(viewer, bot, p.type, p.args); } catch { continue; }
       const k = keyOf(p);
       if (!out.has(k)) out.set(k, {name: planName(p.args.file), bots: [], at: p.args.origin, type: p.type, args: p.args, key: k});

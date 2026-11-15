@@ -219,7 +219,7 @@ const ACTIONS = {
   // From the bot page with no box and no marked area it goes straight into picking (nothing to choose yet).
   aream: async (st, data, ui, viewer) => {
     const fromBot = st.screen?.name === 'botm';
-    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'now', key: st.area?.key ?? null};
+    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'now', key: fromBot ? null : st.area?.key ?? null};
     st.screen = {name: 'aream'};
     if (fromBot && !(st.sel.a && st.sel.b) && !markOf(ui, viewer).area) await ACTIONS.pick(st, {kind: 'area'}, ui, viewer);
   },
