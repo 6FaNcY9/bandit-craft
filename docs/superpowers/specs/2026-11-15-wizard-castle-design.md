@@ -47,8 +47,11 @@ The bots build it themselves from schematics; Claude designs the modules, orders
   - Output: 137 double chests at x -308/-307, y 116..120, z 11..50, opened from the west (x -309). The shell's west
     side is therefore a covered **chest gallery**: floor y 115, 3 wide (x -311..-309); the shell's west wall moves
     to x -313..-312 and A8 becomes this gallery.
-  - Input: 5 double chests x -306/-305, y 121, z 14..18 and the box unloader x -304..-303, y 124..125, z 20..22,
-    reached from the sorter's top. The shell roof covers a walkable top deck with stairs from the forecourt.
+  - Input (corrected 2026-11-15, `2026-11-15-sorter-flow-design.md`): the inbox double chest -308/-307 117 12 (loose
+    items) and -308/-307 117 11 (shulker boxes), both on the west gallery face. The 5 double chests x -306/-305,
+    y 121, z 14..18 are hand-out chests of box loaders, not inputs; they and the box unloader x -304..-303,
+    y 124..125, z 20..22 are reached from the sorter's top. The shell roof covers a walkable top deck with stairs
+    from the forecourt.
   - South: a stone button at -302 121 50, pressed from z 51: a platform at y 120 there.
   - North: hoppers, dropper and dispenser at z 11: keep the air gap, no door. East: nothing to reach (x -296/-295
     hold 2 blocks each); the tower door at x -291 z 21 is fine.
