@@ -50,6 +50,37 @@ assert.equal(cmds.length, 12);
 assert.ok(cmds.includes('setblock -322 105 -26 minecraft:chest[facing=east,type=left]'), cmds[0]);
 assert.ok(cmds.includes('setblock -317 105 -21 minecraft:crafting_table'));
 
+{ // K1 sorter shell: never inside the sorter or its air gap, every cell in exactly one module, openings free
+  const {shell, shellModule, MODULES, SORTER, inBox} = require('../castle/shell.js');
+  const cells = shell(), key = (x, y, z) => `${x},${y},${z}`, has = new Set(cells.map((b) => key(b.x, b.y, b.z)));
+  assert.ok(!MODULES.some((m) => m.x1 <= SORTER.x2 && m.x2 >= SORTER.x1 && m.y1 <= SORTER.y2 && m.y2 >= SORTER.y1 && m.z1 <= SORTER.z2 && m.z2 >= SORTER.z1), 'a module box overlaps the sorter');
+  assert.ok(cells.every((b) => !inBox(SORTER, b.x, b.y, b.z)));
+  assert.ok(!cells.some((b) => b.y <= 129 && ((b.x === -294 && b.z >= 10 && b.z <= 50) || (b.z === 10 && b.x >= -308 && b.x <= -294))), 'air gap');
+  assert.ok(!MODULES.some((m) => m.x1 <= -294 && m.x2 >= -294 && m.z1 <= 50 && m.z2 >= 10 && m.y1 <= 129), 'no module over the east gap');
+  for (const m of MODULES) assert.ok(m.x2 - m.x1 < 32 && m.y2 - m.y1 < 24 && m.z2 - m.z1 < 32, `${m.id} too big`);
+  for (const b of cells) assert.equal(MODULES.filter((m) => inBox(m, b.x, b.y, b.z)).length, 1, `cell ${key(b.x, b.y, b.z)}`);
+  for (let i = 0; i < MODULES.length; i++) for (let j = i + 1; j < MODULES.length; j++) {
+    const a = MODULES[i], c = MODULES[j];
+    assert.ok(!(a.x1 <= c.x2 && a.x2 >= c.x1 && a.y1 <= c.y2 && a.y2 >= c.y1 && a.z1 <= c.z2 && a.z2 >= c.z1), `${a.id} overlaps ${c.id}`);
+  }
+  // openings: north door, chest front x -309 above the gallery floor, west slits, gap z 51 above the fill, bee nest
+  for (const x of [-311, -310]) for (let y = 116; y <= 118; y++) for (const z of [8, 9]) assert.ok(!has.has(key(x, y, z)), 'north door');
+  for (let z = 10; z <= 50; z++) for (let y = 116; y <= 129; y++) assert.ok(!has.has(key(-309, y, z)), `chest front -309 ${y} ${z}`);
+  for (const z of [15, 21, 27, 33, 39, 45]) assert.ok(!has.has(key(-312, 122, z)) && cells.some((b) => b.x === -313 && b.y === 122 && b.z === z && b.name === 'iron_bars'));
+  assert.ok(!has.has(key(-309, 114, 12)), 'bee nest');
+  assert.ok(cells.some((b) => b.x === -302 && b.y === 120 && b.z === 51), 'button platform');
+  // every lantern stands on or hangs from a block
+  for (const b of cells.filter((c) => c.name === 'lantern')) assert.ok(has.has(key(b.x, b.props.hanging === 'true' ? b.y + 1 : b.y - 1, b.z)), `lantern ${key(b.x, b.y, b.z)}`);
+  // palette: the spec's blocks only
+  const K1 = /^(cobblestone|cobbled_deepslate|deepslate_bricks|polished_deepslate|stone_bricks|stone_brick_stairs|deepslate_tiles|deepslate_tile_slab|spruce_log|spruce_planks|spruce_stairs|iron_bars|lantern)$/;
+  assert.ok(cells.every((b) => K1.test(b.name)), [...new Set(cells.map((b) => b.name))].join());
+  // a module is its cells, relative to its low corner
+  const g1 = shellModule('g1');
+  assert.deepEqual([g1.origin, g1.size], [{x: -311, y: 115, z: 10}, {x: 3, y: 15, z: 21}]);
+  assert.equal(g1.blocks.length, cells.filter((b) => inBox(MODULES[2], b.x, b.y, b.z)).length);
+  assert.ok(g1.blocks.every((b) => b.x >= 0 && b.x < 3 && b.y >= 0 && b.y < 15 && b.z >= 0 && b.z < 21));
+}
+
 (async () => {
   // round trip through the real writer and parser, placed at the warehouse origin
   const {writeLitematic} = require('../litematic-write.js');
