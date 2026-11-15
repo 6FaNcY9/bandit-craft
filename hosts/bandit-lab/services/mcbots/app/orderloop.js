@@ -38,19 +38,18 @@ function ordersToStart(orders, snapshotOf, retryAt, now = Date.now()) {
   return out;
 }
 
-// A bot that dies DEATH_LOOP times within DEATH_WINDOW_MS is not sent back at its order for DEATH_HOLD_MS: bot1 died 19 times in
+// A bot that dies DEATH_LOOP times within DEATH_WINDOW_MS loses its order and waits for a new one (server.js): bot1 died 19 times in
 // 3 h on the owner's produce order, as every failure of the resumed job let the order start fresh and reset the interruption
 // count (main server 2026-10-19). `times`: its recent deaths; -> {times: to keep, hold: true when the loop is on}.
 const DEATH_LOOP = 3;
 const DEATH_WINDOW_MS = 30 * 60000;
-const DEATH_HOLD_MS = 30 * 60000;
 function deathLoop(times, t) {
   const kept = [...times, t].filter((x) => t - x <= DEATH_WINDOW_MS);
   return kept.length >= DEATH_LOOP ? {times: [], hold: true} : {times: kept, hold: false};
 }
-// The alert for a death loop: its order is held, its queued jobs are dropped (they went on after each respawn, and the
+// The alert for a death loop: its order and its queued jobs are dropped (they went on after each respawn, and the
 // next grave in the same dark wood killed bot1 five times in 11 min, main server 2026-10-20).
 const deathLoopAlert = (bot, order, queued) => `${bot} died ${DEATH_LOOP} times in ${DEATH_WINDOW_MS / 60000} min: ${
-  [order && `its ${order.type} order waits ${DEATH_HOLD_MS / 60000} min`, queued && `its ${queued} queued jobs are dropped`].filter(Boolean).join(', ') || 'nothing queued'}`;
+  [order && `its ${order.type} order is dropped`, queued && `its ${queued} queued jobs are dropped`].filter(Boolean).join(', ') || 'nothing queued'}; it waits for a new order`;
 
-module.exports = {deathLoop, deathLoopAlert, DEATH_HOLD_MS, failStreak, ordersToStart, orderOutcome, ORDER_RETRY_MS, ORDER_RETRY_MAX_MS};
+module.exports = {deathLoop, deathLoopAlert, failStreak, ordersToStart, orderOutcome, ORDER_RETRY_MS, ORDER_RETRY_MAX_MS};
