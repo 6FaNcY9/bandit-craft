@@ -37,11 +37,11 @@ existing `stock`, `withdraw` and `deposit` jobs. Live steps (reach, haul by hand
 
 - [x] **Step 1:** samples spruce_log → -297 122 47 slot 26, birch_log → -297 122 44 slot 26 (done 2026-11-15 09:42).
 - [x] **Step 2:** inbox proof: 48 birch_log into -307 117 12 → 48 in -308 116 44 within 1 min (PASS 09:44).
-- [ ] **Step 3:** `stock` jobs by bot21 on -308 116 47 and -308 120 47. Expect both `job finished`. If "could not reach": build the
+- [x] **Step 3:** (PASS 09:47, both read) `stock` jobs by bot21 on -308 116 47 and -308 120 47. Expect both `job finished`. If "could not reach": build the
   gallery piece (Step 4); else skip Step 4.
-- [ ] **Step 4 (only if Step 3 fails):** `build` job, platform x -311..-309 y115 z10..13 of `cobbled_deepslate` plus a 1-wide
+- [x] **Step 4 (only if Step 3 fails, skipped: not needed):** `build` job, platform x -311..-309 y115 z10..13 of `cobbled_deepslate` plus a 1-wide
   stair at x -311 z5..9 (each step on a pillar to the ground); bee nest -309 114 12 stays.
-- [ ] **Step 5:** hand haul: bot21 `withdraw {item:"birch_log",count:56,x:-303,y:110,z:7}` then
+- [x] **Step 5:** (PASS 09:52, 104 birch in -308 116 44, inbox reached without the platform) hand haul: bot21 `withdraw {item:"birch_log",count:56,x:-303,y:110,z:7}` then
   `deposit {x:-307,y:117,z:12,only:"birch_log"}`. Expect the deposit job finished and, after the cart, 56 more birch in
   -308 116 44 (104 total). If the deposit cannot reach the inbox, do Step 4 and repeat.
 
@@ -127,7 +127,7 @@ assert.ok(f.events.some((e) => /sorter: could not reach/.test(e)), 'error report
 
 **Files:** `~/sorter-flow-deploy.sh` (owner runs it), memory/board notes.
 
-- [ ] **Step 1:** pick an empty depot double chest for T2 (`execute if data block <p> Items[]` fails on both halves); re-post
+- [x] **Step 1:** (done: T2 chest -299 112 6) pick an empty depot double chest for T2 (`execute if data block <p> Items[]` fails on both halves); re-post
   bot19 `treefarm -351 -55 -338 -42` with `chest` = it. Expect `job started ... at <p>`.
 - [ ] **Step 2:** rebase on origin/main, flake check, write `~/sorter-flow-deploy.sh` (push, craft-bump, ship-claude --deploy);
   owner runs it in a normal terminal.
