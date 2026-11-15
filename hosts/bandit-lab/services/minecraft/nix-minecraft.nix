@@ -237,6 +237,9 @@ in {
 
     servers.sandbox = {
       enable = true;
+      # On demand only (owner 2026-11-15: about 3 GB RAM for a server nobody is on): a deploy no longer starts it.
+      # Start: `sudo systemctl start minecraft-server-sandbox` (~/sandbox-wake.sh); a lab reboot still starts it via velocity's wants.
+      autoStart = false;
       openFirewall = false;
       package = paperPackage;
       jvmOpts = jvmOpts "4G";
