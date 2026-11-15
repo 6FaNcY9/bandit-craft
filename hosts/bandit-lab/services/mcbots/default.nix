@@ -150,6 +150,8 @@ in {
             # The job board (app/board.js) hands its slices to these bots only; the keeper leaves them alone.
             BOARD_BOTS = "bot2,bot3,bot20,bot21";
             GUEST_BOTS = guestBots;
+            # The guests that use the castle armoury too, near it only (owner 2026-11-15: MisaBot, not EM_Trader).
+            GEAR_GUESTS = "MisaBot";
             MAIN_BOTS = mainBots; # the owner's on the real server: no keeper, board or help job, and the Kommandostand tells them from the sandbox's
             # Misa's trader (app/tradeschedule.js): EM_Trader trades in the hall "misa" daily from 18:00
             # Vienna time for 60 minutes. TRADE_HALLS is JSON {"misa": {"hall": {x1,y1,z1,x2,y2,z2}, "stores": [{x,y,z}]}}; the other chests in the hall hold the sticks.

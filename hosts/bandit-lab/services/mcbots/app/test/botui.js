@@ -985,6 +985,11 @@ async function fake() {
     chest = {x: 7, y: 8, z: 9};
     await ev('Fancy', {a: 'go', bot: 'bot1', job: 'rearm'}); assert.deepEqual(submits.at(-1), {bots: ['bot1'], type: 'rearm', args: {x: 7, y: 8, z: 9}, replace: false});
     await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'rearm'}); assert.match(ui.state('Midari').flash.text, /^Fehler:/);
+    // with an armoury marker the owner's Ausrüsten goes there (spec 2026-11-15-castle-armoury); Misa's stays as it was
+    places.push({name: 'Rüstkammer', kind: 'armoury', x: -322, y: 105, z: -26, dim: 'overworld'});
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'rearm'}); assert.deepEqual(submits.at(-1).args, {x: -322, y: 105, z: -26});
+    await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'rearm'}); assert.match(ui.state('Midari').flash.text, /^Fehler:/);
+    places.pop();
     await ev('Fancy', {a: 'go', bot: 'bot1', job: 'goto', x: 4, y: 65, z: 6}); assert.deepEqual(submits.at(-1).args, {x: 4, y: 65, z: 6});
     end();
   }

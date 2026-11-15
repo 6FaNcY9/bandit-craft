@@ -74,7 +74,8 @@ const JOBS = {
   hunt: {label: 'Jagen', here: 'Jagen', type: 'hunt', loc: true, needs: [animal, count(1, 32, 1, 4), where], args: (v) => ({animal: v.animal, count: R(v.n), ...pt(v.at), radius: 24}), say: (v) => `${v.n} ${germanName(v.animal)} jagen`},
   treefarm: {label: 'Baumfarm', type: 'treefarm', general: true, needs: [zone('treefarm')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2}), say: () => 'Baumfarm'},
   wheatfarm: {label: 'Weizenfarm', type: 'wheatfarm', general: true, needs: [zone('wheat')], args: (v) => ({x1: v.zone.x1, z1: v.zone.z1, x2: v.zone.x2, z2: v.zone.z2}), say: () => 'Weizenfarm'},
-  rearm: {label: 'Ausrüsten', type: 'rearm', general: true, needs: [], args: (v, ctx) => supplyAt(ctx), say: () => 'Ausrüsten'},
+  // The armoury first when there is one (spec 2026-11-15-castle-armoury); only for a viewer with the supply chest, as before.
+  rearm: {label: 'Ausrüsten', type: 'rearm', general: true, needs: [], args: (v, ctx) => { const s = supplyAt(ctx), g = (ctx.places || []).find((p) => p.kind === 'armoury' && (p.dim || 'overworld') === 'overworld'); return g ? pt(g) : s; }, say: () => 'Ausrüsten'},
   homebed: {label: 'Heim', type: 'homebed', general: true, needs: [], args: () => ({}), say: () => 'Heim'},
   graves: {label: 'Gräber holen', type: 'graves', general: true, needs: [], args: () => ({}), say: () => 'Gräber holen'},
   help: {label: 'Helfen', type: 'help', general: true, needs: [], args: () => ({}), say: () => 'Helfen'},
@@ -212,7 +213,7 @@ function build(key, data, env) {
     if (typeof x === 'number' && !Number.isFinite(x)) throw new Error('Ungültige Zahl');
     if (typeof x === 'string' && x.length > TEXT_MAX) throw new Error('Eingabe zu lang');
   }
-  const ctx = {...env.ctx, supply: env.supply, sel: env.sel, viewer: env.viewer}, v = {};
+  const ctx = {...env.ctx, supply: env.supply, places: env.places, sel: env.sel, viewer: env.viewer}, v = {};
   const has = (k) => job.needs.find((n) => n.kind === k);
   const preset = presetOf(data, job);
   if (key === 'setchest') { // the chest must be the block the viewer looks at now; a forged payload sets nothing

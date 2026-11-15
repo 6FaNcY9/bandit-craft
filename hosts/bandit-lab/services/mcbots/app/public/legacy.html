@@ -431,7 +431,7 @@ function markerForm(at, start = {}) {
   const f = el('div', 'row'), name = el('input'), kind = el('select'), yIn = el('input', 'xyz'), ok = el('button', '', 'Save');
   name.placeholder = 'name'; name.value = start.name || ''; name.maxLength = 32; name.style.width = '9em';
   yIn.type = 'number'; yIn.min = -64; yIn.max = 320; yIn.value = at.y; yIn.title = 'y: for a chest the height of the chest block itself (F3)';
-  for (const k of ['supply', 'site', 'home', 'afk', 'chest']) kind.append(new Option(k, k));
+  for (const k of ['supply', 'site', 'home', 'afk', 'chest', 'armoury']) kind.append(new Option(k, k));
   kind.value = start.kind || 'site'; ok.type = 'button';
   if (start.box) kind.append(new Option(start.kind, start.kind)); // a zone keeps its kind and box
   ok.onclick = async () => { if (await savePlace({ name: name.value.trim(), kind: kind.value, ...at, y: Number(yIn.value), ...(start.box ? { box: start.box } : {}) })) $('mapmenu').hidden = true; };

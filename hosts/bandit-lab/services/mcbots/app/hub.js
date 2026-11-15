@@ -247,7 +247,7 @@ const workerToken = (shared, label) => crypto.createHash('sha256').update(`mcbot
 class Hub {
   // workers: {label: [bot names]} - credentials of the lab's worker containers, each tied to the names it may
   // run. The shared token (laptops) may run every other remote name (R2-6).
-  constructor({world, runners, token, workers = {}, log = () => {}, protectedAreas = [], supplyChest = null, guests = [], wheatField = null, now = Date.now, events = null, settings = null, tradeHalls = {}}) {
+  constructor({world, runners, token, workers = {}, log = () => {}, protectedAreas = [], supplyChest = null, guests = [], gearChest = null, gearGuests = [], wheatField = null, now = Date.now, events = null, settings = null, tradeHalls = {}}) {
     this.events = events; // EventLog of the dashboard (optional)
     this.settings = settings; // Settings store of the dashboard (optional): sent to a worker with its welcome
     if (typeof token !== 'string' || !/^[\w-]{32,128}$/.test(token)) throw new Error('worker token must be 32..128 characters of [A-Za-z0-9_-]');
@@ -264,6 +264,8 @@ class Hub {
     this.places = []; // the zones, for the workers (server.js applyPlaces)
     this.supplyChest = supplyChest;
     this.guests = new Set(guests); // another player's bots: a worker running only those gets no supply chest
+    this.gearChest = gearChest; // the armoury's gear point (server.js applyPlaces), or null
+    this.gearGuests = new Set(gearGuests); // guests that use it too, near it only (GEAR_GUESTS)
     this.wheatField = wheatField; // the wheat zone's box: hungry worker bots get bread there (bots.js wheatFood)
     this.tradeHalls = tradeHalls; // not secret: sent to workers so their bots can take a chat trade order
     this.now = now;
@@ -483,7 +485,7 @@ class Hub {
       r.snap = {...r.snap, online: false};
     }
     const settings = this.settings ? Object.fromEntries(names.map((n) => [n, this.settings.get(n)])) : {};
-    conn.ws.send(JSON.stringify({t: 'welcome', v: PROTOCOL, protectedAreas: this.protectedAreas, places: this.places, supplyChest: this.chestFor(conn), wheatField: this.wheatField, tradeHalls: this.tradeHalls, settings}));
+    conn.ws.send(JSON.stringify({t: 'welcome', v: PROTOCOL, protectedAreas: this.protectedAreas, places: this.places, supplyChest: this.chestFor(conn), ...this.gearFor(conn), wheatField: this.wheatField, tradeHalls: this.tradeHalls, settings}));
     this.log('hub', `worker ${host} connected: ${names.join(', ')}`);
     for (const n of names) this.events?.add(n, 'hub', `worker ${host} connected`);
   }
@@ -551,11 +553,18 @@ class Hub {
 
   // Zones or the supply chest changed (server.js applyPlaces): connected workers must follow, not only new ones.
   broadcastPolicy() {
-    for (const c of this.conns) if (c.hello && c.ws.readyState === 1) c.ws.send(JSON.stringify({t: 'policy', protectedAreas: this.protectedAreas, places: this.places, supplyChest: this.chestFor(c), wheatField: this.wheatField, tradeHalls: this.tradeHalls}));
+    for (const c of this.conns) if (c.hello && c.ws.readyState === 1) c.ws.send(JSON.stringify({t: 'policy', protectedAreas: this.protectedAreas, places: this.places, supplyChest: this.chestFor(c), ...this.gearFor(c), wheatField: this.wheatField, tradeHalls: this.tradeHalls}));
   }
 
   // Trader chests changed in game: the same frame as a zone change, which carries the halls (hubclient applyPolicy).
   sendTradeHalls() { this.broadcastPolicy(); }
+
+  // The armoury goes by bot name, not by worker: MisaBot and EM_Trader share one worker (spec 2026-11-15-castle-armoury).
+  gearFor(conn) {
+    if (!this.gearChest) return {gearChest: null, gearBots: [], gearGuests: []};
+    const bots = [...(conn.bots || [])].filter((n) => !this.guests.has(n) || this.gearGuests.has(n));
+    return {gearChest: this.gearChest, gearBots: bots, gearGuests: bots.filter((n) => this.guests.has(n))};
+  }
 
   chestFor(conn) {
     return conn.bots?.size && [...conn.bots].every((n) => this.guests.has(n)) ? null : this.supplyChest;

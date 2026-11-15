@@ -41,4 +41,7 @@ function handBack(items, worn) {
   return [...out].map(([name, count]) => ({name, count}));
 }
 
-module.exports = {gearPlan, ingotsWanted, handBack};
+// A guest bot uses the armoury only this near it (blocks, xz): MisaBot at Misa's base, ~720 away, never walks over for gear.
+const GEAR_RANGE = 250;
+
+module.exports = {gearPlan, ingotsWanted, handBack, GEAR_RANGE};

@@ -10,6 +10,7 @@ const {Places, use: usePlaces} = require('./places');
 // The hub's wheat field as a farm box, or null for anything else.
 const fieldOf = (b) => { try { return b ? farmBox(b) : null; } catch { return null; } };
 const {BotRunner, keptOf} = require('./bots');
+const {GEAR_RANGE} = require('./gear');
 const {Settings} = require('./settings');
 const {PROTOCOL} = require('./hub');
 const {botView} = require('./view');
@@ -267,7 +268,7 @@ class HubClient {
         if (!this.runners.length) {
           const opts = {protectedAreas: this.protectedAreas, supplyChest: this.supplyChest};
           this.runners = this.names.map((n) => this.makeRunner(n, opts));
-          for (const r of this.runners) { r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; }
+          for (const r of this.runners) { r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; Object.assign(r, this.gearOf(r.name)); }
           for (const r of this.runners) r.getSettings = () => this.settings.get(r.name);
           for (const r of this.runners) r.start();
         }
@@ -327,10 +328,17 @@ class HubClient {
   applyPolicy(m) {
     this.protectedAreas.splice(0, this.protectedAreas.length, ...(Array.isArray(m.protectedAreas) ? m.protectedAreas : []));
     this.supplyChest = m.supplyChest || null;
+    this.gear = {chest: m.gearChest || null, bots: new Set(m.gearBots || []), guests: new Set(m.gearGuests || [])};
     this.wheatField = fieldOf(m.wheatField);
     if (m.tradeHalls) this.tradeHalls = m.tradeHalls; // a policy frame without it keeps the halls
     if (Array.isArray(m.places)) this.zones.list = m.places;
-    for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; }
+    for (const r of this.runners) { r.protectedAreas = this.protectedAreas; r.supplyChest = this.supplyChest; r.wheatField = this.wheatField; r.tradeHalls = this.tradeHalls; Object.assign(r, this.gearOf(r.name)); }
+  }
+
+  // The armoury for one bot: only when the hub names it; a guest only near it (bots.js gearPoint).
+  gearOf(name) {
+    const on = !!this.gear?.chest && this.gear.bots.has(name);
+    return {gearChest: on ? this.gear.chest : null, gearRange: on && this.gear.guests.has(name) ? GEAR_RANGE : null};
   }
 
   // Same rules as the hub's (settings.clean): a bad value is refused, the old settings stay.
