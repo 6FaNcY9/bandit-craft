@@ -907,8 +907,10 @@ class BotRunner {
     // A second death at the same place: no grave trip and no resumed job walk back there (bot1, 40 deaths at a monument, 2026-11-09).
     if (near) this.emit('alert', `left the grave at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}, ${near + 1} deaths there within 24 h${was ? `; ${was.type} not resumed` : ''}`);
     else this.resumeLater(was, 'died');
-    // Re-equip from the supply chest first thing after respawning.
-    if (this.supplyChest) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: this.supplyChest, status: 'queued'});
+    // Re-equip at the armoury (else the supply chest) first thing after respawning; `nearest`: a bot that wakes at the old
+    // beds by the supply chest re-arms there instead of walking 200 blocks unarmed (spec 2026-11-15-castle-armoury).
+    const gp = gearPoint(this);
+    if (gp) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: {...gp, nearest: true}, status: 'queued'});
     // ... and then fetch the loot from the grave AxGraves made, before the interrupted job goes on.
     const spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue, deaths: earlier, now});
     // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
@@ -1242,6 +1244,18 @@ const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOf
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
 // without armour and died six times in six minutes at the iron farm (main server 2026-10-17); with gear they build on.
 const UNFIT_NIGHT_JOBS = new Set(['schematic', 'produce']);
+// Where gear and food come from: the armoury, else the supply chest; a guest uses the armoury only near it and has no
+// supply chest (spec 2026-11-15-castle-armoury). gearSources adds the supply chest as the fallback, each chest once.
+function gearPoint(r) {
+  const g = r.gearChest;
+  if (!g) return r.supplyChest || null;
+  const p = r.bot?.entity?.position;
+  if (!r.gearRange || (p && Math.hypot(p.x - g.x, p.z - g.z) <= r.gearRange)) return g;
+  return r.supplyChest || null;
+}
+const sameSpot = (a, b) => a.x === b.x && a.y === b.y && a.z === b.z;
+const gearSources = (r) => [gearPoint(r), r.supplyChest].filter((c, i, all) => c && all.findIndex((d) => d && sameSpot(c, d)) === i);
+
 // What a night rearm walk could bring: an armour slot empty, no sword or axe, or no food in the bag.
 function gearMissing(bot) {
   const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots?.[bot.getEquipmentDestSlot?.(s)]);
@@ -1275,10 +1289,10 @@ async function nightShelter(r, job) {
   // Gear first, the hole only when the supply chest has none (owner 2026-11-05: the bots work through the night).
   // Only for missing gear: low health makes a bot in full iron unfit too, and the walk sent bot20 at 6 hp 240 blocks
   // through the dark from the sorter site (main server 2026-11-14); healing in a hole on the spot is the safer step.
-  if (r.combat && r.supplyChest && gearMissing(bot) && Date.now() - (r.nightRearmAt || 0) > FOOD_RETRY_MS) {
+  if (r.combat && gearPoint(r) && gearMissing(bot) && Date.now() - (r.nightRearmAt || 0) > FOOD_RETRY_MS) {
     r.nightRearmAt = Date.now();
-    r.emit('info', 'night: fetching gear from the supply chest before going on');
-    await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => { guard(job); r.emit('info', `night: no gear fetched: ${e.message.slice(0, 80)}`); });
+    r.emit('info', `night: fetching gear from ${place(r, gearPoint(r))} before going on`);
+    await JOBS.rearm(r, child(job, {type: 'rearm', args: gearPoint(r)})).catch((e) => { guard(job); r.emit('info', `night: no gear fetched: ${e.message.slice(0, 80)}`); });
     if (r.combat.fit()) return;
   }
   if (!r.combat && !NIGHT_JOBS.has(job.type)) return;
@@ -2313,30 +2327,45 @@ async function ensureGear(r, job) {
   const {bot} = r;
   const n = (name) => craftingLib.count(bot, name);
   if (Date.now() - (r.gearTriedAt || 0) < 300000) return;
-  const worn = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
-  const owned = [...bot.inventory.items(), ...worn].map((i) => i.name);
+  const ownedNow = () => [...bot.inventory.items(), ...['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean)].map((i) => i.name);
+  let owned = ownedNow();
   let wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
   // Nothing to make at all: no need either. (gearPlan(n('iron_ingot'), ...) asked what the carried iron makes, and a bot
   // with none returned before it fetched any, sandbox 2026-10-18.)
   if (!gearJob.ingotsWanted(owned)) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
-  if (wanted - n('raw_iron') >= 3 && r.supplyChest && !jobWants(job, 'iron_ore')) {
+  // The armoury first: a ready piece there is taken before a new one is crafted (spec 2026-11-15-castle-armoury).
+  if (r.gearChest && gearPoint(r) === r.gearChest && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
-    const fetch = (item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, far: true, ...r.supplyChest}}))
-      .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from storage: ${e.message.slice(0, 80)}`); });
+    await JOBS.rearm(r, child(job, {type: 'rearm', args: r.gearChest})).catch((e) => { guard(job); r.emit('info', `gear: no re-arm at the armoury: ${e.message.slice(0, 80)}`); });
+    owned = ownedNow();
+    wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
+    if (!gearJob.ingotsWanted(owned)) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
+  }
+  if (wanted - n('raw_iron') >= 3 && gearSources(r).length && !jobWants(job, 'iron_ore')) {
+    r.gearTriedAt = Date.now();
+    // Each source in turn (the armoury, then the supply chest) until `left()` is covered.
+    const fetch = async (item, left) => {
+      for (const at of gearSources(r)) {
+        if (left() <= 0) return;
+        await JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count: left(), far: true, ...at}}))
+          .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from ${place(r, at)}: ${e.message.slice(0, 80)}`); });
+      }
+    };
     // Ingots first: 21 lay in the supply chest while bot2 went without armour or sword, as only raw iron was fetched
     // (2026-10-16).
-    await fetch('iron_ingot', wanted);
+    await fetch('iron_ingot', () => gearJob.ingotsWanted(owned) - n('iron_ingot'));
     if (n('iron_ingot') >= gearJob.ingotsWanted(owned)) r.world?.dropNeed?.(r.name, 'iron_ingot');
     else if (r.supplyChest && wanted > n('iron_ingot')) {
       try { r.world?.postNeed(r.name, 'iron_ingot', Math.min(256, Math.max(1, wanted - n('iron_ingot'))), r.supplyChest, 'gear: no iron_ingot from storage'); } catch {}
     }
     wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
-    if (wanted - n('raw_iron') > 0) await fetch('raw_iron', wanted - n('raw_iron'));
+    if (wanted - n('raw_iron') > 0) await fetch('raw_iron', () => wanted - n('raw_iron'));
     // Logs to burn, plus 2 for the sticks of the pickaxe and sword: 20 logs for 29 iron all burned and left
     // the bot with armour but no sword (sandbox, 2026-10-15).
     const smelts = Math.min(n('raw_iron'), wanted);
-    const logs = Math.ceil(smelts / 1.5) + 2 - bot.inventory.items().filter((i) => /_log$/.test(i.name)).reduce((s, i) => s + i.count, 0);
-    if (smelts >= 3 && logs > 0 && !['coal', 'charcoal'].some((f) => n(f) >= Math.ceil(smelts / 8))) await fetch('logs', logs);
+    const logsHeld = () => bot.inventory.items().filter((i) => /_log$/.test(i.name)).reduce((s, i) => s + i.count, 0);
+    const logs = Math.ceil(smelts / 1.5) + 2 - logsHeld(), before = logsHeld();
+    if (smelts >= 3 && logs > 0 && !['coal', 'charcoal'].some((f) => n(f) >= Math.ceil(smelts / 8))) await fetch('logs', () => logs - (logsHeld() - before));
   }
   if (n('raw_iron') < 3 && !n('iron_ingot')) return;
   const smeltN = Math.min(n('raw_iron'), wanted);
@@ -2409,9 +2438,9 @@ async function care(r, job) {
     r.gettingFood = true;
     try {
       await siteFood(r, job);
-      if (r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i))) {
-        r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from the supply chest`);
-        await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
+      if (gearPoint(r) && !bot.inventory.items().some((i) => edible(bot, i))) {
+        r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from ${place(r, gearPoint(r))}`);
+        await JOBS.rearm(r, child(job, {type: 'rearm', args: gearPoint(r)})).catch((e) => {
           guard(job);
           r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
         });
@@ -2599,9 +2628,9 @@ async function replacePickaxe(r, job, need) {
       why = e.message;
     }
   }
-  if (r.supplyChest) {
+  if (gearPoint(r)) {
     try {
-      await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest}));
+      await JOBS.rearm(r, child(job, {type: 'rearm', args: gearPoint(r)}));
     } catch (e) {
       guard(job);
       why = e.message;
@@ -3977,11 +4006,15 @@ const JOBS = {
   // for the off-hand and food up to 32; then wear/hold it.
   async rearm(r, job) {
     const {bot} = r;
-    const {x, y, z} = job.args;
+    // The death rearm (`nearest`): the supply chest when it is nearer, e.g. after a respawn at the old beds by it
+    // (spec 2026-11-15-castle-armoury); otherwise the point it was given.
+    const me = bot.entity?.position, far = (c) => Math.hypot(me.x - c.x, me.z - c.z);
+    const at = job.args.nearest && r.supplyChest && me && far(r.supplyChest) < far(job.args) ? r.supplyChest : job.args;
+    const {x, y, z} = at;
     const Vec3 = require('vec3').Vec3;
     const centre = new Vec3(x, y, z);
     const ids = ['chest', 'trapped_chest', 'barrel'].map((n) => bot.registry.blocksByName[n]?.id).filter((i) => i !== undefined);
-    await goNear(r, job, x, y, z, 3, {brave: true, under: true, doing: `walking to ${place(r, job.args)} to re-arm`}); // getting armour is the safety step
+    await goNear(r, job, x, y, z, 3, {brave: true, under: true, doing: `walking to ${place(r, at)} to re-arm`}); // getting armour is the safety step
     const spots = bot.findBlocks({matching: ids, point: centre, maxDistance: 6, count: 64});
     if (!spots.length) throw new Error(`no chests within 6 blocks of ${x} ${y} ${z}`);
     const tier = (n) => ['wooden', 'leather', 'golden', 'stone', 'chainmail', 'iron', 'diamond', 'netherite'].findIndex((t) => n.startsWith(t));
@@ -3992,14 +4025,14 @@ const JOBS = {
     const foodCount = () => bot.inventory.items().filter((i) => isFood(i.name)).reduce((n, i) => n + i.count, 0);
     const opened = new Set();
     // At the armoury the bot hands back what it carries twice (gear.js handBack); a guest keeps its own (spec 2026-11-15).
-    const atGear = !!r.gearChest && !r.gearRange && ['x', 'y', 'z'].every((k) => job.args[k] === r.gearChest[k]);
+    const atGear = !!r.gearChest && !r.gearRange && ['x', 'y', 'z'].every((k) => at[k] === r.gearChest[k]);
     let handed = 0;
     for (const pos of spots) {
       guard(job);
       // A double chest is two blocks but one inventory; skip the second half.
       if ([...opened].some((k) => pos.distanceTo(k) <= 1.01)) continue;
       opened.add(pos);
-      job.t.doing = `re-arming from ${place(r, job.args)}`;
+      job.t.doing = `re-arming from ${place(r, at)}`;
       await goNear(r, job, pos.x, pos.y, pos.z, 3, {brave: true, doing: job.t.doing});
       const box = await openChest(r, job, bot.blockAt(pos));
       // One failed withdrawal (inventory full, another bot took the last one) never ends the visit:
@@ -4416,4 +4449,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearSources, MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};

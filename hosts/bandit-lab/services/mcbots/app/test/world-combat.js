@@ -423,6 +423,21 @@ assert.deepStrictEqual(VALIDATE.rearm({x: 1, y: 2, z: 3}), {x: 1, y: 2, z: 3});
 const {BotRunner} = require('../bots');
 const runner = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: [], supplyChest: {x: 1, y: 2, z: 3}});
 assert.deepStrictEqual(runner.supplyChest, {x: 1, y: 2, z: 3});
+{ // the armoury first, the supply chest as fallback; a guest only near the armoury (spec 2026-11-15-castle-armoury)
+  const {gearPoint, gearSources} = require('../bots');
+  const A = {x: -322, y: 105, z: -26}, B = {x: -271, y: 66, z: -214};
+  const at = (x, z) => ({entity: {position: {x, y: 70, z}}});
+  assert.deepStrictEqual(gearPoint({gearChest: A, supplyChest: B}), A);
+  assert.deepStrictEqual(gearPoint({gearChest: null, supplyChest: B}), B);
+  assert.strictEqual(gearPoint({gearChest: null, supplyChest: null}), null);
+  assert.strictEqual(gearPoint({gearChest: A, gearRange: 250, supplyChest: null, bot: at(-322 + 720, -26)}), null, 'a guest at its own base: none');
+  assert.deepStrictEqual(gearPoint({gearChest: A, gearRange: 250, supplyChest: null, bot: at(-322 + 100, -26)}), A, 'a guest at the castle');
+  assert.strictEqual(gearPoint({gearChest: A, gearRange: 250, supplyChest: null}), null, 'a guest without a position: none');
+  assert.deepStrictEqual(gearSources({gearChest: A, supplyChest: B}), [A, B]);
+  assert.deepStrictEqual(gearSources({gearChest: null, supplyChest: B}), [B]);
+  assert.deepStrictEqual(gearSources({gearChest: B, supplyChest: B}), [B], 'the same chest once');
+  assert.deepStrictEqual(gearSources({gearChest: null, supplyChest: null}), []);
+}
 { // graves go first: the running job is interrupted, queued right behind them, and goes on afterwards
   const q = new BotRunner('bot3', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: [], onEvent: () => {}});
   q.pump = () => {};

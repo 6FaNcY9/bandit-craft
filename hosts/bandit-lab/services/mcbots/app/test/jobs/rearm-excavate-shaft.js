@@ -184,6 +184,15 @@ module.exports = async () => {
     b = botOf(chest, {inv: [it('iron_sword', 3)]});
     await run(b).go();
     assert.strictEqual(chest.items.length, 0, 'no hand-back at the supply chest');
+    // 10. nearest (the death rearm): a respawn nearer the supply chest re-arms there, and hands nothing back
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword', 3)]});
+    const goals = [];
+    b.bot.pathfinder.goto = async (g) => { goals.push(g); };
+    const near = {t: {}, cancelled: false, args: {x: 500, y: 64, z: 500, nearest: true}};
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: {x: 0, y: 64, z: 0}, gearChest: {x: 500, y: 64, z: 500}}, near);
+    assert.ok(goals.length && goals.every((g) => Math.hypot(g.x, g.z) < 10), JSON.stringify(goals[0]));
+    assert.strictEqual(chest.items.length, 0, 'not the armoury: nothing handed back');
   }
   { // excavate: digs natural ground top-down, leaves placed blocks and protected areas alone
     const {JOBS, VALIDATE} = require('../../bots');
