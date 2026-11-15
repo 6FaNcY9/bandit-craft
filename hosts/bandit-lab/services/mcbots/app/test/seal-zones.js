@@ -153,6 +153,8 @@ const {VALIDATE} = require('../bots');
   assert.ok(P.inZone('storage', -260, 59, -217) && !P.inZone('storage', -260, 70, -217));
   // jobs take zone: "<name>"
   assert.deepStrictEqual(VALIDATE.treefarm({zone: 'Tree farm'}), {x1: -262, z1: -238, x2: -248, z2: -224});
+  assert.strictEqual(VALIDATE.treefarm({zone: 'Tree farm', sapling: 'cherry_sapling'}).sapling, 'cherry_sapling', 'one wood per farm');
+  assert.throws(() => VALIDATE.treefarm({zone: 'Tree farm', sapling: 'stick'}), /sapling must be one of/);
   assert.deepStrictEqual(VALIDATE.shaft({zone: 'Shaft'}), {x1: -300, z1: -10, x2: -290, z2: 0, top: 80, bottom: -59});
   assert.deepStrictEqual(VALIDATE.excavate({zone: 'Storage room'}), {x1: -272, y1: 58, z1: -219, x2: -266, y2: 60, z2: -213});
   assert.throws(() => VALIDATE.wheatfarm({zone: 'Nope'}), /no zone called Nope/);

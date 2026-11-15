@@ -144,6 +144,15 @@ module.exports = async () => {
     await assert.rejects(f.run(), Cancelled);
     assert.strictEqual(f.events.filter((e) => e.startsWith('plant')).length, 9, f.events.join('|'));
     assert.deepStrictEqual(seen, {x: -3, y: 65, z: -3}, 'the pause reads the farm chest');
+    // one wood per farm (castle T5 planted birch from wild trees, 2026-11-15): only `sapling` is planted and fetched
+    const one = {...small, chest: {x: -3, y: 65, z: -3}, sapling: 'birch_sapling'};
+    f = fake({world: flat(), inv: [{name: 'oak_sapling', count: 4, type: 1}, {name: 'birch_sapling', count: 9, type: 2}], args: one});
+    await assert.rejects(f.run(), Cancelled);
+    assert.strictEqual(f.events.filter((e) => e.startsWith('plant birch_sapling')).length, 9, f.events.join('|'));
+    assert.ok(!f.events.some((e) => e.startsWith('plant oak_sapling')), 'the picked-up oak sapling is not planted');
+    f = fake({world: flat(), inv: [{name: 'oak_sapling', count: 4, type: 1}], args: one});
+    await assert.rejects(f.run(), /no saplings/);
+    assert.deepStrictEqual(f.calls.withdraw, ['birch_sapling 9'], 'only its own kind is fetched');
     // a farm mined down to stone (the main base's, 2026-10-15): dirt from the chest on every spot, then saplings
     const stony = () => { const w2 = flat(); for (let x = 0; x <= 8; x++) for (let z = 0; z <= 8; z++) w2.put(x, 64, z, (x + z) % 2 ? 'stone' : 'andesite'); return w2; };
     assert.deepStrictEqual([T.cellState(stony().blockAt, {x: 1, z: 1}, 64), T.scan(stony().blockAt, small, 64, []).bare.length], ['bare', 9]);

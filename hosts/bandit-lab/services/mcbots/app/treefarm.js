@@ -131,7 +131,8 @@ function pickups(entities, box, areas, me) {
 }
 
 // The sapling to plant (oak and birch first) among inventory items, or undefined.
-const pickSapling = (items) => SAPLINGS.map((n) => items.find((i) => i.name === n)).find(Boolean);
+// `only`: the farm's one wood (job arg `sapling`); other kinds the bot picked up are never planted.
+const pickSapling = (items, only) => (only ? [only] : SAPLINGS).map((n) => items.find((i) => i.name === n)).find(Boolean);
 
 function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw, at, unpillar = async () => {}, enoughWood = () => 0, haulSurplus = async () => false, care = async () => {}}) {
   const held = (bot, re) => bot.inventory.items().filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
@@ -155,7 +156,7 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
 
   async function plant(r, job, c) {
     const {bot} = r;
-    const sapling = pickSapling(bot.inventory.items());
+    const sapling = pickSapling(bot.inventory.items(), job.args.sapling);
     if (!sapling) return false;
     if (bot.entity.position.distanceTo(new Vec3(c.x + 0.5, c.gy + 1, c.z + 0.5)) > 4) await goNear(r, job, c.x, c.gy + 1, c.z, 2, {doing: `walking to ${at({x: c.x, y: c.gy + 1, z: c.z})} to plant`});
     guard(job);
@@ -273,10 +274,10 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
       // 3. Plant the free cells, fetching saplings from the chest when the bot has none.
       const free = s.free.filter((c) => !skipped(`cell:${c.x},${c.z}`)).sort(near);
       if (free.length && !trees[0]) {
-        if (!pickSapling(bot.inventory.items()) && Date.now() - chestTriedAt > RETRY_MS) {
+        if (!pickSapling(bot.inventory.items(), box.sapling) && Date.now() - chestTriedAt > RETRY_MS) {
           chestTriedAt = Date.now();
           chestHadNone = true;
-          for (const kind of SAPLINGS) {
+          for (const kind of box.sapling ? [box.sapling] : SAPLINGS) {
             try {
               await withdraw(r, job, kind, Math.min(free.length, 16));
               chestHadNone = false;
@@ -290,7 +291,7 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
         }
         for (const c of free.slice(0, 6)) {
           guard(job);
-          if (!pickSapling(bot.inventory.items())) break;
+          if (!pickSapling(bot.inventory.items(), box.sapling)) break;
           if (await plant(r, job, c)) { planted++; report(); acted = true; } else later(`cell:${c.x},${c.z}`);
           await boneMeal(r, job, c);
         }
@@ -330,7 +331,7 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
       }
       if (!s.trees.length && !s.planted.length && !s.free.length && s.bare.length && noDirt) throw new Error(`no soil: ${s.bare.length} planting spots are bare stone and the supply chest has no dirt; put dirt in it`);
       if (!s.trees.length && !s.planted.length && !s.free.length && !s.bare.length) throw new Error('nothing to farm: no tree, no sapling and no free soil cell in the area');
-      if (!s.trees.length && !s.planted.length && !pickSapling(bot.inventory.items()) && free.length && chestHadNone) {
+      if (!s.trees.length && !s.planted.length && !pickSapling(bot.inventory.items(), box.sapling) && free.length && chestHadNone) {
         throw new Error('no saplings: none carried, none in the supply chest, no tree or sapling in the area; put saplings in the chest');
       }
       job.t.doing = s.planted.length || s.trees.length ? 'waiting for the trees to grow' : 'nothing to plant or chop';
@@ -344,4 +345,4 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
   return {treefarm};
 }
 
-module.exports = {farmBox, gridCells, cellState, scan, pickups, pickSapling, makeTreeFarm};
+module.exports = {farmBox, gridCells, cellState, scan, pickups, pickSapling, makeTreeFarm, SAPLINGS};

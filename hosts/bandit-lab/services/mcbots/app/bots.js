@@ -363,7 +363,10 @@ const VALIDATE = {
     return a.slot === undefined ? {} : {slot: num(a.slot, 0, homebedJob.SLOTS - 1, 'slot')};
   },
   // Plant and chop trees in an area of at most 24 x 24 until stopped; logs go to the supply chest, or to `chest`.
-  treefarm: (a) => ({...treeFarmJob.farmBox(zoned(a)), ...(a.chest ? {chest: xyz(a.chest)} : {})}),
+  treefarm: (a) => {
+    if (a.sapling && !treeFarmJob.SAPLINGS.includes(a.sapling)) throw new Error(`sapling must be one of ${treeFarmJob.SAPLINGS.join(', ')}`);
+    return {...treeFarmJob.farmBox(zoned(a)), ...(a.chest ? {chest: xyz(a.chest)} : {}), ...(a.sapling ? {sapling: a.sapling} : {})};
+  },
   // Keep a wheat field of at most 9 x 9 going until stopped: harvest, till, plant, bake bread, hand it in at the base chest.
   wheatfarm: (a) => {
     const box = wheatFarmJob.farmBox(zoned(a));
