@@ -590,10 +590,10 @@ dashboard radar and served by `GET /api/state` (`bots`, `world`,
   inventory (swords before axes). The server takes a hit from up to 6 blocks, eye to hitbox (its interaction range
   3 plus 3 for lag: bot50 hit a still creeper from 6.0 blocks, not 6.5), so a bot strikes from 5, out of a zombie's
   reach. A hunting bot follows its mob at 3 blocks.
-- **Fight or keep away** (`app/odds.js`): the bot works out what clearing the hostiles within 16 blocks that can get at it would cost (a wall counts only from 5 blocks out, and not for a kind that just hit it):
+- **Fight or keep away** (`app/odds.js`): the bot works out what clearing the hostiles it sees (24 blocks) that can get at it would cost (a wall counts only from 5 blocks out, and not for a kind that just hit it):
   nearest first, each killed in its health over the weapon's damage times speed; a zombie hits once it has walked up,
   an archer from the start, half the hits each could land, after armour (the vanilla formula). It fights while the
-  expected loss leaves more than 6 health, else it kites (melee) or walks off (archers); `retreatHealth` stays a floor.
+  expected loss leaves more than 6 health, else, once one is within 16 blocks, it kites (melee) or walks off (archers, until 20 blocks away); `retreatHealth` stays a floor.
   With no mob in sight `fit()` (hunting, night and grave jobs) asks the same against a usual night, two zombies and a
   skeleton: only full iron with an iron sword passes at full health. Creepers keep their own kiting. Arena check
   2026-10-18 (iron sword, 3 zombies / 2 skeletons, unarmoured vs iron): the verdicts matched what the bot lost.

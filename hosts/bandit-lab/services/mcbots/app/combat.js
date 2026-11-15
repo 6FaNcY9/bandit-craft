@@ -288,10 +288,13 @@ class Combat {
     const near = threats.find((e) => !this.ignore.has(e.id));
     const dist = near ? mobLocation(near).position.distanceTo(me) : Infinity;
     // Numbers, not a fixed health line: three zombies cost an unarmoured bot 13 health, an iron one 2 (arena 2026-10-18).
-    const forecast = this.odds(threats.filter((e) => mobLocation(e).position.distanceTo(me) <= 16 && this.canGetAt(e, now)));
-    if (near && near.name !== 'creeper') {
-      const key = `${near.name}:${forecast.fight}`;
-      if (this.lastOdds !== key) r.log(r.name, `odds: ${threats.filter((e) => e.name !== 'creeper').length} ${near.name} -> ${forecast.fight ? 'fight' : 'keep away'} (loss ~${Math.round(forecast.loss)} of ${Math.round(bot.health)}, ${Math.round(forecast.secs)} s)`);
+    // Every one it sees and can get at: cut at 16 blocks, the odds weighed nothing ("3 zombie -> fight (loss ~0 of 7, 0 s)")
+    // while the mobs came on from 17 to 24, and flipped to keep away each time one stepped inside (MisaBot died, 2026-11-15).
+    const counted = threats.filter((e) => e.name !== 'creeper' && this.canGetAt(e, now));
+    const forecast = this.odds(counted);
+    if (near && counted.length) {
+      const key = `${counted[0].name}:${forecast.fight}`;
+      if (this.lastOdds !== key) r.log(r.name, `odds: ${counted.length} ${counted[0].name} -> ${forecast.fight ? 'fight' : 'keep away'} (loss ~${Math.round(forecast.loss)} of ${Math.round(bot.health)}, ${Math.round(forecast.secs)} s)`);
       this.lastOdds = key;
     } else this.lastOdds = null;
 
@@ -304,7 +307,9 @@ class Combat {
     // back at food 18+). Health alone let a healthy bot go every other tick and start over, each start replacing its job's
     // walk: EM_Trader "retreating to heal" at 20 health for hours while the trade stood still (main server 2026-11-03).
     if (this.mode === 'retreat') {
-      if ((bot.health >= Math.min(20, s.retreatHealth + 4) && forecast.fight) || dist > 16) this.release();
+      // Over once past the 20 blocks it walks off to (takeover below), not at the 16 where it starts: ending there, it
+      // turned back to its job and retreated again every second, a zombie at its heels (MisaBot, 2026-11-15).
+      if ((bot.health >= Math.min(20, s.retreatHealth + 4) && forecast.fight) || dist > 20) this.release();
       else if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
       return;
     }
