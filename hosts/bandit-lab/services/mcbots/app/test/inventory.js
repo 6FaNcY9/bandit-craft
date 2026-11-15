@@ -58,6 +58,12 @@ assert.strictEqual(S.surplus('stick', {stick: 9999}), 0, 'sticks have no hall ca
   const now = 1e12, pos = {x: 1, y: 110, z: 2}, at = (t) => new Map([['1,110,2', {items: {spruce_log: 1800, oak_log: 10}, t}]]);
   assert.strictEqual(S.chestAbove('spruce_log', at(now), pos, now), 82);
   assert.strictEqual(S.chestAbove('spruce_log', at(now - 31 * 60000), pos, now), 0, '31 minutes old');
+  // the farm rests only from one full stack above quota on: below it nothing can be hauled (T1 idled at 1770, 2026-11-15)
+  const one = (items) => new Map([['1,110,2', {items, t: now}]]);
+  assert.strictEqual(S.woodRest(one({spruce_log: 1770}), pos, now), 0, '42 above: keep cutting');
+  assert.strictEqual(S.woodRest(one({spruce_log: 1792}), pos, now), 64, 'one stack: rest and haul');
+  assert.strictEqual(S.woodRest(at(now), pos, now), 82);
+  assert.strictEqual(S.woodRest(at(now - 31 * 60000), pos, now), 0, 'stale = unknown');
 }
 { // sorter (2026-11-15-sorter-flow-design.md): room = fresh empty top chest; haul = full stacks of one kind above quota
   const now = 1e12, top = (items, t = now) => new Map([['-308,120,47', {items, t}]]);

@@ -64,6 +64,9 @@ const chestAbove = (name, stocks, pos, now = Date.now()) => {
   if (!quota || !c || !(now - c.t <= STOCK_TTL_MS)) return 0;
   return Math.max(0, Object.entries(c.items || {}).reduce((s, [n, k]) => s + (kindOf(n) === kindOf(name) ? k : 0), 0) - quota);
 };
+// A tree farm with its own chest rests from one full stack above quota on: below that nothing can be hauled to the sorter
+// and it idled until the reading expired (T1 at 1770 logs, 30 min per round, 2026-11-15).
+const woodRest = (stocks, pos, now = Date.now()) => { const a = chestAbove('oak_log', stocks, pos, now); return a >= 64 ? a : 0; };
 // A farm kind rests while the hall is above its cap or the chest the farm hands in at is above its quota.
 const farmEnough = (name, world, pos, now = Date.now()) => surplus(name, hallTotals(world?.chests)) || chestAbove(name, world?.stocks, pos, now);
 // The castle sorter (2026-11-15-sorter-flow-design.md): loose items go into the inbox; each kind fills one slice z,
@@ -79,4 +82,4 @@ const haulCount = (name, stocks, pos, now = Date.now()) => {
   const have = stocks?.get(pos && `${pos.x},${pos.y},${pos.z}`)?.items?.[name] || 0;
   return Math.min(640, Math.floor(Math.min(chestAbove(name, stocks, pos, now), have) / 64) * 64);
 };
-module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove, farmEnough, SORTER, sorterRoom, haulCount};
+module.exports = {storeFor, overCap, CAPS, sameXYZ, JUNK, HALL_CAPS, DROPPABLE, hallTotals, surplus, CHEST_QUOTA, chestAbove, woodRest, farmEnough, SORTER, sorterRoom, haulCount};

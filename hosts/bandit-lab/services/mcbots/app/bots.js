@@ -3438,7 +3438,7 @@ const {highway} = roadJob.makeRoad({
 const {treefarm} = treeFarmJob.makeTreeFarm({
   goNear, guard, sleep, digAt, waitCalm, at, unpillar, care,
   // every *_log is one kind; a farm with its own chest reads that chest (the hall index never sees it)
-  enoughWood: (r, job) => (job.args.chest ? storage.chestAbove('oak_log', r.world?.stocks, job.args.chest) : storage.surplus('oak_log', storage.hallTotals(r.world?.chests))),
+  enoughWood: (r, job) => (job.args.chest ? storage.woodRest(r.world?.stocks, job.args.chest) : storage.surplus('oak_log', storage.hallTotals(r.world?.chests))),
   deposit: (r, job, only = 'logs') => JOBS.deposit(r, child(job, {type: 'deposit', args: {...(job.args.chest || r.supplyChest), ...(only ? {only} : {})}})),
   withdraw: (r, job, item, count) => JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count, ...(job.args.chest || r.supplyChest)}})),
   // castle sorter (2026-11-15-sorter-flow-design.md): full stacks above the farm chest's quota go into the inbox while
