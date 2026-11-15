@@ -238,7 +238,7 @@ in {
     servers.sandbox = {
       enable = true;
       # On demand only (owner 2026-11-15: about 3 GB RAM for a server nobody is on): a deploy no longer starts it.
-      # Start: `sudo systemctl start minecraft-server-sandbox` (~/sandbox-wake.sh); a lab reboot still starts it via velocity's wants.
+      # Start: `sudo systemctl start minecraft-server-sandbox` (~/sandbox-wake.sh); nothing else starts it (velocity only orders after it; a deploy re-pulled its wants).
       autoStart = false;
       openFirewall = false;
       package = paperPackage;
@@ -311,7 +311,7 @@ in {
     # retries forever. Requires the cutover: the Docker Velocity holds 25565 until it has stopped.
     minecraft-server-velocity = {
       after = ["tailscaled.service" "minecraft-cutover.service" "minecraft-server-paper.service" "minecraft-server-sandbox.service"];
-      wants = ["tailscaled.service" "minecraft-server-paper.service" "minecraft-server-sandbox.service"];
+      wants = ["tailscaled.service" "minecraft-server-paper.service"];
       requires = ["minecraft-cutover.service"];
       startLimitIntervalSec = lib.mkForce 0;
       serviceConfig = {
