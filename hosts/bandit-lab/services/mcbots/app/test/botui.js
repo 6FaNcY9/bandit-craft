@@ -1012,30 +1012,44 @@ async function fake() {
     assert.equal(ui.state('Midari').flash.text, 'Fehler: Fremdes Gelände'); assert.ok(ui.state('Midari').build.at); assert.equal(outlines().length, no);
     // part 2b task 7: Bereich mode, two staff clicks with a ghost, area jobs, expiry
     const PICK_MS = 60000, g = (x, y, z) => ({gaze: {x, y, z, block: 'stone'}});
+    const AREA_PICK_MS = 5 * 60000;
+    await ev('Fancy', {a: 'aream', bot: 'bot1'}); // from the bot page with no box and no mark: straight into picking
+    assert.equal(ui.state('Fancy').pick.kind, 'area'); assert.equal(ui.state('Fancy').open, false); assert.equal(ui.state('Fancy').area.when, 'now');
+    assert.equal(f.of('/actionbar').at(-1).body.text, 'Schritt 1 von 3: Stab-Klick auf Ecke 1');
+    ui.state('Fancy').pick = null;
     await ev('Fancy', {a: 'aream', bot: 'bot1'}); assert.equal(menus().at(-1).title, 'Bereich wählen');
     await ev('Fancy', {a: 'shiftm', bot: 'bot1', shift: true}); assert.equal(menus().at(-1).title, 'Bereich wählen');
     await ev('Fancy', {a: 'aream', bot: 'bot1'});
     const cl = f.of('/close').length, nm0 = menus().length;
     await ev('Fancy', {a: 'pick', kind: 'area'});
-    assert.equal(f.of('/close').length, cl + 1); assert.equal(f.of('/actionbar').at(-1).body.text, 'Ecke 1 anklicken');
+    assert.equal(f.of('/close').length, cl + 1); assert.equal(f.of('/actionbar').at(-1).body.text, 'Schritt 1 von 3: Stab-Klick auf Ecke 1');
     await open('Fancy', g(0, 64, 0));
     assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: {x1: 0, y1: 64, z1: 0, x2: 0, y2: 64, z2: 0}, ghost: true}); assert.equal(menus().length, nm0);
-    assert.equal(f.of('/actionbar').at(-1).body.text, 'Ecke 2 anklicken'); assert.ok(ui.state('Fancy').pick);
+    assert.equal(f.of('/actionbar').at(-1).body.text, 'Ecke 1 ist da. Schritt 2: Stab-Klick auf Ecke 2'); assert.ok(ui.state('Fancy').pick);
     await open('Fancy', {...g(2, 66, 2), dim: 'the_nether'}); assert.equal(ui.state('Fancy').flash.text, 'Ecken in verschiedenen Welten'); assert.ok(ui.state('Fancy').pick);
     await open('Fancy', g(2, 66, 2));
     assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: {x1: 0, y1: 64, z1: 0, x2: 2, y2: 66, z2: 2}, ghost: true});
     assert.equal(menus().at(-1).title, 'Bereich: 3 × 3 × 3'); assert.equal(ui.state('Fancy').pick, null);
+    assert.equal(ui.state('Fancy').flash.text, 'Bereich 3 × 3 × 3. Schritt 3: Arbeit wählen, dann Los!');
+    assert.equal(menus().at(-1).slots.find((x) => x.slot === 22).name, 'Erst Arbeit wählen');
     await ev('Fancy', {a: 'areago', key: 'mine'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: unbekannter Auftrag');
     await ev('Fancy', {a: 'setwhen', when: 'now', screen: 'aream'}); assert.equal(ui.state('Fancy').area.when, 'now');
     const ns = submits.length;
-    await ev('Fancy', {a: 'areago', key: 'excavate'}, g(0, 64, 0));
+    await ev('Fancy', {a: 'areago'}); assert.equal(ui.state('Fancy').flash.text, 'Erst Arbeit wählen'); assert.equal(submits.length, ns);
+    // a job click does not start, Los! does
+    await ev('Fancy', {a: 'areapick', key: 'excavate'}); assert.equal(submits.length, ns); assert.equal(ui.state('Fancy').screen.name, 'aream');
+    const picked = menus().at(-1).slots; assert.equal(picked.find((x) => x.slot === 9).glint, true); assert.deepEqual(picked.find((x) => x.slot === 22).payload, {a: 'areago'});
+    await ev('Fancy', {a: 'areapick', key: 'mine'}); assert.equal(ui.state('Fancy').flash.text, 'Fehler: unbekannter Auftrag'); assert.equal(ui.state('Fancy').area.key, 'excavate');
+    await ev('Fancy', {a: 'areago'}, g(0, 64, 0));
     assert.equal(submits.length, ns + 1); assert.equal(submits.at(-1).type, 'excavate'); assert.deepEqual(submits.at(-1).args, {x1: 0, y1: 64, z1: 0, x2: 2, y2: 66, z2: 2}); assert.equal(submits.at(-1).replace, true);
     assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').sel.a, null); assert.equal(ui.state('Fancy').screen.name, 'botm');
     // expiry: an unfinished area pick drops its ghost on the next open, which is then handled normally
     await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'pick', kind: 'area'}); await open('Fancy', g(5, 64, 5));
-    t += PICK_MS + 1;
+    t += PICK_MS + 1; assert.ok(ui.state('Fancy').pick.until > t, 'the area pick outlasts PICK_MS');
+    t += AREA_PICK_MS;
     await open('Fancy', {gaze: {x: 0, y: 0, z: 0, block: 'air', entity: {type: 'player', name: 'bot1'}}});
     assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').pick, null); assert.equal(menus().at(-1).title, 'bot1');
+    assert.equal(ui.state('Fancy').flash.text, 'Zeit um. Nochmal: Bereich…');
     // a refused order keeps the selection and the ghost
     await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'pick', kind: 'area'}); await open('Fancy', g(0, 64, 0)); await open('Fancy', g(40, 90, 40));
     assert.equal(menus().at(-1).title, 'Bereich: 41 × 27 × 41'); assert.match(menus().at(-1).slots.find((x) => x.slot === 9).lore[0], /^zu groß/);
@@ -1043,6 +1057,7 @@ async function fake() {
     // a selection left open (Escape) does not take over the staff: stone still opens Abbauen
     await open('Fancy', g(7, 64, 7)); assert.equal(menus().at(-1).title, 'Abbauen');
     await ev('Fancy', {a: 'areaclear'}); assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: null}); assert.equal(ui.state('Fancy').sel.a, null);
+    assert.equal(ui.state('Fancy').screen.name, 'aream', 'Auswahl löschen keeps the page'); assert.equal(menus().at(-1).slots.find((x) => x.slot === 2).name, 'Zwei Ecken zeigen');
     // marked area: from the mark store, in this world only
     delete ui.state('Fancy').area; await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.equal(menus().at(-1).title, 'Bereich wählen'); // forged: no aream before
     await ev('Fancy', {a: 'aream', bot: 'bot1'}); await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.equal(ui.state('Fancy').flash.text, 'Kein Bereich markiert');

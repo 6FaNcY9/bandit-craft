@@ -320,16 +320,21 @@ function buildPage(view) {
 }
 
 // Bereich: who, the two corners (staff clicks with a ghost) or the marked area, when; with both corners the area jobs.
+// A job click only selects it (glint), Los! starts it: the owner did not know a job click starts (2026-11-15).
 const AREA_ICON = {excavate: 'diamond_shovel', clear: 'diamond_pickaxe', shaft: 'ladder', light: 'torch', seal: 'stone_bricks'};
+// What each job really does (bots.js, seal.js), one short line.
+const AREA_LORE = {excavate: 'Gräbt einen Raum aus', clear: 'Baut alle Blöcke ab', shaft: 'Gräbt ein Loch nach unten', light: 'Stellt Fackeln auf', seal: 'Mauert Höhlen-Löcher an den Seiten zu'};
 function areaPage(view) {
   const a = view.area, sel = view.sel || {}, size = dims(sel);
   const slots = [slot(0, 'player_head', a.bot, {a: 'botpick', back: 'aream'}, {head: a.bot, lore: ['Klick: anderer Bot']}),
-    slot(2, 'blaze_rod', 'Zwei Ecken zeigen', {a: 'pick', kind: 'area'}, {lore: ['Stab-Klick auf Ecke 1, dann Ecke 2']}),
+    slot(2, 'blaze_rod', size ? 'Neu wählen' : 'Zwei Ecken zeigen', {a: 'pick', kind: 'area'}, {lore: ['Stab-Klick auf Ecke 1, dann Ecke 2']}),
     ...(view.mark?.area ? [slot(3, 'red_banner', 'Markierter Bereich', {a: 'areafrom', from: 'mark'})] : []),
     slot(5, 'clock', 'Danach', {a: 'setwhen', when: 'next', screen: 'aream'}, {glint: a.when === 'next'}), slot(6, 'clock', 'Jetzt (ersetzt die Arbeit)', {a: 'setwhen', when: 'now', screen: 'aream'}, {glint: a.when === 'now'}),
-    slot(8, 'barrier', 'Abbrechen', {a: 'areaclear'}), back(26, 'botm', a.bot)];
-  areaJobs(sel).forEach(({key, ok, why}, i) => slots.push(ok ? slot(9 + i, AREA_ICON[key], JOBS[key].label, {a: 'areago', key})
+    slot(8, 'barrier', 'Auswahl löschen', {a: 'areaclear'}), back(26, 'botm', a.bot)];
+  const jobs = areaJobs(sel);
+  jobs.forEach(({key, ok, why}, i) => slots.push(ok ? slot(9 + i, AREA_ICON[key], JOBS[key].label, {a: 'areapick', key}, {glint: a.key === key, lore: [AREA_LORE[key]]})
     : slot(9 + i, 'gray_stained_glass_pane', JOBS[key].label, {a: 'aream'}, {lore: [safe(why, 40)]})));
+  slots.push(jobs.some((j) => j.ok && j.key === a.key) ? slot(22, 'lime_dye', 'Los!', {a: 'areago'}) : pane(22, 'gray', 'Erst Arbeit wählen', {a: 'aream'}));
   return {type: 'chest', title: size ? `Bereich: ${size.join(' × ')}` : 'Bereich wählen', rows: 3, slots};
 }
 

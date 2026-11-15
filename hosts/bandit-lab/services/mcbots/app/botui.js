@@ -100,6 +100,8 @@ function order(st, ui, viewer, bot, key, o) {
 }
 
 const PICK_MS = 60000;
+const AREA_PICK_MS = 5 * 60000; // the two corners of Bereich: the owner needs time to walk there
+const bar = (ui, viewer, text) => ui.call('/actionbar', {player: viewer, text}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
 // One order from a menu: build (rights, validation), submit (ground), flash. `data` is the job's fields.
 function orderAt(st, ui, viewer, bot, key, data) {
   const o = jobs.build(key, {who: bot, ...data}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
@@ -197,14 +199,24 @@ const ACTIONS = {
   setfar: (st, data, ui, viewer) => { formOf(st, ui, viewer).far = !st.form.far; st.screen = {name: 'shiftm'}; },
   morem: (st, data, ui, viewer) => { st.screen = {name: 'morem', bot: oneBot(ui, viewer, data)}; },
   // Bereich: st.area is who/when, st.sel the two corners (staff clicks, see pick/consumePick) or the marked area.
-  aream: (st, data, ui, viewer) => {
-    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'next'};
+  // From the bot page with no box and no marked area it goes straight into picking (nothing to choose yet).
+  aream: async (st, data, ui, viewer) => {
+    const fromBot = st.screen?.name === 'botm';
+    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'now', key: st.area?.key ?? null};
+    st.screen = {name: 'aream'};
+    if (fromBot && !(st.sel.a && st.sel.b) && !markOf(ui, viewer).area) await ACTIONS.pick(st, {kind: 'area'}, ui, viewer);
+  },
+  // A job click only selects it; Los! (areago) starts it.
+  areapick: (st, data, ui, viewer) => {
+    if (!jobs.AREA.includes(data.key)) throw new Error('unbekannter Auftrag');
+    st.area ||= {bot: botOf(st, ui, viewer), when: 'now', key: null};
+    st.area.key = data.key;
     st.screen = {name: 'aream'};
   },
   areafrom: async (st, data, ui, viewer) => {
     if (data.from !== 'mark') throw new Error('unbekannte Quelle');
     const back = st.screen?.name === 'farmm' && st.farm ? 'farmm' : 'aream'; // Tiere & Felder uses the same corners
-    if (back === 'aream') st.area ||= {bot: botOf(st, ui, viewer), when: 'next'}; // a forged click without aream first must not break the render
+    if (back === 'aream') st.area ||= {bot: botOf(st, ui, viewer), when: 'now', key: null}; // a forged click without aream first must not break the render
     st.screen = {name: back};
     const m = markOf(ui, viewer).area;
     if (!m) return ui.flash(st, 'Kein Bereich markiert');
@@ -213,16 +225,19 @@ const ACTIONS = {
     await outline(ui, viewer, box(m.a, m.b), {ghost: true});
   },
   areago: async (st, data, ui, viewer) => {
-    if (!jobs.AREA.includes(data.key)) throw new Error('unbekannter Auftrag');
     if (!st.area) throw new Error('Erst einen Bereich wählen');
+    const key = data.key ?? st.area.key;
     st.screen = {name: 'aream'};
+    if (key == null) return ui.flash(st, 'Erst Arbeit wählen');
+    if (!jobs.AREA.includes(key)) throw new Error('unbekannter Auftrag');
     if (!st.sel.a || !st.sel.b) return ui.flash(st, 'Erst zwei Ecken wählen');
     if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Bereich ist in einer anderen Welt');
     const bot = oneBot(ui, viewer, {bot: st.area.bot});
     try { // a refusal keeps the selection
-      const o = jobs.build(data.key, {who: bot, when: st.area.when}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
+      const o = jobs.build(key, {who: bot, when: st.area.when}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
       done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
       await clearSel(st, ui, viewer);
+      st.area.key = null;
       st.screen = {name: 'botm', bot};
       ui.flash(st, `${bot}: ${o.say}`, true);
     } catch (e) { throw new Error(explain(e.message)); }
@@ -249,7 +264,7 @@ const ACTIONS = {
     st.screen = {name: 'botm', bot};
     ui.flash(st, `${bot}: ${o.say}${note}`, true);
   },
-  areaclear: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = {name: 'botm', bot: botOf(st, ui, viewer)}; },
+  areaclear: async (st, data, ui, viewer) => { await clearSel(st, ui, viewer); st.screen = st.area ? {name: 'aream'} : {name: 'botm', bot: botOf(st, ui, viewer)}; },
   markclear: async (st, data, ui, viewer) => { ui.marks.delete(viewer); await outline(ui, viewer, null); st.screen = {name: 'ov'}; ui.flash(st, 'Markierung gelöscht', true); },
   guardm: (st, data, ui, viewer) => { st.screen = {name: 'guardm', bot: oneBot(ui, viewer, data)}; },
   // Bewachen: Shift looks, the mark slot uses the stored spot, else where the viewer stands.
@@ -441,10 +456,10 @@ const ACTIONS = {
       const back = st.screen?.name === 'farmm' && st.farm ? 'farmm' : 'aream'; // the page that asked gets the corners
       if (back === 'aream' && !st.area) throw new Error('Erst einen Bereich wählen');
       await clearSel(st, ui, viewer);
-      st.pick = {kind: 'area', until: ui.now() + PICK_MS, back};
+      st.pick = {kind: 'area', until: ui.now() + AREA_PICK_MS, back};
       st.screen = {name: back};
       await ACTIONS.close(st, data, ui, viewer);
-      await ui.call('/actionbar', {player: viewer, text: 'Ecke 1 anklicken'}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
+      await bar(ui, viewer, 'Schritt 1 von 3: Stab-Klick auf Ecke 1');
       return;
     }
     if (data.kind === 'place') { // the ghost follows the staff's gaze (plugin), the next staff click is the origin
@@ -673,6 +688,7 @@ class BotUi {
         const kind = st.pick.kind;
         st.pick = null;
         if (kind === 'place' || kind === 'area') await clearSel(st, this, viewer);
+        if (kind === 'area') this.flash(st, 'Zeit um. Nochmal: Bereich…');
       }
       if (st.pick) { if (!await this.consumePick(st, viewer, g, e.sneak === true)) return; }
       else if (mineBot) st.screen = {name: 'botm', bot: who};
@@ -719,9 +735,9 @@ class BotUi {
       const c = {x: g.x, y: g.y, z: g.z, dim: st.ctx.dim}, bar = (text) => this.call('/actionbar', {player: viewer, text}).catch((err) => this.log(`botui ${viewer}: actionbar: ${err.message}`));
       if (!st.sel.a) {
         st.sel = {a: c, b: null, dim: c.dim};
-        st.pick.until = this.now() + PICK_MS;
+        st.pick.until = this.now() + AREA_PICK_MS;
         await outline(this, viewer, box(c, c), {ghost: true});
-        await bar('Ecke 2 anklicken');
+        await bar('Ecke 1 ist da. Schritt 2: Stab-Klick auf Ecke 2');
         return false;
       }
       if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(c.dim)) { this.flash(st, 'Ecken in verschiedenen Welten'); return false; }
@@ -730,6 +746,7 @@ class BotUi {
       st.pick = null;
       await outline(this, viewer, box(st.sel.a, c), {ghost: true});
       st.screen = {name: back};
+      if (back === 'aream') this.flash(st, `Bereich ${jobs.dims(st.sel).join(' × ')}. Schritt 3: Arbeit wählen, dann Los!`, true);
       return true;
     }
     if (st.pick.kind === 'place') {
