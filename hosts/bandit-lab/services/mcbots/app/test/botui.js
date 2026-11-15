@@ -1085,6 +1085,16 @@ async function fake() {
     await ev('Fancy', {a: 'areafrom', from: 'mark'}); assert.deepEqual(outlines().at(-1), {player: 'Fancy', box: {x1: 1, y1: 64, z1: 1, x2: 3, y2: 65, z2: 2}, ghost: true});
     assert.equal(menus().at(-1).title, 'Bereich: 3 × 2 × 2');
     await ev('Fancy', {a: 'areaclear'});
+    // "dig what I marked": the bot page offers it, Bereich… loads the mark at once, Abbauen without a block leads there
+    await ev('Fancy', {a: 'botm', bot: 'bot1'}); assert.deepEqual(menus().at(-1).slots.find((x) => x.slot === 13).payload, {a: 'aream', bot: 'bot1', key: 'clear'});
+    await ev('Fancy', {a: 'aream', bot: 'bot1', key: 'clear'});
+    assert.equal(menus().at(-1).title, 'Bereich: 3 × 2 × 2'); assert.equal(menus().at(-1).slots.find((x) => x.slot === 22).name, 'Los!');
+    await ev('Fancy', {a: 'areaclear'}); await ev('Fancy', {a: 'botm', bot: 'bot1'}); await ev('Fancy', {a: 'aream', bot: 'bot1'});
+    assert.equal(menus().at(-1).title, 'Bereich: 3 × 2 × 2'); assert.equal(menus().at(-1).slots.find((x) => x.slot === 22).name, 'Erst Arbeit wählen');
+    await ev('Fancy', {a: 'areaclear'}); await ev('Fancy', {a: 'shiftm', bot: 'bot1'}); ui.state('Fancy').form.block = null;
+    const nsm = submits.length; await ev('Fancy', {a: 'shiftgo'});
+    assert.equal(ui.state('Fancy').flash.text, 'Markierter Bereich: jetzt Los!'); assert.equal(menus().at(-1).slots.find((x) => x.slot === 22).name, 'Los!'); assert.equal(submits.length, nsm);
+    await ev('Fancy', {a: 'areaclear'});
     // guest: only her bots; her order fails in ground(), the ghost stays
     await ev('Midari', {a: 'aream', bot: 'bot1'}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nicht dein Bot');
     await ev('Midari', {a: 'shiftm', bot: 'bot1', shift: true}); assert.equal(ui.state('Midari').flash.text, 'Fehler: nicht dein Bot');

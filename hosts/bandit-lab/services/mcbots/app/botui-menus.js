@@ -63,6 +63,7 @@ function botPage(view, screen) {
     go(10, 'iron_axe', 'Holz holen', 'chop', '64 Stämme, nur in der Nähe'),
     slot(11, 'diamond_pickaxe', 'Abbauen…', {a: 'shiftm', bot}, {glint: ['mine', 'shift'].includes(s.job?.type), lore: ['Erz, Stein, Erde: du wählst']}),
     slot(12, 'diamond_shovel', 'Bereich…', {a: 'aream', bot}, {lore: ['Zwei Ecken zeigen, Arbeit wählen']}),
+    ...(view.mark?.area ? [slot(13, 'red_banner', 'Markiertes abbauen', {a: 'aream', bot, key: 'clear'}, {glint: true, lore: ['Baut den markierten Bereich ab', 'Danach: Los!']})] : []),
     slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}, {lore: ['Einen Bauplan bauen']}),
     go(15, 'chest', 'Einlagern', 'deposit', 'Legt alles in seine Kiste'),
     view.joined?.[bot] ? slot(16, 'oak_door', 'Wieder raus', {a: 'leave', bot}, {lore: [safe(`Hört bei ${view.joined[bot]} auf`, 40)]}) : slot(16, 'scaffolding', 'Mitmachen…', {a: 'joinm', bot}, {lore: ['Hilft bei einem Bau der anderen']}),

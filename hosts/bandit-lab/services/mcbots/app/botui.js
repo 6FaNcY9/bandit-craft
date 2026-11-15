@@ -218,10 +218,14 @@ const ACTIONS = {
   // Bereich: st.area is who/when, st.sel the two corners (staff clicks, see pick/consumePick) or the marked area.
   // From the bot page with no box and no marked area it goes straight into picking (nothing to choose yet).
   aream: async (st, data, ui, viewer) => {
-    const fromBot = st.screen?.name === 'botm';
-    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'now', key: fromBot ? null : st.area?.key ?? null};
+    const fromBot = st.screen?.name === 'botm' || !!data.mark;
+    const key = jobs.AREA.includes(data.key) ? data.key : fromBot ? null : st.area?.key ?? null; // "Markiertes abbauen" comes with its job
+    st.area = {bot: botOf(st, ui, viewer, data.bot), when: st.area?.when || 'now', key};
     st.screen = {name: 'aream'};
-    if (fromBot && !(st.sel.a && st.sel.b) && !markOf(ui, viewer).area) await ACTIONS.pick(st, {kind: 'area'}, ui, viewer);
+    if (!fromBot || (st.sel.a && st.sel.b)) return;
+    // A marked area is the one he means: load it at once (the owner looked for "dig what I marked", 2026-11-15).
+    if (markOf(ui, viewer).area) await ACTIONS.areafrom(st, {from: 'mark'}, ui, viewer);
+    else await ACTIONS.pick(st, {kind: 'area'}, ui, viewer);
   },
   // A job click only selects it; Los! (areago) starts it.
   areapick: (st, data, ui, viewer) => {
@@ -495,9 +499,13 @@ const ACTIONS = {
     await ACTIONS.close(st, data, ui, viewer);
     await ui.call('/actionbar', {player: viewer, text: data.kind === 'chest' ? 'Schleich und zeig mit dem Stab auf eine Kiste' : 'Zeig mit dem Stab auf einen Block'}).catch((e) => ui.log(`botui ${viewer}: actionbar: ${e.message}`));
   },
-  shiftgo: (st, data, ui, viewer) => {
+  shiftgo: async (st, data, ui, viewer) => {
     const f = formOf(st, ui, viewer), bot = oneBot(ui, viewer, {bot: f.bot});
     st.screen = {name: 'shiftm'};
+    if (!f.block && markOf(ui, viewer).area) { // no block but a marked area: he wants that area dug, which is Bereich
+      await ACTIONS.aream(st, {bot, key: 'clear', mark: 1}, ui, viewer);
+      return ui.flash(st, 'Markierter Bereich: jetzt Los!', true);
+    }
     if (!f.block) return ui.flash(st, 'Erst einen Block wählen');
     const inf = f.amount === 'inf', log = /_log$/.test(f.block);
     if (inf && !f.chest) return ui.flash(st, 'Erst eine Kiste wählen');
