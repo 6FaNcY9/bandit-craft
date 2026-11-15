@@ -96,6 +96,7 @@
 
   // clear: size limit, and the job digs everything but containers (and nothing outside the area rule)
   assert.deepEqual(VALIDATE.clear({x1: 31, y1: 23, z1: 31, x2: 0, y2: 0, z2: 0}), box(0, 0, 31, 31, 0, 23));
+  assert.deepEqual(misa.clearArgs({x1: 1, anywhere: 'yes'}, true), {x1: 1, anywhere: true}); assert.deepEqual(misa.clearArgs({x1: 1, anywhere: true}, false), {x1: 1}); // server.js submitFor
   assert.equal(VALIDATE.clear({x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1, anywhere: true}).anywhere, true); assert.equal('anywhere' in VALIDATE.clear({x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1, anywhere: 'yes'}), false);
   for (const a of [{x1: 0, y1: 0, z1: 0, x2: 32, y2: 0, z2: 0}, {x1: 0, y1: 0, z1: 0, x2: 0, y2: 24, z2: 0}, {x1: 0, y1: 0, z1: 0, x2: 0, y2: 0, z2: 32}]) assert.throws(() => VALIDATE.clear(a), /zu gross/);
   assert.equal(VALIDATE.schematic({file: 'a.litematic', origin: {x: 1, y: 2, z: 3}, confine: true}).confine, true);

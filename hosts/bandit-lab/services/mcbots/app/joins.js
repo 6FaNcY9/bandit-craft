@@ -56,7 +56,7 @@ function makeJoins({projects, orders, viewerBots, viewers, ground, submit, relea
       if (!j) throw new Error('macht bei nichts mit');
       submit(viewer, {bots: [bot], type: 'stop', args: {}});
       joined.delete(bot);
-      if (j.prev) submit(viewer, {bots: [bot], type: j.prev.type, args: j.prev.args});
+      if (j.prev) submit(viewer, {bots: [bot], type: j.prev.type, args: j.prev.args, stored: true}); // its own rights, not the leaver's
       else release(bot);
       return j.name;
     },

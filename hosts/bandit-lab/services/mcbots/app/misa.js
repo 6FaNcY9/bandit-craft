@@ -16,6 +16,10 @@ function boxRule(areas, name, box, free) {
   return null;
 }
 
+// Abbauen (Bereich) is confined to ground that names the bot unless the owner himself orders it (server.js submitFor):
+// only his order carries anywhere, whatever the caller sent.
+const clearArgs = ({anywhere, ...rest}, owner) => (owner ? {...rest, anywhere: true} : rest);
+
 // A guest's farms lie on its own ground: the order's box must pass boxRule. null for any other order.
 function groundRule(areas, name, type, a) {
   const box = type === 'treefarm' || type === 'wheatfarm' || type === 'cropfarm' || type === 'animalfarm' ? {x1: Math.min(a.x1, a.x2), y1: -64, z1: Math.min(a.z1, a.z2), x2: Math.max(a.x1, a.x2), y2: 320, z2: Math.max(a.z1, a.z2)} : null;
@@ -47,4 +51,4 @@ class Corners {
   }
 }
 
-module.exports = {forBot, boxRule, groundRule, saveRule, Corners};
+module.exports = {forBot, boxRule, clearArgs, groundRule, saveRule, Corners};

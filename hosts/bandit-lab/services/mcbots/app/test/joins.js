@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const {makeJoins, planName} = require('../joins');
 const {Projects} = require('../projects');
+const {clearArgs} = require('../misa');
 
 const viewerBots = {fancy8869: '*', MidariBread: ['MisaBot', 'EM_Trader']}, viewers = Object.keys(viewerBots);
 const projects = new Projects(''), orders = new Map(), submits = [], released = [];
@@ -14,7 +15,8 @@ projects.note('bot4', 'schematic', far); projects.note('bot5', 'shaft', {x1: 0, 
 // ground() as server.js: a guest's bot only where her areas allow (here: not far out)
 const ground = (viewer, bot, type, args) => { if (viewerBots[viewer] !== '*' && bot === 'MisaBot' && args.origin?.x > 1000) throw new Error('Fremdes Gelände'); };
 // submit as server.js: rights first, then the order replaces the project and becomes the owner order
-const submit = (viewer, {bots, type, args, replace}) => {
+const submit = (viewer, {bots, type, args, replace, stored}) => {
+  if (type === 'clear' && !stored) args = clearArgs(args, viewerBots[viewer] === '*');
   for (const b of bots) { if (viewerBots[viewer] !== '*' && !viewerBots[viewer].includes(b)) throw new Error('nicht dein Bot'); ground(viewer, b, type, args); }
   submits.push({viewer, bots, type, args, replace});
   for (const b of bots) {
@@ -57,4 +59,17 @@ j.join('fancy8869', 'EM_Trader', 'bot1');
 assert.deepEqual(j.joinable('MidariBread', 'MisaBot').map((g) => [g.name, g.bots]), [['Sorter', ['EM_Trader']]]);
 projects.pause('EM_Trader');
 assert.deepEqual(j.joined(), {});
+// a stored clear comes back with exactly the rights it was given: the owner leaving for the guest's bot adds no
+// anywhere (it would dig outside her ground), the owner's own anywhere clear keeps it even when the guest leaves
+{
+  const box = {x1: 0, y1: 60, z1: 0, x2: 3, y2: 62, z2: 3};
+  submit('MidariBread', {bots: ['MisaBot'], type: 'clear', args: {...box, anywhere: true}});
+  assert.deepEqual(orders.get('MisaBot').args, box, 'a guest cannot ask for anywhere');
+  j.join('fancy8869', 'MisaBot', 'bot1'); j.leave('fancy8869', 'MisaBot');
+  assert.deepEqual([submits.at(-1).viewer, submits.at(-1).type, submits.at(-1).args], ['fancy8869', 'clear', box]);
+  submit('fancy8869', {bots: ['EM_Trader'], type: 'clear', args: box});
+  assert.deepEqual(orders.get('EM_Trader').args, {...box, anywhere: true}, 'a fresh owner clear gets anywhere');
+  j.join('fancy8869', 'EM_Trader', 'bot1'); j.leave('MidariBread', 'EM_Trader');
+  assert.deepEqual([submits.at(-1).viewer, submits.at(-1).args], ['MidariBread', {...box, anywhere: true}]);
+}
 console.log('joins ok');
