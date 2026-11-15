@@ -66,8 +66,15 @@ assert.ok(MENUS.has('ov'));
   assert.match(s.find((x) => x.head === 'zed').lore.join('|'), /♥ 18\/20 · Essen 15\/20.*Kiste: 1 2 3/);
   assert.deepEqual(s.filter((x) => x.glint).map((x) => x.item), ['iron_axe']);
   assert.match(page({name: 'zed', online: true, job: null}).slots[0].lore.join('|'), /Kiste: keine/);
-  assert.deepEqual(s.map((x) => [x.slot, x.name]), [[0, 'zed'], [2, 'Komm her'], [3, 'Folg mir'], [8, 'Stopp'], [10, 'Holz holen'], [11, 'Abbauen…'], [12, 'Bereich…'], [14, 'Bauen…'], [15, 'Einlagern'], [22, 'Mehr…'], [26, 'Zurück']]);
-  assert.deepEqual([at(2), at(3), at(8), at(10), at(11), at(12), at(14), at(15), at(22)].map((x) => x.lore[0]), ['Der Bot kommt zu dir', 'Der Bot läuft dir nach', 'Hört sofort auf', '64 Stämme, nur in der Nähe', 'Erz, Stein, Erde: du wählst', 'Zwei Ecken zeigen, Arbeit wählen', 'Einen Bauplan bauen', 'Legt alles in seine Kiste', 'Farmen, Herstellen, Bewachen, Kiste']);
+  assert.deepEqual(s.map((x) => [x.slot, x.name]), [[0, 'zed'], [2, 'Komm her'], [3, 'Folg mir'], [8, 'Stopp'], [10, 'Holz holen'], [11, 'Abbauen…'], [12, 'Bereich…'], [14, 'Bauen…'], [15, 'Einlagern'], [16, 'Mitmachen…'], [22, 'Mehr…'], [26, 'Zurück']]);
+  assert.deepEqual([at(2), at(3), at(8), at(10), at(11), at(12), at(14), at(15), at(16), at(22)].map((x) => x.lore[0]), ['Der Bot kommt zu dir', 'Der Bot läuft dir nach', 'Hört sofort auf', '64 Stämme, nur in der Nähe', 'Erz, Stein, Erde: du wählst', 'Zwei Ecken zeigen, Arbeit wählen', 'Einen Bauplan bauen', 'Legt alles in seine Kiste', 'Hilft bei einem Bau der anderen', 'Farmen, Herstellen, Bewachen, Kiste']);
+  assert.deepEqual(at(16).payload, {a: 'joinm', bot: 'zed'});
+  const out = page(chopper, {joined: {zed: 'Sorter'}}).slots.find((x) => x.slot === 16);
+  assert.deepEqual([out.name, out.lore, out.payload], ['Wieder raus', ['Hört bei Sorter auf'], {a: 'leave', bot: 'zed'}]);
+  // Mitmachen: one entry per build, the payload names a bot of it (the args stay on the hub)
+  const jm = menu({name: 'joinm', bot: 'zed'}, bv(chopper, {joinable: [{name: 'Sorter', bots: ['bot1', 'bot2'], at: {x: -308, y: 111, z: 11}}]})).menu;
+  assert.deepEqual(jm.slots.map((x) => [x.slot, x.name, x.payload, x.lore?.[0]]), [[0, 'Mitbauen: Sorter', {a: 'join', bot: 'zed', from: 'bot1'}, 'bot1, bot2 · bei -308 111 11'], [8, 'Zurück', {a: 'botm', bot: 'zed'}, undefined]]);
+  assert.equal(jm.rows, 1); for (const x of jm.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
   assert.deepEqual(at(11).payload, {a: 'shiftm', bot: 'zed'}); assert.ok(!at(11).glint);
   assert.equal(page({...chopper, job: {type: 'shift'}}).slots.find((x) => x.slot === 11).glint, true);
   assert.deepEqual(at(10).payload, {a: 'go', bot: 'zed', job: 'chop'}); assert.equal(at(14).item, 'bricks'); assert.deepEqual(at(12).payload, {a: 'aream', bot: 'zed'});

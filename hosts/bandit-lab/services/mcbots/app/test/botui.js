@@ -507,6 +507,25 @@ async function fake() {
     }
     end();
   }
+  { // Mitmachen: none running flashes, join and leave go through the hub's joins (rights checked there too) and flash
+    const calls = [], snaps = [{name: 'bot1', online: true, health: 20, job: null}, {name: 'MisaBot', online: true, health: 20, job: null, guest: true}];
+    let list = [], joined = {};
+    const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], idle: {get: () => null}, joined: () => joined, joinable: (v, b) => { calls.push(['list', v, b]); return list; },
+      join: (v, b, from) => { calls.push(['join', v, b, from]); joined = {[b]: 'Sorter'}; return 'Sorter'; }, leave: (v, b) => { calls.push(['leave', v, b]); joined = {}; return 'Sorter'; }};
+    const {f, ui, end} = await mk({screens: require('../botui-screens'), api});
+    const ev = (player, data) => ui.handle({type: 'click', player, data});
+    await ev('Fancy', {a: 'joinm', bot: 'MisaBot'});
+    assert.equal(ui.state('Fancy').flash.text, 'Gerade läuft kein Bau'); assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'MisaBot'});
+    list = [{name: 'Sorter', bots: ['bot1'], at: {x: 1, y: 2, z: 3}}];
+    await ev('Fancy', {a: 'joinm', bot: 'MisaBot'}); assert.equal(f.of('/menu').at(-1).body.title, 'MisaBot: mitmachen');
+    await ev('Fancy', {a: 'join', bot: 'MisaBot', from: 'bot1'});
+    assert.equal(ui.state('Fancy').flash.text, 'MisaBot macht mit: Sorter'); assert.deepEqual(calls.at(-1), ['join', 'Fancy', 'MisaBot', 'bot1']);
+    assert.equal(f.of('/menu').at(-1).body.slots.find((x) => x.slot === 16).name, 'Wieder raus');
+    await ev('Fancy', {a: 'leave', bot: 'MisaBot'}); assert.equal(ui.state('Fancy').flash.text, 'MisaBot ist wieder raus');
+    const n = calls.length;
+    await ev('Midari', {a: 'join', bot: 'bot1', from: 'MisaBot'}); assert.match(ui.state('Midari').flash.text, /nicht dein Bot/); assert.equal(calls.length, n);
+    end();
+  }
   { // Abbauen hopper: form defaults, amount cycle, the four shiftgo orders, point-to-pick, expiry, staff on a block
     const submits = [], snaps = [{name: 'bot1', online: true, health: 20, activity: 'idle', job: null, chest: {x: 9, y: 9, z: 9}}, {name: 'MisaBot', online: true, health: 10, activity: 'idle', job: null, guest: true}];
     const api = {snapshots: () => snaps, places: () => [], schematics: async () => [], submit: (v, j) => { submits.push(j); return {ok: true, unreached: []}; }, idle: {get: () => null, set: () => ({})}};

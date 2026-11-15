@@ -49,6 +49,7 @@ function mk(viewer) {
       if (type !== 'stop') { if (!VALIDATE[type]) throw new Error(`unknown job type: ${type}`); VALIDATE[type](args || {}); }
       return {ok: true, unreached: []};
     }, stopAll: () => ({keeperOff: true}), resume() {}, sidebar() {},
+    joinable: () => [{name: 'Haus', bots: ['bot2'], at: {x: 5, y: 64, z: 5}}], join: () => 'Haus', leave: () => 'Haus', joined: () => ({}), // Mitmachen (server.js joins)
     savePlace() {}, uploadLink: (v) => `https://x.test/u?t=${v}`, groundOk: () => true, markers: () => [], presence() {}};
   const ui = new BotUi({url: 'http://plugin.test', token: 't', viewerBots: {Fancy: '*', Midari: ['MisaBot', 'EM_Trader'], Leer: ['gone']}, api, fetch, log: (m) => logs.push(m), now: () => (t += 1000)});
   const ev = (type, gaze, extra = {}) => ui.handle({id: ++id, type, player: viewer, pos: [2, 64, 2], dim: 'overworld', yaw: 0, gaze, ...extra});

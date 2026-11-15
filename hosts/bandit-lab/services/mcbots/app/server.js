@@ -297,6 +297,16 @@ function idleJob(bot, choice) {
 const uploads = new uploadsLib.Uploads();
 const uploadPage = fs.readFileSync(path.join(__dirname, 'public', 'upload.html'));
 const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui');
+// The in-game submit: the viewer's bots only, on ground() they may use.
+function submitFor(viewer, {bots, type, args, replace}) {
+  for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
+  const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace});
+  for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
+  return out;
+}
+// Mitmachen: the same rights an order from that viewer for that bot would need (the bot, the plan, ground()).
+const joins = require('./joins').makeJoins({projects, orders: ownerOrders, submit: submitFor, release: (bot) => idleHeld.delete(bot),
+  viewerBots: cfg.viewerBots, viewers: cfg.ingameViewers, ground});
 const placedBots = () => placeBots([...runners.values()].map((r) => r.snapshot()), {vhost: process.env.MC_VHOST, guests: cfg.guestBots, mainBots: cfg.mainBots});
 const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.password, viewerBots: cfg.viewerBots, log: (m) => log('botui', m),
   api: {
@@ -306,12 +316,8 @@ const botui = cfg.botuiUrl ? new BotUi({url: cfg.botuiUrl, token: cfg.rcon.passw
     groundOk: (viewer, bot, type, args) => { try { ground(viewer, bot, type, args); return true; } catch { return false; } },
     resume: (viewer, bot) => { const p = projects.get(bot); if (p) ground(viewer, bot, p.type, p.args); resumeProject(bot); },
     markers: (viewer) => markersOf(placedBots(), cfg.viewerBots[viewer] || []),
-    submit: (viewer, {bots, type, args, replace}) => {
-      for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
-      const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace});
-      for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
-      return out;
-    },
+    submit: submitFor,
+    joinable: joins.joinable, join: joins.join, leave: joins.leave, joined: joins.joined,
     stopAll: (viewer) => {
       const bots = stopTargets(cfg.viewerBots, viewer, [...runners.keys()]);
       return bots.length ? submitJob({bots, type: 'stop'}) : {ok: true, keeperOff: false, unreached: []};

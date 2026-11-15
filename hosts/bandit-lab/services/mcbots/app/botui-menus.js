@@ -65,6 +65,7 @@ function botPage(view, screen) {
     slot(12, 'diamond_shovel', 'Bereich…', {a: 'aream', bot}, {lore: ['Zwei Ecken zeigen, Arbeit wählen']}),
     slot(14, 'bricks', 'Bauen…', {a: 'schemm', bot}, {lore: ['Einen Bauplan bauen']}),
     go(15, 'chest', 'Einlagern', 'deposit', 'Legt alles in seine Kiste'),
+    view.joined?.[bot] ? slot(16, 'oak_door', 'Wieder raus', {a: 'leave', bot}, {lore: [safe(`Hört bei ${view.joined[bot]} auf`, 40)]}) : slot(16, 'scaffolding', 'Mitmachen…', {a: 'joinm', bot}, {lore: ['Hilft bei einem Bau der anderen']}),
     slot(22, 'book', 'Mehr…', {a: 'morem', bot}, {lore: ['Farmen, Herstellen, Bewachen, Kiste']}), back(26, 'ov')]};
 }
 
@@ -87,6 +88,14 @@ function morePage(view, screen) {
     ...(view.owner ? [go(14, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste')] : []),
     slot(18, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(19, 'barrel', 'Inventar', {a: 'invm', bot}),
     slot(20, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]})]};
+}
+
+// Mitmachen: one entry per running build of other bots, as the hub lists them for this viewer and bot (names only).
+function joinPage(view, screen) {
+  const bot = snapOf(view, screen.bot).name;
+  const slots = (view.joinable || []).slice(0, 7).map((g, i) => slot(i, 'bricks', `Mitbauen: ${g.name}`, {a: 'join', bot, from: g.bots[0]}, {lore: [safe(`${g.bots.join(', ')} · bei ${g.at.x} ${g.at.y} ${g.at.z}`, 40)]}));
+  slots.push(back(8, 'botm', bot));
+  return {type: 'chest', title: `${safe(bot, 20)}: mitmachen`, rows: 1, slots};
 }
 
 // Bewachen…: four radii; click guards where the viewer stands, Shift where they look, the marked spot has its own slot.
@@ -389,7 +398,7 @@ function kartePage(view) {
 }
 
 // Screens drawn as menus.
-const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, enchm: enchPage, botpick: botPickPage, morem: morePage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, farmm: farmPage, zielm: zielPage, kartem: kartePage};
+const RENDER = {ov: overview, botm: botPage, idlem: idlePage, invm: inventoryPage, chestm: chestPage, chestjobs: chestJobsPage, whom: whomPage, huntm: huntPage, shiftm: shiftPage, gridm: gridPage, craftm: craftPage, smeltm: smeltPage, enchm: enchPage, botpick: botPickPage, morem: morePage, joinm: joinPage, guardm: guardPage, placem: placePage, amountm: amountPage, schemm: schemPage, buildm: buildPage, aream: areaPage, farmm: farmPage, zielm: zielPage, kartem: kartePage};
 const MENUS = new Set(Object.keys(RENDER));
 const menu = (screen, view) => ({menu: RENDER[screen.name](view, screen)});
 

@@ -197,6 +197,23 @@ const ACTIONS = {
     st.screen = {name: 'shiftm'};
   },
   setfar: (st, data, ui, viewer) => { formOf(st, ui, viewer).far = !st.form.far; st.screen = {name: 'shiftm'}; },
+  // Mitmachen: the hub lists and checks the builds (server.js joins); the payload names a bot of the build, never its args.
+  joinm: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    st.screen = ui.api.joinable(viewer, bot).length ? {name: 'joinm', bot} : {name: 'botm', bot};
+    if (st.screen.name === 'botm') ui.flash(st, 'Gerade läuft kein Bau');
+  },
+  join: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    st.screen = {name: 'botm', bot};
+    ui.flash(st, `${bot} macht mit: ${ui.api.join(viewer, bot, String(data.from))}`, true);
+  },
+  leave: (st, data, ui, viewer) => {
+    const bot = oneBot(ui, viewer, data);
+    st.screen = {name: 'botm', bot};
+    ui.api.leave(viewer, bot);
+    ui.flash(st, `${bot} ist wieder raus`, true);
+  },
   morem: (st, data, ui, viewer) => { st.screen = {name: 'morem', bot: oneBot(ui, viewer, data)}; },
   // Bereich: st.area is who/when, st.sel the two corners (staff clicks, see pick/consumePick) or the marked area.
   // From the bot page with no box and no marked area it goes straight into picking (nothing to choose yet).
@@ -777,7 +794,7 @@ class BotUi {
     if (st.flash && st.flash.until < this.now()) st.flash = null;
     const snaps = this.api.snapshots().filter((s) => allowed === '*' || allowed.includes(s.name));
     if (this.screens.DIALOGS && !menus.MENUS.has(st.screen.name) && !this.screens.DIALOGS.has(st.screen.name)) st.screen = {name: 'ov'}; // a stale state never breaks a viewer
-    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, area: st.area, farm: st.farm, sel: st.sel, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
+    if (menus.MENUS.has(st.screen.name)) return menus.menu(st.screen, {viewer, snaps, allowed, owner: allowed === '*', idle: this.api.idle, projects: this.api.projects?.(), joined: this.api.joined?.() || {}, joinable: st.screen.name === 'joinm' ? this.api.joinable(viewer, st.screen.bot) : [], ctx: st.ctx, flash: st.flash, form: st.form, hunt: st.hunt, make: st.make, recent: st.recent, recentPlans: st.recentPlans, build: st.build, area: st.area, farm: st.farm, sel: st.sel, schematics: ['schemm', 'buildm'].includes(st.screen.name) ? await this.api.schematics(viewer) : [], places: this.api.places(), mark: markOf(this, viewer), traders: this.api.traders?.() || [], keeper: this.api.keeper, traderChests: this.api.traderChests, mapState: st.mapState});
     return this.screens.render(st.screen, {viewer, snaps, allowed, owner: allowed === '*', keeper: this.api.keeper, flash: st.flash});
   }
 
