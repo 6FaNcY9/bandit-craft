@@ -69,6 +69,13 @@ assert.ok(cmds.includes('setblock -317 105 -21 minecraft:crafting_table'));
   for (const z of [15, 21, 27, 33, 39, 45]) assert.ok(!has.has(key(-312, 122, z)) && cells.some((b) => b.x === -313 && b.y === 122 && b.z === z && b.name === 'iron_bars'));
   assert.ok(!has.has(key(-309, 114, 12)), 'bee nest');
   assert.ok(cells.some((b) => b.x === -302 && b.y === 120 && b.z === 51), 'button platform');
+  // nothing new at z 7 (depot, forecourt; only the stairs t) or at x -291 north of z 31 (tower, tower path)
+  assert.ok(cells.every((b) => b.z !== 7 || (b.x >= -311 && b.x <= -310)), 'z 7');
+  assert.ok(!cells.some((b) => b.x === -291 && b.z <= 30), 'x -291');
+  // west buttresses between the slits, capped with a stair leaning on the wall; nothing else outside x -313
+  const caps = cells.filter((b) => b.x === -314 && b.name === 'stone_brick_stairs');
+  assert.deepEqual(caps.map((b) => [b.z, b.y, b.props.facing]), [12, 18, 24, 30, 36, 42, 48].map((z) => [z, 124, 'east']));
+  assert.ok(cells.every((b) => b.x >= -313 || [12, 18, 24, 30, 36, 42, 48].includes(b.z)), 'only buttresses at x -314');
   // every lantern stands on or hangs from a block
   for (const b of cells.filter((c) => c.name === 'lantern')) assert.ok(has.has(key(b.x, b.props.hanging === 'true' ? b.y + 1 : b.y - 1, b.z)), `lantern ${key(b.x, b.y, b.z)}`);
   // palette: the spec's blocks only

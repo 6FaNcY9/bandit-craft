@@ -11,8 +11,8 @@ const MODULES = [ // build order: the parts without deepslate first (it has to b
   {id: 'g2', x1: -311, x2: -309, y1: 115, y2: 129, z1: 31, z2: 50},
   {id: 'e2f', x1: -293, x2: -292, y1: 94, y2: 109, z1: 31, z2: 50},
   {id: 'n', x1: -313, x2: -292, y1: 106, y2: 129, z1: 8, z2: 9},
-  {id: 'w1', x1: -313, x2: -312, y1: 106, y2: 129, z1: 10, z2: 30},
-  {id: 'w2', x1: -313, x2: -312, y1: 106, y2: 129, z1: 31, z2: 50},
+  {id: 'w1', x1: -314, x2: -312, y1: 106, y2: 129, z1: 10, z2: 30}, // x -314: buttresses
+  {id: 'w2', x1: -314, x2: -312, y1: 106, y2: 129, z1: 31, z2: 50},
   {id: 'sf', x1: -313, x2: -292, y1: 94, y2: 115, z1: 51, z2: 53},
   {id: 's', x1: -313, x2: -292, y1: 116, y2: 129, z1: 51, z2: 53},
   {id: 'e1', x1: -293, x2: -292, y1: 106, y2: 129, z1: 10, z2: 30},
@@ -34,12 +34,14 @@ function wallCell(x, y, z) {
     return [x === -312 && y >= 116 ? 'deepslate_bricks' : 'cobblestone']; // only the west inner face is seen (gallery)
   }
   if (y === 115 || y === 129) return ['polished_deepslate'];
-  return [(along + y) % 3 === 0 ? 'cobbled_deepslate' : 'deepslate_bricks'];
+  // Hashed, not striped (architect review 2026-11-15): rougher low, cleaner high, about as much cobbled as before.
+  const h = Math.imul(x * 73856093 ^ y * 19349663 ^ z * 83492791, 0x9E3779B1) >>> 24;
+  return [h < (y <= 113 ? 150 : y <= 121 ? 80 : 40) ? 'cobbled_deepslate' : 'deepslate_bricks'];
 }
 
 function shell() {
   const cells = new Map(), put = (x, y, z, name, props) => cells.set(`${x},${y},${z}`, {x, y, z, name, ...(props ? {props} : {})});
-  const ring = (x, z) => x <= -312 || x >= -293 || z <= 9 || z >= 52;
+  const ring = (x, z) => x >= -313 && x <= -292 && (x <= -312 || x >= -293 || z <= 9 || z >= 52);
   // walls with their footings (n, w1, w2, e1, e2, e2f, sf, s)
   for (const m of MODULES.filter((m) => /^(n|w1|w2|e1|e2|e2f|sf|s)$/.test(m.id))) {
     for (let x = m.x1; x <= m.x2; x++) for (let y = m.y1; y <= m.y2; y++) for (let z = m.z1; z <= m.z2; z++) {
@@ -50,6 +52,11 @@ function shell() {
   for (const z of [42, 48]) for (const y of [101, 107]) put(-293, y, z, 'lantern', LANTERN); // the deep east gap (ground falls from z 40)
   for (const x of [-310, -304, -298]) for (const y of [105, 111]) put(x, y, 51, 'lantern', LANTERN); // under the sorter's south end
   for (let x = -311; x <= -300; x++) put(x, 120, 51, 'spruce_planks'); // platform for the button -302 121 50
+  // west buttresses between the slits: 1 deep, stone bricks with a stair cap leaning on the wall
+  for (const z of [12, 18, 24, 30, 36, 42, 48]) {
+    for (let y = 106; y <= 123; y++) put(-314, y, z, y < 110 ? 'cobblestone' : 'stone_bricks');
+    put(-314, 124, z, 'stone_brick_stairs', {facing: 'east', half: 'bottom', shape: 'straight', waterlogged: 'false'});
+  }
   // openings
   for (const x of [-311, -310]) for (let y = 116; y <= 118; y++) for (const z of [8, 9]) cells.delete(`${x},${y},${z}`); // north door
   for (const z of [15, 21, 27, 33, 39, 45]) for (const y of [122, 123]) { put(-313, y, z, 'iron_bars'); cells.delete(`-312,${y},${z}`); }
