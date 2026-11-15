@@ -119,6 +119,12 @@ Core wall: 3 thick, wall-walk at +8. Turrets 7 x 7 x 16 centred on (-336,-14), (
 | A7 | Main axis path | -313 | -32 | -311 | 7 | – | – | 3 wide |
 | A8 | Sorter path | -314 | 8 | -312 | 31 | 109 | – | |
 | A9 | Tower path | -291 | 8 | -286 | 12 | 111 | – | |
+| T1 | Spruce tree farm | -332 | -55 | -319 | -42 | 95 | – | outside the walls, bot1 `treefarm` with its own depot chest (`2026-11-15-castle-tree-farms-design.md`) |
+| T2 | Tree farm (reserved) | -351 | -55 | -338 | -42 | 95 | – | next wood once saplings exist |
+| T3 | Tree farm (reserved) | -305 | -55 | -292 | -42 | 95 | – | low spots y 85-87 near z -54..-51 |
+
+A2/M1 also keeps the air above it free up to y 140 (later TNT tree machine: no roof, bridge or wall-walk across it,
+and a free corridor from its west edge to the shell at x -292).
 
 The architect's "outer castle wall" of the owner's words is A4 (low wall around the bot quarter) plus the core
 wall K5; the bot quarter sits between them.
