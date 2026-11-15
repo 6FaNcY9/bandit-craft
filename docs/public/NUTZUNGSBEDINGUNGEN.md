@@ -1,6 +1,6 @@
 # Nutzungsbedingungen / Terms of Use
 
-Stand: 11.11.2026
+Stand: 15.11.2026
 
 Die deutsche Fassung ist maßgeblich; die englische Fassung steht darunter.
 
@@ -28,8 +28,9 @@ Bandit Anarchy ist eine „Anarchy“-Überlebenswelt mit 20 Plätzen. Die Welt 
   Bauwerke, auch nicht für die des Betreibers oder von Bekannten.
 - **Automatische Ereignisse:** Der Server startet von selbst Ereignisse (Versorgungsabwürfe, Bosse,
   Ruinen, Meteoriten, Stürme, Blutnächte). Spieler können sie weder kaufen noch steuern.
-- **Eingriffe des Betreibers** gibt es nur, um die drei Regeln durchzusetzen (Stummschalten, Sperren,
-  Entfernen rechtswidriger Inhalte nach Meldung) und um den Server technisch zu betreiben.
+- **Eingriffe des Betreibers** gegen andere Spielende gibt es nur, um die drei Regeln durchzusetzen
+  (Stummschalten, Sperren, Entfernen rechtswidriger Inhalte nach Meldung) und um den Server technisch
+  zu betreiben.
 
 Andere Spielende können dir alles nehmen, was du gebaut oder gesammelt hast. Das ist hier Teil des
 Spiels.
@@ -136,8 +137,8 @@ Bandit Anarchy is an "anarchy" survival world with 20 slots. The world is never 
   including those of the operator or of people the operator knows.
 - **Automatic events:** the server starts events by itself (supply drops, bosses, ruins, meteors,
   storms, blood nights). Players can neither buy nor steer them.
-- **The operator intervenes** only to enforce the three rules (muting, banning, removing illegal
-  content once reported) and to run the server technically.
+- **The operator intervenes** against other players only to enforce the three rules (muting, banning,
+  removing illegal content once reported) and to run the server technically.
 
 Other players can take everything you have built or collected. Here that is part of the game.
 
@@ -211,42 +212,3 @@ consumer protection rules of the country where you have your habitual residence 
 ## 14. Not an official Minecraft product
 
 Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
-
----
-
-## Offene Punkte für den Betreiber
-
-1. **Widerspruch zu den Werbetexten.** Die Launch-Texte versprechen „keine Eingriffe“. Die Pflicht,
-   rechtswidrige Inhalte nach Meldung zu entfernen, umfasst auch Bauwerke und Schilder (z. B.
-   NS-Symbole, strafbar nach dem Verbotsgesetz). Dafür braucht es einen Eingriff in die Welt. Punkt 3
-   behält ihn ausdrücklich vor. `docs/runbooks/minecraft/PUBLIC-LAUNCH.md` verlangt, dass eine solche
-   Ausnahme in allen Texten genannt wird; die Werbetexte entsprechend anpassen. Entfernt wird mit
-   den Operator-Rechten des Betreibers (seit 2026-11-11) oder über die Konsole.
-2. **Digital Services Act.** Ob ein kostenloser privater Server ein „Vermittlungsdienst“ (Hosting) im
-   Sinne des DSA ist, ist unsicher. Fehlt jedes Entgelt, liegt eher kein Dienst der
-   Informationsgesellschaft vor. Spätestens mit dem Store prüfen: Melde- und Abhilfeverfahren
-   (Art. 16), Begründung von Sperren (Art. 17), Kontaktstellen (Art. 11, 12) und Angaben in den
-   Bedingungen (Art. 14). Punkt 5 und 6 sind so gehalten, dass sie sich leicht erweitern lassen.
-3. **Verbraucherrecht.** Solange nichts verkauft wird, ist der Betreiber vermutlich kein Unternehmer
-   nach § 1 KSchG; sicher ist das nicht. Die Haftungsklausel (Punkt 9) ist so gefasst, dass sie
-   § 6 Abs. 1 Z 9 KSchG auch dann standhält. Mit dem Store neu prüfen: die Änderungsklausel (Punkt
-   12; keine Zustimmungsfiktion verwenden), das Ermessen bei Sperren für zahlende Unterstützer, das
-   Transparenzgebot (§ 6 Abs. 3 KSchG) und den Gerichtsstand (§ 14 KSchG).
-4. **Store und „kein Ersatz“.** Punkt 7 und 8 sind für ein kostenloses Angebot geschrieben. Für
-   gekaufte kosmetische Extras lassen sich Ansprüche bei Einstellung des Servers oder bei einer
-   Sperre nicht einfach ausschließen (Gewährleistung für digitale Leistungen nach VGG,
-   Rücktrittsrecht nach FAGG). Diese Punkte vor dem Verkaufsstart eigens regeln.
-5. **Zustimmung zu den Bedingungen.** Die Zustimmung durch Verbinden (schlüssig, § 863 ABGB) setzt
-   voraus, dass die Bedingungen vorher zugänglich sind. Den Link in Serverlisten, im MOTD oder in
-   einer Nachricht beim ersten Betreten anzeigen.
-6. **Altersgrenze.** Ich habe keine Mindestalter-Regel eingeführt, nur eine Bitte an Unter-14-Jährige
-   (Grenze zwischen Unmündigen und mündigen Minderjährigen nach § 21 Abs. 2 ABGB). Ob ein
-   Unter-14-Jähriger den unentgeltlichen Nutzungsvertrag allein wirksam schließt (§ 170 Abs. 3 ABGB),
-   ist unsicher. Entscheiden, ob eine empfohlene Altersgrenze (z. B. 14 oder 16) genannt werden soll.
-   Durchsetzen lässt sie sich ohne Altersprüfung nicht.
-7. **Fristen ohne Grundlage in den Fakten.** Für Einwände gegen Sperren nennen die Texte keine
-   Antwortfrist; die 48 Stunden gelten laut Fakten nur für Meldungen. Gegebenenfalls ergänzen.
-8. **„Auch nicht die des Betreibers“ (Punkt 3).** Stammt aus der Spec („no protected owner area“).
-   Wird je ein geschützter Bereich eingerichtet, diesen Satz und die Werbetexte zuerst ändern.
-9. **Discord-Ankündigung von Änderungen (Punkt 12).** Setzt voraus, dass es einen Discord gibt; sonst
-   den Kanal anpassen.

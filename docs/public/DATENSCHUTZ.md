@@ -1,6 +1,6 @@
 # Datenschutzerklärung / Privacy Policy
 
-Stand: 11.11.2026
+Stand: 15.11.2026
 
 Diese Erklärung gilt für den Minecraft-Server Bandit Anarchy (`bandit.atmosphaere.at`) und für diese
 Seiten. Sie sagt dir, welche Daten über dich anfallen, wofür, auf welcher Rechtsgrundlage und wie
@@ -25,10 +25,10 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
   und deinen Spielstand in der Welt.
 - Was du im öffentlichen Spielchat schreibst, wann du kommst und gehst und deine Todesmeldungen
   erscheinen mit deinem Minecraft-Namen auch im öffentlichen Discord-Kanal #ingame-chat und werden
-  dort nach 30 Tagen automatisch gelöscht (Punkt 6).
+  dort nach 30 Tagen automatisch gelöscht (Punkt 5).
 - Keine Cookies, kein Tracking, keine Analyse-Werkzeuge, kein Newsletter, keine Werbung. Wir
   verkaufen keine Daten und geben sie nur so weiter, wie unten beschrieben.
-- Server- und Chatprotokolle werden nach etwa 30 Tagen gelöscht.
+- Server- und Chatprotokolle werden nach etwa 30 Tagen gelöscht. Verschlüsselte Backups behalten Kopien länger (siehe „Speicherdauer im Überblick“).
 - Die Welt wird nie zurückgesetzt. Daten, die an dein Konto gebunden sind, löschen wir auf Wunsch.
   Blöcke, die du in die gemeinsame Welt gesetzt hast, können wir weder dir zuordnen noch entfernen.
 
@@ -55,7 +55,8 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
   Inhalte nachvollziehen und entfernen, die Serverregeln durchsetzen.
 - **Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO. Unser berechtigtes Interesse: ein sicherer und
   stabiler Betrieb und der Schutz der Spielenden vor rechtswidrigen Inhalten, Drohungen und Doxxing.
-- **Speicherdauer:** etwa 30 Tage, danach werden die Protokolle gelöscht.
+- **Speicherdauer:** etwa 30 Tage, bei offener Meldung bis zu ihrem Abschluss; danach werden die
+  Protokolle gelöscht.
 
 ### 3. Sperren und Stummschaltungen
 
@@ -65,24 +66,13 @@ Datenschutzbeauftragter ist nicht bestellt; die Voraussetzungen des Art. 37 DSGV
   durchsetzen und die anderen Spielenden schützen.
 - **Speicherdauer:** solange die Maßnahme gilt und zu ihrer Durchsetzung nötig ist.
 
-### 4. Betriebsstatistiken
-
-- **Daten:** aus den Protokollen abgeleitete Werte: Spielzeit, Sitzungen und automatische
-  Spielereignisse.
-- **Zweck:** nur der Betrieb des Servers (Auslastung, Stabilität, Planung). Die Werte werden nicht
-  pro Person veröffentlicht und nicht weitergegeben.
-- **Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO. Unser berechtigtes Interesse: den Server mit
-  begrenzten Mitteln stabil und planbar betreiben.
-- **Speicherdauer:** höchstens 90 Tage. Auf Wunsch löschen wir deine Werte
-  vorher.
-
-### 5. Besuch dieser Seiten
+### 4. Besuch dieser Seiten
 
 Diese Seiten liegen auf GitHub (GitHub, Inc.). Beim Aufruf kann GitHub deine IP-Adresse und
 technische Zugriffsdaten nach seiner eigenen Datenschutzerklärung verarbeiten. Wir selbst setzen
 dort keine Cookies und keine Analyse-Werkzeuge ein.
 
-### 6. Chat-Brücke zu Discord
+### 5. Chat-Brücke zu Discord
 
 Eine Chat-Brücke auf dem Spielserver verbindet den Spielchat in Echtzeit mit dem Kanal #ingame-chat
 auf unserem öffentlichen Discord-Server.
@@ -109,9 +99,8 @@ auf unserem öffentlichen Discord-Server.
   also etwas länger dauern. Was Mitglieder selbst in #ingame-chat schreiben, löscht die Brücke
   nicht. Einzelne übertragene Nachrichten löschen wir auf Wunsch früher in Discord; schreib dafür
   an admin@atmosphaere.at.
-- **Abschalten:** Für einzelne Spielende lässt sich die Brücke nicht abschalten. Was nicht in
-  Discord erscheinen soll, schreib nicht in den öffentlichen Spielchat. Die Zeilen zum Betreten und
-  Verlassen und die Todesmeldungen werden immer übertragen.
+- **Abschalten:** Auf Wunsch sendet die Brücke für dein Konto nichts mehr. Schreib dafür an
+  admin@atmosphaere.at.
 
 ## Wer Daten erhält
 
@@ -128,12 +117,13 @@ auf unserem öffentlichen Discord-Server.
   baust. Das ist der Zweck eines Mehrspieler-Servers.
 - **Behörden und Gerichte:** nur wenn wir gesetzlich dazu verpflichtet sind.
 - **Discord:** Discord ist ein eigener Dienst von Discord Inc. mit eigener Datenschutzerklärung; für
-  deine Nutzung von Discord, auch auf unserem Discord-Server, gilt diese Erklärung nicht. Die
-  Chat-Brücke (Punkt 6) gibt aber Daten aus dem Spiel an Discord weiter: öffentliche
-  Chatnachrichten mit Minecraft-Namen, die Zeilen zum Betreten und Verlassen und Todesmeldungen.
-  Discord Inc. speichert sie als eigener Verantwortlicher. Im Kanal #ingame-chat sehen sie alle
-  Mitglieder unseres Discord-Servers; er ist öffentlich, Mitglied werden kann jeder mit dem
-  Einladungslink. Umgekehrt sehen die Spielenden im Spiel, was Mitglieder in #ingame-chat schreiben.
+  deine Nutzung von Discord, auch auf unserem Discord-Server, gilt die Datenschutzerklärung von
+  Discord, außer für das, was Punkt 5 zur Chat-Brücke beschreibt. Die Chat-Brücke gibt Daten aus dem
+  Spiel an Discord weiter: öffentliche Chatnachrichten mit Minecraft-Namen, die Zeilen zum Betreten
+  und Verlassen und Todesmeldungen. Das Senden über die Brücke verantworten wir. Discord Inc.
+  speichert sie als eigener Verantwortlicher. Im Kanal #ingame-chat sehen sie alle Mitglieder
+  unseres Discord-Servers; er ist öffentlich, Mitglied werden kann jeder mit dem Einladungslink.
+  Umgekehrt sehen die Spielenden im Spiel, was Mitglieder in #ingame-chat schreiben.
 
 ## Übermittlung außerhalb der EU
 
@@ -143,7 +133,7 @@ der EU verarbeitet werden. Für diesen Anbieter gibt es keinen Angemessenheitsbe
 Garantien nach Art. 46 DSGVO; dein Schutz kann dort geringer sein als in der EU. Ohne den Tunnel
 kannst du dich nicht mit dem Server verbinden; wir stützen die Übermittlung deshalb auf Art. 49
 Abs. 1 lit. b DSGVO (für die Erfüllung des Nutzungsvertrags erforderlich).
-Außerdem übermitteln wir Daten außerhalb der EU über die Chat-Brücke (Punkt 6): Sie schickt öffentliche
+Außerdem übermitteln wir Daten außerhalb der EU über die Chat-Brücke (Punkt 5): Sie schickt öffentliche
 Chatnachrichten, Minecraft-Namen, die Zeilen zum Betreten und Verlassen und Todesmeldungen an
 Discord Inc. in den USA. Discord Inc. ist unter dem EU-US Data Privacy Framework zertifiziert; die
 Übermittlung stützt sich auf den Angemessenheitsbeschluss der EU-Kommission vom 10. Juli 2023
@@ -154,10 +144,10 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 
 | Daten | Speicherdauer |
 | --- | --- |
-| Server- und Chatprotokolle (mit IP-Adressen und Befehlen) | etwa 30 Tage |
+| Server- und Chatprotokolle (mit IP-Adressen und Befehlen) | etwa 30 Tage, bei offener Meldung bis zu ihrem Abschluss |
 | Spielstand (Position, Inventar, Statistiken) | solange die Welt besteht oder bis du die Löschung verlangst |
 | Sperren und Stummschaltungen | solange zur Durchsetzung nötig |
-| Betriebsstatistiken | höchstens 90 Tage |
+| Backups (Spielwelt, Spielstände, Serverprotokolle), verschlüsselt | täglich erstellt; aufbewahrt werden 7 tägliche, 5 wöchentliche, 12 monatliche und 2 jährliche Kopien, eine Kopie also bis zu zwei Jahre |
 | Verbindungsdaten beim Tunneldienst playit.gg | legt der Anbieter fest; er nennt keine Frist |
 | Kopien der Chat-Brücke im Discord-Kanal #ingame-chat | 30 Tage, dann löscht die Brücke sie automatisch; einzelne Nachrichten löschen wir auf Wunsch früher (an admin@atmosphaere.at) |
 
@@ -166,10 +156,15 @@ verarbeiten, steht in ihren Datenschutzerklärungen.
 Die Welt wird nie zurückgesetzt; das ist der Sinn dieses Servers. Deshalb ehrlich:
 
 - **Löschen können wir** alles, was an dein Konto gebunden ist: deinen Spielstand (Position,
-  Inventar, Statistiken) und deine Werte in den Betriebsstatistiken. Kommst du danach wieder,
-  beginnst du von vorne. Protokolle werden ohnehin nach etwa 30 Tagen gelöscht.
-- **Kopien in Discord** (Punkt 6) werden nach 30 Tagen automatisch gelöscht; einzelne löschen wir
+  Inventar, Statistiken). Kommst du danach wieder, beginnst du von vorne. Protokolle werden ohnehin
+  nach etwa 30 Tagen gelöscht.
+- **Kopien in Discord** (Punkt 5) werden nach 30 Tagen automatisch gelöscht; einzelne löschen wir
   auf Wunsch früher im Kanal #ingame-chat.
+- **Backups** der Spielwelt, der Spielstände und der Serverprotokolle liegen verschlüsselt auf
+  eigenen Geräten des Betreibers in Österreich (eine zweite Kopie auf seinem eigenen Computer),
+  nicht bei einem Cloud-Anbieter. Wir nutzen sie nur, um den Server nach einem Ausfall
+  wiederherzustellen. Einzelne Einträge können wir aus einem Backup nicht löschen; sie fallen weg,
+  wenn die Kopie abläuft, also nach höchstens zwei Jahren.
 - **Nicht löschen können wir** Blöcke, die du in die gemeinsame Welt gesetzt hast. Sie lassen sich
   nicht einer Person zuordnen und nicht von den Bauten anderer trennen.
 - **Persönliche Angaben über andere** (zum Beispiel ein echter Name auf einem Schild) sind Doxxing.
@@ -190,7 +185,7 @@ die du widerrufen müsstest.
 ## Widerspruchsrecht (Art. 21 DSGVO)
 
 **Du kannst jederzeit aus Gründen, die sich aus deiner besonderen Situation ergeben, der
-Verarbeitung widersprechen, die auf Art. 6 Abs. 1 lit. f DSGVO beruht (Punkte 2 bis 4, Punkt 6 und,
+Verarbeitung widersprechen, die auf Art. 6 Abs. 1 lit. f DSGVO beruht (Punkte 2 und 3, Punkt 5 und,
 wo zutreffend, Punkt 1). Wir verarbeiten die Daten dann nicht mehr, außer wir können zwingende
 schutzwürdige Gründe nachweisen, die deine Interessen überwiegen, oder die Verarbeitung dient der
 Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen. Der Widerspruch geht formlos an
@@ -231,6 +226,10 @@ Konto und löschen die an das Konto gebundenen Daten.
 
 *English version. The German version above governs.*
 
+This policy applies to the Minecraft server Bandit Anarchy (`bandit.atmosphaere.at`) and to these
+pages. It tells you what data about you we process, for what purpose, on what legal basis and for
+how long (Art. 13 and 14 GDPR).
+
 ## Who is responsible
 
 Controller within the meaning of Art. 4(7) GDPR:
@@ -249,10 +248,10 @@ been appointed; the conditions of Art. 37 GDPR are not met.
   the world.
 - What you write in the public game chat, when you join and leave, and your death messages also
   appear with your Minecraft name in the public Discord channel #ingame-chat and are deleted there
-  automatically after 30 days (point 6).
+  automatically after 30 days (point 5).
 - No cookies, no tracking, no analytics, no newsletter, no advertising. We do not sell data and
   share it only as described below.
-- Server and chat logs are deleted after about 30 days.
+- Server and chat logs are deleted after about 30 days. Encrypted backups keep copies longer (see "Retention at a glance").
 - The world is never reset. We delete data bound to your account on request. Blocks you placed in the
   shared world can neither be attributed to you nor removed.
 
@@ -277,7 +276,8 @@ been appointed; the conditions of Art. 37 GDPR are not met.
   illegal content, and enforce the server rules.
 - **Legal basis:** Art. 6(1)(f) GDPR. Our legitimate interest: safe and stable operation and
   protecting players from illegal content, threats and doxxing.
-- **Retention:** about 30 days, after which the logs are deleted.
+- **Retention:** about 30 days, or until a report is closed if one is open; after that the logs are
+  deleted.
 
 ### 3. Bans and mutes
 
@@ -287,22 +287,13 @@ been appointed; the conditions of Art. 37 GDPR are not met.
   protecting the other players.
 - **Retention:** as long as the measure applies and is needed to enforce it.
 
-### 4. Operating statistics
-
-- **Data:** figures derived from the logs: play time, sessions and automatic in-game events.
-- **Purpose:** running the server only (load, stability, planning). The figures are not published per
-  person and not shared.
-- **Legal basis:** Art. 6(1)(f) GDPR. Our legitimate interest: running the server stably and
-  predictably with limited resources.
-- **Retention:** at most 90 days. On request we delete your figures sooner.
-
-### 5. Visiting these pages
+### 4. Visiting these pages
 
 These pages are hosted on GitHub (GitHub, Inc.). When you open them, GitHub may process your IP
 address and technical access data under its own privacy statement. We use no cookies and no
 analytics there.
 
-### 6. Chat bridge to Discord
+### 5. Chat bridge to Discord
 
 A chat bridge on the game server connects the game chat in real time with the channel #ingame-chat
 on our public Discord server.
@@ -328,9 +319,8 @@ on our public Discord server.
   It looks for them every six hours and only while the game server runs, so it can take a little
   longer. The bridge does not delete what members write in #ingame-chat themselves. On request we
   delete individual bridged messages in Discord earlier; write to admin@atmosphaere.at.
-- **Switching it off:** the bridge cannot be switched off for individual players. If something should
-  not appear in Discord, do not write it in the public game chat. The join and leave lines and death
-  messages are always passed on.
+- **Switching it off:** on request the bridge sends nothing more for your account. Write to
+  admin@atmosphaere.at.
 
 ## Who receives data
 
@@ -345,13 +335,14 @@ on our public Discord server.
 - **Other players:** see your name, your chat messages and what you do and build in the world. That is
   the purpose of a multiplayer server.
 - **Authorities and courts:** only where we are legally obliged.
-- **Discord:** Discord is a separate service of Discord Inc. with its own privacy policy; this policy
-  does not apply to your use of Discord, including on our Discord server. The chat bridge (point 6)
-  does, however, pass data from the game to Discord: public chat messages with Minecraft names, the
-  join and leave lines and death messages. Discord Inc. stores them as a controller in its own right.
-  In the channel #ingame-chat they are visible to all members of our Discord server; it is public,
-  anyone with the invite link can join. In the other direction, players see in the game what members
-  write in #ingame-chat.
+- **Discord:** Discord is a separate service of Discord Inc. with its own privacy policy; Discord's
+  privacy policy applies to your use of Discord, including on our Discord server, except for what
+  point 5 describes about the chat bridge. The chat bridge passes data from the game to Discord:
+  public chat messages with Minecraft names, the join and leave lines and death messages. We are
+  responsible for sending them through the bridge. Discord Inc. stores them as a controller in its
+  own right. In the channel #ingame-chat they are visible to all members of our Discord server; it is
+  public, anyone with the invite link can join. In the other direction, players see in the game what
+  members write in #ingame-chat.
 
 ## Transfers outside the EU
 
@@ -361,7 +352,7 @@ For this provider there is no adequacy decision and there are no safeguards unde
 your protection there may be lower than in the EU. Without the tunnel you cannot connect to the
 server; we therefore base the transfer on Art. 49(1)(b) GDPR (necessary to perform the contract of
 use). We also
-transfer data outside the EU through the chat bridge (point 6): it sends public chat messages,
+transfer data outside the EU through the chat bridge (point 5): it sends public chat messages,
 Minecraft names, the join and leave lines and death messages to Discord Inc. in the USA. Discord Inc.
 is certified under the EU-U.S. Data Privacy Framework; the transfer is based on the European
 Commission's adequacy decision of 10 July 2023 (Art. 45 GDPR). Mojang/Microsoft and GitHub act as
@@ -371,10 +362,10 @@ controllers in their own right; where they process data is set out in their priv
 
 | Data | Retention |
 | --- | --- |
-| Server and chat logs (with IP addresses and commands) | about 30 days |
+| Server and chat logs (with IP addresses and commands) | about 30 days, or until a report is closed if one is open |
 | Game state (position, inventory, statistics) | as long as the world exists or until you ask for deletion |
 | Bans and mutes | as long as needed to enforce them |
-| Operating statistics | at most 90 days |
+| Backups (game world, game states, server logs), encrypted | made daily; 7 daily, 5 weekly, 12 monthly and 2 yearly copies are kept, so a copy can exist for up to two years |
 | Connection data at the tunnel service playit.gg | set by the provider; it names no period |
 | Chat bridge copies in the Discord channel #ingame-chat | 30 days, then the bridge deletes them automatically; we delete individual messages earlier on request (to admin@atmosphaere.at) |
 
@@ -383,10 +374,14 @@ controllers in their own right; where they process data is set out in their priv
 The world is never reset; that is the point of this server. So, honestly:
 
 - **We can delete** everything bound to your account: your game state (position, inventory,
-  statistics) and your figures in the operating statistics. If you come back afterwards, you start
-  from scratch. Logs are deleted after about 30 days in any case.
-- **Copies in Discord** (point 6) are deleted automatically after 30 days; on request we delete
+  statistics). If you come back afterwards, you start from scratch. Logs are deleted after about
+  30 days in any case.
+- **Copies in Discord** (point 5) are deleted automatically after 30 days; on request we delete
   individual ones earlier in the channel #ingame-chat.
+- **Backups** of the game world, game states and server logs are kept encrypted on the operator's own
+  machines in Austria (a second copy on the operator's own computer), not with a cloud provider. We
+  use them only to restore the server after a failure. We cannot delete single entries from a
+  backup; they drop out when the copy expires, so after two years at most.
 - **We cannot delete** blocks you placed in the shared world. They cannot be attributed to a person or
   separated from what others built.
 - **Personal details about others** (for example a real name on a sign) are doxxing. We remove them as
@@ -405,7 +400,7 @@ No processing described here is based on consent, so there is no consent for you
 ## Right to object (Art. 21 GDPR)
 
 **You may object at any time, on grounds relating to your particular situation, to processing based
-on Art. 6(1)(f) GDPR (points 2 to 4, point 6 and, where applicable, point 1). We will then stop,
+on Art. 6(1)(f) GDPR (points 2 and 3, point 5 and, where applicable, point 1). We will then stop,
 unless we can demonstrate compelling legitimate grounds that override your interests, or the
 processing serves the establishment, exercise or defence of legal claims. Send your objection, in any
 form, to admin@atmosphaere.at.**
@@ -440,106 +435,3 @@ bound to it.
 ## Changes
 
 If the processing changes, we update this policy and the date at the top.
-
----
-
-## Offene Punkte für den Betreiber
-
-1. **Speicherdauer der Betriebsstatistiken fehlt.** Art. 13 Abs. 2 lit. a DSGVO verlangt eine Frist
-   oder klare Kriterien. Die Retention von Prometheus in bandit-nix prüfen und eintragen (Platzhalter
-   `[OFFEN: ...]` in beiden Fassungen ersetzen). Nachgesehen am 11.11.2026: Prometheus auf dem Lab
-   hält 30 Tage (`--storage.tsdb.retention.time=30d`). In diesem Zweig gibt es aber noch keinen
-   Sammler für die öffentliche Welt. Der Betreiber hat am 11.11.2026 höchstens 90 Tage
-   festgelegt (eingetragen). Ein künftiger Sammler muss das einhalten; werden keine Werte gesammelt,
-   Abschnitt 4 und die Tabellenzeile streichen.
-2. **Dashboard-Spec geht über die genannten Fakten hinaus.**
-   `docs/specs/2026-11-10-public-world-dashboard.md` sieht weitere Daten pro Person vor (Tode mit
-   Ursache, Spielerkills, Distanz, abgebaute Blöcke, Fortschritte) und einen zweiten Zweck (die
-   eigenen Bots an menschlichen Werten messen). Beides ist hier nicht abgedeckt. Entweder streichen
-   oder vor dem Öffnen ergänzen. Für den Bot-Zweck braucht es eine Prüfung der Zweckvereinbarkeit
-   (Art. 6 Abs. 4 DSGVO) oder ein eigenes berechtigtes Interesse. Auch klären, was mit „automatische
-   Spielereignisse“ gemeint ist (Welt-Events oder Ereignisse pro Person?).
-3. **Backups.** Die Anarchy-Spec sieht restic-Backups (Peer und off-host) vor; in den Fakten fehlen
-   sie. Enthalten sie Spielstände oder Protokolle, müssen Ort, Speicherdauer und der Umgang mit
-   Löschanträgen (Daten bleiben bis zum Ablauf der Backup-Retention) genannt werden.
-4. **Tunneldienst playit.gg (Relay).** Der Text ging von einem gemieteten Relay-Server in der EU mit
-   Auftragsverarbeitungsvertrag aus. Tatsächlich läuft der Server über den kostenlosen Tunnel von
-   playit.gg. Stand 11.11.2026 (vom Agenten nachgesehen, keine Rechtsauskunft): Betreiber ist laut
-   playit.gg/terms und playit.gg/privacy-policy die Developed Methods LLC, USA (Nevada). Die
-   Datenschutzerklärung dort (Stand 20.4.2020) gilt nur für die Website; sie nennt weder die DSGVO
-   noch einen Auftragsverarbeitungsvertrag noch eine Frist für Verbindungsdaten. Die Liste auf
-   dataprivacyframework.gov hat keinen Eintrag für „Developed Methods“ oder „playit“. Der Anbieter
-   nennt 19 Standorte, sechs davon in Europa; Spielende verbinden sich über den nächsten. Es fehlen
-   also ein Vertrag nach Art. 28 DSGVO und eine Grundlage für die Übermittlung in die USA
-   (Art. 44 ff. DSGVO). Entschieden vom Betreiber am 11.11.2026: bei playit.gg bleiben, kein VPS-Relay. Der
-   Text nennt darum den Anbieter, das Fehlen eines Vertrags und eines Angemessenheitsbeschlusses
-   und stützt die Übermittlung auf Art. 49 Abs. 1 lit. b DSGVO (Formulierung vom Agenten, keine
-   Rechtsauskunft, nicht juristisch geprüft). Bleibendes Risiko: Art. 49 ist eine eng auszulegende
-   Ausnahme; ob „erforderlich“ trägt, wenn ein Relay in der EU möglich wäre
-   (`docs/runbooks/minecraft/PUBLIC.md`), kann eine Behörde anders sehen. Der Wechsel auf den
-   VPS-Relay bleibt der saubere Weg, falls es eine Beschwerde gibt. PROXY protocol: Velocity verlangt es
-   (`haproxy-protocol = true`) und lehnt Verbindungen ohne ab; Joins und Status über playit klappen
-   (2026-11-11), playit schickt es also. Die echte Spieler-IP im Velocity-Log ist noch einmal mit Root
-   zu bestätigen; stünde dort playits Adresse, müssten Punkt 1 bis 3 angepasst werden.
-5. **Beweissicherung über 30 Tage hinaus.** Kommt eine Meldung kurz vor Ablauf, sind die Protokolle
-   weg. Wenn einzelne Einträge für eine laufende Meldung oder ein Verfahren länger aufbewahrt werden
-   sollen, muss das hier ergänzt werden. Ich habe es nicht aufgenommen, weil es nicht in den Fakten
-   steht.
-6. **Rechtsgrundlage für den Spielbetrieb.** Gewählt: lit. b, ersatzweise lit. f für Fälle ohne
-   wirksamen Vertrag. Ob Unmündige (unter 14) einen unentgeltlichen Nutzungsvertrag wirksam schließen
-   (§ 170 Abs. 3 ABGB, „geringfügige Angelegenheit des täglichen Lebens“), ist nicht sicher. Ob eine
-   im Voraus offengelegte Ersatz-Rechtsgrundlage zulässig ist, wird uneinheitlich gesehen.
-   Alternative: durchgehend lit. f.
-7. **Anmeldeprüfung bei Mojang.** Bei `online-mode` fragt der Proxy die Session-Server von Mojang ab
-   und überträgt dabei mindestens den Namen, je nach Einstellung auch die IP-Adresse. Ich habe das
-   als Verarbeitung von Mojang/Microsoft als eigenem Verantwortlichen dargestellt. Wo diese Server
-   stehen, kenne ich nicht. Bitte prüfen, ob die Aussage „keine Übermittlung außerhalb der EU durch
-   uns“ dann trägt.
-8. **GitHub.** Ob GitHub für Seitenaufrufe eigener Verantwortlicher ist (Repository-Ansicht auf
-   github.com) oder bei GitHub Pages mit eigener Domain eher Auftragsverarbeiter, ist nicht sicher
-   geklärt. GitHub, Inc. sitzt in den USA. Bei Pages mit eigener Domain Rolle und Drittlandbezug
-   prüfen.
-9. **Postanschrift der Datenschutzbehörde.** Ich habe nur Name und Website angegeben. Die mir zuletzt
-   bekannte Anschrift ist Barichgasse 40–42, 1030 Wien. Vor dem Ergänzen auf dsb.gv.at prüfen.
-10. **Verzeichnis von Verarbeitungstätigkeiten (Art. 30 DSGVO).** Die Ausnahme für kleine
-    Verantwortliche greift nur bei gelegentlicher Verarbeitung. Laufende Protokolle sind nicht
-    gelegentlich, daher ist ein kurzes internes Verzeichnis vermutlich Pflicht (nicht
-    veröffentlichen).
-11. **Automatische Kicks.** Die Paper-Limits (Spam- und Paket-Limiter) trennen Verbindungen
-    automatisch. Ich halte das nicht für eine Entscheidung nach Art. 22 DSGVO, weil kein Ausschluss
-    auf Dauer folgt; bitte bestätigen.
-12. **Anrede.** Gewählt ist „du“ (Art. 12 Abs. 1 DSGVO: verständlich auch für Kinder), im
-    Elternabsatz „Sie“. Bei Bedarf vereinheitlichen.
-13. **Chat-Brücke: DPF-Zertifizierung von Discord prüfen.** Die Übermittlung an Discord Inc. stützt
-    sich im Text auf den Angemessenheitsbeschluss zum EU-US Data Privacy Framework (Art. 45 DSGVO).
-    Vor dem Veröffentlichen auf dataprivacyframework.gov prüfen, ob Discord Inc. aktiv gelistet ist,
-    und ob der (gerichtlich angefochtene) Beschluss weiter gilt. Trifft eines nicht zu, trägt der
-    Satz nicht; eine Ersatzgrundlage nach Art. 46 oder 49 DSGVO ist für einen Bot in einem fremden
-    Dienst kaum verfügbar. Stand 11.11.2026 (vom Agenten nachgesehen, keine Rechtsauskunft): Die
-    Liste führt „Discord, Inc.“, San Francisco, für das EU-U.S. Data Privacy Framework als
-    „Active - Re-certification under Review“, erfasste Daten „Non-HR“. Das Gericht der EU hat die
-    Klage gegen den Beschluss am 3.9.2025 abgewiesen (T-553/23, Latombe); das Rechtsmittel beim
-    EuGH (C-703/25 P) war nach einer Meldung vom Juni 2026 noch offen, ein Urteil habe ich nicht
-    gefunden. Am Tag der Veröffentlichung beides noch einmal ansehen.
-14. **Chat-Brücke: Widerspruch, Kinder, Frist.** Die Brücke lässt sich nicht pro Person abschalten.
-    Bei einem Widerspruch nach Art. 21 DSGVO bleibt derzeit nur das Löschen in Discord; Betreten-,
-    Verlassen- und Todeszeilen laufen weiter. Bei Kindern wiegt ihr Interesse in der Abwägung nach
-    lit. f besonders schwer. Entschieden am 11.11.2026: Die Brücke löscht ihre Kopien im Kanal
-    nach 30 Tagen automatisch (gebaut, Punkt 6). Ausnahme pro Spieler
-    (mindestens für Betreten, Verlassen und Tod): am 11.11.2026 vom Agenten entschieden, nachdem
-    der Betreiber die offenen Punkte freigegeben hat: vorerst nicht gebaut. Bei einem Widerspruch
-    löscht der Betreiber die Zeilen in Discord von Hand. Neu bewerten, sobald ein Widerspruch
-    eingeht oder Kinder erkennbar mitspielen.
-15. **Chat-Brücke: Protokoll, Rolle, Zeitpunkt.** Prüfen, was das Serverprotokoll zu Nachrichten aus
-    Discord festhält (nur Anzeigename und Text oder auch die Discord-ID); steht dort mehr, Punkt 6
-    ergänzen. Geprüft am 11.11.2026 auf dem lokalen Testserver: Das Protokoll enthält nur die
-    Zeile, die auch im Spiel steht (`[Discord] Anzeigename: Text`), keine Discord-ID. Ob der Betreiber für den eigenen Discord-Server neben Discord gemeinsam verantwortlich
-    ist (Art. 26 DSGVO, vgl. EuGH C-210/16 zu Facebook-Fanpages), ist nicht geklärt; der Text stellt
-    Discord als eigenen Verantwortlichen dar. Diese Fassung erst veröffentlichen, wenn die Brücke
-    live geht (mit der Öffnung).
-16. **Adresse des Servers.** Eingetragen ist `bandit.atmosphaere.at` (seit 11.11.2026), auch im
-    Impressum und in den Nutzungsbedingungen. Das ist ein SRV-Eintrag bei Cloudflare, der auf den
-    playit.gg-Tunnel zeigt (`impairment-peterson.tun.ply.gg:24924`); ein Status-Ping über den Namen
-    hat am 11.11.2026 geantwortet. Ändert sich die playit-Adresse, nur den SRV-Eintrag anpassen
-    (`TUNNEL=<neu> TUNNEL_PORT=<neu> bash ~/bandit-domain.sh` legt keinen zweiten an; den alten vorher
-    im Cloudflare-Dashboard ändern). Die Texte bleiben dann gleich.
