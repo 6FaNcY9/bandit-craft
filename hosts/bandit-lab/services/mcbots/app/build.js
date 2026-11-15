@@ -648,11 +648,14 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     };
     // Nor on a material chest (it then stays shut: "did not open"), nor where dirt would later fall into a hopper.
     const lidCells = new Set(chests.flatMap((c) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => `${c.x + dx},${c.y + 1},${c.z + dz}`)));
+    const chestLids = new Set(plan.targets.filter((t) => /(^|_)chest$/.test(t.name)).map((t) => `${t.x},${t.y + 1},${t.z}`));
+    const boxMouths = new Set(plan.targets.filter((t) => /shulker_box$/.test(t.name)).map((t) => keyOf(v(t).offset(...placing.DIRS[t.props.facing || 'up']))));
     const vetoPlace = (blk) => {
       const p = blk.position, k = keyOf(p);
       if (lidCells.has(k)) return 100;
       // Over a hopper only while the bot carries glass, which the pathfinder then places (dirt would fall in later).
-      return inSite(p) && (plan.cells.has(k) || (glassCarried < 8 && landsInHopper(p.x, p.y, p.z, true))) ? 100 : 0;
+      if (boxMouths.has(k)) return 100;
+      return inSite(p) && (plan.cells.has(k) || (glassCarried < 8 && (chestLids.has(k) || landsInHopper(p.x, p.y, p.z, true)))) ? 100 : 0;
     };
     // Standing on a low block inside its own cell (a comparator): the pathfinder plans from that cell, finds
     // no move and "moves" until its deadline (two bots stood on one for minutes). After a failed walk the
@@ -797,7 +800,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // Fill the inventory with what the next open cells take, from the material chests in order.
     // A fill of 1972 cobblestone took 16 trips to the chest at two stacks each, and smelted sand into glass for hoppers
     // it did not have (bot21, main server 2026-10-20).
-    const perKind = stacksPerKind(plan.targets), hoppers = plan.targets.some((t) => /hopper/.test(t.name));
+    const perKind = stacksPerKind(plan.targets), hoppers = plan.targets.some((t) => /hopper|(^|_)chest$/.test(t.name)); // glass for supports on chest lids too
     const uses = new Set(plan.targets.map((t) => t.p.item));
     async function restock(want) {
       if (chests.length) for (const only of bycatch(bot.inventory.items(), uses, natural)) await stow(only, only === SCAFFOLD ? {[SCAFFOLD]: SCAFFOLD_KEEP} : undefined);
@@ -853,6 +856,17 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       if (eye.distanceTo(v(t).offset(0.5, 0.5, 0.5)) > 4.5) await goNear(r, job, t.x, t.y, t.z, 4, {goal: new GoalBeside(t, 4), doing: `walking to fill ${t.name} at ${k}`});
       guard(job);
     };
+    // Dirt on the lid comes off first (a climb of the pathfinder, a support from before the lids got glass): it keeps
+    // the chest shut, and the fill failed for minutes on 43 sorter chests (main server 2026-11-15).
+    const openLid = async (t, partner) => {
+      for (const c of [t, partner].filter(Boolean)) {
+        const up = {x: c.x, y: c.y + 1, z: c.z}, uk = keyOf(up);
+        if (!chestLids.has(uk) || plan.byKey.has(uk) || stateAt(up.x, up.y, up.z)?.name !== SCAFFOLD) continue;
+        job.t.doing = `taking the ${SCAFFOLD} off ${c.name} at ${keyOf(c)}`;
+        if (await digAt(r, job, v(up), (n) => n === SCAFFOLD).catch(() => { guard(job); return false; })) pillars.delete(uk);
+      }
+      return bot.openContainer(bot.blockAt(v(t)));
+    };
     async function fill(t) {
       const k = keyOf(t);
       const want = new Map();
@@ -866,7 +880,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       if (!seen.has(k) && !placed.has(k)) {
         await reach(t, k);
         job.t.doing = `looking into ${t.name} at ${k}`;
-        const win = await bot.openContainer(bot.blockAt(v(t)));
+        const win = await openLid(t, partner);
         try { seen.set(k, contents(win)); } finally { win.close(); }
       }
       for (const [item, n] of want) want.set(item, Math.max(0, n - (seen.get(k)?.[item] || 0)));
@@ -893,8 +907,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         if (fits > 0) await take(item, fits, (left) => `taking ${left} ${item} to fill ${t.name} at ${k}`);
       }
       await reach(t, k);
+      const win = await openLid(t, partner);
       job.t.doing = `filling ${t.name} at ${k}`;
-      const win = await bot.openContainer(bot.blockAt(v(t)));
       const missing = [];
       try {
         // `want` is net of what was in it at the last look; the window counts again (another bot may have filled).
@@ -1175,14 +1189,14 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         // else helps (a closed hopper loop: each hopper needs the next one standing).
         const supportAt = (x, y, z) => {
           const inPlan = plan.byKey.has(`${x},${y},${z}`) && free(stateAt(x, y, z)?.name ?? 'stone');
-          if (!airCell(x, y, z) && !inPlan) return null;
+          if (boxMouths.has(`${x},${y},${z}`) || (!airCell(x, y, z) && !inPlan)) return null;
           for (const f of FACES) {
             if (solid(stateAt(x + f[0], y + f[1], z + f[2])?.name)) return {x, y, z, w: {against: f, face: f.map((n) => -n), cursor: null, look: null}, height: inPlan ? 50 : 1};
           }
           if (inPlan) return null;
           let b = y - 1;
           while (b > y - SCAFFOLD_MAX && airCell(x, b, z)) b--;
-          return solid(stateAt(x, b, z)?.name) ? {x, y: b + 1, z, w: BELOW, height: y - b} : null;
+          return solid(stateAt(x, b, z)?.name) && !boxMouths.has(`${x},${b + 1},${z}`) ? {x, y: b + 1, z, w: BELOW, height: y - b} : null;
         };
         const pillarFor = (lateOnes, inBand = true) => {
           let best = null;
@@ -1211,7 +1225,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             }
           }
           if (best?.real) return best.real;
-          const item = best && landsInHopper(best.x, best.y, best.z, true) ? GLASS : SCAFFOLD;
+          const item = best && (chestLids.has(`${best.x},${best.y},${best.z}`) || landsInHopper(best.x, best.y, best.z, true)) ? GLASS : SCAFFOLD;
           return best && {t: {x: best.x, y: best.y, z: best.z, name: item, props: {}, p: {item, check: [], ways: [best.w]}, pillar: true, for: best.for}, w: best.w};
         };
         next ??= pillarFor(false) || above || pillarFor(false, false) || late || pillarFor(true, false);

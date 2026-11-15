@@ -2354,6 +2354,41 @@ async function ensureGear(r, job) {
   if (!gearJob.ingotsWanted([...bot.inventory.items(), ...wornNow].map((i) => i.name))) r.world?.dropNeed?.(r.name, 'iron_ingot');
 }
 
+// Food from the project's own chests when they are nearer than the supply chest: bot3 walked 240 blocks at night with
+// 5-8 health from the sorter depot, 10 blocks from its chests (main server 2026-11-15). What the crew last counted only
+// orders the chests (it may be stale): each is opened until one holds food.
+// shortcut: food that is also a material of the build is eaten too, exclude buildJob.stillNeeded when a schematic fills chests with food.
+async function siteFood(r, job) {
+  const {bot} = r, top = r.current;
+  if (!top || !/^(schematic|produce)$/.test(top.type)) return;
+  const {Vec3} = require('vec3');
+  const far = (c) => bot.entity.position.distanceTo(new Vec3(c.x, c.y, c.z));
+  const dim = normDim(bot.game?.dimension);
+  const has = (c) => [...(buildJob.chestStock(dim, c)?.keys() || [])].some((name) => edible(bot, {name}));
+  const chests = projectChests(top.args).filter((c) => !r.supplyChest || far(c) < far(r.supplyChest)).sort((a, b) => has(b) - has(a));
+  if (chests.length) r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: looking in the project chests`);
+  for (const c of chests) {
+    guard(job);
+    try {
+      await goNear(r, job, c.x, c.y, c.z, 3, {under: true, doing: 'walking to the project chests for food'});
+      const block = bot.blockAt(new Vec3(c.x, c.y, c.z));
+      if (!block || !/chest|barrel/.test(block.name)) continue;
+      const box = await openChest(r, job, block);
+      try {
+        const food = box.containerItems().find((i) => edible(bot, i));
+        if (!food) continue;
+        await box.withdraw(food.type, food.metadata, Math.min(32, food.count));
+        buildJob.forgetChest(dim, c); // the crew counts it again
+        return;
+      } finally {
+        box.close();
+      }
+    } catch (e) {
+      guard(job); // a chest that is walled in or stays shut: the next one
+    }
+  }
+}
+
 // Food and gear, for every job's upkeep and for a builder between its cells (build.js).
 async function care(r, job) {
   const {bot} = r;
@@ -2361,14 +2396,17 @@ async function care(r, job) {
   const needFood = bot.food < FOOD_BELOW || (bot.health <= 10 && bot.food < 18);
   if (needFood && r.supplyChest && !bot.inventory.items().some((i) => edible(bot, i)) && Date.now() - (r.foodTriedAt || 0) > FOOD_RETRY_MS) {
     r.foodTriedAt = Date.now();
-    r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from the supply chest`);
     // Shown in the snapshot while this runs.
     r.gettingFood = true;
     try {
-      await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
-        guard(job);
-        r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
-      });
+      await siteFood(r, job);
+      if (!bot.inventory.items().some((i) => edible(bot, i))) {
+        r.emit('info', `hungry (food ${bot.food}, health ${Math.round(bot.health)}) and no food: fetching some from the supply chest`);
+        await JOBS.rearm(r, child(job, {type: 'rearm', args: r.supplyChest})).catch((e) => {
+          guard(job);
+          r.emit('info', `no food fetched: ${e.message}`); // keep working; the retry timer asks again later
+        });
+      }
       // The chest had none: bread from stored wheat, from the wheat field, else hunt. Same 10-minute timer, so at most
       // one try per bot per 10 minutes.
       if (!bot.inventory.items().some((i) => edible(bot, i))) await storedBread(r, job);

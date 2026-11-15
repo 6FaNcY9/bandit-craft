@@ -343,4 +343,32 @@ module.exports = async () => {
     f.bot.placeBlock = async () => {};
     await assert.rejects(JOBS.bed(f.r, bedJob()), /did not take/);
   }
+  { // hungry at the site: food from the project's chests, not a 240-block walk to the supply chest (bot3 at the
+    // sorter depot at night with 5-8 health, main server 2026-11-15); the supply chest when they hold none or lie farther off
+    const B = require('../../bots');
+    const {Vec3} = require('vec3');
+    const realRearm = B.JOBS.rearm;
+    const walks = [];
+    B.JOBS.rearm = async (r) => { walks.push(r.name); };
+    try {
+      const hungry = (name, {depot = [], at = new Vec3(0, 64, 3)} = {}) => {
+        const inv = [], chest = {items: depot.map((i) => ({...i})), opened: 0};
+        const bot = {food: 17, health: 8, entity: {position: at, onGround: true}, game: {dimension: 'overworld'}, entities: {},
+          blockAt: (p) => (p.x === 0 && p.y === 64 && p.z === 0 ? {name: 'chest', position: p, boundingBox: 'block', getProperties: () => ({})} : {name: 'air', position: p, boundingBox: 'empty', getProperties: () => ({})}),
+          registry: {foodsByName: {bread: {}}, blocksByName: {}}, pathfinder: {goto: async () => {}, stop() {}, setGoal() {}},
+          inventory: {items: () => inv, slots: []},
+          openContainer: async () => { chest.opened++; return {containerItems: () => chest.items, close() {}, withdraw: async (type, _m, n) => { inv.push({name: 'bread', type, count: n}); }}; }};
+        const r = {name, bot, world: {hostilesNear: () => []}, emit() {}, protectedAreas: [], supplyChest: {x: 240, y: 64, z: 0}, boardPart: true, pickaxeTriedAt: Date.now(),
+          current: {type: 'schematic', args: {chests: [{x: 0, y: 64, z: 0}]}}};
+        return {r, inv, chest};
+      };
+      const bread = [{name: 'bread', type: 7, metadata: null, count: 40}];
+      const near = hungry('near', {depot: bread}), empty = hungry('empty'), far = hungry('far', {depot: bread, at: new Vec3(239, 64, 0)});
+      for (const m of [near, empty, far]) await B.care(m.r, {t: {}, cancelled: false, type: 'schematic', args: m.r.current.args});
+      assert.deepStrictEqual(walks, ['empty', 'far'], 'the supply chest only when the project chests hold no food or lie farther off');
+      assert.deepStrictEqual([near.inv[0]?.count, empty.chest.opened, far.chest.opened], [32, 1, 0], '32 bread from the depot; an empty depot is looked into once; a far one not at all');
+    } finally {
+      B.JOBS.rearm = realRearm;
+    }
+  }
 };
