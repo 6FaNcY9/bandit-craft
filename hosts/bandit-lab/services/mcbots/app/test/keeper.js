@@ -201,6 +201,18 @@ const {WorldModel} = require('../world');
   assert.ok(!gearPlan(Infinity, ['iron_pickaxe']).includes('iron_pickaxe') && gearPlan(Infinity, ['iron_pickaxe']).includes('iron_axe'), 'a pickaxe is not an axe');
   assert.strictEqual(ingotsWanted(['iron_pickaxe', 'iron_sword', 'iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots', 'iron_axe']), 1, 'the shield');
   assert.strictEqual(ingotsWanted(['iron_pickaxe', 'iron_sword', 'iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots', 'shield', 'iron_axe']), 0);
+  // hand-back at the armoury: duplicates go back, the best of each kind stays (owner 2026-11-15: full iron set, no waste)
+  const {handBack} = require('../gear');
+  const back = (items, worn = []) => Object.fromEntries(handBack(items, worn).map((i) => [i.name, i.count]));
+  assert.deepStrictEqual(back([{name: 'iron_sword', count: 3}, {name: 'iron_pickaxe', count: 3}]), {iron_sword: 2, iron_pickaxe: 1}, 'bot1 today');
+  assert.deepStrictEqual(back([{name: 'iron_sword', count: 1}, {name: 'iron_sword', count: 1}]), {iron_sword: 1}, 'unstacked swords count together');
+  assert.deepStrictEqual(back([{name: 'diamond_pickaxe', count: 1}, {name: 'iron_pickaxe', count: 2}]), {iron_pickaxe: 1}, 'best two pickaxes stay');
+  assert.deepStrictEqual(back([{name: 'wooden_axe', count: 1}, {name: 'stone_axe', count: 1}, {name: 'iron_axe', count: 1}]), {wooden_axe: 1, stone_axe: 1});
+  assert.deepStrictEqual(back([{name: 'wooden_axe', count: 1}]), {}, 'the only axe stays');
+  assert.deepStrictEqual(back([{name: 'iron_helmet', count: 1}, {name: 'shield', count: 1}], ['iron_helmet', 'shield']), {iron_helmet: 1, shield: 1}, 'carried armour and a second shield go back when one is worn');
+  assert.deepStrictEqual(back([{name: 'iron_helmet', count: 1}], []), {}, 'an unworn helmet with an empty head slot stays (rearm wears it)');
+  assert.deepStrictEqual(back([{name: 'diamond_helmet', count: 1}], ['iron_helmet']), {}, 'a better carried piece stays (rearm wears it)');
+  assert.deepStrictEqual(back([{name: 'bread', count: 30}, {name: 'oak_log', count: 64}]), {}, 'only gear is handed back');
   // chain arguments pass the real validators (the bots would refuse them otherwise)
   const {VALIDATE: V} = require('../bots');
   for (const [type, args] of [...PLANS.logs(40, chest), ...PLANS.cobblestone(64, chest), ...PLANS.coal(8, chest), ...PLANS.torch(16, chest, {coal: 9, oak_log: 3}), ...PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 3}), ...PLANS.raw_iron(16, chest), ...PLANS.iron_pickaxe(2, chest, kitStock), ...PLANS.iron_sword(1, chest, kitStock), ['stock', chest], ['goto', chest]]) assert.doesNotThrow(() => V[type](args), type);

@@ -3991,6 +3991,9 @@ const JOBS = {
     const isFood = (n) => bot.registry.foodsByName[n] && !/rotten|spider_eye|poisonous|pufferfish|chorus|golden_apple/.test(n);
     const foodCount = () => bot.inventory.items().filter((i) => isFood(i.name)).reduce((n, i) => n + i.count, 0);
     const opened = new Set();
+    // At the armoury the bot hands back what it carries twice (gear.js handBack); a guest keeps its own (spec 2026-11-15).
+    const atGear = !!r.gearChest && !r.gearRange && ['x', 'y', 'z'].every((k) => job.args[k] === r.gearChest[k]);
+    let handed = 0;
     for (const pos of spots) {
       guard(job);
       // A double chest is two blocks but one inventory; skip the second half.
@@ -4030,6 +4033,18 @@ const JOBS = {
         if (spare && count(/_pickaxe$/) < 2) await take(spare.name, spare, 1);
         const log = box.containerItems().find((i) => /_log$/.test(i.name));
         if (log && count(/_log$/) < 2) await take(log.name, log, Math.min(2 - count(/_log$/), log.count));
+        // Each chest takes what it can; the next one gets the rest (a full chest ends nothing).
+        const worn = ['head', 'torso', 'legs', 'feet', 'off-hand'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]?.name).filter(Boolean);
+        for (const {name, count: n} of atGear ? gearJob.handBack(bot.inventory.items(), worn) : []) {
+          const item = bot.inventory.items().find((i) => i.name === name);
+          try {
+            if (item) { await box.deposit(item.type, item.metadata, n); handed += n; }
+          } catch (e) {
+            guard(job);
+            r.emit('info', `re-arm: could not hand back ${name}: ${e.message.slice(0, 80)}`);
+          }
+          guard(job);
+        }
       } finally {
         box.close();
       }
@@ -4070,7 +4085,7 @@ const JOBS = {
     const worn = ['head', 'torso', 'legs', 'feet'].filter((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).length;
     const off = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')]?.name;
     await fetchWood(r, job, true);
-    job.progress = `armour ${worn}/4, ${sword?.name || 'no sword'}, off-hand ${off || 'empty'}, food ${foodCount()}${noPlanks.length ? ', no planks' : ''}`;
+    job.progress = `armour ${worn}/4, ${sword?.name || 'no sword'}, off-hand ${off || 'empty'}, food ${foodCount()}${noPlanks.length ? ', no planks' : ''}${handed ? `, handed back ${handed}` : ''}`;
   },
 
   build: (r, job) => build(r, job),

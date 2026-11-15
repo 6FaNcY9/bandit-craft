@@ -20,4 +20,25 @@ function gearPlan(ingots, owned) {
 // Ingots every missing piece needs together.
 const ingotsWanted = (owned) => gearPlan(Infinity, owned).reduce((n, item) => n + COST[item], 0);
 
-module.exports = {gearPlan, ingotsWanted};
+// What a bot hands back at the armoury (pure): per kind the best `keep` stay, counting what is worn, the rest goes back;
+// wood and stone tools of a kind go too once an iron or better one stays (bot1 carried 3 iron swords and 3 iron
+// pickaxes, owner 2026-11-15: "nicht verschwenden"). `items` = carried {name, count}, `worn` = names in armour and off-hand.
+const TIER = ['wooden', 'leather', 'golden', 'stone', 'chainmail', 'iron', 'diamond', 'netherite'];
+const tier = (n) => TIER.findIndex((t) => n.startsWith(`${t}_`));
+const KINDS = [[/_sword$/, 1], [/_axe$/, 1], [/_pickaxe$/, 2], [/^shield$/, 1], [/_helmet$/, 1], [/_chestplate$/, 1], [/_leggings$/, 1], [/_boots$/, 1]];
+function handBack(items, worn) {
+  const out = new Map();
+  for (const [re, keep] of KINDS) {
+    const pool = [...worn.filter((n) => re.test(n)).map((name) => ({name, worn: true})),
+      ...items.filter((i) => re.test(i.name)).flatMap((i) => Array.from({length: i.count}, () => ({name: i.name})))];
+    pool.sort((a, b) => tier(b.name) - tier(a.name) || !!b.worn - !!a.worn);
+    const strong = tier(pool[0]?.name || '') >= TIER.indexOf('iron');
+    pool.forEach((p, i) => {
+      if (p.worn || (i < keep && !(strong && i > 0 && /^(wooden|stone)_/.test(p.name)))) return;
+      out.set(p.name, (out.get(p.name) || 0) + 1);
+    });
+  }
+  return [...out].map(([name, count]) => ({name, count}));
+}
+
+module.exports = {gearPlan, ingotsWanted, handBack};
