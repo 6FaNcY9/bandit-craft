@@ -183,7 +183,8 @@ function shiftPage(view) {
     slot(0, 'player_head', f.bot, {a: 'botpick'}, {head: f.bot, lore: ['Klick: anderer Bot']}),
     f.block ? slot(1, f.block, germanName(f.block), {a: 'gridm', tab: 'erze', page: 0}, {lore: ['Klick: aussuchen']}) : slot(1, 'stick', 'Was? Klick: aussuchen', {a: 'gridm', tab: 'erze', page: 0}),
     slot(2, amount === 16 || amount === 64 ? f.block || 'paper' : 'paper', amount === 'inf' ? '∞ immer weiter' : String(amount), {a: 'amountm'}, {count: amount === 16 || amount === 64 ? amount : 1, lore: ['Klick: Menge wählen']}),
-    f.chest ? slot(3, 'barrel', `Wohin: ${f.chest.x} ${f.chest.y} ${f.chest.z}`, {a: 'pick', kind: 'chest'}, {lore: ['Klick: andere Kiste zeigen']}) : slot(3, 'barrier', 'Keine Kiste – klick und zeig auf eine', {a: 'pick', kind: 'chest'}),
+    amount !== 'inf' ? slot(3, f.far ? 'map' : 'compass', f.far ? 'Egal wie weit' : 'Nur in der Nähe', {a: 'setfar'}, {lore: [f.far ? 'kann weit weglaufen · Klick: ändern' : 'bis 64 Blöcke · Klick: ändern']}) // a shift (∞) keeps its chest leash and needs the chest here
+      : f.chest ? slot(3, 'barrel', `Wohin: ${f.chest.x} ${f.chest.y} ${f.chest.z}`, {a: 'pick', kind: 'chest'}, {lore: ['Klick: andere Kiste zeigen']}) : slot(3, 'barrier', 'Keine Kiste – klick und zeig auf eine', {a: 'pick', kind: 'chest'}),
     slot(4, 'lime_dye', 'Los!', {a: 'shiftgo'})]};
 }
 

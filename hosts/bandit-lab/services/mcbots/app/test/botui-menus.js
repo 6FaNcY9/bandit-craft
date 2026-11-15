@@ -168,7 +168,9 @@ assert.ok(MENUS.has('ov'));
   assert.deepEqual([m.slots[1].item, m.slots[3].item, m.slots[4].item], ['stick', 'barrier', 'lime_dye']);
   assert.equal(m.slots[2].name, '∞ immer weiter'); assert.equal(m.slots[2].count, 1);
   m = hop({bot: 'zed', block: 'iron_ore', amount: 64, chest: {x: 1, y: 2, z: 3}});
-  assert.deepEqual([m.slots[1].item, m.slots[2].item, m.slots[2].count, m.slots[3].name], ['iron_ore', 'iron_ore', 64, 'Wohin: 1 2 3']);
+  assert.deepEqual([m.slots[1].item, m.slots[2].item, m.slots[2].count, m.slots[3].name, m.slots[3].payload.a], ['iron_ore', 'iron_ore', 64, 'Nur in der Nähe', 'setfar']);
+  assert.deepEqual(hop({bot: 'zed', block: 'iron_ore', amount: 64, far: true}).slots[3].lore, ['kann weit weglaufen · Klick: ändern']);
+  assert.equal(hop({bot: 'zed', block: 'iron_ore', amount: 'inf', chest: {x: 1, y: 2, z: 3}}).slots[3].name, 'Wohin: 1 2 3', 'a shift (∞) shows its chest');
   assert.equal(hop({bot: 'zed', block: 'iron_ore', amount: 256}).slots[2].name, '256');
   for (const x of m.slots) assert.ok(Object.hasOwn(ACTIONS, x.payload.a), x.payload.a);
 }

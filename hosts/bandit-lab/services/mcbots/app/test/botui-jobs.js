@@ -31,8 +31,9 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: {x: -271, y: 
     assert.doesNotThrow(() => VALIDATE[job.type](job.args(key === 'enchant' ? {...values, item: 'iron_pickaxe', n: 2} : values, {sel, supply: {x: 1, y: 2, z: 3}, viewer: 'Midari', pos: [1, 64, 2], dim: 'overworld'})), key);
     assert.ok(job.label && typeof job.say(values) === 'string', key);
   }
-  assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 64.0}, ctx), {block: 'iron_ore', count: 64});
-  assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 63.9999}, ctx), {block: 'iron_ore', count: 64});
+  assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 64.0}, ctx), {block: 'iron_ore', count: 64, near: true});
+  assert.deepEqual(JOBS.mine.args({block: 'iron_ore', n: 63.9999, far: true}, ctx), {block: 'iron_ore', count: 64});
+  assert.deepEqual([JOBS.chop.args({n: 64}, ctx), JOBS.chop.args({n: 64, far: true}, ctx)], [{count: 64, near: true}, {count: 64}], 'menu orders stay near unless far');
 }
 
 { // offered items pass VALIDATE for their job; ender chests offer nothing chest-like

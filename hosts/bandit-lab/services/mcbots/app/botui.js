@@ -121,7 +121,7 @@ function formOf(st, ui, viewer, bot) {
   bot = botOf(st, ui, viewer, bot || prev?.bot);
   if (!prev || prev.bot !== bot) {
     const c = ui.api.snapshots().find((s) => s.name === bot)?.chest || supplyFor(ui, viewer);
-    st.form = {bot, block: prev?.block ?? null, amount: prev?.amount ?? 'inf', chest: c ? {x: c.x, y: c.y, z: c.z} : null};
+    st.form = {bot, block: prev?.block ?? null, amount: prev?.amount ?? 'inf', far: prev?.far ?? false, chest: c ? {x: c.x, y: c.y, z: c.z} : null};
   }
   return st.form;
 }
@@ -194,6 +194,7 @@ const ACTIONS = {
     formOf(st, ui, viewer).amount = data.amount;
     st.screen = {name: 'shiftm'};
   },
+  setfar: (st, data, ui, viewer) => { formOf(st, ui, viewer).far = !st.form.far; st.screen = {name: 'shiftm'}; },
   morem: (st, data, ui, viewer) => { st.screen = {name: 'morem', bot: oneBot(ui, viewer, data)}; },
   // Bereich: st.area is who/when, st.sel the two corners (staff clicks, see pick/consumePick) or the marked area.
   aream: (st, data, ui, viewer) => {
@@ -469,7 +470,7 @@ const ACTIONS = {
     const inf = f.amount === 'inf', log = /_log$/.test(f.block);
     if (inf && !f.chest) return ui.flash(st, 'Erst eine Kiste wählen');
     const chesttext = f.chest && `${f.chest.x} ${f.chest.y} ${f.chest.z}`;
-    const [key, d] = log ? (inf ? ['shiftlogs', {chesttext}] : ['chop', {n: f.amount}]) : inf ? ['shift', {block: f.block, chesttext}] : ['mine', {block: f.block, n: f.amount}];
+    const [key, d] = log ? (inf ? ['shiftlogs', {chesttext}] : ['chop', {n: f.amount, far: f.far}]) : inf ? ['shift', {block: f.block, chesttext}] : ['mine', {block: f.block, n: f.amount, far: f.far}];
     const o = jobs.build(key, {who: bot, ...d}, {ctx: st.ctx, sel: st.sel, supply: jobs.supplyOf(ui.api.keeper), places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
     done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
     st.screen = {name: 'botm', bot};

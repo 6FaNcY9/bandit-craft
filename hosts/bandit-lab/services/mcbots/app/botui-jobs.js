@@ -49,10 +49,10 @@ const supplyAt = (ctx) => { if (!ctx.supply) throw new Error('keine Vorratskiste
 // loc: the job uses a target (v.at) and the context preset carries it. here: the label next to the gazed block.
 // general: listed in the screen's general section. say(v): what the result line calls the order.
 const JOBS = {
-  mine: {label: 'Abbauen', type: 'mine', general: true, needs: [block, count(16, 2048, 16, 64)], args: (v) => ({block: v.block, count: R(v.n)}), say: (v) => `${germanName(v.block)} abbauen`},
+  mine: {label: 'Abbauen', type: 'mine', general: true, needs: [block, count(16, 2048, 16, 64)], args: (v) => ({block: v.block, count: R(v.n), ...(v.far ? {} : {near: true})}), say: (v) => `${germanName(v.block)} abbauen`},
   shift: {label: 'Schicht', type: 'shift', general: true, needs: [block, chest], args: (v) => ({block: v.block, ...pt(v.chest)}), say: (v) => `Schicht ${germanName(v.block)}`},
   shiftlogs: {label: 'Holz-Schicht', type: 'shift', needs: [chest], args: (v) => ({block: 'logs', ...pt(v.chest)}), say: () => 'Holz-Schicht'},
-  chop: {label: 'Holz', type: 'chop', general: true, needs: [count(16, 2048, 16, 64)], args: (v) => ({count: R(v.n)}), say: () => 'Holz hacken'},
+  chop: {label: 'Holz', type: 'chop', general: true, needs: [count(16, 2048, 16, 64)], args: (v) => ({count: R(v.n), ...(v.far ? {} : {near: true})}), say: () => 'Holz hacken'},
   get: {label: 'Besorgen', type: 'get', general: true, needs: [item, count(1, 256, 1, 16)], args: (v) => ({item: v.item, count: R(v.n)}), say: (v) => `${germanName(v.item)} besorgen`},
   deposit: {label: 'Einlagern', here: 'Hier einlagern', type: 'deposit', general: true, loc: true, needs: [where], args: (v) => pt(v.at), say: () => 'Einlagern'},
   withdraw: {label: 'Entnehmen', here: 'Hier entnehmen', type: 'withdraw', general: true, loc: true, needs: [item, count(1, 1728, 1, 64), where], args: (v) => ({item: v.item, count: R(v.n), ...pt(v.at)}), say: (v) => `${germanName(v.item)} entnehmen`},
@@ -204,6 +204,7 @@ function build(key, data, env) {
   const text = (k) => String(data[k] ?? '').trim();
   if (has('block')) v.block = nameOf(data.block, text('blockx'), 'Block');
   if (has('item')) v.item = nameOf(data.item, text('itemx'), 'Item');
+  if (data.far === true) v.far = true; // mine/chop: menu orders stay near unless asked (Abbauen… → Egal wie weit)
   const c = has('count');
   if (c) v.n = num(data.n ?? c.initial, 'Anzahl');
   const r = has('radius');

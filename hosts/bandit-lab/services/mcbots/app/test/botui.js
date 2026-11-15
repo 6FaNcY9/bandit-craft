@@ -515,7 +515,7 @@ async function fake() {
     const open = (player, gaze) => ui.handle({type: 'open', player, gaze});
     const bars = () => f.of('/actionbar').map((c) => c.body.text);
     await ev('Fancy', {a: 'shiftm'});
-    assert.deepEqual(ui.state('Fancy').form, {bot: 'bot1', block: null, amount: 'inf', chest: {x: 9, y: 9, z: 9}});
+    assert.deepEqual(ui.state('Fancy').form, {bot: 'bot1', block: null, amount: 'inf', far: false, chest: {x: 9, y: 9, z: 9}});
     assert.equal(f.of('/menu').at(-1).body.type, 'hopper');
     await ev('Midari', {a: 'shiftm', bot: 'MisaBot'});
     assert.equal(ui.state('Midari').form.chest, null);
@@ -533,13 +533,17 @@ async function fake() {
     assert.equal(bars().at(-1), 'Erst eine Kiste wählen'); assert.equal(submits.length, 0);
     const run = async (block, amount) => { await ev('Fancy', {a: 'pickblock', block}); ui.state('Fancy').form.amount = amount; await ev('Fancy', {a: 'shiftgo'}); return submits.at(-1); };
     assert.deepEqual(await run('oak_log', 'inf'), {bots: ['bot1'], type: 'shift', args: {block: 'logs', x: 9, y: 9, z: 9}, replace: false});
-    assert.deepEqual(await run('oak_log', 64), {bots: ['bot1'], type: 'chop', args: {count: 64}, replace: false});
+    assert.deepEqual(await run('oak_log', 64), {bots: ['bot1'], type: 'chop', args: {count: 64, near: true}, replace: false});
     assert.deepEqual(await run('iron_ore', 'inf'), {bots: ['bot1'], type: 'shift', args: {block: 'iron_ore', x: 9, y: 9, z: 9}, replace: false});
-    assert.deepEqual(await run('iron_ore', 16), {bots: ['bot1'], type: 'mine', args: {block: 'iron_ore', count: 16}, replace: false});
+    assert.deepEqual(await run('iron_ore', 16), {bots: ['bot1'], type: 'mine', args: {block: 'iron_ore', count: 16, near: true}, replace: false});
+    await ev('Fancy', {a: 'setfar'}); assert.equal(ui.state('Fancy').form.far, true); assert.equal(ui.state('Fancy').screen.name, 'shiftm');
+    assert.deepEqual((await run('oak_log', 64)).args, {count: 64}, 'Egal wie weit: no near');
+    await ev('Fancy', {a: 'setfar'}); assert.equal(ui.state('Fancy').form.far, false);
+    await run('iron_ore', 16);
     assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'}); assert.match(bars().at(-1), /^bot1: /);
     assert.deepEqual(ui.state('Fancy').recent, ['iron_ore', 'oak_log']);
     // point-to-pick: a chest sets form.chest and shows the hopper again; a wrong target posts nothing; the pick survives
-    await ev('Fancy', {a: 'shiftm'});
+    await ev('Fancy', {a: 'shiftm'}); ui.state('Fancy').form.amount = 'inf'; // the chest slot belongs to a shift
     await ev('Fancy', {a: 'pick', kind: 'chest'});
     assert.equal(bars().at(-1), 'Schleich und zeig mit dem Stab auf eine Kiste'); assert.equal(f.of('/close').length, 1); assert.equal(ui.state('Fancy').open, false);
     let menus = f.of('/menu').length;
@@ -952,7 +956,7 @@ async function fake() {
     // amounts feed shiftgo
     await ev('Fancy', {a: 'shiftm'}); await ev('Fancy', {a: 'pickblock', block: 'iron_ore'});
     await ev('Fancy', {a: 'setamount', amount: 256}); await ev('Fancy', {a: 'shiftgo'});
-    assert.deepEqual(submits.at(-1).args, {block: 'iron_ore', count: 256});
+    assert.deepEqual(submits.at(-1).args, {block: 'iron_ore', count: 256, near: true});
     // generic bot picker: back goes to the asking screen, bots/forms follow
     await ev('Fancy', {a: 'botpick', back: 'botm'}); assert.deepEqual(ui.state('Fancy').screen, {name: 'botpick', back: 'botm', bot: ui.state('Fancy').lastBot});
     await ev('Fancy', {a: 'setbot', bot: 'bot1', back: 'botm'}); assert.deepEqual(ui.state('Fancy').screen, {name: 'botm', bot: 'bot1'});
