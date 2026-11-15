@@ -1103,6 +1103,17 @@ async function fake() {
       const parts = submits.slice(n0);
       assert.deepEqual(parts.map((p) => [p.type, !!p.replace, p.args.z1, p.args.z2]), [['clear', true, 0, 26], ['clear', false, 27, 53], ['clear', false, 54, 79]]);
       assert.equal(ui.state('Fancy').flash.text, 'bot1: Bereich abbauen (3 Teile)');
+      // Raum graben and Ausleuchten go out in parts the same way (excavate 9 x 9 x 5, top layer first)
+      ui.marks.set('Fancy', {spot: null, area: {a: {x: 0, y: 64, z: 0, dim: 'overworld'}, b: {x: 17, y: 73, z: 8, dim: 'overworld'}}, at: t});
+      await ev('Fancy', {a: 'botm', bot: 'bot1'}); await ev('Fancy', {a: 'aream', bot: 'bot1', key: 'excavate'});
+      const n1 = submits.length; await ev('Fancy', {a: 'areago'});
+      assert.deepEqual(submits.slice(n1).map((p) => [p.type, !!p.replace, p.args.x1, p.args.y1, p.args.y2]), [['excavate', true, 0, 69, 73], ['excavate', false, 9, 69, 73], ['excavate', false, 0, 64, 68], ['excavate', false, 9, 64, 68]]);
+      assert.equal(ui.state('Fancy').flash.text, 'bot1: Raum graben (4 Teile)');
+      ui.marks.set('Fancy', {spot: null, area: {a: {x: 0, y: 64, z: 0, dim: 'overworld'}, b: {x: 99, y: 73, z: 9, dim: 'overworld'}}, at: t});
+      await ev('Fancy', {a: 'botm', bot: 'bot1'}); await ev('Fancy', {a: 'aream', bot: 'bot1', key: 'light'});
+      const n2 = submits.length; await ev('Fancy', {a: 'areago'});
+      assert.deepEqual(submits.slice(n2).map((p) => [p.type, p.args.x1, p.args.x2, p.args.y1, p.args.y2]), [['light', 0, 49, 64, 73], ['light', 50, 99, 64, 73]]);
+      assert.equal(ui.state('Fancy').flash.text, 'bot1: Ausleuchten (2 Teile)');
       ui.marks.set('Fancy', {spot: null, area: {a: {x: 1, y: 64, z: 1, dim: 'overworld'}, b: {x: 3, y: 65, z: 2, dim: 'overworld'}}, at: t});
     }
     // guest: only her bots; her order fails in ground(), the ghost stays

@@ -98,16 +98,21 @@ const isChest = (b) => /^(trapped_)?chest$|barrel/.test(b);
 
 const dims = (sel) => (sel.a && sel.b ? [Math.abs(sel.a.x - sel.b.x) + 1, Math.abs(sel.a.y - sel.b.y) + 1, Math.abs(sel.a.z - sel.b.z) + 1] : null);
 
-// Abbauen (Bereich) takes 32 x 32 x 24 per order: a bigger box goes out as several orders, the top layer first
-// (the owner marked 21 x 4 x 80 and saw only grey panes, 2026-11-15).
+// Abbauen (Bereich) takes 32 x 32 x 24 per order, Raum graben 9 x 9 x 5, Ausleuchten 64 x 64: a bigger box goes out
+// as several orders, the top layer first (the owner marked 21 x 4 x 80 and saw only grey panes, 2026-11-15).
+// Ausleuchten is cut across only: a floor spot counts when its ground and two air blocks lie in the box, a y seam stays dark.
+// Schacht and Versiegeln are not cut: parts would be shafts with their own stairs, or walls between the parts.
+const TILE = {clear: [32, 24, 32], excavate: [9, 5, 9], light: [64, 385, 64]};
 const CLEAR_PARTS = 24;
-function clearTiles(sel) {
+function clearTiles(sel, key = 'clear') {
+  const t = TILE[key];
+  if (!t) return [sel];
   const cuts = (k, max) => {
     const lo = Math.min(sel.a[k], sel.b[k]), size = Math.abs(sel.a[k] - sel.b[k]) + 1, n = Math.ceil(size / max), len = Math.ceil(size / n);
     return Array.from({length: n}, (_, i) => [lo + i * len, Math.min(lo + size - 1, lo + (i + 1) * len - 1)]);
   };
   const out = [];
-  for (const [y1, y2] of cuts('y', 24).reverse()) for (const [x1, x2] of cuts('x', 32)) for (const [z1, z2] of cuts('z', 32)) out.push({...sel, a: {...sel.a, x: x1, y: y1, z: z1}, b: {...sel.b, x: x2, y: y2, z: z2}});
+  for (const [y1, y2] of cuts('y', t[1]).reverse()) for (const [x1, x2] of cuts('x', t[0])) for (const [z1, z2] of cuts('z', t[2])) out.push({...sel, a: {...sel.a, x: x1, y: y1, z: z1}, b: {...sel.b, x: x2, y: y2, z: z2}});
   return out;
 }
 
@@ -118,12 +123,9 @@ function areaJobs(sel) {
   return AREA.map((key) => {
     const job = JOBS[key];
     if (crossed) return {key, ok: false, why: 'Ecken in verschiedenen Welten'};
-    if (key === 'clear') {
-      const parts = clearTiles(sel).length;
-      if (parts > CLEAR_PARTS) return {key, ok: false, why: `zu groß: höchstens ${CLEAR_PARTS} Teile`};
-      if (parts > 1) return {key, ok: true, parts};
-    }
-    try { VALIDATE[job.type](job.args({}, {sel})); return {key, ok: true}; } catch { return {key, ok: false, why: `zu groß oder zu klein: ${job.limit}`}; }
+    const parts = clearTiles(sel, key);
+    if (parts.length > CLEAR_PARTS) return {key, ok: false, why: `zu groß: höchstens ${CLEAR_PARTS} Teile`};
+    try { VALIDATE[job.type](job.args({}, {sel: parts[0]})); return parts.length > 1 ? {key, ok: true, parts: parts.length} : {key, ok: true}; } catch { return {key, ok: false, why: `zu groß oder zu klein: ${job.limit}`}; }
   });
 }
 

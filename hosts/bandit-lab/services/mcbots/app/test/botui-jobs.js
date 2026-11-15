@@ -91,7 +91,7 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: {x: -271, y: 
   let r = by(areaJobs(sel({x: 8, y: 64, z: 8})));
   assert.ok(r.excavate.ok && r.clear.ok && r.light.ok && r.shaft.ok && r.seal.ok);
   r = by(areaJobs(sel({x: 20, y: 60, z: 20})));
-  assert.equal(r.excavate.ok, false); assert.match(r.excavate.why, /9 x 9 x 5/); assert.equal(r.clear.ok, true);
+  assert.deepEqual([r.excavate.ok, r.excavate.parts], [true, 9], 'a big Raum graben box goes out in parts'); assert.equal(r.clear.ok, true);
   r = by(areaJobs(sel({x: 40, y: 60, z: 40})));
   assert.deepEqual([r.clear.ok, r.clear.parts], [true, 4], 'a big Abbauen box goes out in parts'); assert.equal(r.light.ok, true);
   { // clearTiles: every part within 32 x 32 x 24, together the whole box, the top layer first; too many parts is refused
@@ -101,6 +101,20 @@ const ctx = {pos: [1.7, 64, -3.2], dim: 'overworld', yaw: 0, gaze: {x: -271, y: 
     const tall = clearTiles(sel({x: 3, y: 110, z: 3})); assert.ok(tall[0].a.y > tall.at(-1).a.y, 'top first');
     assert.equal(clearTiles(sel({x: 8, y: 64, z: 8})).length, 1);
     const huge = by(areaJobs(sel({x: 300, y: 60, z: 300}))); assert.equal(huge.clear.ok, false); assert.match(huge.clear.why, /höchstens 24 Teile/);
+  }
+  { // Raum graben in 9 x 9 x 5 parts, top first, every cell once; Ausleuchten cut across only; Schacht and Versiegeln never
+    const {clearTiles} = require('../botui-jobs'), size = (q) => ['x', 'y', 'z'].map((k) => Math.abs(q.a[k] - q.b[k]) + 1);
+    const cells = (t) => { const c = new Set(); let n = 0; for (const q of t) for (let x = q.a.x; x <= q.b.x; x++) for (let y = q.a.y; y <= q.b.y; y++) for (let z = q.a.z; z <= q.b.z; z++) { n++; c.add(`${x},${y},${z}`); } return [n, c.size]; };
+    const s = sel({x: 17, y: 69, z: 17}), t = clearTiles(s, 'excavate');
+    assert.equal(t.length, 8); assert.ok(t.every((q) => size(q)[0] <= 9 && size(q)[1] <= 5 && size(q)[2] <= 9 && q.a.dim === 'overworld'));
+    assert.deepEqual(cells(t), [18 * 10 * 18, 18 * 10 * 18], 'no gap, no overlap'); assert.ok(t.slice(0, 4).every((q) => q.a.y === 65) && t.slice(4).every((q) => q.b.y === 64), 'top first');
+    const lt = clearTiles(sel({x: 99, y: 79, z: 9}), 'light');
+    assert.equal(lt.length, 2); assert.ok(lt.every((q) => q.a.y === 60 && q.b.y === 79)); assert.deepEqual(cells(lt), [100 * 20 * 10, 100 * 20 * 10]);
+    assert.equal(clearTiles(sel({x: 99, y: 79, z: 99}), 'shaft').length, 1); assert.equal(clearTiles(sel({x: 99, y: 79, z: 99}), 'seal').length, 1);
+    r = by(areaJobs(sel({x: 99, y: 79, z: 9})));
+    assert.deepEqual([r.light.ok, r.light.parts], [true, 2]); assert.equal(r.shaft.ok, false); assert.equal(r.seal.ok, false); assert.match(r.seal.why, /zu groß oder zu klein/);
+    r = by(areaJobs(sel({x: 99, y: 119, z: 9}))); assert.equal(r.light.ok, false); assert.match(r.light.why, /64 x 64 x 48/, 'over 48 high is not cut: a y seam would stay dark');
+    r = by(areaJobs(sel({x: 49, y: 64, z: 49}))); assert.equal(r.excavate.ok, false); assert.match(r.excavate.why, /höchstens 24 Teile/);
   }
   r = by(areaJobs(sel({x: 1, y: 60, z: 1})));
   assert.equal(r.shaft.ok, false); // 2 x 2 is under the minimum

@@ -255,8 +255,8 @@ const ACTIONS = {
     if (jobs.dimOf(st.sel.a.dim) !== jobs.dimOf(st.ctx.dim)) throw new Error('Bereich ist in einer anderen Welt');
     const bot = oneBot(ui, viewer, {bot: st.area.bot});
     try { // a refusal keeps the selection
-      // A big Abbauen (Bereich) box goes out in parts (jobs.clearTiles): the first as chosen, the rest queued behind it.
-      const sels = key === 'clear' ? jobs.clearTiles(st.sel) : [st.sel];
+      // A big box goes out in parts (jobs.clearTiles, for the jobs it cuts): the first as chosen, the rest queued behind it.
+      const sels = jobs.clearTiles(st.sel, key);
       if (sels.length > jobs.CLEAR_PARTS) throw new Error('Bereich zu groß');
       let o;
       sels.forEach((sel, i) => {
