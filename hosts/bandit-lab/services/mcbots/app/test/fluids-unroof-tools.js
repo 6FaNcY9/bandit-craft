@@ -217,6 +217,19 @@
     assert.strictEqual(topTargets(blocks, () => false).length, 8, 'default k is 8');
   }
   assert.deepStrictEqual([shiftLeash(home, {x: -269, z: -211}, false), shiftLeash(home, {x: home.x + 100, z: home.z}, false), shiftLeash(home, {x: -269, z: -211}, true), shiftLeash(home, null, false)], [112, 64, 240, 64], 'a shift anchored under the base reaches past the circle');
+  // Menu orders (near): mine/chop stay around where they started; orders without near keep no anchor (far search as before).
+  {
+    const {anchorOf, VALIDATE} = require('../bots'), {germanReason} = require('../owner'), {explain} = require('../botui-screens'), {classify} = require('../ownalerts');
+    const start = {x: 500, y: 70, z: 500};
+    assert.deepStrictEqual([anchorOf({type: 'chop', args: {count: 64, near: true}, startPos: start}), anchorOf({type: 'chop', args: {count: 64}, startPos: start}), anchorOf({type: 'shift', args: {x: 1, y: 2, z: 3}})], [start, null, {x: 1, y: 2, z: 3}]);
+    assert.strictEqual(shiftLeash(home, start, false), 64, 'near wood gets the plain leash, not 192');
+    assert.deepStrictEqual([VALIDATE.chop({count: 64, near: true}), VALIDATE.chop({count: 64}), VALIDATE.mine({block: 'iron_ore', count: 16, near: false})], [{count: 64, near: true}, {count: 64}, {block: 'iron_ore', count: 16}]);
+    assert.throws(() => VALIDATE.mine({block: 'stone', near: 'yes'}), /near must be true or false/);
+    const fail = 'no free logs within 64 blocks of the start';
+    assert.strictEqual(germanReason(fail), 'kein logs in der Nähe (64 Blöcke). Weiter weg: Abbauen… → Egal wie weit');
+    assert.strictEqual(explain(`chop: ${fail}`), 'kein logs in der Nähe (64 Blöcke). Weiter weg: Abbauen… → Egal wie weit');
+    assert.strictEqual(classify({kind: 'fail', text: `gave up: chop 64 - ${fail}`}), null, 'a near miss is not "missing" material');
+  }
   const {ensureTool} = require('../bots');
   const crafted = [], infos = [];
   let carried = [stack('cobblestone', 6), stack('stick', 4)];

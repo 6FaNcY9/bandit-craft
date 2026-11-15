@@ -14,6 +14,7 @@ function explain(error) {
   const e = String(error ?? '');
   let m;
   if (/inventory still full/.test(e)) return 'Kiste voll';
+  if ((m = /no free (\w+) within (\d+) blocks of the start/.exec(e))) return `kein ${m[1]} in der Nähe (${m[2]} Blöcke). Weiter weg: Abbauen… → Egal wie weit`;
   if ((m = /no free (\w+) within \d+ blocks/.exec(e))) return `nichts zu finden: ${m[1]} in Reichweite`;
   if (/could not reach/.test(e)) return 'kein Weg dorthin';
   if ((m = /unsafe: (water|lava)/.exec(e))) return m[1] === 'water' ? 'Wasser daneben, zu gefährlich' : 'Lava daneben, zu gefährlich';

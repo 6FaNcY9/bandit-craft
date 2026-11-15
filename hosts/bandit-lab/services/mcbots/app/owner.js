@@ -106,6 +106,7 @@ const REASONS = [
   [/^no chests within/, () => 'keine Kiste in der Nähe'],
   [/^no pickaxe for (\S+)/, (m) => `keine Spitzhacke für ${m[1]}`],
   [/^needs a tool that can harvest ([^:\s]+)/, (m) => `kein Werkzeug für ${m[1]}`],
+  [/^no free (\S+) within (\d+) blocks of the start$/, (m) => `kein ${m[1]} in der Nähe (${m[2]} Blöcke). Weiter weg: Abbauen… → Egal wie weit`],
   [/^no free (\S+) within reach and no walkable heading$/, (m) => `kein ${m[1]} in Reichweite und kein Weg weiter weg`],
   [/^no free (\S+) within (\d+) blocks of a far search heading (\w+)/, (m) => `kein ${m[1]} gefunden, auch nicht ${m[2]} Blöcke weiter Richtung ${dirEn(m[3])?.de ?? m[3]}`],
   [/^no free (\S+) within/, (m) => `kein ${m[1]} in Reichweite`],

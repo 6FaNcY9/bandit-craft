@@ -131,6 +131,11 @@ const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j &
 });
 
 // Normalise and validate job arguments (throws on bad input).
+// near (menu orders): mine/chop stay within the leash of where the job started, no far search.
+const near = (a) => {
+  if (a.near !== undefined && typeof a.near !== 'boolean') throw new Error('near must be true or false');
+  return a.near ? {near: true} : {};
+};
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
 // The walk back to a resumed job's area; a pen job walks in itself under its own rules (no digging, no pillars, gates shut).
 const walksBack = (job, at) => at.x !== undefined && job.type !== 'animalfarm';
@@ -152,9 +157,9 @@ const VALIDATE = {
     if (BUILT_RE.test(a.block)) throw new Error(`${a.block} is a placed block, not something to mine: craft it or take it from a chest`);
     // Items the model asked to mine (lab: "torches", 2026-10-11): they are crafted.
     if (/^(torches|sticks?|planks|[a-z]+_planks|[a-z]+_ingot|charcoal)$/.test(a.block)) throw new Error(`${a.block} is crafted, not mined: craft it or take it from a chest`);
-    return {block: a.block, count: num(a.count ?? 1, 1, 4096, 'count')};
+    return {block: a.block, count: num(a.count ?? 1, 1, 4096, 'count'), ...near(a)};
   },
-  chop: (a) => ({count: num(a.count ?? 1, 1, 4096, 'count')}),
+  chop: (a) => ({count: num(a.count ?? 1, 1, 4096, 'count'), ...near(a)}),
   // `only` (optional): put just that kind into the chest, even what a normal
   // deposit keeps (coal, torches); used by the keeper.
   // `own` (lagern): the bot's own chest from its prefs, with its own keep list.
@@ -2640,7 +2645,7 @@ async function explore(r, job, what, n, leash = LEASH, surface = false) {
   // try used to end at once and a chop failed in a second (bot18, 2026-10-10).
   const ok = ([dx, dz]) => {
     const x = Math.floor(p.x) + dx * EXPLORE_STEP, z = Math.floor(p.z) + dz * EXPLORE_STEP;
-    return !insideAreas(r.protectedAreas, x, z) && !(job.type === 'shift' && Math.hypot(x - job.args.x, z - job.args.z) > leash); // shifts stay near the chest
+    return !insideAreas(r.protectedAreas, x, z) && !(anchorOf(job) && Math.hypot(x - anchorOf(job).x, z - anchorOf(job).z) > leash); // shifts stay near the chest, near jobs near their start
   };
   // Underground a new direction each time. Over ground the bot keeps its heading until the leash or a wall
   // turns it: turning every 32 blocks walked it in a square round the main base, never to the forest
@@ -2702,6 +2707,8 @@ const LEASH = 64; // blocks a shift may work from its chest (more for logs: fore
 const WOOD_LEASH = 192; // the main base's forest was felled within 128; the next one starts 80-190 blocks south (2026-10-14)
 const EXPLORE_MAX = 6;
 // A shift anchored inside the base circle gets the circle's width on top: its ore starts 48 out, so 64 left a 16-wide ring (coal "no free", 2026-10-20).
+// What a job works around: a shift its chest, a near mine/chop where it started (startPos), else nothing.
+const anchorOf = (job) => (job.type === 'shift' ? job.args : job.args?.near ? job.startPos || null : null);
 const shiftLeash = (home, anchor, wood) => (wood ? WOOD_LEASH : LEASH) + (anchor && underBase(home, anchor) ? BASE_NO_MINE : 0);
 
 // Torches need wood (2 planks, or a log). A deep miner carries coal but never chops, so it runs dry.
@@ -2732,7 +2739,7 @@ async function collect(r, job, matching, count, what) {
   if (!ids.length) throw new Error(`unknown block: ${what}`);
   const ore = names.some((n) => n.endsWith('_ore'));
   const wood = names.every((n) => /_(log|stem)$/.test(n));
-  const leash = shiftLeash(r.supplyChest, job.type === 'shift' ? job.args : null, wood);
+  const leash = shiftLeash(r.supplyChest, anchorOf(job), wood && !job.args?.near); // near wood: 64, not 192
   const range = ore || wood ? 128 : 64; // the bot sees every block within its view distance (no anti-xray)
   const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] : null;
   let explored = 0, descents = 0, left = 0, far = null;
@@ -2770,7 +2777,7 @@ async function collect(r, job, matching, count, what) {
       continue;
     }
     // A shift works around its own chest: never more than LEASH blocks away from it.
-    const anchor = job.type === 'shift' ? job.args : null;
+    const anchor = anchorOf(job);
     if (anchor && Math.hypot(me.x - anchor.x, me.z - anchor.z) > leash - 8) { // e.g. respawned at world spawn
       await goNear(r, job, anchor.x, anchor.y, anchor.z, 3, {doing: `walking back to the shift's chest ${at(anchor)}`});
       continue;
@@ -2825,7 +2832,7 @@ async function collect(r, job, matching, count, what) {
         continue;
       }
       // Nothing free in view and nowhere left to explore: travel on in one direction (not shifts: they keep their leash).
-      if (job.type !== 'shift' && !job.noFar && (job.t.farHops || 0) < farsearch.FAR_TOTAL && (!far || far.hops < farsearch.FAR_HOPS)) {
+      if (!anchor && !job.args?.near && !job.noFar && (job.t.farHops || 0) < farsearch.FAR_TOTAL && (!far || far.hops < farsearch.FAR_HOPS)) {
         if (isNight(bot) && r.combat && !r.combat.fit()) { // an unfit bot does not set out in the dark: shelter, then look again
           await waitSafe(r, job, me.x, me.z, me.y);
           // No hole (protected ground, nothing for a lid): wait on the clock. A bare `continue` spun without yielding,
@@ -2844,6 +2851,7 @@ async function collect(r, job, matching, count, what) {
         try { await goNear(r, job, far.start.x, bot.entity.position.y, far.start.z, 8, {xz: true, doing: 'walking back from the far search'}); } catch (e) { guard(job); }
         throw new Error(farsearch.farFail(what, far));
       }
+      if (job.args?.near) throw new Error(`no free ${what} within ${leash} blocks of the start`);
       throw new Error(`no free ${what} within ${range} blocks (collected ${got}/${count}${explored ? `, searched ${explored} more spots` : ''}; seen ${seen.length}, ${filtered} outside base and protected areas, ${inLeash} within leash ${leash}, ${blocked} blocked, ${claimed} claimed)`);
     }
     far = null; // found something: a later dry spell searches afresh
@@ -4370,4 +4378,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
