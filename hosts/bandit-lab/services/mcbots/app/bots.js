@@ -2740,6 +2740,17 @@ async function farHop(r, job, what, far, surface) {
 // these Y bands, digging down (or up) to them first.
 const ORE_BAND = {coal_ore: [40, 130], iron_ore: [0, 40], copper_ore: [30, 70], gold_ore: [-30, -5], lapis_ore: [-15, 15], redstone_ore: [-60, -45], diamond_ore: [-60, -45], emerald_ore: [100, 250]};
 const outside = (band, y) => (band ? Math.max(0, band[0] - y, y - band[1]) : 0);
+// Rock that lies only deep: `produce` asked for deepslate at the sorter (Y 113), saw none within 64 and failed (2026-11-15).
+const DEEP_BAND = {deepslate: [-50, 0], tuff: [-50, 0]};
+// Where a dig-down for deep rock begins: false = not at all, null = here, else walk there first. Beside the base only:
+// the castle and the sorter are no protected area, and a staircase from the depot (Y 113) would cut the sorter's redstone.
+// A job tied to a spot away from the base (a shift at the castle depot) does not dig down.
+function descentStart(home, me, anchor) {
+  if (!home) return false;
+  const near = (p) => Math.hypot(p.x - home.x, p.z - home.z) <= BASE_NO_MINE + 16;
+  if (anchor && !near(anchor)) return false;
+  return near(me) ? null : {x: home.x, y: home.y, z: home.z};
+}
 const EXPLORE_STEP = 32;
 // T04 (2026-10-20): one search toward the TOPK nearest free blocks instead of a walk to one that may be sealed in
 // (535 "could not reach" a day); only for a first block farther than TOPK_NEAR, so close work stays a single short walk.
@@ -2783,7 +2794,8 @@ async function collect(r, job, matching, count, what) {
   const wood = names.every((n) => /_(log|stem)$/.test(n));
   const leash = shiftLeash(r.supplyChest, anchorOf(job), wood && !job.args?.near); // near wood: 64, not 192
   const range = ore || wood ? 128 : 64; // the bot sees every block within its view distance (no anti-xray)
-  const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] : null;
+  const deep = !ore && names.every((n) => DEEP_BAND[n]);
+  const band = bot.game?.dimension?.endsWith('overworld') !== false ? ORE_BAND[matching.find((n) => ORE_BAND[n])] || (deep ? DEEP_BAND[names[0]] : null) : null;
   let explored = 0, descents = 0, left = 0, far = null;
   if (names.some((n) => ORE_BAND[n.replace(/^deepslate_/, '')])) await fetchWood(r, job);
   let got = job.collected || 0; // survives a combat interruption + resume
@@ -2812,9 +2824,11 @@ async function collect(r, job, matching, count, what) {
     const seen = bot.findBlocks({matching: ids, maxDistance: range, count: 1024});
     let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood || !underBase(r.supplyChest, p)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
-    // Ore job, nothing inside the band near enough, and the bot is not in the band: go there first.
-    if (band && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
+    // Ore or deep rock, nothing inside the band near enough, and the bot is not in the band: go there first.
+    const start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : null;
+    if (band && start !== false && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
       descents++; // twice at most, then mine what is in reach
+      if (start) await goNear(r, job, start.x, start.y, start.z, 4, {xz: true, doing: `walking to the base to dig down for ${what} (never under a build)`});
       await toBand(r, job, band, what);
       continue;
     }
@@ -4463,4 +4477,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearSources, MAX_QUEUE, walksBack, beyondKeep, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};

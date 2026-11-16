@@ -207,6 +207,17 @@
   const [ox, oz] = outOfBase(home, {x: -258, z: -210}, 4);
   assert.ok(!underBase(home, {x: ox, z: oz}) && Math.hypot(ox - home.x, oz - home.z) < 53 && ox > home.x && oz > home.z, `${ox} ${oz}`);
   assert.deepStrictEqual(outOfBase(home, home, 4), [home.x + 52, home.z]);
+  // deep rock: dig down beside the base only, never from the castle depot (Y 113, no protected area; 2026-11-16)
+  {
+    const {descentStart, DEEP_BAND} = require('../bots');
+    const depot = {x: -303, y: 113, z: 6};
+    assert.deepStrictEqual(descentStart(home, depot, null), home, 'away from the base: walk to the base first');
+    assert.equal(descentStart(home, {x: -250, z: -190}, null), null, 'near the base: dig down here (toBand walks out of the circle)');
+    assert.equal(descentStart(home, depot, depot), false, 'a job tied to the depot does not dig down');
+    assert.deepStrictEqual(descentStart(home, depot, {x: -270, z: -215}), home, 'a job tied to the base walks back to it');
+    assert.equal(descentStart(null, depot, null), false, 'no base: no dig-down');
+    assert.ok(DEEP_BAND.deepslate[1] <= 0 && DEEP_BAND.deepslate[0] >= -60, 'deepslate band lies below Y 0');
+  }
   const {shiftLeash} = require('../bots');
   // T04: the walk aims at the nearest free blocks, never at skipped ones, and at most k of them
   {
