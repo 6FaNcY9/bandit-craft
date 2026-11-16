@@ -42,6 +42,20 @@ function bedNeeds(items) {
   return {wool: !woolColour(items), planks: sum(/_planks$/) < 3 && sum(/_log$/) < 1};
 }
 
+// Which wool to take from the base chest, in order: [{item, count}]. One colour at a time: a plain "wool" withdraw took
+// 2 gray + 1 light gray while 20 white lay there, and bot21 went after sheep 150 blocks away, underground (2026-11-16).
+// A colour the chest index shows enough of comes first (the one the bot already holds most of), then white (the index
+// may be stale), then what the bot holds; three tries at most. stock = the chest index's {name: count}.
+function woolPicks(items, stock = {}) {
+  const held = {};
+  for (const i of items) { const m = /^(\w+)_wool$/.exec(i.name); if (m) held[m[1]] = (held[m[1]] || 0) + i.count; }
+  const need = (c) => Math.max(1, 3 - (held[c] || 0));
+  const inStock = Object.keys(stock).map((n) => /^(\w+)_wool$/.exec(n)?.[1]).filter((c) => c && stock[`${c}_wool`] >= need(c))
+    .sort((a, b) => (held[b] || 0) - (held[a] || 0) || stock[`${b}_wool`] - stock[`${a}_wool`]);
+  const order = [...inStock, 'white', ...Object.keys(held).sort((a, b) => held[b] - held[a])];
+  return [...new Set(order)].slice(0, 3).map((c) => ({item: `${c}_wool`, count: need(c)}));
+}
+
 function makeHomebed({goNear, guard, sleep, goals, crafting, run, at, digAt, NATURAL}) {
   const items = (bot) => bot.inventory.items();
 
@@ -50,12 +64,15 @@ function makeHomebed({goNear, guard, sleep, goals, crafting, run, at, digAt, NAT
     const {bot} = r;
     const c = r.supplyChest;
     if (c) {
-      const have = items(bot).filter((i) => /_wool$/.test(i.name)).reduce((n, i) => n + i.count, 0);
-      try {
-        await run(r, job, 'withdraw', {item: 'wool', count: Math.max(1, 3 - have), ...c});
-      } catch (e) {
-        guard(job);
-        r.emit('info', `no wool from the base chest: ${e.message.slice(0, 80)}`);
+      const stock = r.world?.chests?.get?.(`${c.x},${c.y},${c.z}`)?.items || {};
+      for (const {item, count} of woolPicks(items(bot), stock)) {
+        if (woolColour(items(bot))) break;
+        try {
+          await run(r, job, 'withdraw', {item, count, ...c});
+        } catch (e) {
+          guard(job);
+          r.emit('info', `no ${item} from the base chest: ${e.message.slice(0, 80)}`);
+        }
       }
     }
     // Animals are only sent within ~48 blocks of the bot: look here, then walk a ring around the base.
@@ -186,4 +203,4 @@ function makeHomebed({goNear, guard, sleep, goals, crafting, run, at, digAt, NAT
   return {homebed};
 }
 
-module.exports = {SLOTS, CREW, YAW, searchRing, slotSpot, homeSpot, bedNeeds, makeHomebed};
+module.exports = {SLOTS, CREW, YAW, searchRing, slotSpot, homeSpot, bedNeeds, woolPicks, makeHomebed};

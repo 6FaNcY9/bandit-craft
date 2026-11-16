@@ -24,6 +24,13 @@ module.exports = async () => {
     assert.deepStrictEqual(HB.bedNeeds(have({white_wool: 3, oak_planks: 3})), {wool: false, planks: false});
     assert.deepStrictEqual(HB.bedNeeds(have({white_wool: 3, oak_log: 1})), {wool: false, planks: false}, 'one log makes planks');
     assert.deepStrictEqual(HB.bedNeeds(have({white_wool: 2, red_wool: 1, oak_planks: 2})), {wool: true, planks: true});
+    // wool from the base chest: one colour at a time, never "any wool" (2 gray + 1 light gray, bot21 2026-11-16)
+    assert.deepStrictEqual(HB.woolPicks([], {white_wool: 20, gray_wool: 2}), [{item: 'white_wool', count: 3}], 'white when the chest has it');
+    assert.deepStrictEqual(HB.woolPicks(have({gray_wool: 2, light_gray_wool: 1}), {white_wool: 20, gray_wool: 1}),
+      [{item: 'gray_wool', count: 1}, {item: 'white_wool', count: 3}, {item: 'light_gray_wool', count: 2}], 'finish the held colour first');
+    assert.deepStrictEqual(HB.woolPicks([], {red_wool: 5}), [{item: 'red_wool', count: 3}, {item: 'white_wool', count: 3}], 'a colour the index shows enough of');
+    assert.deepStrictEqual(HB.woolPicks([], {}), [{item: 'white_wool', count: 3}], 'no index: white');
+    assert.ok(HB.woolPicks(have({a_wool: 1, b_wool: 1, c_wool: 1}), {d_wool: 9, e_wool: 9}).length <= 3, 'three tries at most');
     assert.deepStrictEqual(HB.searchRing({x: 10.5, y: 66, z: -4}).slice(0, 4), [{x: 80, z: -4}, {x: 10, z: 66}, {x: -60, z: -4}, {x: 10, z: -74}]);
     assert.strictEqual(HB.searchRing({x: 0, z: 0}).length, 8);
     assert.deepStrictEqual(VALIDATE.homebed({}), {});
