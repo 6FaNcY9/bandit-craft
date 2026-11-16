@@ -83,9 +83,9 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.strictEqual(A.deathLoop(d.times, 29 * MIN).hold, true, 'the third within 30 min');
   assert.deepStrictEqual(A.deathLoop(d.times, 29 * MIN).times, [], 'counting starts over after a hold');
   assert.strictEqual(A.deathLoop(d.times, 31 * MIN).hold, false, 'the first death is 31 min old: out of the window');
-  assert.strictEqual(A.deathLoopAlert('bot1', {type: 'produce'}, 0), 'bot1 died 3 times in 30 min: its produce order is dropped; it waits for a new order');
-  assert.strictEqual(A.deathLoopAlert('bot1', undefined, 9), 'bot1 died 3 times in 30 min: its 9 queued jobs are dropped; it waits for a new order', 'graves queued one by one (2026-10-20)');
-  assert.match(A.deathLoopAlert('bot1', undefined, 0), /: nothing queued; it waits for a new order$/);
+  assert.strictEqual(A.deathLoopAlert('bot1', {type: 'produce'}, 0), 'bot1 died 3 times in 30 min: its produce order waits 30 min');
+  assert.strictEqual(A.deathLoopAlert('bot1', undefined, 9), 'bot1 died 3 times in 30 min: its 9 queued jobs are dropped', 'graves queued one by one (2026-10-20)');
+  assert.match(A.deathLoopAlert('bot1', undefined, 0), /: nothing queued$/);
 }
 assert.throws(() => loadConfig({BOT_NAMES: 'bot1', DASHBOARD_HOST: '0.0.0.0'}));
 assert.ok(loadConfig({BOT_NAMES: 'bot1', DASHBOARD_HOST: '0.0.0.0', ALLOWED_TS_LOGINS: 'a@github'}).allowed.length);
@@ -201,7 +201,7 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '1,2,3'}));
     h.event({bot: 'base', kind: 'alert', text: loop('bot1', {type: 'produce'}, 0)});
     h.event({bot: 'base', kind: 'alert', text: loop('bot3', undefined, 2)});
     h.event({bot: 'base', kind: 'alert', text: loop('bot1', undefined, 0)});
-    assert.deepStrictEqual([sent.length, sent.at(-1).headers.Priority, sent.at(-1).body], [before + 3, 'high', 'bot3 died 3 times in 30 min: its 2 queued jobs are dropped; it waits for a new order']);
+    assert.deepStrictEqual([sent.length, sent.at(-1).headers.Priority, sent.at(-1).body], [before + 3, 'high', 'bot3 died 3 times in 30 min: its 2 queued jobs are dropped']);
   }
   assert.doesNotThrow(() => new NtfyNotifier({...options, fetcher: () => Promise.reject(Error('offline'))}).send('bot1', 'x', 'x'));
   // Both local and sanitized remote events share this callback; notification errors cannot stop logging.

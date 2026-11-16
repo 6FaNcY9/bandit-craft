@@ -70,7 +70,7 @@ const orderEnded = (e) => {
     return retry * s.factor;
   };
   if (out?.end) { ownerOrders.delete(e.bot); saveOrders(); orderFails.delete(e.bot); }
-  if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + backoff(out.retry, `${order.type} order`))); // never cuts a death-loop hold (Infinity) short
+  if (out?.retry) orderRetryAt.set(e.bot, Math.max(orderRetryAt.get(e.bot) || 0, Date.now() + backoff(out.retry, `${order.type} order`))); // never cuts a death hold short
   // A project goes on by itself whenever its bot is idle (sweep below) until it finishes; a failure waits like an order's.
   const p = projects.get(e.bot), pout = p && !p.paused ? orderloop.orderOutcome(e, p) : null;
   if (pout?.end) { projects.forget(e.bot); orderFails.delete(e.bot); }
@@ -83,15 +83,13 @@ const orderEnded = (e) => {
     deathTimes.set(e.bot, d.times);
     if (d.hold) {
       const r = runners.get(e.bot), queued = r?.snapshot().queue?.length || 0;
+      // A hold, not an end: the order or project starts again after DEATH_HOLD_MS (a paused project never did, bots slept).
+      orderRetryAt.set(e.bot, e.t + orderloop.DEATH_HOLD_MS);
+      if (queued) {
+        r.enqueue('stop');
+        delete toResume[e.bot];
+      }
       events.add('base', 'alert', orderloop.deathLoopAlert(e.bot, order || (p && !p.paused ? p : null), queued));
-      // An end like the owner's Stop: the bot stays where it respawned until the owner gives it a new job (owner 2026-11-15;
-      // the 30 min hold before sent it back into the same death).
-      // shortcut: the hold is not saved, a hub restart lets its "Wenn frei" job start again; save it when that bites.
-      ownerOrders.delete(e.bot); saveOrders(); orderFails.delete(e.bot);
-      projects.pause(e.bot);
-      orderRetryAt.set(e.bot, Infinity); // no idle, project or keeper start; submitJob lifts it with the owner's next order
-      delete toResume[e.bot];
-      r?.enqueue('stop');
     }
   }
 };
@@ -230,7 +228,7 @@ function submitJob({bots, type, args, replace, remember = true}) {
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
       r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' ? {first: true} : {})});
       if (remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
-      if (remember) { orderFails.delete(r.name); type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') { idleStopAll = false; orderRetryAt.delete(r.name); } }
+      if (remember) { orderFails.delete(r.name); type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {
         delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
         projects.pause(r.name);
