@@ -268,7 +268,7 @@ assert.ok(MENUS.has('ov'));
   assert.equal(more.rows, 3); assert.match(more.title, /zed: mehr/);
   assert.deepEqual([at(more, 11).item, at(more, 11).payload], ['shield', {a: 'guardm', bot: 'zed'}]);
   assert.deepEqual(more.slots.filter((x) => x.slot >= 9 && x.slot < 15).map((x) => x.payload.a), ['placem', 'go', 'guardm', 'go', 'go', 'go']);
-  assert.deepEqual(at(more, 9).payload, {a: 'placem', mode: 'goto', bot: 'zed'}); assert.deepEqual(at(more, 14).lore, ['aus der Vorratskiste']);
+  assert.deepEqual(at(more, 9).payload, {a: 'placem', mode: 'goto', bot: 'zed'}); assert.deepEqual(at(more, 14).lore, ['aus der Rüstkammer, sonst Vorratskiste']);
   assert.deepEqual(at(more, 8).payload, {a: 'botm', bot: 'zed'});
   const guard = pg('guardm');
   assert.deepEqual([0, 1, 2, 3].map((i) => at(guard, i).count), [8, 16, 32, 48]); assert.deepEqual(at(guard, 2).payload, {a: 'guardgo', bot: 'zed', radius: 32});

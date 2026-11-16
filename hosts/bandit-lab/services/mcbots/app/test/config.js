@@ -32,6 +32,9 @@ for (const bad of ['bot', 'bot100', 'Bot1', 'steve', 'bot1,x']) assert.throws(()
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', MAIN_BOTS: 'bot19'}).mainBots, ['bot19']);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', BOARD_BOTS: 'bot2', MAIN_BOTS: 'bot2'}), /MAIN_BOTS must be bot names outside/);
   assert.throws(() => loadConfig({BOT_NAMES: 'bot1', GUEST_BOTS: 'MisaBot', MAIN_BOTS: 'MisaBot'}), /MAIN_BOTS must be bot names outside/);
+  assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', GUEST_BOTS: 'MisaBot,EM_Trader', GEAR_GUESTS: 'MisaBot'}).gearGuests, ['MisaBot']);
+  assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).gearGuests, []);
+  assert.throws(() => loadConfig({BOT_NAMES: 'bot1', GEAR_GUESTS: 'bot1'}), /GEAR_GUESTS must be names in GUEST_BOTS/);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1', INGAME_VIEWERS: 'a,b'}).ingameViewers, ['a', 'b']);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).ingameViewers, ['fancy8869', 'MidariBread']);
   assert.deepStrictEqual(loadConfig({BOT_NAMES: 'bot1'}).viewerBots.MidariBread, ['MisaBot', 'EM_Trader']); // the default must not make the guest an owner

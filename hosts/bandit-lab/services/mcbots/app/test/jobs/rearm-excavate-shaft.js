@@ -35,6 +35,15 @@ module.exports = async () => {
               const mine = inv.find((i) => i.type === type);
               if (mine) mine.count += n; else inv.push({...src, count: n});
             },
+            deposit: async (type, _m, n) => {
+              if (failAt.deposit) throw new Error(failAt.deposit);
+              const mine = inv.find((i) => i.type === type);
+              if (!mine || mine.count < n) throw new Error('nothing to deposit');
+              mine.count -= n;
+              if (!mine.count) inv.splice(inv.indexOf(mine), 1);
+              const there = chest.items.find((i) => i.type === type);
+              if (there) there.count += n; else chest.items.push({...mine, count: n});
+            },
           };
         },
         recipesFor: (id) => [{id}],
@@ -47,9 +56,9 @@ module.exports = async () => {
       };
       return {bot, inv, equipped};
     };
-    const run = (b, job = {t: {}, cancelled: false}) => {
+    const run = (b, job = {t: {}, cancelled: false}, extra = {}) => {
       const infos = [];
-      const r = {bot: b.bot, world: {hostilesNear: () => []}, emit: (k, m) => infos.push(m), protectedAreas: [], supplyChest: null};
+      const r = {bot: b.bot, world: {hostilesNear: () => []}, emit: (k, m) => infos.push(m), protectedAreas: [], supplyChest: null, ...extra};
       return {go: () => JOBS.rearm(r, Object.assign(job, {args: {x: 0, y: 64, z: 0}})), job, infos};
     };
     // 1. full inventory with a pickaxe and carried armour: the spare pickaxe cannot be taken, the armour is worn
@@ -151,6 +160,52 @@ module.exports = async () => {
       assert.strictEqual(calls, 1, `${at}: nothing is started after the Stop`);
       assert.strictEqual(chest.closed, chest.opened);
     }
+    // 9. at the armoury (the gear point) duplicates go back; a guest keeps its own; a full chest ends nothing (owner 2026-11-15)
+    const GEAR = {x: 0, y: 64, z: 0};
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword', 3), it('bread', 10)]});
+    x = run(b, undefined, {gearChest: GEAR});
+    await x.go();
+    assert.strictEqual(chest.items.find((i) => i.name === 'iron_sword')?.count, 2, 'two swords back');
+    assert.strictEqual(b.inv.find((i) => i.name === 'iron_sword').count, 1);
+    assert.match(x.job.progress, /handed back 2/);
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword', 3)]});
+    await run(b, undefined, {gearChest: GEAR, gearRange: 250}).go();
+    assert.strictEqual(chest.items.length, 0, 'a guest hands nothing back');
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword', 3)], failAt: {deposit: 'chest full'}});
+    x = run(b, undefined, {gearChest: GEAR});
+    await x.go();
+    assert.deepStrictEqual(b.equipped, ['iron_sword>hand'], 'still equipped');
+    assert.ok(x.infos.some((m) => /could not hand back/.test(m)), x.infos.join('|'));
+    assert.match(x.job.progress, /armour 0\/4/);
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword', 3)]});
+    await run(b).go();
+    assert.strictEqual(chest.items.length, 0, 'no hand-back at the supply chest');
+    // 10. nearest (the death rearm): a respawn nearer the supply chest re-arms there, and hands nothing back
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword', 3)]});
+    const goals = [];
+    b.bot.pathfinder.goto = async (g) => { goals.push(g); };
+    const near = {t: {}, cancelled: false, args: {x: 500, y: 64, z: 500, nearest: true}};
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: {x: 0, y: 64, z: 0}, gearChest: {x: 500, y: 64, z: 500}}, near);
+    assert.ok(goals.length && goals.every((g) => Math.hypot(g.x, g.z) < 10), JSON.stringify(goals[0]));
+    // 11. a guest that died near the castle and woke at its own base ~720 blocks away: the death rearm ends, no walk (review 2026-11-16)
+    goals.length = 0;
+    const guestJob = {t: {}, cancelled: false, args: {x: 720, y: 64, z: 0, nearest: true}};
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: null, gearChest: {x: 720, y: 64, z: 0}, gearRange: 250}, guestJob);
+    assert.deepStrictEqual(goals, [], 'no walk across the map');
+    assert.match(guestJob.progress, /out of reach/);
+    // 12. at the armoury without wood: no 200-block trip to the supply chest for logs afterwards (review 2026-11-16)
+    chest = chestOf([]);
+    b = botOf(chest, {inv: [it('iron_sword')]});
+    const woodGoals = [];
+    b.bot.pathfinder.goto = async (g) => { woodGoals.push(g); };
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: {x: 500, y: 64, z: 500}, gearChest: {x: 0, y: 64, z: 0}}, {t: {}, cancelled: false, args: {x: 0, y: 64, z: 0}});
+    assert.ok(woodGoals.every((g) => Math.hypot(g.x, g.z) < 10), JSON.stringify(woodGoals.at(-1)));
+    assert.strictEqual(chest.items.length, 0, 'not the armoury: nothing handed back');
   }
   { // excavate: digs natural ground top-down, leaves placed blocks and protected areas alone
     const {JOBS, VALIDATE} = require('../../bots');

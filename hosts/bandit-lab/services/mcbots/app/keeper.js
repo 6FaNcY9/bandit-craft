@@ -85,6 +85,23 @@ for (const [item, ingots] of [['iron_pickaxe', 3], ['iron_sword', 2]]) {
 const getPlan = (item) => (n, c) => [['get', {item, count: n}], ['deposit', {...c, only: item}]];
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
+// The castle armoury (spec 2026-11-15-castle-armoury): kept from the base chest, everything into the gear-point chest
+// (the keeper counts that one chest; rearm reads all of them). 2 ready sets, the rest as ingots.
+const ARMOURY_STOCK = [['iron_ingot', 64], ['bread', 64], ['torch', 32], ['logs', 16], ['iron_helmet', 2], ['iron_chestplate', 2], ['iron_leggings', 2], ['iron_boots', 2], ['iron_sword', 2], ['iron_axe', 2], ['iron_pickaxe', 2], ['shield', 2]];
+const {COST} = require('./gear');
+// A gear piece is crafted from the base chest's ingots (logs for the table, sticks and shield planks); the rest is carried.
+function armouryPlan(item, n, base, armoury, baseStock) {
+  if (!COST[item]) {
+    const k = Math.min(n, have(baseStock, item));
+    if (k < 1) return {blocked: `no ${item} in the base chest`};
+    return [['withdraw', {item, count: k, ...base}], ['deposit', {...armoury, only: item}]];
+  }
+  const need = [['iron_ingot', COST[item] * n], ['logs', item === 'shield' ? 2 * n + 1 : 2]];
+  const short = need.find(([what, k]) => have(baseStock, what) < k);
+  if (short) return {blocked: `needs ${short[1]} ${short[0]} in the base chest first`};
+  return [...need.map(([what, k]) => ['withdraw', {item: what, count: k, ...base}]), ['craft', {item, count: n}], ['deposit', {...armoury, only: item}], ['deposit', {...armoury, only: 'iron_ingot'}]];
+}
+
 class Keeper {
   constructor({runners, world, chest, quotas, site = null, places = null, events = null, now = Date.now, log = () => {}, file = null, skip = [], held = () => false}) {
     this.runners = runners;
@@ -93,6 +110,9 @@ class Keeper {
     this.skip = new Set(skip);
     this.world = world;
     this.chest = chest; // {x,y,z} of the supply chest, or null: nothing to keep
+    this.armoury = null; // {x,y,z} of the armoury's gear point (server.js applyPlaces), or null
+    this.countingArmoury = null;
+    this.armouryNotes = new Map();
     this.quotas = quotas; // [[item, want]]
     this.configured = quotas; // setWant and the file only ever touch these
     this.site = site;
@@ -144,6 +164,7 @@ class Keeper {
     this.save();
     this.work.clear();
     this.counting = null;
+    this.countingArmoury = null;
     this.cooldown.clear();
     this.say(this.enabled ? 'standing orders on' : 'standing orders off (bots finish what they are doing; use Stop to end it)');
   }
@@ -224,7 +245,39 @@ class Keeper {
         busy.add(r.name);
       }, `${r.name}: ${item} ${have(stock.items, item)}/${want}, fetching ${n} (${jobs[0][0]} ...)`);
     }
+    if (this.armoury) this.tickArmoury(t, stock, busy, free);
     this.planLighting(snaps, t, busy);
+  }
+
+  // The armoury's own numbers only: stockAt falls back to the last untagged count, which would be the base chest's.
+  armouryStock() {
+    const c = this.armoury;
+    return (c && this.world.stocks?.get(`${c.x},${c.y},${c.z}`)) || null;
+  }
+
+  // 3. the armoury, after the supply chest's quotas, sharing their bots (MAX_BOTS), cooldowns and finish().
+  tickArmoury(t, baseStock, busy, free) {
+    const stock = this.armouryStock();
+    this.armouryNotes.clear();
+    if (!stock || t - stock.t > STOCK_MAX_AGE_MS) {
+      const r = !this.countingArmoury && busy.size < MAX_BOTS && free();
+      if (r) this.assign(r, [['stock', {...this.armoury}]], () => { this.countingArmoury = {bot: r.name, at: t}; busy.add(r.name); }, `${r.name}: counting what is in the armoury`);
+      return;
+    }
+    const short = ARMOURY_STOCK.map(([item, want]) => ({item, want, missing: want - have(stock.items, item)}))
+      .filter((q) => q.missing > 0 && !this.work.has(`armoury:${q.item}`)).sort((a, b) => b.missing / b.want - a.missing / a.want);
+    for (const {item, want, missing} of short) {
+      const key = `armoury:${item}`, n = Math.min(missing, MAX_JOB);
+      if ((this.cooldown.get(key) || 0) > t) { this.armouryNotes.set(item, 'no progress last time'); continue; }
+      const jobs = armouryPlan(item, n, this.chest, this.armoury, baseStock.items);
+      if (!Array.isArray(jobs)) { this.armouryNotes.set(item, jobs.blocked); continue; }
+      const r = busy.size < MAX_BOTS && free();
+      if (!r) { this.armouryNotes.set(item, 'waiting for a free bot'); continue; }
+      this.assign(r, jobs, () => {
+        this.work.set(key, {bot: r.name, n, at: t, before: have(stock.items, item), seen: false});
+        busy.add(r.name);
+      }, `${r.name}: armoury ${item} ${have(stock.items, item)}/${want}, bringing ${n} from the base chest`);
+    }
   }
 
   planLighting(snaps, t, busy) {
@@ -275,14 +328,19 @@ class Keeper {
       const s = snaps.get(this.counting.bot);
       if ((stock && stock.t >= this.counting.at) || t - this.counting.at > 5 * 60 * 1000 || !s?.online) this.counting = null;
     }
+    if (this.countingArmoury) {
+      const s = snaps.get(this.countingArmoury.bot), a = this.armouryStock();
+      if ((a && a.t >= this.countingArmoury.at) || t - this.countingArmoury.at > 5 * 60 * 1000 || !s?.online) this.countingArmoury = null;
+    }
     for (const [item, w] of [...this.work]) {
       const s = snaps.get(w.bot);
       if (s && !this.idle(s)) w.seen = true;
       const over = (w.seen && this.idle(s)) || !s?.online || t - w.at > ASSIGN_TIMEOUT_MS || (!w.seen && t - w.at > 60000);
       if (!over) continue;
       this.work.delete(item);
-      // The deposit at the end of every chain re-reads the chest, so a newer stock tells the result.
-      const after = stock && stock.t > w.at ? have(stock.items, item) : null;
+      // The deposit at the end of every chain re-reads the chest, so a newer stock tells the result (the armoury's own for its items).
+      const st = item.startsWith('armoury:') ? this.armouryStock() : stock, name = item.replace(/^armoury:/, '');
+      const after = st && st.t > w.at ? have(st.items, name) : null;
       if (after !== null && after <= w.before) {
         this.cooldown.set(item, t + COOLDOWN_MS);
         this.say(`${w.bot} is done with ${item}, but the chest did not get more (${w.before} -> ${after}); trying something else for ${COOLDOWN_MS / 60000} min`);
@@ -307,6 +365,11 @@ class Keeper {
       }),
       lighting: [...new Set([...this.lighting.keys(), ...this.lightWork.keys()])].map((key) => ({target: key, bot: this.lightWork.get(key)?.bot || null, nextAt: this.lighting.get(key) || null})),
       counting: this.counting?.bot || null,
+      armoury: this.armoury ? ARMOURY_STOCK.map(([item, want]) => {
+        const a = this.armouryStock(), w = this.work.get(`armoury:${item}`);
+        return {item, want, have: a ? have(a.items, item) : null, bot: w?.bot || null, note: w ? '' : this.armouryNotes.get(item) || ''};
+      }) : null,
+      countingArmoury: this.countingArmoury?.bot || null,
     };
   }
 }
@@ -323,4 +386,4 @@ function parseQuotas(text) {
   return out;
 }
 
-module.exports = {Keeper, parseQuotas, PLANS, have, idle, IDLE_MS, COOLDOWN_MS, STOCK_MAX_AGE_MS};
+module.exports = {Keeper, parseQuotas, PLANS, ARMOURY_STOCK, armouryPlan, have, idle, IDLE_MS, COOLDOWN_MS, STOCK_MAX_AGE_MS};

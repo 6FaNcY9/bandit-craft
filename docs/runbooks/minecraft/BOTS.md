@@ -57,6 +57,16 @@ Disable: set `bandit-lab.mcbots.enable = false;` (or remove the
 `./services/mcbots` import in `hosts/bandit-lab/default.nix`) and deploy.
 Immediate stop without a deploy: `sudo systemctl stop docker-mcbots mcbots-https`.
 
+## Armoury (castle gear point, 2026-11-15)
+
+Spec `docs/superpowers/specs/2026-11-15-castle-armoury-design.md`. A dashboard marker of kind `armoury` (the Iron chest,
+-322 105 -26) is the gear point: every bot's rearm after a death, the night rearm, the food rearm, the pickaxe rearm and
+`ensureGear` go there; the `supply` chest stays the material store and the fallback when the armoury lacks something.
+At the armoury a bot hands back duplicates (1 sword, 1 axe, 2 pickaxes, 1 shield, worn armour stay; `gear.js handBack`).
+Guests get it only when named in `GEAR_GUESTS` (MisaBot), only within 250 blocks, and never hand back. No marker: as before.
+The keeper (when on) also keeps the gear-point chest at `keeper.js ARMOURY_STOCK` (64 ingots, 64 bread, 32 torches, 16 logs,
+2 of each set piece), carried and crafted from the supply chest after its own quotas; `/api/keeper` shows it as `armoury`.
+
 ## Guest bot (MidariBread, 2026-10-29)
 
 `MisaBot` (builder) and `EM_Trader` (trader, `bot23` until 2026-11-03) in `mcbots-worker-5` belong to the player MidariBread: they play on the main

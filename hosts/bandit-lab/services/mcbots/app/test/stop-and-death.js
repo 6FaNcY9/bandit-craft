@@ -587,5 +587,17 @@ const {BotRunner} = require('../bots');
   assert.match(alerts[0], /2 deaths there/);
   r.enqueue('goto', {x: 1, y: 64, z: 1});
   assert.ok(r.queue.some((j) => j.type === 'goto'), 'an owner order after the repeat still runs');
+  { // the armoury: the death rearm goes there; nearest lets a respawn at the old beds use the supply chest (spec 2026-11-15)
+    const GEAR = {x: -322, y: 105, z: -26}, BASE = {x: -271, y: 66, z: -214};
+    const a = new BotRunner('bot2', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+    a.supplyChest = BASE;
+    a.gearChest = GEAR;
+    a.onDeath(deadBot(-310, -20));
+    assert.deepStrictEqual([a.queue[0].type, a.queue[0].args], ['rearm', {...GEAR, nearest: true}]);
+    const c = new BotRunner('bot3', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+    c.supplyChest = BASE;
+    c.onDeath(deadBot(-310, -20));
+    assert.deepStrictEqual([c.queue[0].type, c.queue[0].args], ['rearm', {...BASE, nearest: true}], 'no armoury: the supply chest');
+  }
   console.log('death spots ok');
 }

@@ -103,6 +103,10 @@ function loadConfig(env = process.env) {
   if (guestBad.length) throw new Error(`GUEST_BOTS must be bot names outside BOARD_BOTS: ${guestBad.join(', ')}`);
   // The owner's bots on the real server while the other helpers stay in the sandbox (owner 2026-11-04): they move on
   // orders only, so no keeper, board or help job; unlike a guest they use the supply chest.
+  // Guests that use the castle armoury like the owner's bots, near it only (owner 2026-11-15: MisaBot, not EM_Trader).
+  const gearGuests = list(env.GEAR_GUESTS);
+  const gearBad = gearGuests.filter((n) => !guestBots.includes(n));
+  if (gearBad.length) throw new Error(`GEAR_GUESTS must be names in GUEST_BOTS: ${gearBad.join(', ')}`);
   const mainBots = list(env.MAIN_BOTS);
   const mainBad = mainBots.filter((n) => !NAME_RE.test(n) || boardBots.includes(n) || guestBots.includes(n));
   if (mainBad.length) throw new Error(`MAIN_BOTS must be bot names outside BOARD_BOTS and GUEST_BOTS: ${mainBad.join(', ')}`);
@@ -165,6 +169,7 @@ function loadConfig(env = process.env) {
     hubWorkers,
     boardBots,
     guestBots,
+    gearGuests,
     mainBots,
     tradeHalls,
     tradeSchedule,

@@ -86,7 +86,7 @@ function morePage(view, screen) {
     go(10, 'iron_sword', 'Bewach diesen Ort', 'guardhere'), slot(11, 'shield', 'Bewachen…', {a: 'guardm', bot}, {glint: s.job?.type === 'guard'}),
     go(12, 'red_bed', 'Heim', 'homebed'), go(13, 'bone', 'Gräber holen', 'graves'),
     // a guest has no supply chest, so Ausrüsten always failed for one (menu crawl 2026-11-11)
-    ...(view.owner ? [go(14, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Vorratskiste')] : []),
+    ...(view.owner ? [go(14, 'iron_chestplate', 'Ausrüsten', 'rearm', 'aus der Rüstkammer, sonst Vorratskiste')] : []),
     slot(18, 'hopper', 'Kiste merken', {a: 'pick', kind: 'chest', bot}), slot(19, 'barrel', 'Inventar', {a: 'invm', bot}),
     slot(20, 'clock', 'Wenn frei…', {a: 'idlem', bot}, {lore: [safe(label, 40)]})]};
 }

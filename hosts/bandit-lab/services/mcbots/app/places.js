@@ -7,7 +7,8 @@ const path = require('node:path');
 
 // Zone kinds carry a box (the owner's "markers where you can make zones"); the others are points.
 const ZONE_KINDS = ['storage', 'shaft', 'treefarm', 'wheat', 'pen', 'field', 'base', 'protected'];
-const KINDS = ['supply', 'site', 'home', 'afk', 'chest', ...ZONE_KINDS];
+// 'armoury': the castle's gear point (spec 2026-11-15-castle-armoury); every gear and food trip goes there.
+const KINDS = ['supply', 'site', 'home', 'afk', 'chest', 'armoury', ...ZONE_KINDS];
 const MAX_SIDE = 64; // a zone is at most 64 blocks wide
 const DIMS = ['overworld', 'the_nether', 'the_end'];
 const MAX = 64;

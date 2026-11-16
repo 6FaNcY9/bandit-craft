@@ -24,6 +24,7 @@ const {botView} = require('./view');
 const {scanAround} = require('./scan');
 const {Settings} = require('./settings');
 const {Places, use: usePlaces, protectedBoxes} = require('./places');
+const {GEAR_RANGE} = require('./gear');
 const {BlockLog, Exporter, areaBoxes} = require('./blocklog');
 const {Projects, PROJECTS} = require('./projects');
 const orderloop = require('./orderloop');
@@ -119,7 +120,7 @@ setInterval(() => {
   idleLib.trackIdle(snaps, idleSince);
   const busy = new Set([...ownerOrders.keys(), ...started, ...Object.entries(projects.all).filter(([, p]) => !p.paused).map(([n]) => n),
     ...(board?.parts() || []).filter((p) => p.state === 'claimed').map((p) => p.claim.bot)]);
-  if (keeper) { const k = keeper.state(); for (const b of [k.counting, ...k.quotas.map((q) => q.bot), ...k.lighting.map((l) => l.bot)]) if (b) busy.add(b); }
+  if (keeper) { const k = keeper.state(); for (const b of [k.counting, k.countingArmoury, ...k.quotas.map((q) => q.bot), ...(k.armoury || []).map((q) => q.bot), ...k.lighting.map((l) => l.bot)]) if (b) busy.add(b); }
   for (const {bot, choice} of idleStopAll ? [] : idleLib.idleToStart({snaps, store: idleStore, busy: new Set([...busy, ...idleHeld]), retryAt: orderRetryAt, idleSince})) {
     started.add(bot);
     try {
@@ -163,7 +164,7 @@ const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<scrip
 const CSP = csp(page), LEGACY_CSP = csp(legacy), UPLOAD_CSP = csp(fs.readFileSync(path.join(__dirname, 'public', 'upload.html'))); // each page allows its own bodies only
 // Remote workers register themselves in `runners` (see hub.js), so the
 // dashboard, /api/state and /api/debug list them next to the lab's bots.
-const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, guests: cfg.guestBots, events, settings, tradeHalls: cfg.tradeHalls}) : null;
+const hub = cfg.workerToken ? new Hub({world, runners, token: cfg.workerToken, workers: cfg.hubWorkers, log, protectedAreas: cfg.protectedAreas, supplyChest: cfg.supplyChest, guests: cfg.guestBots, gearGuests: cfg.gearGuests, events, settings, tradeHalls: cfg.tradeHalls}) : null;
 const workerServer = hub ? createWorkerServer(hub) : null;
 
 // tailscale serve sets Tailscale-User-Login for tailnet users. When
@@ -380,10 +381,14 @@ function applyPlaces() {
   supplyChest = s ? {x: s.x, y: s.y, z: s.z} : cfg.supplyChest;
   const w = places.zone('wheat')?.box;
   const wheatField = w ? {x1: w.x1, z1: w.z1, x2: w.x2, z2: w.z2} : null; // hungry bots get bread there (bots.js wheatFood)
-  for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField, tradeHalls: cfg.tradeHalls});
-  if (hub) { Object.assign(hub, {supplyChest, wheatField, places: places.list}); hub.broadcastPolicy(); }
+  // The armoury (spec 2026-11-15-castle-armoury): every gear and food trip goes there; guests only by GEAR_GUESTS, near it.
+  const a = places.first('armoury'), gearChest = a ? {x: a.x, y: a.y, z: a.z} : null;
+  const guest = (n) => cfg.guestBots.includes(n), gearOk = (n) => !!gearChest && (!guest(n) || cfg.gearGuests.includes(n));
+  for (const r of runners.values()) if (!(r instanceof RemoteRunner)) Object.assign(r, {supplyChest, wheatField, tradeHalls: cfg.tradeHalls, gearChest: gearOk(r.name) ? gearChest : null, gearRange: gearOk(r.name) && guest(r.name) ? GEAR_RANGE : null});
+  if (hub) { Object.assign(hub, {supplyChest, gearChest, wheatField, places: places.list}); hub.broadcastPolicy(); }
   if (keeper) {
     keeper.chest = supplyChest;
+    keeper.armoury = gearChest; // filled from the supply chest (keeper.js ARMOURY_STOCK)
     keeper.site = site ? {x: site.x, y: site.y, z: site.z} : cfg.keeperSite;
   }
 }

@@ -115,8 +115,8 @@ Core wall: 3 thick, wall-walk at +8. Turrets 7 x 7 x 16 centred on (-336,-14), (
 | A1 | Wizard tower | -290 | 13 | -274 | 29 | 113 | 54 | 17 x 17, walls to y 152, spire to 167; sits on the curtain; rock plinth ≤ 10 on the east edge; door to the shell at x -291 z 21; needs birch demolition |
 | A2 | Machine plot M1 | -290 | 31 | -277 | 44 | 110 | 0 | 14 x 14; cut the knoll 1-6, fill one hole |
 | A3 | Bot forecourt (Vorburg) | -334 | -32 | -295 | -16 | 104 | 0 | 40 x 17; level by 3, NE corner fill 6-10 |
-| A3a | Barracks 1 | -333 | -30 | -325 | -20 | 104 | 7 | 9 x 11 |
-| A3b | Barracks 2 | -323 | -30 | -315 | -20 | 104 | 7 | 9 x 11 |
+| A3a | Barracks 1 (bot dormitory) | -333 | -30 | -325 | -20 | 104 | 7 | 9 x 11; the bots' beds move here, phase 1c (`2026-11-15-castle-armoury-design.md`) |
+| A3b | Thralls' Armoury (was Barracks 2) | -323 | -30 | -315 | -20 | 104 | 7 | 9 x 11; gear and food station for all bots, phase 1b (`2026-11-15-castle-armoury-design.md`) |
 | A3c | Field / farm | -309 | -31 | -296 | -18 | 104 | 0 | 14 x 14 |
 | A4a | Outer low wall W | -337 | -35 | -336 | -16 | 104 | 6 | 2 thick |
 | A4b | Outer low wall N | -337 | -35 | -292 | -34 | 104 | 6 | ground 94-104 |
@@ -157,6 +157,8 @@ wall K5; the bot quarter sits between them.
    x -333..-315, z -11..6 holds no owner blocks; identify the tall structure at x -327..-316, z 24..28 (y up to 140);
    probe the ground under the birch remains after demolition.
 1. **Warehouse K2.**
+1b. **Thralls' Armoury A3b** (owner 2026-11-15: now, not in phase 7; `2026-11-15-castle-armoury-design.md`).
+1c. **Barracks 1 A3a** with the bots' beds, right after the armoury (owner 2026-11-15).
 2. **Chest move**: all 71 owner chests + 6 shulkers + the ender chest into K2 **as they are** (same contents,
    same order; owner 2026-11-15), item counts compared before/after.
 3. **Birch demolition** (two boxes, above), then probe the ground.
@@ -172,6 +174,7 @@ Owner:
 - Option A (2026-11-15, companion click + "ja das was du empfiehlst").
 - The owner chests move 1:1 into the warehouse, not through the sorter (2026-11-15).
 - MisaBot works on the castle too (2026-11-15).
+- The armoury replaces Barracks 2 and is built now; all gear and food trips go there, the base chest stays the material store; MisaBot is equipped there automatically; the bots' beds move into Barracks 1 (2026-11-15).
 - Evil-wizard theme, bots as servants; birch house may be demolished; modular; not too big (2026-11-05).
 
 Claude's calls (correctable):
