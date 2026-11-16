@@ -296,4 +296,41 @@ module.exports = async () => {
     assert.match(String(doing), /glass/, `a support on a chest's lid is glass (doing: ${doing})`);
     assert.doesNotMatch(String(doing), /dirt/, `no dirt on a chest's lid: it keeps the chest shut (doing: ${doing})`);
   }
+  { // a work torch or a crafting table the bots put down in a planned cell comes out without clearAll; a chest stays, and
+    // a torch in an air cell stays without tight: "no progress for 300 s: in the way: wall_torch ..." (castle roof, main server 2026-11-16)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+    const packed = 4n | (4n << 5n) | (4n << 10n) | (0n << 15n); // stone at x 0..2, air at x 3
+    const longs = [[Number(BigInt.asIntN(32, packed >> 32n)), Number(BigInt.asIntN(32, packed))]];
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 4, y: 1, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: longs}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-workblocks-'));
+    fs.writeFileSync(path.join(dir, 'roof.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('roof')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const job = {t: {}, cancelled: false, args: {file: 'roof.litematic', origin: {x: 0, y: 64, z: 0}, chests: []}};
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const world = new Map([['0,64,0', 'wall_torch'], ['1,64,0', 'crafting_table'], ['2,64,0', 'chest'], ['3,64,0', 'torch']]);
+    const at = (p) => world.get(`${p.x},${p.y},${p.z}`) ?? (p.y <= 63 ? 'stone' : 'air');
+    const on = {};
+    const bot = {game: {dimension: 'overworld'}, on(e, f) { on[e] = f; }, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, equip: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(0.5, 64, 3.5), yaw: 0, pitch: 0},
+      inventory: {items: () => [], emptySlotCount: () => 36},
+      registry: {itemsByName: {stone: item(1), dirt: item(3), glass: item(4)}, blocksByName: {}},
+      pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+      blockAt: (p) => ({name: at(p), position: p, getProperties: () => ({}), boundingBox: at(p) === 'air' || /torch/.test(at(p)) ? 'empty' : 'block', shapes: []})};
+    const dug = [];
+    const digAt = async (rr, jj, p) => { dug.push(at(p)); world.delete(`${p.x},${p.y},${p.z}`); on.blockUpdate?.(null, {position: p}); return true; };
+    const schematic = require('../../build').makeSchematic({goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir});
+    const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}}, job).catch((e) => e);
+    await new Promise((res) => setTimeout(res, 400));
+    job.cancelled = true;
+    await Promise.race([run, new Promise((res) => setTimeout(res, 3000))]);
+    fs.rmSync(dir, {recursive: true, force: true});
+    assert.deepStrictEqual(dug.sort(), ['crafting_table', 'wall_torch'], `own work blocks in planned cells come out; a chest and an air cell's torch stay (dug: ${dug})`);
+  }
 };

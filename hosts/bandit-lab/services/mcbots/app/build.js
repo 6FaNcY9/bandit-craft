@@ -617,6 +617,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // container comes out, so nothing of theirs spills.
     const clearable = (k, name) => (job.args.tight && /torch$/.test(name)) || natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS ||
       (job.args.clearAll === true && !CONTAINER.test(name)) ||
+      // The bots' own work lights and crafting tables in a cell the schematic fills: "in the way" stopped 4 bots 1.5 h (main 2026-11-16).
+      (plan.byKey.has(k) && /^(torch|wall_torch|crafting_table)$/.test(name)) ||
       // A tight build's air is air: bot50's own blocks blocked a test tunnel's mouth, "not ours" (sandbox 2026-10-18).
       (job.args.tight === true && plan.air.has(k) && !CONTAINER.test(name));
     // Whether a drop at x,y,z comes to rest in a hopper: in the world now, or (`final`) in the finished build,
