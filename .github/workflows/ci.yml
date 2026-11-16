@@ -22,6 +22,13 @@ jobs:
           extra-conf: |
             substituters = https://cache.nixos.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+      # Same cache as bandit-nix, which builds this flake for the lab.
+      # Only main writes: the lab substitutes from this cache.
+      - uses: cachix/cachix-action@3ba601ff5bbb07c7220846facfa2cd81eeee15a1 # v16
+        with:
+          name: github-bandit-nix
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: ${{ github.event_name == 'pull_request' }}
       - run: nix flake check --no-update-lock-file
       - name: Formatting
         run: nix fmt -- --check .
