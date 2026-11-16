@@ -171,6 +171,19 @@ try {
             if (-not $reason) { $reason = Busy }
         } catch { $reason = "probe failed: $($_.Exception.Message)" }
         if ($reason) { $script:freeSince = $null } elseif (-not $script:freeSince) { $script:freeSince = Get-Date }
+        # Several accounts may each run a watcher (fast user switching). Only the one in the console session
+        # publishes gpu.json and manages the server; a watcher in another session stops just its own server, so
+        # it never stops the active account's server or overwrites its share (owner 2026-11-17).
+        if ($reason -like 'another console session*') {
+            try {
+                foreach ($server in @(Servers @() | Where-Object { $_.SessionId -eq $session })) {
+                    Stop-Process -Id $server.ProcessId -ErrorAction Stop
+                    Write-Log "stopped PID $($server.ProcessId): $reason"
+                }
+            } catch { Write-Log "error: $($_.Exception.Message)" }
+            if (-not $Once) { Start-Sleep -Milliseconds ([Math]::Max(0, 15000 - [int]$cycle.ElapsedMilliseconds)) }
+            continue
+        }
         Publish
         try {
             $listeners = @(Listeners)

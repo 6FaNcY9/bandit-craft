@@ -105,3 +105,13 @@ Assert ($script:starts.Count -eq 1 -and $script:starts[0] -match '--n-gpu-layers
 # installer must not merge the coordinator key or an unbound tunnel line back in.
 Assert ($installer -match "(?s)if \(Test-Path -LiteralPath 'C:\\bandit-ai\\agent\\keys\.json'\) \{.*\} else \{\s*Set-AuthorizedKeys 'C:\\ProgramData\\ssh\\administrators_authorized_keys'") 'Keys managed by the PC manager must be left alone'
 'PASS: SSH keys left alone once the PC manager manages them'
+# Several gaming accounts (owner 2026-11-17): one watcher task each, stale ones removed, the first account
+# keeps the tunnel's authorized_keys, and a watcher outside the console session touches only its own server.
+Assert ($installer -match '\[string\[\]\]\$UserName') '-UserName must take several accounts'
+Assert ($installer -match "-split ','") '-UserName yassi,vino through powershell.exe -File must be split'
+Assert ($installer -match 'Register-ScheduledTask -TaskName "bandit-ai-watch-\$name"') 'Every account needs its own watcher task'
+Assert ($installer -match "Get-ScheduledTask -TaskName 'bandit-ai-watch\*'.*\`$tasks -notcontains.*Unregister-ScheduledTask") 'Watcher tasks of unlisted accounts must be removed'
+Assert ($installer -match 'authorized_keys" \(@\(\$restricted\) \+ \$CoordinatorPublicKey\) \$userSid\[0\]') 'Only the first (tunnel) account gets the tunnel key'
+Assert ($installer -match '\$managed = @\("\$base\\agent", "\$base\\control"\)') 'The PC manager folders keep their own ACLs'
+Assert ($watcher -match "(?s)if \(\`$reason -like 'another console session\*'\) \{.*SessionId -eq \`$session.*continue\s*\}\s*Publish") 'A watcher in another session must stop only its own server and not publish'
+'PASS: several watcher accounts'

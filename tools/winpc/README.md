@@ -19,6 +19,7 @@ PowerShell**, substituting actual StableIDs and the watcher's account:
 ```powershell
 & .\install-agent.ps1 -Fqdn slayerpc.tail7facc9.ts.net -Port 8443 -WatcherUser "$env:COMPUTERNAME\yassi" -Access '{"nPC":"self","nPHONE":"operator","nLAPTOP":"owner"}'
 # In a PowerShell session, -Access also accepts a hashtable.
+# Several watcher accounts: -WatcherUser "$env:COMPUTERNAME\yassi","$env:COMPUTERNAME\vino" (all may write runtime\).
 ```
 
 Open `https://slayerpc.tail7facc9.ts.net:8443/`. The firewall permits only
