@@ -97,14 +97,14 @@ Expected: `exit 1` with "PRIMARY KEY missing" means SQLite ran (the table lacks 
 
 - [ ] **Step 2: Record the backend**
 
-Backend: `sqlite` | `blobs` (fill in). With `blobs`, Task 4 implements the same interface on files `STATE_DIR/world/r.<cx>>5>.<cz>>5>.bin` (one batch frame per region, rewritten tmp + rename at most every 5 s; index and `seq` in memory, `seq` starts at `Date.now()` so it stays monotonic across restarts). Only one backend is built.
+Backend: `sqlite` (2026-11-17: `PRIMARY KEY missing` = SQLite ran on nodejs 22.23.3; the lab has nodejs-22.23.3 too). With `blobs`, Task 4 implements the same interface on files `STATE_DIR/world/r.<cx>>5>.<cz>>5>.bin` (one batch frame per region, rewritten tmp + rename at most every 5 s; index and `seq` in memory, `seq` starts at `Date.now()` so it stays monotonic across restarts). Only one backend is built.
 
 - [ ] **Step 3: javac and java for pure classes**
 
 ```
 nix shell --inputs-from . nixpkgs#jdk25_headless -c sh -c 'd=$(mktemp -d) && printf "final class T { public static void main(String[] a) { assert a.length == 0; System.out.println(\"ok\"); } }" > $d/T.java && javac --release 25 -Xlint:all -Werror -d $d $d/T.java && java -ea -cp $d T'
 ```
-Expected: `ok`. Record: Java: `ok` | the error. If `java` is missing in `jdk25_headless`, the checks in Task 3 use `pkgs.jdk25` for the run only.
+Expected: `ok`. Record: Java: `ok` (2026-11-17, jdk25_headless has java). If `java` is missing in `jdk25_headless`, the checks in Task 3 use `pkgs.jdk25` for the run only.
 
 ### Task 2: Section and batch codec (JS)
 
