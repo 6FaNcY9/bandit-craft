@@ -57,12 +57,15 @@ class BotTrace {
 }
 
 // Event-loop delay of the hub in ms (one decimal) over the last complete window; null until the first one ends.
+// The histogram records the whole time between its own ticks, so the tick interval is subtracted: an idle loop reads about 0.
+const LOOP_TICK_MS = 10;
 function loopDelayMeter({windowMs = 60000} = {}) {
-  const h = require('node:perf_hooks').monitorEventLoopDelay();
+  const h = require('node:perf_hooks').monitorEventLoopDelay({resolution: LOOP_TICK_MS});
+  const late = (ns) => round(Math.max(0, ns / 1e6 - LOOP_TICK_MS), 1);
   let last = null;
   h.enable();
   setInterval(() => {
-    if (h.count) last = {p50: round(h.percentile(50) / 1e6, 1), p99: round(h.percentile(99) / 1e6, 1), max: round(h.max / 1e6, 1), windowS: windowMs / 1000};
+    if (h.count) last = {p50: late(h.percentile(50)), p99: late(h.percentile(99)), max: late(h.max), windowS: windowMs / 1000};
     h.reset();
   }, windowMs).unref();
   return () => last;

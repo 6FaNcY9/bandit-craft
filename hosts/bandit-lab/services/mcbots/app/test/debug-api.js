@@ -239,6 +239,7 @@ const {BotRunner} = require('../bots');
       const d = read();
       assert.ok([d.p50, d.p99, d.max].every(Number.isFinite) && d.p50 <= d.p99 && d.p99 <= d.max, JSON.stringify(d));
       assert.strictEqual(d.windowS, 0.05);
+      assert.ok(d.p50 < 5, 'an idle loop is not delayed: ' + JSON.stringify(d)); // the 10 ms sampling tick is not delay
     }, 120);`;
   await require('node:util').promisify(require('node:child_process').execFile)(process.execPath, ['-e', code]);
 })();
