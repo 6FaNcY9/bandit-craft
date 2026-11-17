@@ -56,4 +56,16 @@ class BotTrace {
   }
 }
 
-module.exports = {BotTrace, WINDOW_MS, SAMPLE_MS, round};
+// Event-loop delay of the hub in ms (one decimal) over the last complete window; null until the first one ends.
+function loopDelayMeter({windowMs = 60000} = {}) {
+  const h = require('node:perf_hooks').monitorEventLoopDelay();
+  let last = null;
+  h.enable();
+  setInterval(() => {
+    if (h.count) last = {p50: round(h.percentile(50) / 1e6, 1), p99: round(h.percentile(99) / 1e6, 1), max: round(h.max / 1e6, 1), windowS: windowMs / 1000};
+    h.reset();
+  }, windowMs).unref();
+  return () => last;
+}
+
+module.exports = {BotTrace, WINDOW_MS, SAMPLE_MS, round, loopDelayMeter};

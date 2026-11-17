@@ -200,6 +200,10 @@ The v1 chest menus (CommandPanels `/bots`, `botmenu`) and the `pa data` push and
   (401 = token mismatch, refused = plugin not loaded or port taken: look for "cannot bind" in the Paper log, BotUi disables itself then)
   and `systemctl restart mc-bridge-botui.socket` after a port change. Nothing happens on Shift + F: the player is not a viewer.
 - Test stand without a server of the lab: `tools/botui-stand/stand.sh up` (local Paper on 127.0.0.1:25599, token "stand-token"), the e2e scripts beside it.
+- Block model: `WORLD_AREA="x,z,radius"` (blocks, e.g. `-270,-20,320`; needs `BOTUI_URL` and `STATE_DIR`) makes the hub pull the plugin's
+  chunk sections into `STATE_DIR/world` (`app/worldmodel.js`) and serve them, behind the dashboard login, as `GET /api/world/{sections,changes,blocks,height,materials,sample,stats}`;
+  `/api/state` carries `worldSeq`. Off by default: unset, every route answers 503 `{"error":"world model is off"}`. Blocks the hub changes over RCON
+  (`fill`, `setblock` with absolute coordinates) are re-read at once; `/api/debug` also shows `loopDelayMs` (event-loop delay, last full minute).
 
 ### Bot control phase 1 (2026-11-06): staff, Wenn frei, alerts, upload, alive
 

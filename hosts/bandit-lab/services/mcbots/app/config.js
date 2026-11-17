@@ -3,6 +3,7 @@
 const {NAME_RE} = require('./bots');
 const {parseQuotas} = require('./keeper');
 const {parseHalls, parseSchedule} = require('./tradeschedule');
+const {parseArea} = require('./worldapi');
 
 const ownerUuids = (env) => {
   const ids = (env.OWNER_UUIDS || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -134,6 +135,9 @@ function loadConfig(env = process.env) {
   const botuiUrl = (env.BOTUI_URL || '').replace(/\/+$/, '');
   if (botuiUrl && !/^http:\/\/[\w.-]+(:\d+)?$/.test(botuiUrl)) throw new Error('BOTUI_URL must be http://host:port');
   if (botuiUrl && !rconPassword) throw new Error('BOTUI_URL needs RCON_PASSWORD (the plugin token)');
+  // The block model's area ("x,z,radius" in blocks), read from the plugin at BOTUI_URL; unset, the model is off.
+  const worldArea = (env.WORLD_AREA || '').trim() ? parseArea(env.WORLD_AREA) : null;
+  if (worldArea && !botuiUrl) throw new Error('WORLD_AREA needs BOTUI_URL (the plugin it reads)');
   // Where the main server's rescue lands a stranded bot (rescue.js), "x,y,z"; unset, no rescue there.
   const spot = (env.RESCUE_SPOT || '').trim();
   if (spot && !/^-?\d{1,7},-?\d{1,3},-?\d{1,7}$/.test(spot)) throw new Error('RESCUE_SPOT must be x,y,z');
@@ -179,6 +183,7 @@ function loadConfig(env = process.env) {
     ingameViewers,
     viewerBots,
     botuiUrl,
+    worldArea,
     uploadBase,
     workerPort,
     workerHost: env.WORKER_HOST || '127.0.0.1',

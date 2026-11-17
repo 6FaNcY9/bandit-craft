@@ -9,7 +9,8 @@ const {RESUME_WINDOW_MS, BotRunner, keptOf, VALIDATE, projectMaterials, SCHEMATI
 const buildLib = require('./build');
 const schematicLib = require('./schematic');
 const {WorldModel, startBlueMap} = require('./world');
-const {WINDOW_MS} = require('./debug');
+const {WINDOW_MS, loopDelayMeter} = require('./debug');
+const worldApi = require('./worldapi');
 const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
 const {EventLog} = require('./events');
 const archive = require('./archive');
@@ -144,7 +145,9 @@ setInterval(() => {
 }, 60000).unref();
 const events = new EventLog({onAdd: (e) => { notifier.event(e); for (const r of rescuers) r.event(e); ingame?.event(e); ownAlerts?.event(e, runners.get(e.bot)?.snapshot()); orderEnded(e); if (ARCHIVE) archive.append(path.join(ARCHIVE, 'events.jsonl'), {server_session: SESSION, event: e}); }});
 // Owner-only server administration (RCON); not wired when RCON_HOST is unset.
-const mainConsole = cfg.rcon ? queued(cfg.rcon) : null; // one chain for the admin panel and the rescue
+// The block model (worldmodel.js), only with WORLD_AREA and a state dir: the plugin at BOTUI_URL feeds it, STATE_DIR/world holds it.
+const worldModel = cfg.worldArea && process.env.STATE_DIR ? require('./worldmodel').startWorldModel({dir: path.join(process.env.STATE_DIR, 'world'), url: cfg.botuiUrl, token: cfg.rcon.password, area: cfg.worldArea, log: (m) => log('world', m)}) : null;
+const mainConsole = cfg.rcon ? worldApi.withDirty(queued(cfg.rcon), (b) => worldModel?.dirty(b)) : null; // one chain for the admin panel and the rescue; blocks it changes are re-read by the model
 const sandboxConsole = cfg.sandboxRcon ? queued(cfg.sandboxRcon) : null; // one chain for the rescue and the laptop tools
 const admin = cfg.rcon ? new Admin({call: mainConsole, events, botNames: [...cfg.names, ...Object.values(cfg.hubWorkers).flat()]}) : null;
 const stopBlueMap = startBlueMap(world, cfg.bluemapUrl, log);
@@ -468,7 +471,8 @@ const sameOrigin = (req) => {
     return false;
   }
 };
-const state = () => ({now: Date.now(), lastEventId: events.lastId, keeper: keeper?.state() || null, bots: [...runners.values()].map((r) => ({...r.snapshot(), settings: settings.get(r.name)})), world: world.snapshot(), protectedAreas: cfg.protectedAreas, supplyChest, places: places.list, projects: projects.view(), chest: supplyStock() && {warnings: chestWarnings(supplyStock().items, supplyStock().free)}});
+const loopDelay = loopDelayMeter();
+const state = () => ({now: Date.now(), lastEventId: events.lastId, worldSeq: worldModel?.seq() || 0, keeper: keeper?.state() || null, bots: [...runners.values()].map((r) => ({...r.snapshot(), settings: settings.get(r.name)})), world: world.snapshot(), protectedAreas: cfg.protectedAreas, supplyChest, places: places.list, projects: projects.view(), chest: supplyStock() && {warnings: chestWarnings(supplyStock().items, supplyStock().free)}});
 
 // A schematic upload: the raw .litematic, at most 4 MB.
 function readBytes(req, max = 4 * 1024 * 1024) {
@@ -747,6 +751,11 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {'Content-Type': 'image/png', 'Cache-Control': 'max-age=300', 'X-Content-Type-Options': 'nosniff'});
     return res.end(body);
   }
+  if (url.pathname.startsWith('/api/world/')) {
+    const [code, headers, body] = await worldApi.handle(req.method, url, worldModel);
+    res.writeHead(code, {...headers, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': CSP, 'Referrer-Policy': 'no-referrer'});
+    return res.end(body);
+  }
   if (req.method === 'GET' && url.pathname === '/api/debug') {
     const bots = [...runners.values()].map((r) => {
       try {
@@ -763,7 +772,7 @@ const server = http.createServer(async (req, res) => {
       w.bots.push(b.name);
       for (const k of ['granted', 'refused', 'timedOut']) w[k] += b.claims[k];
     }
-    return json(200, {generatedAt: new Date().toISOString(), generatedAtMs: Date.now(), windowS: WINDOW_MS / 1000, bots, workers});
+    return json(200, {generatedAt: new Date().toISOString(), generatedAtMs: Date.now(), windowS: WINDOW_MS / 1000, loopDelayMs: loopDelay(), bots, workers});
   }
   // Server admin: human path only (no bearer path any more).
   if (url.pathname.startsWith('/api/admin/')) {
@@ -980,6 +989,7 @@ function shutdown() {
   blocklog.flush();
   stopBlueMap();
   hub?.close();
+  worldModel?.stop();
   for (const r of runners.values()) r.shutdown();
   for (const c of wss.clients) c.close();
   server.close();

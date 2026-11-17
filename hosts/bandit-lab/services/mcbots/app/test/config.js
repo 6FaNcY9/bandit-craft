@@ -210,3 +210,10 @@ assert.throws(() => loadConfig({BOT_NAMES: 'bot1', PROTECTED_AREAS: '1,2,3'}));
   assert.match(sent.at(-1).body, /bot99 died: drowned/);
   assert.strictEqual(new EventLog({onAdd: () => { throw Error('offline'); }}).add('bot1', 'death', 'died').id, 1);
 }
+{ // WORLD_AREA: the block model's area, off when unset, and it needs the plugin (BOTUI_URL)
+  const wc = {BOT_NAMES: 'bot1', RCON_HOST: 'minecraft', RCON_PASSWORD: 'pw', BOTUI_URL: 'http://10.250.77.1:8101'};
+  assert.strictEqual(loadConfig(wc).worldArea, null);
+  assert.deepStrictEqual(loadConfig({...wc, WORLD_AREA: '-270,-20,320'}).worldArea, {cx1: -37, cz1: -22, cx2: 3, cz2: 18});
+  assert.throws(() => loadConfig({BOT_NAMES: 'bot1', WORLD_AREA: '-270,-20,320'}), /WORLD_AREA needs BOTUI_URL/);
+  assert.throws(() => loadConfig({...wc, WORLD_AREA: '-270,-20'}), /WORLD_AREA/);
+}

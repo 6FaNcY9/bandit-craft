@@ -151,6 +151,14 @@ const {BotRunner} = require('../bots');
       assert.ok(Array.isArray(b.positions) && Array.isArray(b.queue));
     }
     assert.strictEqual((await fetch(base, {method: 'POST', headers: {'tailscale-user-login': 'a@github'}})).status, 403);
+    // no WORLD_AREA: the model is off, behind the same login gate, and /api/state and /api/debug say so
+    const wstats = `http://127.0.0.1:${port}/api/world/stats`;
+    assert.strictEqual((await fetch(wstats)).status, 403, 'world routes sit behind the login');
+    const off = await fetch(wstats, {headers: {'tailscale-user-login': 'a@github'}});
+    assert.deepStrictEqual([off.status, await off.json(), off.headers.get('cache-control'), off.headers.get('x-content-type-options')], [503, {error: 'world model is off'}, 'no-store', 'nosniff']);
+    assert.strictEqual((await fetch(wstats, {method: 'POST', headers: {'tailscale-user-login': 'a@github', 'content-type': 'application/json', origin: `http://127.0.0.1:${port}`}, body: '{}'})).status, 404);
+    assert.strictEqual((await (await fetch(`http://127.0.0.1:${port}/api/state`, {headers: {'tailscale-user-login': 'a@github'}})).json()).worldSeq, 0);
+    assert.ok('loopDelayMs' in j, 'loop delay in /api/debug');
     // the hub inside the real server: a worker joins, "all" reaches it, and an absent worker never blocks a Stop
     const wport = port + 1 < 65535 ? port + 1 : port - 1;
     const WebSocket = require('ws');
@@ -220,4 +228,17 @@ const {BotRunner} = require('../bots');
   } finally {
     child.kill('SIGKILL');
   }
+})();
+(async () => { // event-loop delay over the last complete window, for /api/debug
+  // In a child process: the meter's 50 ms interval would sit in the shared timer list of stop-and-death's 50 ms stub restore and reorder it.
+  const code = `
+    const assert = require('node:assert');
+    const read = require(${JSON.stringify(require('node:path').join(APP, 'debug'))}).loopDelayMeter({windowMs: 50});
+    assert.strictEqual(read(), null, 'no complete window yet');
+    setTimeout(() => {
+      const d = read();
+      assert.ok([d.p50, d.p99, d.max].every(Number.isFinite) && d.p50 <= d.p99 && d.p99 <= d.max, JSON.stringify(d));
+      assert.strictEqual(d.windowS, 0.05);
+    }, 120);`;
+  await require('node:util').promisify(require('node:child_process').execFile)(process.execPath, ['-e', code]);
 })();
