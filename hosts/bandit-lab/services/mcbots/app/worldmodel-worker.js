@@ -44,6 +44,7 @@ function makeModel({store, fetch, url, token, area, now = Date.now, lru = 2048, 
     return s;
   }
   const query = makeQuery({section, chunk: (cx, cz) => store.chunk(cx, cz)});
+  let planStatus = null; // planstatus.js pulls in the schematic parser: a hub nobody looks at never loads it
 
   // One long poll. Returns how many records changed the store. A frame that does not decode, a non-ok reply or
   // a failed batch throws before ack moves, so the plugin sends the same batch again.
@@ -107,6 +108,12 @@ function makeModel({store, fetch, url, token, area, now = Date.now, lru = 2048, 
     blocks: (a) => json(200, query.blocks(a)),
     height: (a) => json(200, query.height(a)),
     materials: (a) => json(200, query.materials(a)),
+    async planStatus(a) {
+      planStatus ??= require('./planstatus').makePlanStatus({src: {section, chunk: (cx, cz) => store.chunk(cx, cz)}, seq: () => store.seq()});
+      const body = await planStatus(a);
+      // a copy: run() transfers the answer's memory to the main thread, which would empty the cached body
+      return body ? {status: 200, type: JSON_TYPE, body: Buffer.from(body), gzip: true} : json(404, {error: 'no such schematic'});
+    },
     async sample(a) {
       const p = new URLSearchParams(Object.entries({n: a.n, seed: a.seed, box: a.box}).filter(([, v]) => v !== undefined)).toString();
       return (await plugin('sample' + (p && '?' + p))) ?? down();

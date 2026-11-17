@@ -438,6 +438,18 @@ function loneChests(cells) {
   });
 }
 
+// The cells a plan places (the blocks, rotated, substituted, without fluids) and its fluid sources; shared with the
+// plan status of the world model, so the bots and the dashboard read one plan.
+function planCells(parsed, {origin, rotation = 0, mirror = 'none', substitute = {}, anySolid = []}) {
+  const placed = schematicLib.placeSchematic(parsed, {origin, rotation, mirror}).map((c) => (substitute[c.name] ? {...c, name: substitute[c.name]} : c));
+  // Water and lava are no blocks to place: the builders waited on 1436 "water" and 9 "lava" for the downloaded
+  // iron farm (2026-10-15). Flowing cells come by themselves; the sources (a bubble column is a water source
+  // over soul sand) are kept apart for a bucket step and are not built.
+  const fluid = (c) => /^(water|lava|bubble_column)$/.test(c.name);
+  const fluids = placed.filter((c) => fluid(c) && (c.name === 'bubble_column' || String(c.props?.level ?? '0') === '0')).map((c) => ({x: c.x, y: c.y, z: c.z, name: c.name === 'lava' ? 'lava' : 'water'}));
+  const cells = loneChests(placed.filter((c) => !fluid(c))).map((t) => anySolid.includes(t.name) ? {...t, anySolid: true} : t);
+  return {cells, fluids};
+}
 // One parse per file and placement, shared by the bots of this process; so is what they saw in the chests.
 // A file replaced under its name is parsed again: bot50 built a tunnel leg from the old copy until the process
 // restarted (sandbox 2026-10-18).
@@ -450,13 +462,7 @@ async function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', 
   if (SCHEMATIC_PLANS.get(k)?.stamp !== stamp) {
     SCHEMATIC_PLANS.set(k, {stamp, plan: (async () => {
       const parsed = await schematicLib.parseLitematic(await fs.promises.readFile(path.join(dir, file)));
-      const placed = schematicLib.placeSchematic(parsed, {origin, rotation, mirror}).map((c) => (substitute[c.name] ? {...c, name: substitute[c.name]} : c));
-      // Water and lava are no blocks to place: the builders waited on 1436 "water" and 9 "lava" for the downloaded
-      // iron farm (2026-10-15). Flowing cells come by themselves; the sources (a bubble column is a water source
-      // over soul sand) are kept apart for a bucket step and are not built.
-      const fluid = (c) => /^(water|lava|bubble_column)$/.test(c.name);
-      const fluids = placed.filter((c) => fluid(c) && (c.name === 'bubble_column' || String(c.props?.level ?? '0') === '0')).map((c) => ({x: c.x, y: c.y, z: c.z, name: c.name === 'lava' ? 'lava' : 'water'}));
-      const cells = loneChests(placed.filter((c) => !fluid(c))).map((t) => anySolid.includes(t.name) ? {...t, anySolid: true} : t);
+      const {cells, fluids} = planCells(parsed, {origin, rotation, mirror, substitute, anySolid});
       const {order, deferred, unsupported} = schematicLib.buildOrder(cells);
       const airCells = schematicLib.placeSchematic(parsed, {origin, rotation, mirror, air: true}).filter((c) => c.name === 'air');
       // A schematic of air alone (a clean-up) spans its air: its site was "NaN Infinity NaN" (sandbox 2026-10-19).
@@ -1496,6 +1502,7 @@ module.exports = {
   PLANTS,
   makeSchematic,
   schematicPlan,
+  planCells,
   loneChests,
   SCHEMATIC_RE,
   stillNeeded,

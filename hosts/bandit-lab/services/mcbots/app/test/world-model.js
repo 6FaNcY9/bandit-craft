@@ -12,6 +12,7 @@ const {encodeBatch, decodeBatch, encodeSection, sectionHash} = require('../world
 const {openStore} = require('../worldstore');
 const {makeModel} = require('../worldmodel-worker');
 const {startWorldModel} = require('../worldmodel');
+const {writeLitematic} = require('../litematic-write');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(f, what) {
@@ -86,6 +87,8 @@ async function inline() {
     assert.strictEqual(JSON.parse((await m.handle('changes', {since: '0', limit: '99999'})).body).sections.length, 24); // clamped to 1024
     assert.strictEqual((await m.handle('nope', {})).status, 404);
     assert.strictEqual((await m.handle('constructor', {})).status, 404);
+    assert.strictEqual((await m.handle('planStatus', {dir: tmp(), file: 'nope.litematic', origin: {x: 0, y: 0, z: 0}})).status, 404);   // no such schematic
+    assert.strictEqual((await m.handle('planStatus', {dir: tmp(), file: '../x', origin: {x: 0, y: 0, z: 0}})).status, 400);
     assert.strictEqual((await m.handle('height', undefined)).status, 400);
     const st = m.stats();
     assert.deepStrictEqual([st.boot, st.ack, st.sections, st.ungenerated, st.seq, st.badRecords], ['2', 2, 24, 1, 24, 0]);
@@ -270,6 +273,14 @@ async function thread() {
     assert.strictEqual(s.gzip, true); assert.strictEqual(decodeBatch(zlib.gunzipSync(s.body)).records.length, 24 + 8);
     const st = JSON.parse((await wm.request('stats', {})).body);
     assert.deepStrictEqual([st.hub.sections, st.hub.seq, st.plugin], [24, 24, {importLeft: 0}]);
+    // plan status: a one-block stone plan in the all-stone chunk; asked twice, because the answer's memory is transferred and must not empty the cache
+    const plans = tmp();
+    fs.writeFileSync(path.join(plans, 'p.litematic'), writeLitematic({name: 'p', regions: [{position: {x: 0, y: 0, z: 0}, size: {x: 1, y: 1, z: 1}, blocks: [{x: 0, y: 0, z: 0, name: 'stone'}]}]}));
+    const plan = {dir: plans, file: 'p.litematic', origin: {x: -592, y: 0, z: -352}, rotation: 0, mirror: 'none', substitute: {}, anySolid: []};
+    const [p1, p2] = [await wm.request('planStatus', plan), await wm.request('planStatus', plan)];
+    assert.deepStrictEqual([p1.status, p1.gzip, p2.status, p2.gzip], [200, true, 200, true]);
+    assert.ok(p1.body.length > 0 && p1.body.equals(p2.body));
+    assert.deepStrictEqual(JSON.parse(zlib.gunzipSync(p2.body)).counts, [0, 1, 0, 0]);
     wm.dirty({x1: 1, y1: 2, z1: 3, x2: 4, y2: 5, z2: 6});
     await until(() => f.calls.some((c) => c.path === '/world/dirty'), 'dirty');
     assert.deepStrictEqual(JSON.parse(f.calls.find((c) => c.path === '/world/dirty').body), {x1: 1, y1: 2, z1: 3, x2: 4, y2: 5, z2: 6});
