@@ -3,14 +3,15 @@
 // Does the hub's block model equal the real world? Static (random cells of the whole area), scripted (--spot: WRITES
 // blocks and summons TNT in the REAL world, only with the owner's OK) and bot (--bot, --bot-spot). See README.md.
 // node equality.js [--hub URL] [--spot x,y,z] [--bot name --bot-spot x,y,z]
-const {HUB, Exit, sleep, parseArgs, parseTriple, makeApi, blocksPath, checkBox, diffSamples, showDiffs, run} = require('./lib');
+const {HUB, Exit, sleep, parseArgs, parseTriple, makeApi, blocksPath, checkBox, diffSamples, isAir, showDiffs, run} = require('./lib');
 
-const R = 6, BOX_N = 2000, WAIT_MS = 5000; // BOX_N: the plugin's maximum; 500 of the 2197 cells would miss a 4-cell piston change most of the time
+const R = 6, PRE = 10, BOX_N = 2000, WAIT_MS = 5000; // BOX_N: the plugin's maximum; 500 of the 2197 cells would miss a 4-cell piston change most of the time
 const BAD_REPLY = /not loaded|out of this world|Unknown or incomplete|Incorrect argument/i;
 
 // 500 random cells of the area against the model, section by section; the first 20 differences are printed.
 async function staticCheck(api, seed) {
   const {samples, skipped} = await api(`/api/world/sample?n=500&seed=${seed}`);
+  if (!samples.length) throw new Exit(2, '0 cells compared (the plugin sampled nothing: chunks not generated?)');
   const bySection = new Map();
   for (const s of samples) {
     const k = s.slice(0, 3).map((v) => Math.floor(v / 16)).join(',');
@@ -25,13 +26,18 @@ async function staticCheck(api, seed) {
 }
 
 async function scripted(api, [x, y, z], area) {
-  const box = [x - R, y - R, z - R, x + R, y + R, z + R];
+  const box = [x - R, y - R, z - R, x + R, y + R, z + R], pre = [x - PRE, y - PRE, z - PRE, x + PRE, y + PRE, z + PRE];
   const [cx1, cz1, cx2, cz2] = area || [];
-  if (!area || [box[0], box[3]].some((v) => Math.floor(v / 16) < cx1 || Math.floor(v / 16) > cx2) || [box[2], box[5]].some((v) => Math.floor(v / 16) < cz1 || Math.floor(v / 16) > cz2))
-    throw new Exit(2, `--spot ${x},${y},${z} +-${R} is not inside the model's area (chunks ${area})`);
-  const m = await api(blocksPath(box));
+  if (!area || [pre[0], pre[3]].some((v) => Math.floor(v / 16) < cx1 || Math.floor(v / 16) > cx2) || [pre[2], pre[5]].some((v) => Math.floor(v / 16) < cz1 || Math.floor(v / 16) > cz2))
+    throw new Exit(2, `--spot ${x},${y},${z} +-${PRE} is not inside the model's area (chunks ${area})`);
+  // The model alone must not be the guard of a write: the real world is sampled too, and nothing is written unless both say air.
+  const m = await api(blocksPath(pre));
   if (m.blocks.length || m.unknown.length || m.ungenerated.length)
-    throw new Exit(2, `--spot ${x},${y},${z} +-${R} is not all air in the model (${m.blocks.length} blocks, ${m.unknown.length + m.ungenerated.length} chunks unknown): pick another spot`);
+    throw new Exit(2, `--spot ${x},${y},${z} +-${PRE} is not all air in the model (${m.blocks.length} blocks, ${m.unknown.length + m.ungenerated.length} chunks unknown): pick another spot`);
+  const {samples} = await api(`/api/world/sample?n=${BOX_N}&seed=${Date.now()}&box=${pre.join(',')}`);
+  const solid = samples.filter((c) => !isAir(c[3]));
+  if (!samples.length || solid.length)
+    throw new Exit(2, `--spot ${x},${y},${z} +-${PRE}: the real world sample has ${solid.length} non-air of ${samples.length} cells${solid[0] ? ` (e.g. ${solid[0].join(' ')})` : ''}: pick another spot`);
 
   const at = (dx, dy, dz) => `${x + dx} ${y + dy} ${z + dz}`;
   const steps = [
@@ -42,7 +48,9 @@ async function scripted(api, [x, y, z], area) {
     ['tnt', [`summon minecraft:tnt ${at(2, 2, 2)} {fuse:1}`]],
   ];
   const cleanup = [`fill ${at(-6, -6, -6)} ${at(6, 6, 6)} minecraft:air`, `execute positioned ${at(0, 0, 0)} run kill @e[type=minecraft:item,distance=..16]`];
-  const cmd = async (c) => {
+  let cleaned = false, cleanFailed = false, aborted = false;
+  const cmd = async (c, isCleanup) => {
+    if (aborted && !isCleanup) throw new Exit(1, 'interrupted');
     const {reply} = await api('/api/admin/action', {action: 'command', cmd: c});
     console.log(`  > ${c}${reply ? ` -> ${reply}` : ''}`);
     if (BAD_REPLY.test(reply || '')) throw new Exit(2, `the server refused "${c}": ${reply}`);
@@ -55,14 +63,28 @@ async function scripted(api, [x, y, z], area) {
     console.log(`OK ${name} (${n} cells)`);
   };
 
-  let cleaned = false;
+  // Never throws: it runs after a failed step and on a signal. Once only.
+  const cleanNow = async () => {
+    if (cleaned) return;
+    cleaned = true;
+    for (const c of cleanup) await cmd(c, true).catch((e) => { cleanFailed = true; console.error(`CLEAN-UP FAILED, run by hand: ${c} (${e.message})`); });
+  };
+  const onSignal = (sig) => {
+    aborted = true;
+    console.error(`${sig}: cleaning up`);
+    cleanNow().finally(() => process.exit(1));
+  };
+  console.log(`Writing starts now. If this is killed (kill -9) or the hub dies, clean up by hand:\n${cleanup.map((c) => `  ${c}`).join('\n')}`);
+  const signals = ['SIGINT', 'SIGTERM'];
+  for (const sig of signals) process.once(sig, onSignal);
   try {
     for (const [name, cmds] of steps) { for (const c of cmds) await cmd(c); await compare(name); }
-    for (const c of cleanup) await cmd(c);
-    cleaned = true;
+    await cleanNow();
+    if (cleanFailed) throw new Exit(2, 'the clean-up failed: run the commands above by hand');
     await compare('clean-up');
   } finally { // whatever went wrong, the spot must not stay built
-    if (!cleaned) for (const c of cleanup) await cmd(c).catch((e) => console.error(`CLEAN-UP FAILED, run by hand: ${c} (${e.message})`));
+    await cleanNow();
+    for (const sig of signals) process.removeListener(sig, onSignal);
   }
 }
 

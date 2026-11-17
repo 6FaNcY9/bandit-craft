@@ -18,14 +18,18 @@ node tools/world-check/equality.js --spot X,Y,Z --bot bot10 --bot-spot X,Y,Z
 ```
 
 1. Needs `plugin.importLeft === 0` (the first import is done), else exit 2.
-2. Static: 500 random cells of the whole area, compared section by section; on a difference it waits 5 s, reads both
+2. Static: 500 random cells of the whole area (0 cells compared is exit 2), compared section by section; on a difference it waits 5 s, reads both
    again with the same seed, and prints the first 20 that are left (exit 1).
 3. Scripted, only with `--spot`: **writes blocks and summons TNT in the REAL world** (console commands through
-   `/api/admin/action`). **Owner OK first; pick a spot far from builds** (the TNT blast reaches about 6 blocks from
-   the spot; the spot +-6 must be air in the model and inside the model's area, else exit 2). Steps: basin, sticky
-   piston, water, water away, TNT, clean-up; after each one it waits 5 s and compares 2000 random cells of the
-   spot +-6 (the plugin's maximum: 500 would miss a 4-cell change most of the time). The clean-up (`fill ... air` over
-   the box, kill dropped items) also runs when a step fails; if even that fails the command is printed to run by hand.
+   `/api/admin/action`). **Owner OK first; pick a spot far from builds, high in the air (around y 280).** The TNT
+   blast can reach about 9 blocks from the spot. Before anything is written the spot +-10 must be inside the model's
+   area, all known and all air in the model, and a real-world sample of it (2000 cells) must hold only air, else
+   exit 2 (the model alone is not trusted to guard a write; the sample is random, so it is a check, not a proof).
+   Steps: basin, sticky piston, water, water away, TNT, clean-up; after each one it waits 5 s and compares 2000
+   random cells of the spot +-6 (the plugin's maximum: 500 would miss a 4-cell change most of the time). The
+   clean-up (`fill ... air` over the +-6 box, kill dropped items) also runs when a step fails and on Ctrl-C or
+   SIGTERM; if even that fails the command is printed to run by hand. The commands are printed before the first
+   write, for a kill -9.
 4. Bot, only with `--bot` and `--bot-spot` (a free air cell): the bot places one cobblestone, then removes it
    (`POST /api/job`, type `build`, the second with `remove: true`). The model cell is polled every second for up to
    120 s, then compared with the real cell. The jobs are remembered as that bot's standing order: send it a stop

@@ -104,4 +104,4 @@ const run = (main) => main().then((code = 0) => { process.exitCode = code; }, (e
   process.exitCode = e instanceof Exit ? e.code : 2;
 });
 
-module.exports = {HUB, diffSamples, farSpot, parseMspt, compareLoad, Exit, sleep, parseArgs, parseTriple, makeApi, blocksPath, checkBox, showDiffs, run};
+module.exports = {HUB, isAir, diffSamples, farSpot, parseMspt, compareLoad, Exit, sleep, parseArgs, parseTriple, makeApi, blocksPath, checkBox, showDiffs, run};
