@@ -121,8 +121,11 @@ const {BotRunner} = require('../bots');
   const asked = [];
   const bm = require('node:http').createServer((q, s) => { asked.push(q.url); if (q.url === '/maps/world/tiles/1/x-1/z0.png') { s.writeHead(200); s.end('PNGDATA'); } else { s.writeHead(404); s.end(); } });
   await new Promise((res) => bm.listen(0, '127.0.0.1', res));
+  // one small plan for /api/schematic/blocks
+  const planDir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'plan-'));
+  require('node:fs').writeFileSync(`${planDir}/tower.litematic`, require('../litematic-write').writeLitematic({name: 't', regions: [{position: {x: 0, y: 0, z: 0}, size: {x: 2, y: 2, z: 1}, blocks: [{x: 0, y: 0, z: 0, name: 'stone_bricks'}, {x: 1, y: 0, z: 0, name: 'stone_bricks'}, {x: 0, y: 1, z: 0, name: 'oak_stairs', props: {facing: 'east'}}]}]}));
   const child = spawn(process.execPath, [require('node:path').join(APP, 'server.js')], {
-    env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', WORKER_PORT: String(port + 1 < 65535 ? port + 1 : port - 1), WORKER_TOKEN: 'c0ffee11'.repeat(5), DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test', BLUEMAP_URL: `http://127.0.0.1:${bm.address().port}`},
+    env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', WORKER_PORT: String(port + 1 < 65535 ? port + 1 : port - 1), WORKER_TOKEN: 'c0ffee11'.repeat(5), DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test', BLUEMAP_URL: `http://127.0.0.1:${bm.address().port}`, SCHEMATIC_DIR: planDir},
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   try {
@@ -180,6 +183,14 @@ const {BotRunner} = require('../bots');
     // the 3D map: human path only, bad boxes refused, the vendored script served
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/voxels?x1=0&y1=0&z1=0&x2=500&y2=1&z2=1`, {headers: {'tailscale-user-login': 'a@github'}})).status, 400);
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/voxels?x1=0&y1=0&z1=0&x2=1&y2=1&z2=1`, {headers: {'tailscale-user-login': 'a@github'}})).status, 409, 'no bot online to read from');
+    // the Plan tab: a schematic's blocks without air, palette-indexed; names outside the schematic folder refused
+    const plan = (f) => fetch(`http://127.0.0.1:${port}/api/schematic/blocks?file=${encodeURIComponent(f)}`, {headers: {'tailscale-user-login': 'a@github'}});
+    const pj = await (await plan('tower.litematic')).json();
+    assert.deepStrictEqual(pj.size, [2, 2, 1]);
+    assert.deepStrictEqual(pj.palette.slice().sort(), ['oak_stairs', 'stone_bricks']);
+    assert.deepStrictEqual(pj.blocks.map(([x, y, z, i]) => `${x},${y},${z},${pj.palette[i]}`).sort(), ['0,0,0,stone_bricks', '0,1,0,oak_stairs', '1,0,0,stone_bricks']);
+    for (const bad of ['../tower.litematic', '/etc/passwd', 'tower.txt', '']) assert.strictEqual((await plan(bad)).status, 400, bad);
+    assert.strictEqual((await plan('missing.litematic')).status, 404);
     assert.match(await (await fetch(`http://127.0.0.1:${port}/vendor/three.min.js`, {headers: {'tailscale-user-login': 'a@github'}})).text(), /Three\.js Authors/);
     // a supply marker replaces the configured supply chest for everyone
     const placesPost = (body, origin = `http://127.0.0.1:${port}`) => fetch(`http://127.0.0.1:${port}/api/places`, {method: 'POST', headers: {'content-type': 'application/json', origin, 'tailscale-user-login': 'a@github'}, body: JSON.stringify(body)});

@@ -14,7 +14,7 @@
   header .grow { flex: 1; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; flex: none; }
   .dot.on { background: var(--ok); }
-  nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 3; display: grid; grid-template-columns: repeat(6, 1fr); background: #0d0f12; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 3; display: grid; grid-template-columns: repeat(7, 1fr); background: #0d0f12; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
   nav.tabs button { background: none; border: 0; color: var(--mut); font: inherit; font-size: 11px; padding: 8px 2px 10px; cursor: pointer; display: grid; gap: 2px; justify-items: center; }
   nav.tabs button b { font-size: 20px; font-weight: normal; line-height: 1; }
   nav.tabs button.cur { color: var(--text); background: var(--card); }
@@ -64,6 +64,7 @@
   #toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 5; background: #2b3340; padding: 10px 16px; border-radius: 10px; display: none; max-width: 92vw; box-shadow: 0 6px 20px #0008; }
   #console { background: #0b0d10; border-radius: 8px; padding: 8px; height: 260px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
   #map { width: 100%; height: 62vh; min-height: 320px; background: #0b0d10; border-radius: 10px; touch-action: none; display: block; }
+  #plan3d { width: 100%; height: 62vh; min-height: 320px; background: #0b0d10; border-radius: 10px; touch-action: none; display: block; margin-top: 8px; }
   .chest { padding: 10px 0; border-bottom: 1px solid #23272d; }
   .my8 { margin: 8px 0; } .mt6 { margin-top: 6px; } .mt8 { margin-top: 8px; } .mt10 { margin-top: 10px; } .mt12 { margin-top: 12px; } .mb8 { margin-bottom: 8px; }
   .grow { flex: 1; } .full { width: 100%; display: block; } a.acc { color: var(--acc); }
@@ -83,6 +84,7 @@
   <button data-tab="map"><b>🗺️</b>Karte</button>
   <button data-tab="chests"><b>📦</b>Kisten</button>
   <button data-tab="project"><b>🏗️</b>Projekt</button>
+  <button data-tab="plan"><b>📐</b>Plan</button>
   <button data-tab="server"><b>⚙️</b>Server</button>
 </nav>
 
@@ -216,6 +218,16 @@
     <form class="mt8 row" id="cmdForm"><input class="grow t" id="cmd" placeholder="Befehl, z.B. list"><button class="b">Senden</button></form>
   </section>
   <p class="mut small"><a href="/mehr" class="acc">Alte Seite</a> (3D-Ansicht, Daueraufträge)</p>
+</main>
+
+<!-- Plan: a schematic in 3D, view only -->
+<main data-page="plan" hidden>
+  <section class="card">
+    <select class="t full" id="planFile"></select>
+    <label class="row mt8"><span>Höhe</span><input type="range" class="grow" id="planY" min="0" max="0" value="0"><b id="planYNum"></b></label>
+    <canvas id="plan3d"></canvas>
+    <p class="mut small" id="planInfo"></p>
+  </section>
 </main>
 <div id="toast"></div>
 
@@ -380,6 +392,7 @@ function tab(name) {
   if (name === 'chests') loadChests();
   if (name === 'project') loadSchematics();
   if (name === 'map') requestAnimationFrame(drawMap);
+  if (name === 'plan') loadPlanList();
 }
 for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => tab(b.dataset.tab);
 for (const a of document.querySelectorAll('[data-goto-tab]')) a.onclick = (e) => { e.preventDefault(); tab(a.dataset.gotoTab); };
@@ -750,6 +763,104 @@ $('npStart').onclick = async () => {
   if (build.length) await sendJob(build, 'schematic', args, 'Bau gestartet');
   if (produce.length) await sendJob(produce, 'produce', {...args, store: list[0]}, 'Material besorgen gestartet');
 };
+
+// ---- Plan: one schematic in 3D, view only; the slider hides every layer above Höhe ----
+const PLANCOL = [[/glass/, 0xbfe8f5], [/water/, 0x3366ff], [/lantern|torch|glowstone|lamp/, 0xffe080], [/deepslate|blackstone|basalt/, 0x4a4a55], [/^brick|mud_brick/, 0x9a4a3a], [/quartz/, 0xeee8dc], [/purpur|amethyst/, 0xa070c0], [/copper/, 0xc07040],
+  [/stone|cobble|andesite|tuff|diorite|granite/, 0x8a8a8a], [/dark_oak/, 0x4a3018], [/spruce/, 0x6b4a2a], [/leaves/, 0x2f7d2f], [/oak|birch|planks|log|wood/, 0xb08850], [/grass_block|moss/, 0x5fa83a], [/dirt/, 0x7a5230]];
+function planColor(n) {
+  for (const [re, c] of PLANCOL) if (re.test(n)) return c;
+  let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return new THREE.Color().setHSL((h % 360) / 360, 0.3, 0.55).getHex();
+}
+let PG = null, PD = null, planQueued = false;
+const PC = {az: 0.7, el: 0.6, r: 40, ty: 0};
+function planThree() { // loaded on the first open of the tab
+  if (window.THREE) return Promise.resolve();
+  return new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/vendor/three.min.js'; s.onload = ok; s.onerror = () => no(new Error('three.js lädt nicht')); document.head.append(s); });
+}
+function planInit() {
+  if (PG) return;
+  const canvas = $('plan3d'), renderer = new THREE.WebGLRenderer({canvas, antialias: true}), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, 0.5, 4000);
+  scene.background = new THREE.Color(0x0b0d10);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x555566, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(0.4, 1, 0.7); scene.add(sun);
+  PG = {canvas, renderer, scene, camera, geo: new THREE.BoxGeometry(1, 1, 1), meshes: []};
+  new ResizeObserver(planFit).observe(canvas);
+  // orbit by drag, zoom by pinch or wheel
+  const ptr = new Map(); let pinch = 0;
+  canvas.onpointerdown = (e) => { canvas.setPointerCapture(e.pointerId); ptr.set(e.pointerId, e); pinch = 0; };
+  canvas.onpointermove = (e) => {
+    const p = ptr.get(e.pointerId); if (!p) return;
+    ptr.set(e.pointerId, e);
+    if (ptr.size === 2) { const [a, b] = [...ptr.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); if (pinch) PC.r = Math.min(2000, Math.max(3, PC.r * pinch / d)); pinch = d; }
+    else { PC.az -= (e.clientX - p.clientX) * 0.008; PC.el = Math.min(1.55, Math.max(-0.3, PC.el + (e.clientY - p.clientY) * 0.008)); }
+    planDraw();
+  };
+  canvas.onpointerup = canvas.onpointercancel = (e) => { ptr.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); PC.r = Math.min(2000, Math.max(3, PC.r * Math.exp(Math.max(-100, Math.min(100, e.deltaY)) * 0.0015))); planDraw(); }, {passive: false});
+}
+function planFit() {
+  const c = PG.canvas, w = c.clientWidth || 640, h = c.clientHeight || 480;
+  PG.renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); PG.renderer.setSize(w, h, false); PG.camera.aspect = w / h; PG.camera.updateProjectionMatrix(); planDraw();
+}
+function planDraw() {
+  if (!PG || planQueued) return;
+  planQueued = true;
+  requestAnimationFrame(() => {
+    planQueued = false;
+    const c = PG.camera, ce = Math.cos(PC.el);
+    c.position.set(PC.r * ce * Math.sin(PC.az), PC.ty + PC.r * Math.sin(PC.el), PC.r * ce * Math.cos(PC.az)); c.lookAt(0, PC.ty, 0);
+    PG.renderer.render(PG.scene, c);
+  });
+}
+async function loadPlanList() {
+  let list = [];
+  try { list = (await (await fetch('/api/schematics')).json()).filter((s) => !s.error); } catch {}
+  const sel = $('planFile'), was = sel.value || store.get('planFile', '');
+  sel.replaceChildren(...list.map((s) => el('option', {value: s.file}, s.file.replace(/\.litematic$/, ''))));
+  if (list.some((s) => s.file === was)) sel.value = was;
+  if (!sel.value) { $('planInfo').textContent = 'Kein Bauplan da.'; return; }
+  if (PD?.file !== sel.value) planLoad();
+}
+$('planFile').onchange = () => { store.set('planFile', $('planFile').value); planLoad(); };
+$('planY').oninput = planCut;
+async function planLoad() {
+  const file = $('planFile').value;
+  $('planInfo').textContent = 'Lädt …';
+  try {
+    await planThree();
+    const r = await fetch('/api/schematic/blocks?file=' + encodeURIComponent(file)), j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    if ($('planFile').value !== file) return; // another plan was picked meanwhile
+    planInit();
+    for (const m of PG.meshes) { PG.scene.remove(m); m.material.dispose(); m.dispose(); }
+    const groups = j.palette.map(() => []), m4 = new THREE.Matrix4(), [sx, sy, sz] = j.size;
+    for (const b of j.blocks) groups[b[3]].push(b);
+    // shortcut: every block is a full cube (stairs, slabs, fences unshaped), upgrade if the owner misses the shapes
+    PG.meshes = groups.map((list, i) => {
+      list.sort((a, b) => a[1] - b[1]); // low to high: the slider then only shortens the instance count
+      const n = j.palette[i], glass = /glass/.test(n);
+      const mesh = new THREE.InstancedMesh(PG.geo, new THREE.MeshLambertMaterial({color: planColor(n), transparent: glass, opacity: glass ? 0.4 : 1, depthWrite: !glass}), list.length);
+      list.forEach((b, k) => mesh.setMatrixAt(k, m4.makeTranslation(b[0] - sx / 2 + 0.5, b[1] + 0.5, b[2] - sz / 2 + 0.5)));
+      mesh.userData.ys = list.map((b) => b[1]);
+      PG.scene.add(mesh);
+      return mesh;
+    });
+    PD = {file, size: j.size};
+    Object.assign(PC, {az: 0.7, el: 0.6, r: Math.max(sx, sy, sz) * 1.8 + 5, ty: sy / 2});
+    $('planY').max = sy - 1; $('planY').value = sy - 1;
+    planCut(); planFit();
+  } catch (e) { $('planInfo').textContent = 'Geht nicht: ' + e.message; }
+}
+function planCut() {
+  if (!PD) return;
+  const y = +$('planY').value;
+  let shown = 0;
+  for (const m of PG.meshes) { const ys = m.userData.ys; let k = 0; while (k < ys.length && ys[k] <= y) k++; m.count = k; shown += k; }
+  $('planYNum').textContent = y;
+  $('planInfo').textContent = `${PD.size.join('×')} · ${shown} Blöcke`;
+  planDraw();
+}
 
 // ---- events ----
 let evLast = 0;

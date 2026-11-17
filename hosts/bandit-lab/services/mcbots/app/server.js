@@ -581,6 +581,29 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy, LEGACY_CSP);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(200, state());
   if (req.method === 'GET' && url.pathname === '/api/schematics') return json(200, await listSchematics());
+  // One schematic's blocks for the dashboard's Plan view (read only): {size: [x,y,z], palette: [name], blocks: [[x,y,z,paletteIndex]]}, no air.
+  if (req.method === 'GET' && url.pathname === '/api/schematic/blocks') {
+    const file = String(url.searchParams.get('file') || '');
+    if (!buildLib.SCHEMATIC_RE.test(file)) return json(400, {error: 'bad file name'});
+    if (voxelBusy) return json(429, {error: 'another map read is running, try again in a moment'});
+    voxelBusy = true;
+    try {
+      let bytes;
+      try { bytes = await fs.promises.readFile(path.join(SCHEMATIC_DIR, file)); } catch { return json(404, {error: 'no such schematic'}); }
+      const s = await schematicLib.parseLitematic(bytes);
+      if (s.blocks.length > 500000) return json(413, {error: 'Bauplan zu groß zum Anzeigen'}); // ~8 MB of JSON; castle pieces are far below
+      const palette = [], ix = new Map();
+      const blocks = s.blocks.map((b) => {
+        if (!ix.has(b.name)) { ix.set(b.name, palette.length); palette.push(b.name); }
+        return [b.x, b.y, b.z, ix.get(b.name)];
+      });
+      return json(200, {size: [s.size.x, s.size.y, s.size.z], palette, blocks});
+    } catch (e) {
+      return json(400, {error: e.message.slice(0, 200)});
+    } finally {
+      voxelBusy = false;
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/schematic') {
     if (!sameOrigin(req) || req.headers['content-type'] !== 'application/octet-stream') return json(403, {error: 'bad origin'});
     try {
