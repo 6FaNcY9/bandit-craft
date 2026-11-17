@@ -121,7 +121,7 @@ const plugin = http.createServer((req, res) => {
   });
   child.on('exit', (c) => { if (!closing) { console.error(`stand: hub exited (${c})`); shutdown(1); } });
   await new Promise((res) => child.stdout.on('data', (b) => { if (String(b).includes('listening')) res(); }));
-  child.stdout.resume();
+  child.stdout.pipe(process.stderr); // the hub log stays visible, stdout keeps only the URL
 
   // two fake worker bots: bot8 walks a circle, bot9 stands
   const ws = new WebSocket(`ws://127.0.0.1:${workerPort}/worker`, {headers: {Authorization: `Bearer ${WORKER_TOKEN}`}});

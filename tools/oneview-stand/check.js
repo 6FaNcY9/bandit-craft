@@ -27,9 +27,12 @@ let profile = null;
 process.on('exit', () => { if (profile) fs.rmSync(profile, {recursive: true, force: true}); });
 function chrome(args) {
   profile ??= fs.mkdtempSync(path.join(os.tmpdir(), 'oneview-chrome-'));
-  return execFileSync('nix', ['shell', 'nixpkgs#chromium', '-c', 'chromium', '--headless=new', '--password-store=basic', '--no-first-run', '--hide-scrollbars',
-    '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--virtual-time-budget=15000', `--user-data-dir=${profile}`, ...args],
-  {encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'ignore']});
+  try {
+    return execFileSync('nix', ['shell', 'nixpkgs#chromium', '-c', 'chromium', '--headless=new', '--password-store=basic', '--no-first-run', '--hide-scrollbars',
+      '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--virtual-time-budget=15000', `--user-data-dir=${profile}`, ...args],
+    // TMPDIR=/tmp: Chromium puts unix sockets there, and a long TMPDIR passes the socket path limit (SIGABRT)
+    {encoding: 'utf8', timeout: 120000, maxBuffer: 256 << 20, stdio: ['ignore', 'pipe', 'pipe'], env: {...process.env, TMPDIR: '/tmp'}});
+  } catch (e) { throw new Error(`chromium ${args.at(-1)}: ${e.signal || e.status} ${String(e.stderr || '').slice(-1500)}`); }
 }
 
 async function partA() {
@@ -47,12 +50,39 @@ async function partA() {
   ok(js.status === 200, `/oneview/worker.js: HTTP ${js.status}`);
 }
 
+// Part B: the page in a phone and a desktop window, one --dump-dom per URL; a shown element has no hidden attribute.
+const PHONE = '--window-size=390,844', DESKTOP = '--window-size=1280,800';
+const page = (hash, size = PHONE) => chrome([size, '--dump-dom', `${BASE}/${hash}`]);
+function shown(dom, attr) {
+  const tag = dom.split('<script>')[0].match(new RegExp(`<[a-z]+[^>]*\\s${attr}[^>]*>`))?.[0];
+  ok(tag, `no element with ${attr}`);
+  return !/\shidden[\s=>]/.test(tag);
+}
+async function partB() {
+  let d = page('');
+  ok(!shown(d, 'id="sheet"') && !shown(d, 'id="chatBtn"') && shown(d, 'id="bar"'), '/: want #sheet and #chatBtn hidden, #bar shown');
+  d = page('#bots');
+  ok(shown(d, 'data-page="home"') && !shown(d, 'data-page="orders"'), '/#bots: want home shown, orders hidden');
+  ok(shown(page('#bots/orders'), 'data-page="orders"'), '/#bots/orders: orders is hidden');
+  ok(shown(page('#plan'), 'data-page="project"'), '/#plan: project is hidden');
+  ok(shown(page('#plan/plan'), 'data-page="plan"'), '/#plan/plan: plan („Datei ansehen“) is hidden');
+  d = page('#menu/server');
+  ok(shown(d, 'data-page="server"') && /<body[^>]*\sdata-sheet="menu"/.test(d), '/#menu/server: want server shown and body data-sheet="menu"');
+  fs.mkdirSync(OUT, {recursive: true});
+  for (const [file, size, hash] of [['phone.png', PHONE, ''], ['phone-bots.png', PHONE, '#bots'], ['desktop-bots.png', DESKTOP, '#bots']]) {
+    const out = path.join(OUT, file);
+    fs.rmSync(out, {force: true});
+    chrome([size, `--screenshot=${out}`, `${BASE}/${hash}`]);
+    ok(fs.existsSync(out), `no screenshot ${out}`);
+  }
+}
+
 module.exports = {chrome, get, ok, until, BASE, OUT};
 
 if (require.main === module) {
   (async () => {
     await partA();
-    // Part B (browser checks, tasks 10-12) goes here.
+    await partB();
     console.log('stand ok');
   })().catch((e) => { console.error(`FAIL ${e.message}`); process.exit(1); });
 }

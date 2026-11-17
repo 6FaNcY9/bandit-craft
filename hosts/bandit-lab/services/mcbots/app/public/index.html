@@ -5,24 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bots</title>
 <style>
-  :root { --bg: #121417; --card: #1c1f24; --line: #2a2e35; --text: #e8e8e8; --mut: #9aa1aa; --ok: #4ade80; --warn: #f59e0b; --bad: #ef4444; --acc: #60a5fa; }
+  :root { --bg: #121417; --card: #1c1f24; --line: #2a2e35; --text: #e8e8e8; --mut: #9aa1aa; --ok: #4ade80; --warn: #f59e0b; --bad: #ef4444; --acc: #60a5fa; --bar: calc(60px + env(safe-area-inset-bottom, 0px)); }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  body { padding-bottom: 76px; }
-  header { position: sticky; top: 0; z-index: 3; display: flex; gap: 10px; align-items: center; padding: 10px 16px; background: #0d0f12; border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 18px; margin: 0; }
-  header .grow { flex: 1; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; flex: none; }
   .dot.on { background: var(--ok); }
-  nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 3; display: grid; grid-template-columns: repeat(7, 1fr); background: #0d0f12; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-  nav.tabs button { background: none; border: 0; color: var(--mut); font: inherit; font-size: 11px; padding: 8px 2px 10px; cursor: pointer; display: grid; gap: 2px; justify-items: center; }
-  nav.tabs button b { font-size: 20px; font-weight: normal; line-height: 1; }
-  nav.tabs button.cur { color: var(--text); background: var(--card); }
+  /* one screen: the world fills what the bar and an open sheet leave free */
+  #world { position: fixed; top: 0; left: 0; right: 0; bottom: var(--bar); overflow: hidden; background: #0b0d10; }
+  #view { display: block; width: 100%; height: 100%; touch-action: none; }
+  #tags { position: absolute; inset: 0; pointer-events: none; }
+  #conn { position: absolute; top: 18px; left: 16px; }
+  #stopAll { position: absolute; top: 8px; right: 8px; }
+  #fab { position: absolute; right: 8px; bottom: 8px; display: grid; gap: 8px; }
+  #sheet { position: fixed; left: 0; right: 0; top: 50dvh; bottom: var(--bar); z-index: 2; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); border-top: 1px solid var(--line); }
+  body[data-sheet="menu"] #sheet { top: 0; }
+  body[data-sheet="bots"] #world, body[data-sheet="plan"] #world { bottom: 50dvh; }
+  #sheetHead { position: sticky; top: 0; z-index: 1; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; height: var(--bar); padding-bottom: env(safe-area-inset-bottom, 0px); display: flex; background: #0d0f12; border-top: 1px solid var(--line); }
+  #bar button { flex: 1; min-height: 56px; background: none; border: 0; color: var(--mut); font: inherit; font-size: 12px; cursor: pointer; display: grid; align-content: center; justify-items: center; gap: 2px; }
+  #bar button b { font-size: 24px; font-weight: normal; line-height: 1; }
+  #bar button.cur { color: var(--text); background: var(--card); }
   @media (min-width: 900px) {
-    body { padding-bottom: 0; }
-    nav.tabs { position: sticky; top: 49px; bottom: auto; display: flex; justify-content: center; gap: 4px; border-top: 0; border-bottom: 1px solid var(--line); padding: 6px; }
-    nav.tabs button { display: flex; gap: 6px; align-items: center; font-size: 14px; padding: 6px 14px; border-radius: 8px; }
-    nav.tabs button b { font-size: 16px; }
+    #sheet { top: 0; right: auto; width: 380px; border-top: 0; border-right: 1px solid var(--line); }
+    #world { z-index: 4; } /* above the bar, so #stopAll (fixed, but painted inside #world) shows in it */
+    body[data-sheet] #world { left: 380px; bottom: var(--bar); }
+    #bar button { flex: 0 0 95px; }
+    #stopAll { position: fixed; top: auto; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
   }
   main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
@@ -63,7 +71,6 @@
   .ev.fail, .ev.death { color: #fca5a5; } .ev.done { color: #86efac; }
   #toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 5; background: #2b3340; padding: 10px 16px; border-radius: 10px; display: none; max-width: 92vw; box-shadow: 0 6px 20px #0008; }
   #console { background: #0b0d10; border-radius: 8px; padding: 8px; height: 260px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
-  #map { width: 100%; height: 62vh; min-height: 320px; background: #0b0d10; border-radius: 10px; touch-action: none; display: block; }
   #plan3d { width: 100%; height: 62vh; min-height: 320px; background: #0b0d10; border-radius: 10px; touch-action: none; display: block; margin-top: 8px; }
   .chest { padding: 10px 0; border-bottom: 1px solid #23272d; }
   .my8 { margin: 8px 0; } .mt6 { margin-top: 6px; } .mt8 { margin-top: 8px; } .mt10 { margin-top: 10px; } .mt12 { margin-top: 12px; } .mb8 { margin-bottom: 8px; }
@@ -72,21 +79,10 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>Bots</h1><span class="dot" id="conn" title="Verbindung"></span>
-  <span class="grow"></span>
-  <input class="t" id="me" maxlength="16" size="11" placeholder="Dein Name" title="Dein Spielername (für Komm, Folge, Karte)">
-  <button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹ Alle</button>
-</header>
-<nav class="tabs" id="tabs">
-  <button data-tab="home" class="cur"><b>🏠</b>Übersicht</button>
-  <button data-tab="orders"><b>🎯</b>Aufträge</button>
-  <button data-tab="map"><b>🗺️</b>Karte</button>
-  <button data-tab="chests"><b>📦</b>Kisten</button>
-  <button data-tab="project"><b>🏗️</b>Projekt</button>
-  <button data-tab="plan"><b>📐</b>Plan</button>
-  <button data-tab="server"><b>⚙️</b>Server</button>
-</nav>
+<div id="world"><canvas id="view"></canvas><div id="tags"></div><span class="dot" id="conn" title="Verbindung"></span><button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹</button><div id="fab"><button class="b" id="camTop" title="Von oben">🗺️</button><button class="b" id="cutBtn" title="Höhe">▤</button></div><input type="range" id="cutY" min="-64" max="319" value="319" hidden><div id="pickBar" hidden></div><div id="worldMsg" hidden></div></div>
+
+<div id="sheet" hidden>
+<div class="row between" id="sheetHead"><div class="row" id="seg"></div><button class="b" id="sheetClose" title="Schließen">✕</button></div>
 
 <!-- Übersicht -->
 <main data-page="home">
@@ -101,6 +97,9 @@
 
 <!-- Aufträge -->
 <main data-page="orders" hidden>
+  <section class="card">
+    <label class="row"><b>Dein Name</b><input class="grow t" id="me" maxlength="16" placeholder="Spielername" autocomplete="off"></label>
+  </section>
   <section class="card">
     <h2>1. Wer?</h2>
     <div class="row" id="pickBots"></div>
@@ -132,27 +131,7 @@
     <div class="row"><input class="grow t" id="getItem" placeholder="Item, z.B. iron_pickaxe" autocomplete="off"><input class="t" id="getCount" type="number" min="1" max="256" value="1" size="4" title="Anzahl"></div>
     <div class="mt12 row"><button class="b go" id="getGo">Besorgen schicken</button></div>
   </section>
-  <p class="mut small">Hinschicken: auf der <a href="#" data-goto-tab="map" class="acc">Karte</a> eine Stelle antippen.</p>
-</main>
-
-<!-- Karte -->
-<main data-page="map" hidden>
-  <section class="card">
-    <div class="mb8 row between">
-      <div class="row">
-        <button class="b" id="mapMe">Zu mir</button>
-        <button class="b" id="mapSite">Bauplatz</button>
-        <button class="b" id="mapBots">Bots</button>
-      </div>
-      <div class="row"><button class="b" id="zoomOut">−</button><button class="b" id="zoomIn">+</button></div>
-    </div>
-    <canvas id="map"></canvas>
-    <div class="mt10 row between" id="mapPick" hidden>
-      <span id="mapPickText"></span>
-      <div class="row"><button class="b go" id="mapSend">Ausgewählte Bots hierher</button><button class="b" id="mapCancel">Abbrechen</button></div>
-    </div>
-    <p class="mut small" id="mapInfo">Ziehen zum Verschieben, antippen um einen Ort zu wählen. Bots wählst du unter „Aufträge“.</p>
-  </section>
+  <p class="mut small">Hinschicken: in der Welt eine Stelle antippen.</p>
 </main>
 
 <!-- Kisten -->
@@ -229,6 +208,13 @@
     <p class="mut small" id="planInfo"></p>
   </section>
 </main>
+</div>
+<nav id="bar">
+  <button data-sheet="bots"><b>🤖</b>Bots</button>
+  <button data-sheet="plan"><b>🏰</b>Plan</button>
+  <button id="chatBtn" hidden><b>💬</b>Chat</button>
+  <button data-sheet="menu"><b>☰</b>Mehr</button>
+</nav>
 <div id="toast"></div>
 
 <script>
@@ -381,21 +367,33 @@ const PROJECT = new Set(['schematic', 'produce']);
 const pct = (a, b) => (b ? Math.max(0, Math.min(100, Math.round((100 * a) / b))) : 0);
 const ago = (s) => (s == null ? '' : s < 90 ? 'gerade eben' : s < 5400 ? `vor ${Math.round(s / 60)} min` : `vor ${Math.round(s / 3600)} h`);
 
-// ---- tabs ----
-let curTab = store.get('tab', 'home');
-function tab(name) {
-  curTab = name;
-  store.set('tab', name);
-  for (const m of document.querySelectorAll('main[data-page]')) m.hidden = m.dataset.page !== name;
-  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('cur', b.dataset.tab === name);
-  if (name === 'server') loadServer();
-  if (name === 'chests') loadChests();
-  if (name === 'project') loadSchematics();
-  if (name === 'map') requestAnimationFrame(drawMap);
-  if (name === 'plan') loadPlanList();
+// ---- sheets over the world: the hash says which one is open (#bots, #bots/orders, #menu/server …) ----
+const SHEETS = {bots: ['home', 'orders'], plan: ['project', 'plan'], menu: ['chests', 'server']};
+const SEG = {home: 'Bots', orders: 'Auftrag', project: 'Bau', plan: 'Datei ansehen', chests: 'Kisten', server: 'Server'};
+let curTab = null; // the page open in the sheet, null while it is closed
+function sheet(name, page) {
+  const h = !name ? '' : page && page !== SHEETS[name][0] ? `#${name}/${page}` : `#${name}`;
+  if (!location.hash) location.hash = h; // only opening adds a history step, so the back button closes the sheet
+  else location.replace(h || '#');
 }
-for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => tab(b.dataset.tab);
-for (const a of document.querySelectorAll('[data-goto-tab]')) a.onclick = (e) => { e.preventDefault(); tab(a.dataset.gotoTab); };
+function route() {
+  const [name, want] = location.hash.slice(1).split('/'), pages = Object.hasOwn(SHEETS, name) ? SHEETS[name] : null;
+  curTab = pages ? (pages.includes(want) ? want : pages[0]) : null;
+  $('sheet').hidden = !pages;
+  if (pages) document.body.dataset.sheet = name;
+  else delete document.body.dataset.sheet;
+  for (const m of document.querySelectorAll('main[data-page]')) m.hidden = m.dataset.page !== curTab;
+  for (const b of document.querySelectorAll('#bar [data-sheet]')) b.classList.toggle('cur', b.dataset.sheet === name);
+  $('seg').replaceChildren(...(pages || []).map((p) => el('button', {class: 'b' + (p === curTab ? ' sel' : ''), onclick: () => sheet(name, p)}, SEG[p])));
+  if (curTab === 'server') loadServer();
+  if (curTab === 'chests') loadChests();
+  if (curTab === 'project') loadSchematics();
+  if (curTab === 'plan') loadPlanList();
+}
+window.addEventListener('hashchange', route);
+for (const b of document.querySelectorAll('#bar [data-sheet]')) b.onclick = () => sheet(document.body.dataset.sheet === b.dataset.sheet ? null : b.dataset.sheet);
+$('sheetClose').onclick = () => sheet(null);
+fetch('/api/architect/status').then((r) => { $('chatBtn').hidden = !r.ok; }, () => {});
 
 // ---- live state ----
 let last = null;
@@ -407,7 +405,6 @@ function connect() {
     renderBots();
     renderPicks();
     renderProject();
-    if (curTab === 'map') drawMap();
     if (last.lastEventId !== evLast) loadEvents();
   };
   ws.onclose = () => { $('conn').classList.remove('on'); setTimeout(connect, 2000); };
@@ -433,6 +430,7 @@ function renderBots() {
           el('button', {class: 'b', onclick: (e) => { e.stopPropagation(); quick(b.name, 'come'); }}, '🙋 Komm'),
           el('button', {class: 'b', onclick: (e) => { e.stopPropagation(); quick(b.name, 'follow'); }}, '👣 Folge'),
           el('button', {class: 'b stop', onclick: (e) => { e.stopPropagation(); sendJob([b.name], 'stop', {}, 'Stopp'); }}, '⏹ Stopp'),
+          el('button', {class: 'b', onclick: (e) => { e.stopPropagation(); picked = new Set([b.name]); store.set('picked', [...picked]); renderPicks(); sheet('bots', 'orders'); }}, '🎯 Auftrag'),
           r.proj));
       r.detail.onclick = (e) => e.stopPropagation();
       r.root.onclick = () => { open = open === b.name ? null : b.name; store.set('openBot', open); renderBots(); };
@@ -525,114 +523,9 @@ $('gatherGo').onclick = () => {
   else sendJob(bots, 'mine', {block: gItem, count: gCount}, `${gCount} ${lbl}`);
 };
 
-// ---- map ----
-const cv = $('map'), g = cv.getContext('2d');
-let view = store.get('view', null), drag = null, pick = null;
+// ---- world ----
 const COLORS = ['#60a5fa', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c'];
 function ownerPos() { return last?.world?.players?.find((p) => p.name?.toLowerCase() === me().toLowerCase()) || null; }
-function centreOn(x, z, scale) { view = {x, z, s: scale || view?.s || 3}; store.set('view', view); drawMap(); }
-function siteBox() { return materials?.lo ? {x1: materials.lo.x, z1: materials.lo.z, x2: materials.hi.x, z2: materials.hi.z} : null; }
-// BlueMap low-res tiles of the overworld through /api/tile (the old page's terrain; the new map had lost it). A tile
-// that fails stays not ready and is simply not drawn.
-const tiles = new Map();
-function tileImg(lod, x, z) {
-  const key = `world/${lod}/x${x}/z${z}`;
-  let t = tiles.get(key);
-  if (!t) {
-    t = {img: new Image(), ready: false};
-    t.img.onload = () => { t.ready = true; drawMap(); };
-    t.img.src = `/api/tile/${key}.png`;
-    tiles.set(key, t);
-  }
-  return t;
-}
-function drawMap() {
-  if (!last || $('map').closest('main').hidden) return;
-  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
-  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!view) {
-    const o = ownerPos(), b = last.bots.find((x) => x.pos);
-    view = {x: o ? o.x : b ? b.pos[0] : 0, z: o ? o.z : b ? b.pos[2] : 0, s: 3};
-  }
-  const sx = (x) => (x - view.x) * view.s + w / 2, sz = (z) => (z - view.z) * view.s + h / 2;
-  g.fillStyle = '#0b0d10';
-  g.fillRect(0, 0, w, h);
-  // terrain: lod 1 = 500 blocks a tile, x5 per lod; the top 500 x 500 of a tile is its colour
-  const lod = view.s >= 0.4 ? 1 : view.s >= 0.08 ? 2 : 3, size = 500 * 5 ** (lod - 1);
-  g.imageSmoothingEnabled = false;
-  for (let tx = Math.floor((view.x - w / 2 / view.s) / size); tx * size < view.x + w / 2 / view.s; tx++) {
-    for (let tz = Math.floor((view.z - h / 2 / view.s) / size); tz * size < view.z + h / 2 / view.s; tz++) {
-      const t = tileImg(lod, tx, tz);
-      if (t.ready) g.drawImage(t.img, 0, 0, 500, 500, sx(tx * size), sz(tz * size), size * view.s + 1, size * view.s + 1);
-    }
-  }
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  g.fillRect(0, 0, w, h); // keep the boxes and dots readable
-  // chunk grid
-  const step = view.s >= 2 ? 16 : view.s >= 0.5 ? 64 : 256;
-  g.strokeStyle = '#1b1f25';
-  g.lineWidth = 1;
-  for (let x = Math.floor((view.x - w / 2 / view.s) / step) * step; sx(x) < w; x += step) { g.beginPath(); g.moveTo(sx(x), 0); g.lineTo(sx(x), h); g.stroke(); }
-  for (let z = Math.floor((view.z - h / 2 / view.s) / step) * step; sz(z) < h; z += step) { g.beginPath(); g.moveTo(0, sz(z)); g.lineTo(w, sz(z)); g.stroke(); }
-  const box = (b, color, label) => {
-    g.strokeStyle = color; g.lineWidth = 2;
-    g.strokeRect(sx(b.x1), sz(b.z1), (b.x2 - b.x1 + 1) * view.s, (b.z2 - b.z1 + 1) * view.s);
-    if (label) { g.fillStyle = color; g.font = '12px system-ui'; g.fillText(label, sx(b.x1) + 3, sz(b.z1) - 4); }
-  };
-  for (const a of last.protectedAreas || []) box({x1: a[0], z1: a[1], x2: a[2], z2: a[3]}, '#7f1d1d', 'geschützt');
-  for (const p of last.places || []) {
-    if (p.box) box(p.box, '#475569', p.name);
-    else { g.fillStyle = '#94a3b8'; g.fillRect(sx(p.x) - 3, sz(p.z) - 3, 6, 6); g.font = '11px system-ui'; g.fillText(p.name, sx(p.x) + 5, sz(p.z) + 4); }
-  }
-  const site = siteBox();
-  if (site) box(site, '#22c55e', 'Bauplatz');
-  if (last.supplyChest) { const c = last.supplyChest; g.fillStyle = '#facc15'; g.fillRect(sx(c.x) - 4, sz(c.z) - 4, 8, 8); }
-  for (const m of last.world?.mobs || []) { g.fillStyle = '#b91c1c'; g.fillRect(sx(m.x) - 1.5, sz(m.z) - 1.5, 3, 3); }
-  const dot = (x, z, color, label, r = 6) => {
-    g.fillStyle = color; g.beginPath(); g.arc(sx(x), sz(z), r, 0, 7); g.fill();
-    g.font = 'bold 12px system-ui'; g.fillStyle = '#e8e8e8'; g.fillText(label, sx(x) + r + 3, sz(z) + 4);
-  };
-  last.bots.forEach((b, i) => { if (b.pos && b.online) dot(b.pos[0], b.pos[2], COLORS[i % COLORS.length], b.name, picked.has(b.name) ? 8 : 6); });
-  for (const p of last.world?.players || []) if (!/^(bot\d+|MisaBot|EM_Trader)$/.test(p.name)) dot(p.x, p.z, '#ffffff', p.name, 7);
-  if (pick) { g.strokeStyle = '#60a5fa'; g.lineWidth = 3; g.beginPath(); g.arc(sx(pick.x), sz(pick.z), 10, 0, 7); g.stroke(); }
-}
-const toWorld = (ev) => { const r = cv.getBoundingClientRect(); return {x: Math.floor(view.x + (ev.clientX - r.left - r.width / 2) / view.s), z: Math.floor(view.z + (ev.clientY - r.top - r.height / 2) / view.s)}; };
-cv.onpointerdown = (e) => { drag = {x: e.clientX, y: e.clientY, vx: view.x, vz: view.z, moved: false}; cv.setPointerCapture(e.pointerId); };
-cv.onpointermove = (e) => {
-  if (!drag) return;
-  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
-  if (drag.moved) { view.x = drag.vx - dx / view.s; view.z = drag.vz - dy / view.s; drawMap(); }
-};
-cv.onpointerup = (e) => {
-  if (drag && !drag.moved) {
-    pick = toWorld(e);
-    $('mapPick').hidden = false;
-    $('mapPickText').textContent = `Ort ${pick.x} / ${pick.z}`;
-    drawMap();
-  }
-  drag = null;
-  store.set('view', view);
-};
-cv.onwheel = (e) => { e.preventDefault(); view.s = Math.max(0.1, Math.min(16, view.s * (e.deltaY < 0 ? 1.25 : 0.8))); store.set('view', view); drawMap(); };
-$('zoomIn').onclick = () => { view.s = Math.min(16, view.s * 1.5); store.set('view', view); drawMap(); };
-$('zoomOut').onclick = () => { view.s = Math.max(0.1, view.s / 1.5); store.set('view', view); drawMap(); };
-$('mapMe').onclick = () => { const o = ownerPos(); o ? centreOn(o.x, o.z) : say(me() ? 'Deine Position ist gerade nicht bekannt (BlueMap)' : 'Trag oben deinen Spielernamen ein', true); };
-$('mapSite').onclick = () => { const s = siteBox(); s ? centreOn((s.x1 + s.x2) / 2, (s.z1 + s.z2) / 2, 6) : say('Gerade kein Bauplatz', true); };
-$('mapBots').onclick = () => {
-  const ps = last.bots.filter((b) => b.pos && b.online).map((b) => b.pos);
-  if (!ps.length) return say('Kein Bot online', true);
-  centreOn(ps.reduce((a, p) => a + p[0], 0) / ps.length, ps.reduce((a, p) => a + p[2], 0) / ps.length);
-};
-$('mapCancel').onclick = () => { pick = null; $('mapPick').hidden = true; drawMap(); };
-$('mapSend').onclick = () => {
-  const bots = chosen();
-  if (!bots.length || !pick) return;
-  sendJob(bots, 'goto', {x: pick.x, z: pick.z}, `Hin zu ${pick.x} / ${pick.z}`);
-  pick = null; $('mapPick').hidden = true; drawMap();
-};
-window.addEventListener('resize', () => curTab === 'map' && drawMap());
 
 // ---- chests ----
 let chests = [];
@@ -804,7 +697,7 @@ function planFit() {
   PG.renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); PG.renderer.setSize(w, h, false); PG.camera.aspect = w / h; PG.camera.updateProjectionMatrix(); planDraw();
 }
 function planDraw() {
-  if (!PG || planQueued) return;
+  if (!PG || planQueued || curTab !== 'plan') return; // the canvas comes back with a resize, which draws again
   planQueued = true;
   requestAnimationFrame(() => {
     planQueued = false;
@@ -918,7 +811,8 @@ loadMaterials();
 setInterval(loadMaterials, 15000);
 loadNeeds();
 setInterval(loadNeeds, 15000);
-tab(curTab);
+if (!location.hash && matchMedia('(min-width: 900px)').matches) location.replace('#bots'); // the desktop has room for the dock
+route();
 </script>
 </body>
 </html>
