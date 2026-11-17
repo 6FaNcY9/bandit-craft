@@ -100,8 +100,13 @@ assert.ok(cmds.includes('setblock -317 105 -21 minecraft:crafting_table'));
   const conn = (b) => b.x === -291 && b.z >= 20 && b.z <= 22 && b.y >= 116 && b.y <= 120;
   assert.ok(cells.every((b) => conn(b) || (b.x >= -290 && b.x <= -274 && b.z >= 13 && b.z <= 29 && b.y >= 103 && b.y <= 167)), 'box');
   assert.ok(!cells.some((b) => b.z > 29 || b.x > -274));
-  const A1 = /^(cobblestone|cobbled_deepslate|deepslate_bricks|polished_deepslate|stone_bricks|deepslate_tiles|deepslate_tile_slab|spruce_planks|spruce_stairs|iron_bars|lantern|campfire)$/;
+  const A1 = /^(cobblestone|cobbled_deepslate|deepslate_bricks|polished_deepslate|stone_bricks|deepslate_tiles|deepslate_tile_slab|spruce_planks|spruce_stairs|iron_bars|lantern|campfire|iron_block|beacon|purple_stained_glass)$/;
   assert.ok(cells.every((b) => A1.test(b.name)), [...new Set(cells.map((b) => b.name))].join());
+  // beacon: on a 3x3 iron base, a clear beam up the spire's centre, purple glass at the tip
+  assert.equal(at.get(key(-282, 153, 21))?.name, 'beacon');
+  for (let x = -283; x <= -281; x++) for (let z = 20; z <= 22; z++) assert.equal(at.get(key(x, 152, z))?.name, 'iron_block', `base ${x} ${z}`);
+  for (let y = 154; y <= 164; y++) assert.ok(!at.has(key(-282, y, 21)), `beam ${y}`);
+  for (let y = 165; y <= 167; y++) assert.equal(at.get(key(-282, y, 21))?.name, 'purple_stained_glass', `tip ${y}`);
   for (const x of [-290, -289]) for (let y = 117; y <= 119; y++) assert.ok(!at.has(key(x, y, 21)), 'K1 door');
   for (const z of [13, 14]) for (let y = 114; y <= 116; y++) assert.ok(!at.has(key(-282, y, z)), 'north door');
   assert.equal(at.get(key(-288, 116, 21))?.name, 'spruce_planks', 'landing');
@@ -117,7 +122,7 @@ assert.ok(cmds.includes('setblock -317 105 -21 minecraft:crafting_table'));
   assert.ok(fires.every((b) => b.y === 153 && at.get(key(b.x, 152, b.z))?.name === 'polished_deepslate'), 'campfires on the deck');
   assert.equal(cells.filter((b) => b.y === 130 && wall(b.x, b.z)).length, 92);
   const top = cells.reduce((a, b) => (b.y > a.y ? b : a));
-  assert.deepEqual([top.x, top.y, top.z, top.name], [-282, 167, 21, 'deepslate_tile_slab']);
+  assert.deepEqual([top.x, top.y, top.z, top.name], [-282, 167, 21, 'purple_stained_glass']);
   // supported: every cell reaches the footing through face neighbours
   const seen = new Set(cells.filter((b) => b.y === 103).map((b) => key(b.x, b.y, b.z))), todo = [...seen];
   while (todo.length) {

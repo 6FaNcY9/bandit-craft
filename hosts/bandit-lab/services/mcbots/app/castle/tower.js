@@ -48,12 +48,14 @@ function tower() {
     } else if (oct(6, 10, dx, dz)) for (const y of [...FLOORS, 152]) put(x, y, z, 'spruce_planks');
   });
   for (const sx of [-6, 6]) for (const sz of [-5, 5]) put(CX + sx, 153, CZ + sz, 'campfire', {facing: 'north', lit: 'true', signal_fire: 'false', waterlogged: 'false'});
+  // beacon on the deck (owner 2026-11-17): tier-1 iron base; its beam rises through the hollow spire and the glass tip
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) put(CX + dx, 152, CZ + dz, 'iron_block');
+  put(CX, 153, CZ, 'beacon');
   // spire: each ring R for two layers (R 6: three); its top layer also covers ring R-1, so the next ring stands on it
   for (const [R, y1, y2] of [[6, 153, 155], [5, 156, 157], [4, 158, 159], [3, 160, 161], [2, 162, 163], [1, 164, 165]]) {
     for (let y = y1; y <= y2; y++) each((dx, dz, x, z) => { if (ring(R, dx, dz) || (y === y2 && ring(R - 1, dx, dz))) put(x, y, z, 'deepslate_tiles'); });
   }
-  put(CX, 166, CZ, 'deepslate_tiles');
-  put(CX, 167, CZ, 'deepslate_tile_slab', {type: 'bottom', waterlogged: 'false'});
+  for (const y of [165, 166, 167]) put(CX, y, CZ, 'purple_stained_glass'); // the beam turns purple
   // flight 0 along the west wall (x -288), landing at the K1 door, up through floor 120
   for (let i = 0; i < 3; i++) put(-288, 114 + i, 18 + i, 'spruce_stairs', stair('south'));
   put(-288, 116, 21, 'spruce_planks');
