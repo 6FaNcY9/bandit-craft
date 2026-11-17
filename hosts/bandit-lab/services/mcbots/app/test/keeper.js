@@ -214,6 +214,13 @@ const {WorldModel} = require('../world');
   assert.deepStrictEqual(back([{name: 'iron_helmet', count: 1}], []), {}, 'an unworn helmet with an empty head slot stays (rearm wears it)');
   assert.deepStrictEqual(back([{name: 'diamond_helmet', count: 1}], ['iron_helmet']), {}, 'a better carried piece stays (rearm wears it)');
   assert.deepStrictEqual(back([{name: 'bread', count: 30}, {name: 'oak_log', count: 64}]), {}, 'only gear is handed back');
+  // the off-hand counts: inventory.items() leaves slot 45 out, so a worn shield looked missing and a new one was crafted
+  // each armoury visit, the spare handed back: 37 shields in the armoury (main server 2026-11-17)
+  const {gearOwned} = require('../bots');
+  const SLOT = {head: 5, torso: 6, legs: 7, feet: 8, 'off-hand': 45};
+  const kitBot = {getEquipmentDestSlot: (s) => SLOT[s], inventory: {items: () => ['iron_pickaxe', 'iron_sword', 'iron_axe'].map((name) => ({name})),
+    slots: {5: {name: 'iron_helmet'}, 6: {name: 'iron_chestplate'}, 7: {name: 'iron_leggings'}, 8: {name: 'iron_boots'}, 45: {name: 'shield'}}}};
+  assert.strictEqual(ingotsWanted(gearOwned(kitBot)), 0, 'a shield in the off-hand is owned: nothing to craft');
   // chain arguments pass the real validators (the bots would refuse them otherwise)
   const {VALIDATE: V} = require('../bots');
   for (const [type, args] of [...PLANS.logs(40, chest), ...PLANS.cobblestone(64, chest), ...PLANS.coal(8, chest), ...PLANS.torch(16, chest, {coal: 9, oak_log: 3}), ...PLANS.stone_pickaxe(3, chest, {cobblestone: 9, oak_log: 3}), ...PLANS.raw_iron(16, chest), ...PLANS.iron_pickaxe(2, chest, kitStock), ...PLANS.iron_sword(1, chest, kitStock), ['stock', chest], ['goto', chest]]) assert.doesNotThrow(() => V[type](args), type);

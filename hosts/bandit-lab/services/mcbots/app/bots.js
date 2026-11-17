@@ -2366,11 +2366,15 @@ async function wearArmour(r) {
 // One try per 5 min, only when there is something to do; every failure is logged and the job carries on.
 // An armoury visit that left the bot without iron to craft with waits this long, not 5 minutes (review 2026-11-16).
 const GEAR_IDLE_MS = 30 * 60 * 1000;
+// Names of every item carried or worn, the off-hand too: inventory.items() leaves slot 45 out, so a worn shield looked missing
+// and a new one was crafted at each armoury visit, the spare handed back: 37 shields there (main server 2026-11-17).
+const gearOwned = (bot) => [...bot.inventory.items(), ...['head', 'torso', 'legs', 'feet', 'off-hand'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean)].map((i) => i.name);
+
 async function ensureGear(r, job) {
   const {bot} = r;
   const n = (name) => craftingLib.count(bot, name);
   if (Date.now() - (r.gearTriedAt || 0) < 300000 || Date.now() < (r.gearIdleUntil || 0)) return;
-  const ownedNow = () => [...bot.inventory.items(), ...['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean)].map((i) => i.name);
+  const ownedNow = () => gearOwned(bot);
   let owned = ownedNow();
   let wanted = gearJob.ingotsWanted(owned) - n('iron_ingot');
   // Nothing to make at all: no need either. (gearPlan(n('iron_ingot'), ...) asked what the carried iron makes, and a bot
@@ -2436,8 +2440,7 @@ async function ensureGear(r, job) {
       r.emit('info', `could not make an ${item}: ${e.message.slice(0, 80)}`);
     }
   }
-  const wornNow = ['head', 'torso', 'legs', 'feet'].map((s) => bot.inventory.slots[bot.getEquipmentDestSlot(s)]).filter(Boolean);
-  if (!gearJob.ingotsWanted([...bot.inventory.items(), ...wornNow].map((i) => i.name))) r.world?.dropNeed?.(r.name, 'iron_ingot');
+  if (!gearJob.ingotsWanted(gearOwned(bot))) r.world?.dropNeed?.(r.name, 'iron_ingot');
 }
 
 // Food from the project's own chests when they are nearer than the supply chest: bot3 walked 240 blocks at night with
@@ -3566,9 +3569,7 @@ const {highway} = roadJob.makeRoad({
   countChest: (r, job, p) => JOBS.stock(r, child(job, {type: 'stock', args: {x: p.x, y: p.y, z: p.z}})),
   chestsNear: (r, {x, y, z}) => r.bot.findBlocks({point: new (require('vec3').Vec3)(x, y, z), matching: (b) => /^(chest|trapped_chest|barrel)$/.test(b.name), maxDistance: 16, count: 256}),
   gearWanted: (r) => {
-    const worn = ['head', 'torso', 'legs', 'feet'].map((s) => r.bot.inventory.slots[r.bot.getEquipmentDestSlot(s)]).filter(Boolean);
-    const owned = [...r.bot.inventory.items(), ...worn].map((i) => i.name);
-    return Math.max(0, gearJob.ingotsWanted(owned) - craftingLib.count(r.bot, 'iron_ingot'));
+    return Math.max(0, gearJob.ingotsWanted(gearOwned(r.bot)) - craftingLib.count(r.bot, 'iron_ingot'));
   },
 });
 
@@ -4562,4 +4563,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
