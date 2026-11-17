@@ -28,7 +28,7 @@ function makeModel({store, fetch, url, token, area, now = Date.now, lru = 2048, 
   const cache = new Map(); // "cx,sy,cz" -> decoded section, least recently used first; never holds a frame
   const auth = {authorization: 'Bearer ' + token};
   const limit = (ms) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
-  let boot = null, ack = 0, badRecords = 0, lastPull = null, lastChange = null;
+  let boot = null, ack = 0, badRecords = 0, lastPull = null, lastChange = null, lastPullError = null;
 
   function section(cx, sy, cz) {
     const key = `${cx},${sy},${cz}`;
@@ -48,6 +48,9 @@ function makeModel({store, fetch, url, token, area, now = Date.now, lru = 2048, 
   // One long poll. Returns how many records changed the store. A frame that does not decode, a non-ok reply or
   // a failed batch throws before ack moves, so the plugin sends the same batch again.
   async function pullOnce() {
+    try { return await pull(); } catch (e) { lastPullError = {at: now(), message: e.message}; throw e; }
+  }
+  async function pull() {
     const res = await fetch(`${url}/world/pull?ack=${ack}&wait=${PULL_WAIT_S}&area=${area.cx1},${area.cz1},${area.cx2},${area.cz2}`, {headers: auth, signal: limit(PULL_TIMEOUT_MS)});
     if (!res.ok) throw new Error('pull: HTTP ' + res.status);
     const frame = decodeBatch(Buffer.from(await res.arrayBuffer()));
@@ -63,11 +66,12 @@ function makeModel({store, fetch, url, token, area, now = Date.now, lru = 2048, 
     if (frame.boot !== boot) { boot = frame.boot; ack = 0; } // the plugin restarted: its batch numbers start over
     ack = frame.batch; // every stored frame is acked, an empty one too: if it has a batch id of its own, the next one must not wait behind it
     lastPull = now();
+    lastPullError = null;
     if (changed) lastChange = lastPull;
     return changed;
   }
 
-  const stats = () => ({boot: boot === null ? null : String(boot), ack, badRecords, seq: store.seq(), ...store.counts(), lru: cache.size, lastPull, lastChange});
+  const stats = () => ({boot: boot === null ? null : String(boot), ack, badRecords, seq: store.seq(), ...store.counts(), lru: cache.size, lastPull, lastChange, lastPullError});
 
   // GET (or POST a JSON body) to the plugin: {status, body}, or null when it did not answer.
   async function plugin(path, post) {

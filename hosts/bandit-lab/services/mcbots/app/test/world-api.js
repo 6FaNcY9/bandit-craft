@@ -5,7 +5,8 @@ const {parseArea, dirtyBoxes, withDirty, handle} = require('../worldapi');
 
 assert.deepStrictEqual(parseArea('-270,-20,320'), {cx1: -37, cz1: -22, cx2: 3, cz2: 18});
 assert.throws(() => parseArea('-270,-20'), /WORLD_AREA/);
-for (const bad of ['a,b,c', '1,2,0', '1,2,-5', '1.5,2,3', ' ']) assert.throws(() => parseArea(bad), /WORLD_AREA/, bad);
+for (const bad of ['a,b,c', '1,2,0', '1,2,-5', '1.5,2,3', ' ', '0,0,1025']) assert.throws(() => parseArea(bad), /WORLD_AREA/, bad);
+assert.deepStrictEqual(parseArea('0,0,1024'), {cx1: -64, cz1: -64, cx2: 64, cz2: 64});
 
 assert.deepStrictEqual(dirtyBoxes('fill -3 70 -3 3 70 3 minecraft:stone'), [{x1: -3, y1: 70, z1: -3, x2: 3, y2: 70, z2: 3}]);
 assert.deepStrictEqual(dirtyBoxes('/minecraft:setblock -323 105 -30 minecraft:chest[facing=north]'), [{x1: -323, y1: 105, z1: -30, x2: -323, y2: 105, z2: -30}]);

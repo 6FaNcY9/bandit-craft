@@ -110,7 +110,9 @@ async function pulls() {
     ({urls, fetch: f} = feed(q));
     m = makeModel({store, fetch: f, url: 'http://p', token: 't', area});
     await assert.rejects(m.pullOnce(), /bad batch/); await assert.rejects(m.pullOnce(), /HTTP 503/); await assert.rejects(m.pullOnce(), /down/);
+    assert.strictEqual(m.stats().lastPullError.message, 'down'); assert.strictEqual(typeof m.stats().lastPullError.at, 'number');
     assert.strictEqual(await m.pullOnce(), 1);                                                // acks batch 1
+    assert.strictEqual(m.stats().lastPullError, null);                                        // a good pull clears it
     await assert.rejects(m.pullOnce());                                                       // truncated: still ack 1
     assert.strictEqual(await m.pullOnce(), 0);                                                // empty frame, batch 2
     assert.deepStrictEqual(urls.map((u) => u.match(/ack=(\d+)/)[1]), ['0', '0', '0', '0', '1', '1']);

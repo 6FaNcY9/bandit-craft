@@ -2,11 +2,12 @@
 // The hub's side of the block model that is not the model itself: the WORLD_AREA text, which RCON commands
 // change blocks (so the model can re-read them at once), and the /api/world/* routes in front of worldmodel.js.
 const INT = /^-?\d{1,9}$/;
+const RADIUS_MAX = 1024; // the first area is 320; a larger one is a deliberate change (phase 5), not a typo
 
 // "x,z,radius" in blocks (the plugin's area is whole chunks) -> chunk bounds
 function parseArea(text) {
   const p = String(text).trim().split(',').map((s) => s.trim());
-  if (p.length !== 3 || !p.every((s) => INT.test(s)) || Number(p[2]) < 1) throw new Error('WORLD_AREA must be x,z,radius in blocks (radius >= 1)');
+  if (p.length !== 3 || !p.every((s) => INT.test(s)) || Number(p[2]) < 1 || Number(p[2]) > RADIUS_MAX) throw new Error(`WORLD_AREA must be x,z,radius in blocks (radius 1..${RADIUS_MAX})`);
   const [x, z, r] = p.map(Number), chunk = (v) => Math.floor(v / 16);
   return {cx1: chunk(x - r), cz1: chunk(z - r), cx2: chunk(x + r), cz2: chunk(z + r)};
 }
