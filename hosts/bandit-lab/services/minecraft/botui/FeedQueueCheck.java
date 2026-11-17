@@ -152,5 +152,42 @@ final class FeedQueueCheck {
         for (int i = 1; i < shots.size(); i++) assert shots.get(i) - shots.get(i - 1) >= FeedQueue.DEBOUNCE_TICKS
             && shots.get(i) - shots.get(i - 1) <= FeedQueue.DEBOUNCE_TICKS + FeedQueue.SETTLE_TICKS;
         assert shots.size() >= 5 && shots.get(shots.size() - 1) > 400 && !s.dirty(0, 0);   // the last marks were snapshotted too
+
+        // overlap: the same chunk is handed out again before the first done(); done() order must not decide which snapshot wins
+        FeedQueue ov = new FeedQueue(1); ov.setArea(0, 0, 0, 0);
+        ov.mark(0, 0, 10);
+        FeedQueue.Work o1 = ov.next(15), o2 = ov.next(55);
+        assert o1.kind() == FeedQueue.Kind.DIRTY && o2.kind() == FeedQueue.Kind.DIRTY && o1.cx() == 0 && o2.cx() == 0 && o1.cz() == 0 && o2.cz() == 0;
+        ov.done(o2, 55, List.of(rec(0, 0, 0, "b")));
+        ov.done(o1, 15, List.of(rec(0, 0, 0, "a")));                              // late and older: ignored
+        assert ov.outboxSize() == 1;
+        ov.mark(0, 0, 56);
+        for (int t = 56; t < 95; t++) { FeedQueue.Work x = ov.next(t); assert x == null || x.kind() != FeedQueue.Kind.DIRTY; }   // debounce still counts from 55
+        assert ov.next(95).kind() == FeedQueue.Kind.DIRTY;
+        assert Arrays.equals(ov.batch(0), SectionCodec.frame(1, 2, List.of(wire(rec(0, 0, 0, "b")))));
+        assert count(ov.batch(2)) == 0;
+        ov.done(sw, 100, List.of(rec(0, 0, 0, "b")));                             // b is the newest hash, a never was
+        assert ov.outboxSize() == 0;
+
+        // a late done() of an older hand-out does not pull the debounce back from a newer hand-out that is still outstanding
+        FeedQueue lt = new FeedQueue(1); lt.setArea(0, 0, 0, 0);
+        lt.mark(0, 0, 10);
+        FeedQueue.Work l1 = lt.next(15); assert lt.next(55).kind() == FeedQueue.Kind.DIRTY;
+        lt.done(l1, 15, List.of());
+        lt.mark(0, 0, 56);
+        for (int t = 56; t < 95; t++) { FeedQueue.Work x = lt.next(t); assert x == null || x.kind() != FeedQueue.Kind.DIRTY; }
+        assert lt.next(95).kind() == FeedQueue.Kind.DIRTY;
+
+        // an IMPORT or SWEEP done older than an accepted DIRTY done is ignored, an equal tick is not
+        FeedQueue st = new FeedQueue(1); st.setArea(0, 0, 0, 0);
+        st.mark(0, 0, 10);
+        FeedQueue.Work si = st.next(0), sd = st.next(15);
+        assert si.kind() == FeedQueue.Kind.IMPORT && sd.kind() == FeedQueue.Kind.DIRTY;
+        st.done(sd, 15, List.of(rec(0, 0, 0, "b")));
+        st.done(si, 0, List.of(rec(0, 0, 0, "a"), new FeedQueue.Rec(1, 0, 0, 0, null, null)));
+        st.done(sw, 14, List.of(rec(0, 0, 2, "c")));
+        assert st.outboxSize() == 1;
+        st.done(sw, 15, List.of(rec(0, 0, 1, "d")));
+        assert Arrays.equals(st.batch(0), SectionCodec.frame(1, 2, List.of(wire(rec(0, 0, 0, "b")), wire(rec(0, 0, 1, "d")))));
     }
 }

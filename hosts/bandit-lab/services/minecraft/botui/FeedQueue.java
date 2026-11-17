@@ -13,7 +13,8 @@ import java.util.Map;
 /**
  * Bookkeeping between Paper's block events/snapshots and the hub's long poll: dirty marks with settle and debounce,
  * the order of snapshot work, a bounded outbox and acked batch frames. Pure (no Bukkit) and thread-safe.
- * Ticks passed to {@link #done} are the ticks the snapshots were taken at, not when the encoder finished.
+ * The tick passed to {@link #done} must be the tick the snapshot was taken at, not when the encoder finished: it orders snapshots of one chunk
+ * (a done() older than one already accepted is ignored) and decides which marks the snapshot covers.
  */
 final class FeedQueue {
     static final int OUTBOX_MAX = 4096, SETTLE_TICKS = 5, DEBOUNCE_TICKS = 40, BATCH_RECORDS = 256, BATCH_BYTES = 1 << 20;
@@ -29,7 +30,8 @@ final class FeedQueue {
     private int ax1 = 1, az1 = 1, ax2 = 0, az2 = 0; // empty until setArea
     private long imported; // imports are handed out row by row, so a big area costs no memory
     private final HashMap<Long, long[]> dirtyAt = new HashMap<>(); // chunk -> {first pending mark, newest mark}
-    private final HashMap<Long, Long> lastSnap = new HashMap<>(); // chunk -> tick of its last snapshot
+    private final HashMap<Long, Long> lastSnap = new HashMap<>(); // chunk -> tick of its last snapshot, handed out or done; only moves forward
+    private final HashMap<Long, Long> accepted = new HashMap<>(); // chunk -> snapshot tick of the newest done() taken
     private final LinkedHashSet<Long> sweeps = new LinkedHashSet<>();
     private final HashMap<Long, Long> newest = new HashMap<>(); // section -> hash of the newest record accepted, queued or sent
     private final HashSet<Long> ungenerated = new HashSet<>();
@@ -69,6 +71,7 @@ final class FeedQueue {
         imported = 0;
         dirtyAt.keySet().removeIf(k -> !in(cxOf(k), czOf(k)));
         lastSnap.keySet().removeIf(k -> !in(cxOf(k), czOf(k)));
+        accepted.keySet().removeIf(k -> !in(cxOf(k), czOf(k)));
         sweeps.removeIf(k -> !in(cxOf(k), czOf(k)));
         return true;
     }
@@ -100,7 +103,7 @@ final class FeedQueue {
                 && (due == null || e.getValue()[0] < dirtyAt.get(due)[0])) due = e.getKey();
         }
         if (due != null) {
-            lastSnap.put(due, tick); // also keeps a drain loop from getting this chunk twice before done()
+            lastSnap.merge(due, tick, Math::max); // also keeps a drain loop from getting this chunk twice before done()
             return new Work(cxOf(due), czOf(due), Kind.DIRTY);
         }
         if (imported < total()) {
@@ -117,14 +120,19 @@ final class FeedQueue {
     }
 
     /**
-     * Takes the records of a snapshot taken at tick. A record whose hash equals the newest one accepted for its section is dropped,
-     * a newer record replaces a queued one; kind 1 is kept once per chunk. The chunk is clean when no mark came at or after the snapshot;
+     * Takes the records of a snapshot taken at tick. One older than a snapshot already taken for the chunk is ignored whole (the chunk can be
+     * handed out again before an earlier done(), and the encoder may finish out of order); an equal tick is taken.
+     * A record whose hash equals the newest one accepted for its section is dropped, a newer record replaces a queued one;
+     * kind 1 is kept once per chunk. The chunk is clean when no mark came at or after the snapshot;
      * otherwise it stays dirty, and as DEBOUNCE_TICKS > SETTLE_TICKS its next snapshot waits only for the debounce, whichever mark was first.
      */
     synchronized void done(Work w, long tick, List<Rec> recs) {
         if (!in(w.cx(), w.cz())) return; // the area moved while the snapshot was made
         long chunk = SectionCodec.chunkKey(w.cx(), w.cz());
-        lastSnap.put(chunk, tick);
+        Long last = accepted.get(chunk);
+        if (last != null && tick < last) return;
+        accepted.put(chunk, tick);
+        lastSnap.merge(chunk, tick, Math::max);
         dirtyAt.computeIfPresent(chunk, (k, p) -> p[1] < tick ? null : p);
         for (Rec r : recs) {
             long rc = SectionCodec.chunkKey(r.cx(), r.cz());
