@@ -202,7 +202,7 @@ const {BotRunner} = require('../bots');
     assert.deepStrictEqual(after.events, []);
     // the page may only run its own two inline blocks and the app's own files (the vendored three.js)
     const csp = (await fetch(`http://127.0.0.1:${port}/`, {headers: {'tailscale-user-login': 'a@github'}})).headers.get('content-security-policy');
-    assert.match(csp, /default-src 'none'; script-src 'self' 'sha256-[\w+/=]{44}'; style-src 'sha256-[\w+/=]{44}'; connect-src 'self'/);
+    assert.match(csp, /default-src 'none'; script-src 'self' 'sha256-[\w+/=]{44}'; style-src 'sha256-[\w+/=]{44}'; connect-src 'self'; worker-src 'self'/);
     // the 3D map: human path only, bad boxes refused, the vendored script served
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/voxels?x1=0&y1=0&z1=0&x2=500&y2=1&z2=1`, {headers: {'tailscale-user-login': 'a@github'}})).status, 400);
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/voxels?x1=0&y1=0&z1=0&x2=1&y2=1&z2=1`, {headers: {'tailscale-user-login': 'a@github'}})).status, 409, 'no bot online to read from');

@@ -167,7 +167,7 @@ const ONEVIEW_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'";
 // bodies by hash, plus this server's own files ('self': the vendored three.js of the 3D map);
 // no CDN, no eval, no other origin.
 const sha = (html, re) => `'sha256-${require('node:crypto').createHash('sha256').update(String(html).match(re)?.[1] ?? '').digest('base64')}'`;
-const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<script>([\s\S]*?)<\/script>/)}; style-src ${sha(html, /<style>([\s\S]*?)<\/style>/)}; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const csp = (html) => `default-src 'none'; script-src 'self' ${sha(html, /<script>([\s\S]*?)<\/script>/)}; style-src ${sha(html, /<style>([\s\S]*?)<\/style>/)}; connect-src 'self'; worker-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 const CSP = csp(page), LEGACY_CSP = csp(legacy), UPLOAD_CSP = csp(fs.readFileSync(path.join(__dirname, 'public', 'upload.html'))); // each page allows its own bodies only
 // Remote workers register themselves in `runners` (see hub.js), so the
 // dashboard, /api/state and /api/debug list them next to the lab's bots.

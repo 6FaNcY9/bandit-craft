@@ -14,3 +14,14 @@ const start = html.slice(html.indexOf('function startWorld'), html.indexOf("wind
 assert.match(start, /new Worker\([^)]*\);\n\s*const pause = [^\n]*\n\s*pause\(\);/, 'pause is the first message to the worker');
 // the world's files run after the inline script, which uses them only from the load event
 assert.deepStrictEqual([...html.slice(html.indexOf('</script>')).matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]), ['/oneview/blocks.js', '/oneview/planview.js', '/oneview/view.js', '/oneview/layers.js']);
+// a throw in the 3D layer never stops the old dashboard: toWorld() runs last, caught
+const onWs = html.slice(html.indexOf('ws.onmessage'), html.indexOf('ws.onclose'));
+assert.match(onWs, /renderBots\(\);[\s\S]*loadEvents\(\);\n\s*try \{ toWorld\(\); \} catch/, 'toWorld() after the old renders, in try');
+assert.strictEqual(onWs.match(/toWorld\(\)/g).length, 1);
+// a world that cannot start says so instead of „Welt lädt …“ forever
+assert.match(start, /then\(\(\) => \{ try \{\n[\s\S]*\} catch \(e\) \{ worldFail\(e\); \} \},/); assert.match(start, /worker\.onerror = worldFail;/); assert.ok(html.includes('Welt geht hier nicht. Seite neu laden.'));
+// the name field and „Wer?“ live under Auftrag now
+for (const gone of ['Trag oben', 'Erst oben']) assert.ok(!html.includes(gone), gone);
+assert.match(html, /top: 50vh; top: 50dvh;/); assert.match(html, /bottom: 50vh; bottom: 50dvh;/);
+// Safari before 15.5 has no worker-src fallback to script-src: without it the worker falls to default-src 'none'
+assert.ok(fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8').includes("connect-src 'self'; worker-src 'self';"), 'worker-src in the page CSP');

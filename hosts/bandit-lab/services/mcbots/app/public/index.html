@@ -25,9 +25,9 @@
   #pickBar { position: absolute; left: 8px; right: 64px; bottom: 8px; display: flex; gap: 8px; align-items: center; padding: 6px 6px 6px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; white-space: nowrap; } /* right: clear of #fab */
   #pickBar span { flex: 1; } #pickBar button { min-width: 44px; justify-content: center; }
   #worldMsg { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: var(--mut); pointer-events: none; }
-  #sheet { position: fixed; left: 0; right: 0; top: 50dvh; bottom: var(--bar); z-index: 2; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); border-top: 1px solid var(--line); }
+  #sheet { position: fixed; left: 0; right: 0; top: 50vh; top: 50dvh; bottom: var(--bar); z-index: 2; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); border-top: 1px solid var(--line); }
   body[data-sheet="menu"] #sheet { top: 0; }
-  body[data-sheet="bots"] #world, body[data-sheet="plan"] #world { bottom: 50dvh; }
+  body[data-sheet="bots"] #world, body[data-sheet="plan"] #world { bottom: 50vh; bottom: 50dvh; }
   #sheetHead { position: sticky; top: 0; z-index: 1; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
   #bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; height: var(--bar); padding-bottom: env(safe-area-inset-bottom, 0px); display: flex; background: #0d0f12; border-top: 1px solid var(--line); }
   #bar button { flex: 1; min-height: 56px; background: none; border: 0; color: var(--mut); font: inherit; font-size: 12px; cursor: pointer; display: grid; align-content: center; justify-items: center; gap: 2px; }
@@ -405,18 +405,18 @@ $('sheetClose').onclick = () => sheet(null);
 fetch('/api/architect/status').then((r) => { $('chatBtn').hidden = !r.ok; }, () => {});
 
 // ---- live state ----
-let last = null;
+let last = null, toWorldErr = false; // toWorldErr: its first throw is logged, the rest quiet
 function connect() {
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   ws.onopen = () => $('conn').classList.add('on');
   ws.onmessage = (e) => {
     last = JSON.parse(e.data);
     worker?.postMessage({t: 'seq', seq: last.worldSeq});
-    toWorld();
     renderBots();
     renderPicks();
     renderProject();
     if (last.lastEventId !== evLast) loadEvents();
+    try { toWorld(); } catch (err) { if (!toWorldErr) { toWorldErr = true; console.error(err); } } // the old dashboard must not stop with the 3D layer
   };
   ws.onclose = () => { $('conn').classList.remove('on'); setTimeout(connect, 2000); };
 }
@@ -476,7 +476,7 @@ function renderBots() {
   }
 }
 function quick(bot, type) {
-  if (!me()) return say('Trag oben deinen Spielernamen ein', true);
+  if (!me()) return askName();
   sendJob([bot], type, {player: me()}, type === 'come' ? 'Komm' : 'Folge');
 }
 
@@ -498,13 +498,14 @@ function renderPicks() {
   }
   $('pickAll').classList.toggle('sel', picked.size === names.length && names.length > 0);
 }
-const chosen = () => { const p = [...picked].filter((n) => last?.bots.some((b) => b.name === n)); if (!p.length) say('Erst oben unter „Wer?“ Bots antippen', true); return p; };
+const chosen = () => { const p = [...picked].filter((n) => last?.bots.some((b) => b.name === n)); if (!p.length) { say('Erst unter Auftrag Bots wählen.', true); sheet('bots', 'orders'); } return p; };
+function askName() { say('Trag unter Auftrag deinen Namen ein.', true); sheet('bots', 'orders'); route(); $('me').focus(); } // route() now: focus needs the page shown
 for (const b of document.querySelectorAll('[data-order]')) {
   b.onclick = () => {
     const bots = chosen();
     if (!bots.length) return;
     const t = b.dataset.order, sc = last.supplyChest;
-    if ((t === 'come' || t === 'follow' || t === 'guard') && !me()) return say('Trag oben deinen Spielernamen ein', true);
+    if ((t === 'come' || t === 'follow' || t === 'guard') && !me()) return askName();
     if ((t === 'rearm' || t === 'deposit') && !sc) return say('Keine Vorratskiste eingestellt', true);
     const args = {come: {player: me()}, follow: {player: me()}, guard: {player: me(), radius: 16}, rearm: sc, deposit: sc, tidy: sc ? {...sc, radius: 16} : {radius: 16}, trade: {}, stop: {}}[t];
     sendJob(bots, t, args, b.textContent.replace(/^\S+/, '').trim());
@@ -541,7 +542,7 @@ $('gatherGo').onclick = () => {
 // ---- world ----
 const COLORS = ['#60a5fa', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c'];
 function ownerPos() { return last?.world?.players?.find((p) => p.name?.toLowerCase() === me().toLowerCase()) || null; }
-let worker = null, view = null, layers = null, worldNet = true; // null until startWorld() ran: /ws messages come before the files have loaded
+let worker = null, view = null, layers = null, worldNet = true, worldErr = ''; // null until startWorld() ran: /ws messages come before the files have loaded
 let followed = ''; // the plan list last sent to the worker
 const planMsgs = new Map(); // plan key -> the worker's last plan message, for the chips
 function toWorld() { // /ws state into the world: markers and the plans to follow
@@ -562,7 +563,7 @@ function onPlan(m) {
   $('planChips').replaceChildren(...(chips.length ? chips : [el('span', {class: 'mut'}, 'Kein Bauplan aktiv.')]));
 }
 function worldMsg() {
-  const t = view?.stats().meshes ? '' : worldNet ? 'Welt lädt …' : 'Keine Welt-Daten';
+  const t = worldErr || (view?.stats().meshes ? '' : worldNet ? 'Welt lädt …' : 'Keine Welt-Daten');
   $('worldMsg').textContent = t;
   $('worldMsg').hidden = !t;
 }
@@ -573,19 +574,21 @@ function onPick(x, y, z) { // a tap on the world: send the chosen bots there
     el('button', {class: 'b', title: 'Schließen', onclick: close}, '✕'));
   bar.hidden = false;
 }
+function worldFail(e) { console.error(e); worldErr = 'Welt geht hier nicht. Seite neu laden.'; worldMsg(); } // no WebGL, a script or the worker did not load
 function startWorld() {
   worldMsg();
-  loadThree().then(() => {
+  loadThree().then(() => { try {
     worker = new Worker('/oneview/worker.js');
     const pause = () => worker.postMessage({t: 'pause', on: document.hidden});
     pause(); // first: the view's first message makes the worker fetch, and a page opened in a hidden tab must not
+    worker.onerror = worldFail;
     document.addEventListener('visibilitychange', pause);
     if (last) worker.postMessage({t: 'seq', seq: last.worldSeq});
     view = OV.makeView($('view'), {worker, onPick});
     layers = OV.makeLayers(view, $('tags'));
     worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; if (m.t === 'plan') onPlan(m); else view.onWorker(m); worldMsg(); };
     if (last) toWorld();
-  },(e) => { $('worldMsg').textContent = e.message; });
+  } catch (e) { worldFail(e); } },(e) => { $('worldMsg').textContent = e.message; });
 }
 window.addEventListener('load', startWorld);
 // the cut slider: everything above Höhe is hidden, 319 shows all
@@ -708,7 +711,7 @@ $('npUpload').onchange = async () => {
 };
 $('npHere').onclick = () => {
   const o = ownerPos();
-  if (!o) return say(me() ? 'Deine Position ist gerade nicht bekannt (BlueMap)' : 'Trag oben deinen Spielernamen ein', true);
+  if (!o) return me() ? say('Deine Position ist gerade nicht bekannt (BlueMap)', true) : askName();
   $('npX').value = Math.floor(o.x); $('npY').value = Math.floor(o.y); $('npZ').value = Math.floor(o.z);
 };
 for (const id of ['npX', 'npY', 'npZ', 'npChests', 'npRot']) {

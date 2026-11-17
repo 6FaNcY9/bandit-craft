@@ -30,21 +30,23 @@ const answer = (url) => {
   return {status: 404};
 };
 
-// The worker's world: no require, no module; a message log, a URL log, and a count of fetches in flight.
-const posts = [], urls = [];
-let inflight = 0, last = Date.now(), manual = false;
+// The worker's world: no require, no module; a message log, a URL log (with each fetch's signal), and a count of fetches in flight.
+const posts = [], urls = [], sigs = [], aborts = []; // aborts: one controller per AbortSignal.timeout() call, so a test can fire the timeout
+let inflight = 0, last = Date.now(), manual = false, skew = 0; // skew moves the worker's clock forward
 const timers = [];
 const ctx = vm.createContext({
   TextDecoder,
+  Date: {now: () => Date.now() + skew},
+  AbortSignal: {timeout: (ms) => { const c = new AbortController(); c.ms = ms; aborts.push(c); return c.signal; }},
   // the worker's 5 s plan timer must not hold the test process; `manual` collects timers so a test can fire them and read their delays
   setTimeout: (f, ms) => { if (!manual) return setTimeout(f, ms).unref(); timers.push({f, ms}); return timers.length; },
   clearTimeout,
   postMessage: (msg, transfer) => { posts.push({msg, transfer}); last = Date.now(); },
   importScripts: (...files) => { for (const f of files) { const b = path.basename(f); vm.runInContext(fs.readFileSync(b === 'worldsection.js' ? path.join(root, b) : path.join(root, 'public', 'oneview', b), 'utf8'), ctx, {filename: b}); } },
-  fetch: async (url) => {
-    urls.push(url); inflight++;
+  fetch: async (url, opt = {}) => {
+    urls.push(url); sigs.push(opt.signal); inflight++;
     try {
-      await (hub.gate || new Promise((r) => setImmediate(r)));
+      await new Promise((ok, no) => { (hub.gate || new Promise((r) => setImmediate(r))).then(ok); opt.signal?.addEventListener('abort', () => no(opt.signal.reason)); });
       if (hub.down) throw new TypeError('network down');
       return answer(url);
     } finally { inflight--; last = Date.now(); }
@@ -136,6 +138,19 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
   assert.deepStrictEqual(of('net', n).map((x) => x.ok), [false, true]);
   assert.ok(of('mesh', n).some((m) => m.cx >= 27 && m.cx <= 32 && m.pos));
 
+  // 4b a request that never settles is cut by its 40 s timeout and takes the failure path: tiles and changes are asked again 2 s later
+  hub.gate = new Promise(() => {}); n = posts.length; let k0 = urls.length, a0 = aborts.length;
+  hub.table.set('/api/world/changes?since=9', () => json({seq: 10, sections: [], more: false}));
+  send({t: 'view', cx: 300, cz: 0, viewR: 1}); send({t: 'seq', seq: 10}); await sleep(50);
+  assert.deepStrictEqual([inflight, asked('/api/world/changes?since=9', k0).length, sigs.slice(k0).every(Boolean)], [3, 1, true], 'three hanging fetches, each with a signal');
+  const hung = asked('/api/world/sections?', k0);
+  hub.gate = null; aborts.slice(a0).forEach((c) => c.abort()); await settle();
+  assert.deepStrictEqual([...hung.map((u) => asked(u, k0).length), asked('/api/world/changes?since=9', k0).length], [1, 1, 1], 'nothing asked again before the wait');
+  await sleep(2200); await settle();
+  assert.deepStrictEqual([...hung.map((u) => asked(u, k0).length), asked('/api/world/changes?since=9', k0).length], [2, 2, 2], 'asked again after the wait');
+  assert.deepStrictEqual(of('net', n).map((x) => x.ok), [false, true]);
+  assert.ok(of('mesh', n).some((m) => m.cx >= 297 && m.cx <= 302 && m.pos), 'tiles after the timeout');
+
   // 5 Review Focus 4: plans: 200 groups and percent, 404 gone, 413 big; a cut regroups without a fetch
   hub.table.set('/api/plan/status?bot=bot1', () => json(planReply));
   hub.table.set('/api/plan/status?bot=bot2', () => json(null, 404));
@@ -156,6 +171,18 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
   assert.deepStrictEqual(of('plan', n).slice(1).map((x) => [x.key, x.state]), [['b.litematic@0,0,0', 'gone'], ['c.litematic@0,0,0', 'gone']]);
   send({t: 'plans', list: []}); send({t: 'cut', y: 319});
 
+  // 5b an unchanged plan is asked 5 s, 10 s, 20 s, 30 s, 30 s apart; a change brings it back to 5 s; never without a new worldSeq
+  let S = 10; const k5 = urls.length;
+  const later = async (ms) => { skew += ms; const s = S++; hub.table.set('/api/world/changes?since=' + s, () => json({seq: s + 1, sections: [], more: false})); send({t: 'seq', seq: s + 1}); await settle(); return asked('/api/plan/status?', k5).length; };
+  send({t: 'plans', list: [{key: 'a.litematic@0,64,0', bot: 'bot1'}]}); await settle();
+  assert.strictEqual(asked('/api/plan/status?', k5).length, 1);
+  const steps = [[4900, 1], [100, 2], [9900, 2], [100, 3], [19900, 3], [100, 4], [29900, 4], [100, 5], [30000, 6]];
+  for (const [ms, want] of steps) assert.strictEqual(await later(ms), want, `after +${ms}`);
+  hub.table.set('/api/plan/status?bot=bot1', () => json({...planReply, blocks: planReply.blocks.map((b) => [...b.slice(0, 4), 1])}));
+  assert.deepStrictEqual([await later(30000), await later(4900), await later(100)], [7, 7, 8], 'a change: back to 5 s');
+  skew += 60000; send({t: 'pause', on: false}); await settle(); assert.strictEqual(asked('/api/plan/status?', k5).length, 8, 'no new worldSeq, no ask');
+  send({t: 'plans', list: []}); await settle();
+
   // 6 hidden page: nothing starts; visible again: it does
   n = urls.length; send({t: 'pause', on: true}); send({t: 'view', cx: 60, cz: 0, viewR: 1}); await settle();
   assert.strictEqual(urls.length, n);
@@ -175,5 +202,12 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
 
   // 8 only the three routes
   for (const u of urls) assert.ok(/^\/api\/(world\/sections|world\/changes|plan\/status)\?/.test(u), u);
+  // ... and every one with its own 40 s timeout signal
+  assert.ok(urls.length === sigs.length && sigs.every((s, i) => s === aborts[i].signal && aborts[i].ms === 40000), 'every fetch has a 40 s signal');
+
+  // 9 no AbortSignal.timeout (Safari before 16): the fetches still go out, without a signal
+  delete ctx.AbortSignal; n = posts.length;
+  send({t: 'view', cx: 400, cz: 0, viewR: 1}); await settle();
+  assert.ok(of('mesh', n).some((m) => m.cx >= 397 && m.cx <= 402 && m.pos) && sigs.at(-1) === undefined);
   console.log('view-worker ok');
 })().catch((e) => { console.error(e); process.exit(1); });

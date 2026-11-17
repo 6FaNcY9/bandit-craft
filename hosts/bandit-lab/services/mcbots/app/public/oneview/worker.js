@@ -7,11 +7,13 @@
   const PLAN_EVERY = 5000, RETRY = 2100; // RETRY is a little over the cache's 2 s first back-off, so its wait is over when we pump
   let cache = null, cut = 319, worldSeq = 0, paused = false, netOk = true;
   let changing = false, blocked = false, changeFails = 0, epoch = 0, retry = 0, unblock = 0, tick = 0;
-  const plans = new Map(); // key -> {bot, at, seq, busy, reply, sent, cut}: at/seq of the last fetch, sent/cut of the last message
+  const plans = new Map(); // key -> {bot, at, every, seq, busy, reply, sent, cut}: at/seq of the last fetch, every its wait, sent/cut of the last message
 
   const post = (msg, transfer = []) => self.postMessage(msg, transfer);
   const drop = ([cx, cz]) => post({t: 'chunk', cx, cz, state: -1});
   const setNet = (ok) => { if (ok !== netOk) { netOk = ok; post({t: 'net', ok}); } };
+  // a stalled request must fail into the retry paths; the hub answers within 35 s; no AbortSignal.timeout (Safari < 16) means no timeout
+  const sig = () => ({signal: self.AbortSignal?.timeout?.(40000)});
 
   function mesh(cx, sy, cz) {
     const sec = cache.section(cx, sy, cz);
@@ -33,7 +35,7 @@
   async function load(q) {
     let records = null;
     try {
-      const res = await fetch(`/api/world/sections?cx=${q.cx}&cz=${q.cz}&r=${q.r}`);
+      const res = await fetch(`/api/world/sections?cx=${q.cx}&cz=${q.cz}&r=${q.r}`, sig());
       if (res.status === 200) {
         records = OV.section.decodeBatch(new Uint8Array(await res.arrayBuffer())).records;
         for (const r of records) if (r.kind === 0) r.sec = OV.section.decodeSection(r.blob);
@@ -48,7 +50,7 @@
     const e = epoch, seen = worldSeq;
     let reply = null;
     try {
-      const res = await fetch('/api/world/changes?since=' + cache.seq());
+      const res = await fetch('/api/world/changes?since=' + cache.seq(), sig());
       if (res.status === 200) { reply = await res.json(); if (!Array.isArray(reply.sections)) reply = null; }
     } catch (err) { reply = null; }
     changing = false;
@@ -66,7 +68,7 @@
     p.busy = true; p.seq = worldSeq; p.at = Date.now();
     let status = 0, reply = null;
     try {
-      const res = await fetch('/api/plan/status?bot=' + encodeURIComponent(p.bot));
+      const res = await fetch('/api/plan/status?bot=' + encodeURIComponent(p.bot), sig());
       status = res.status;
       if (status === 200) { reply = await res.json(); if (!Array.isArray(reply.blocks)) status = 0; }
     } catch (e) { status = 0; }
@@ -75,6 +77,7 @@
     if (status !== 200 && status !== 404 && status !== 413) { p.seq = null; return; } // retried on the next round
     const sent = status === 404 ? 'gone' : status === 413 ? 'big' : reply.blocks.map((b) => b[4]).join('');
     p.reply = status === 200 ? reply : null;
+    p.every = sent === p.sent ? Math.min(30000, p.every * 2) : PLAN_EVERY; // a full reply each time: ask a plan that stands still less often
     if (sent === p.sent && p.cut === cut) return;
     p.sent = sent; p.cut = cut;
     if (p.reply) show(key, p); else post({t: 'plan', key, state: sent});
@@ -91,7 +94,7 @@
       // a failing changes call waits 2 s, 4 s ... 30 s like the cache's requests
       if (blocked && !unblock) unblock = setTimeout(() => { unblock = 0; blocked = false; pump(); }, Math.min(30000, 1000 * 2 ** changeFails));
     }
-    if (!paused) for (const [key, p] of plans) if (!p.busy && p.seq !== worldSeq && Date.now() - p.at >= PLAN_EVERY) follow(key, p);
+    if (!paused) for (const [key, p] of plans) if (!p.busy && p.seq !== worldSeq && Date.now() - p.at >= p.every) follow(key, p);
     if (plans.size && !tick) tick = setTimeout(() => { tick = 0; pump(); }, PLAN_EVERY);
   }
 
@@ -101,18 +104,18 @@
       cache.setView(m.cx, m.cz);
     } else if (m.t === 'seq') {
       worldSeq = m.seq;
-      if (cache && cache.onSeq(m.seq) === 'reset') { epoch++; post({t: 'reset'}); } // 'changes' is picked up by pump()
+      if (cache && cache.onSeq(m.seq) === 'reset') { epoch++; changeFails = 0; post({t: 'reset'}); } // 'changes' is picked up by pump()
     } else if (m.t === 'cut') {
       const old = cut;
       cut = m.y;
       if (cache && cut !== old) for (const [cx, sy, cz] of cache.loaded()) if (sy >= Math.min(old, cut) >> 4) mesh(cx, sy, cz);
-      for (const [key, p] of plans) { p.cut = cut; if (p.reply) show(key, p); }
+      for (const [key, p] of plans) { p.cut = cut; p.every = PLAN_EVERY; if (p.reply) show(key, p); }
     } else if (m.t === 'plans') {
       const keep = new Set(m.list.map((x) => x.key));
       for (const key of plans.keys()) if (!keep.has(key)) { plans.delete(key); post({t: 'plan', key, state: 'gone'}); }
       for (const {key, bot} of m.list) {
         const p = plans.get(key);
-        if (p) p.bot = bot; else plans.set(key, {bot, at: -Infinity, seq: null, busy: false, reply: null, sent: null, cut});
+        if (p) { p.bot = bot; p.every = PLAN_EVERY; } else plans.set(key, {bot, at: -Infinity, every: PLAN_EVERY, seq: null, busy: false, reply: null, sent: null, cut});
       }
     } else if (m.t === 'pause') paused = m.on;
     pump();
