@@ -163,6 +163,28 @@ const assert = require('node:assert');
   assert.ok(mv.exclusionBreak(ghost) >= 100, 'nor digging it');
 })();
 
+(async () => { // parkour: no jump over a deep gap, a shallow gap is still jumped (five falls at the tower, 2026-11-17)
+  const {safeMovements} = require('../bots');
+  const {Movements} = require('mineflayer-pathfinder');
+  const {Vec3} = require('vec3');
+  const EventEmitter = require('node:events');
+  const registry = require('minecraft-data')('26.1');
+  const air = registry.blocksByName.air.id, stone = registry.blocksByName.stone.id;
+  const world = (solid) => {
+    const at = (p) => solid.has(`${p.x},${p.y},${p.z}`)
+      ? {type: stone, name: 'stone', position: p.clone(), boundingBox: 'block', shapes: [[0, 0, 0, 1, 1, 1]], getProperties: () => ({})}
+      : {type: air, name: 'air', position: p.clone(), boundingBox: 'empty', shapes: [], getProperties: () => ({})};
+    return Object.assign(new EventEmitter(), {registry, entities: {}, entity: {position: new Vec3(0, 64, 0)}, pathfinder: {}, blockAt: at});
+  };
+  // The bot stands on 0,63,0; the landing is 2,63,0; 1,y,0 is the gap.
+  const jumpsTo = (mv) => { const out = []; mv.getMoveParkourForward(new Vec3(0, 64, 0), {x: 1, z: 0}, out); return out.map((m) => `${m.x},${m.y},${m.z}`); };
+  const chasm = world(new Set(['0,63,0', '2,63,0']));
+  assert.deepStrictEqual(jumpsTo(new Movements(chasm)), ['2,64,0'], 'the library alone jumps the deep gap');
+  assert.deepStrictEqual(jumpsTo(safeMovements(chasm, [], null)), [], 'no jump over a gap with no floor in reach');
+  const shallow = world(new Set(['0,63,0', '2,63,0', '1,61,0']));
+  assert.deepStrictEqual(jumpsTo(safeMovements(shallow, [], null)), ['2,64,0'], 'a gap with a floor 2 down is still jumped');
+})();
+
 (async () => { // chase: "No path" to a player below widens the fall once, and a way missing for 30 s ends the job with a reason (2026-11-01)
   const {chase} = require('../bots');
   const {Vec3} = require('vec3');

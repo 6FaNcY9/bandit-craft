@@ -23,6 +23,8 @@ const O = require('../odds');
   const now = 100000, hit = (by, ago) => ({t: now - ago, by});
   assert.equal(hitsNote([hit('zombie', 1000), hit('skeleton', 2000), hit('zombie', 3000), hit('creeper', 40000)], 'walking', now), ' (last 30 s: zombie x2, skeleton x1; walking)');
   assert.equal(hitsNote([], 'idle - no job', now), ' (last 30 s: no hits seen; idle - no job)');
+  // A hit with no mob tells where and how the bot moved (tower falls, 2026-11-17).
+  assert.equal(hitsNote([{...hit('no mob', 1000), y: 114, how: 'sprint+ground'}, hit('zombie', 2000)], 'walking', now), ' (last 30 s: no mob x1, zombie x1 [y 114 sprint+ground]; walking)');
 }
 {
   // acquire.js: how to get an item, worked out from the game's data (owner, 2026-10-17: derive, do not describe).

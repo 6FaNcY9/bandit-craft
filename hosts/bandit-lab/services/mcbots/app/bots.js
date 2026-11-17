@@ -55,11 +55,16 @@ const WHISPER_TYPES = new Set(['commands.message.display.incoming', '%s whispers
 const BACKOFF_START = 5000;
 const HITS_MS = 30000;
 // " (last 30 s: zombie x6, skeleton x3; walking to the storage)" for the death line: what hurt the bot and what it did.
+// A hit with no mob also tells where and how the bot moved ("no mob x2 [y 114 sprint+ground, ...]"): five falls at the
+// tower read only "no mob" (main server 2026-11-17).
 const hitsNote = (hits, doing, now = Date.now()) => {
-  const by = {};
-  for (const h of hits) if (now - h.t < HITS_MS) by[h.by] = (by[h.by] || 0) + 1;
+  const by = {}, how = [];
+  for (const h of hits) if (now - h.t < HITS_MS) {
+    by[h.by] = (by[h.by] || 0) + 1;
+    if (h.by === 'no mob' && h.y !== undefined) how.push(`y ${h.y}${h.how ? ` ${h.how}` : ''}`);
+  }
   const list = Object.entries(by).map(([n, c]) => `${n} x${c}`).join(', ');
-  return ` (last 30 s: ${list || 'no hits seen'}; ${doing})`;
+  return ` (last 30 s: ${list || 'no hits seen'}${how.length ? ` [${how.join(', ')}]` : ''}; ${doing})`;
 };
 const BACKOFF_CAP = 300000;
 const RESUME_WINDOW_MS = 1800000; // saved jobs wait this long after a hub start for a bot to log in: Paper can be back minutes later, and a login retry is up to BACKOFF_CAP away
@@ -715,7 +720,8 @@ class BotRunner {
     bot.on('entityHurt', (e, by) => {
       if (e !== bot.entity) return;
       const now = Date.now();
-      this.hits = [...this.hits.filter((h) => now - h.t < HITS_MS), {t: now, by: by?.username || by?.name || 'no mob'}];
+      const c = bot.controlState || {}, how = [c.sprint && 'sprint', c.jump && 'jump', bot.entity.onGround ? 'ground' : 'air'].filter(Boolean).join('+');
+      this.hits = [...this.hits.filter((h) => now - h.t < HITS_MS), {t: now, by: by?.username || by?.name || 'no mob', y: Math.floor(bot.entity.position.y), how}];
     });
     bot.loadPlugin(collectBlock);
     require('./crafting').fixCraftTiming(bot);
@@ -898,7 +904,11 @@ class BotRunner {
     const p = bot.entity?.position;
     const why = this.deathCause && Date.now() - this.deathCause.t < 5000 ? `: ${this.deathCause.cause}` : '';
     this.deathCause = null;
-    this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${hitsNote(this.hits, doing)}`);
+    // How far it fell and whether the server pulled it back: the tower falls of 2026-11-17 left neither.
+    const top = Math.max(...this.trace.positions.filter((q) => Date.now() - q.t < 10000).map((q) => q.y));
+    const pulls = this.trace.recentCorrections();
+    const fall = `${p && top - p.y > 3 ? `, highest y ${Math.floor(top)} in 10 s` : ''}${pulls ? `, ${pulls} pullbacks` : ''}`;
+    this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${fall}${hitsNote(this.hits, doing)}`);
     this.hits = [];
     const now = Date.now();
     const earlier = gravesJob.recentDeaths(this.deathSpots, now);
@@ -1189,6 +1199,21 @@ function safeMovements(bot, areas, runner = null) {
   // whole bot process down with it (main server 2026-10-17 10:08): no landing there.
   const landing = mv.getLandingBlock.bind(mv);
   mv.getLandingBlock = (node, dir) => { const b = landing(node, dir); return b?.position ? b : null; };
+  // The library jumps a gap without looking how deep it is, so a missed sprint jump high up was a long fall: five bots
+  // "fell from a high place" on the way to the tower's walls (main server 2026-11-17). A jump is kept only when every
+  // cell it crosses has a floor within the drop the walk allows anyway; an unloaded cell counts as no floor.
+  const parkour = mv.getMoveParkourForward.bind(mv);
+  const floored = (node, dir, d) => { for (let dy = -1; dy >= -(mv.maxDropDown + 1); dy--) if (mv.getBlock(node, dir.x * d, dy, dir.z * d).physical) return true; return false; };
+  mv.getMoveParkourForward = (node, dir, neighbors) => {
+    const jumps = [];
+    parkour(node, dir, jumps);
+    for (const m of jumps) {
+      const span = Math.abs(m.x - node.x) + Math.abs(m.z - node.z);
+      let ok = true;
+      for (let d = 1; d < span && ok; d++) ok = floored(node, dir, d);
+      if (ok) neighbors.push(m);
+    }
+  };
   const scaffold = mv.countScaffoldingItems.bind(mv);
   mv.countScaffoldingItems = () => (runner?.noScaffold ? 0 : scaffold()); // a path with 0 blocks places none
   // pathfinder 2.4.5 opens fence gates only, and only with canOpenDoors (off by default): every closed door was a wall
