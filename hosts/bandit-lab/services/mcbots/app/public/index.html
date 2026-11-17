@@ -17,6 +17,10 @@
   #conn { position: absolute; top: 18px; left: 16px; }
   #stopAll { position: absolute; top: 8px; right: 8px; }
   #fab { position: absolute; right: 8px; bottom: 8px; display: grid; gap: 8px; }
+  #conn { cursor: pointer; } #conn::after { content: ""; position: absolute; inset: -18px; } /* a 45 px target around the dot */
+  #pickBar { position: absolute; left: 8px; right: 64px; bottom: 8px; display: flex; gap: 8px; align-items: center; padding: 6px 6px 6px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; white-space: nowrap; } /* right: clear of #fab */
+  #pickBar span { flex: 1; } #pickBar button { min-width: 44px; justify-content: center; }
+  #worldMsg { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: var(--mut); pointer-events: none; }
   #sheet { position: fixed; left: 0; right: 0; top: 50dvh; bottom: var(--bar); z-index: 2; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); border-top: 1px solid var(--line); }
   body[data-sheet="menu"] #sheet { top: 0; }
   body[data-sheet="bots"] #world, body[data-sheet="plan"] #world { bottom: 50dvh; }
@@ -402,6 +406,7 @@ function connect() {
   ws.onopen = () => $('conn').classList.add('on');
   ws.onmessage = (e) => {
     last = JSON.parse(e.data);
+    worker?.postMessage({t: 'seq', seq: last.worldSeq});
     renderBots();
     renderPicks();
     renderProject();
@@ -526,6 +531,35 @@ $('gatherGo').onclick = () => {
 // ---- world ----
 const COLORS = ['#60a5fa', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c'];
 function ownerPos() { return last?.world?.players?.find((p) => p.name?.toLowerCase() === me().toLowerCase()) || null; }
+let worker = null, view = null, worldNet = true; // null until startWorld() ran: /ws messages come before the files have loaded
+function worldMsg() {
+  const t = view?.stats().meshes ? '' : worldNet ? 'Welt lädt …' : 'Keine Welt-Daten';
+  $('worldMsg').textContent = t;
+  $('worldMsg').hidden = !t;
+}
+function onPick(x, y, z) { // a tap on the world: send the chosen bots there
+  const bar = $('pickBar'), close = () => { bar.hidden = true; };
+  bar.replaceChildren(el('span', {}, `📍 ${x} / ${z}`),
+    el('button', {class: 'b go', onclick: () => { const bots = chosen(); if (bots.length) { sendJob(bots, 'goto', {x, z}, `Hin zu ${x} / ${z}`); close(); } }}, 'Bots hierher'),
+    el('button', {class: 'b', title: 'Schließen', onclick: close}, '✕'));
+  bar.hidden = false;
+}
+function startWorld() {
+  worldMsg();
+  loadThree().then(() => {
+    worker = new Worker('/oneview/worker.js');
+    if (last) worker.postMessage({t: 'seq', seq: last.worldSeq});
+    view = OV.makeView($('view'), {worker, onPick});
+    worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; view.onWorker(m); worldMsg(); };
+    const pause = () => worker.postMessage({t: 'pause', on: document.hidden});
+    pause();
+    document.addEventListener('visibilitychange', pause);
+  }, (e) => { $('worldMsg').textContent = e.message; });
+}
+window.addEventListener('load', startWorld);
+// the camera looks almost straight down only in the top view
+$('camTop').onclick = () => view?.topDown(view.camera.getWorldDirection(new THREE.Vector3()).y > -0.999);
+$('conn').onclick = () => { const s = view?.stats(); if (s) say(`${s.chunks} Chunks · ${String(s.tris).replace(/\B(?=(\d{3})+$)/g, ' ')} Dreiecke`); };
 
 // ---- chests ----
 let chests = [];
@@ -667,14 +701,15 @@ function planColor(n) {
 }
 let PG = null, PD = null, planQueued = false;
 const PC = {az: 0.7, el: 0.6, r: 40, ty: 0};
-function planThree() { // loaded on the first open of the tab
-  if (window.THREE) return Promise.resolve();
-  return new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/vendor/three.min.js'; s.onload = ok; s.onerror = () => no(new Error('three.js lädt nicht')); document.head.append(s); });
+let three = null;
+function loadThree() { // one script element for the world and „Datei ansehen“; a failed load is tried again on the next call
+  return three ??= new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/vendor/three.min.js'; s.onload = ok; s.onerror = () => { three = null; s.remove(); no(new Error('three.js lädt nicht')); }; document.head.append(s); });
 }
 function planInit() {
   if (PG) return;
   const canvas = $('plan3d'), renderer = new THREE.WebGLRenderer({canvas, antialias: true}), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, 0.5, 4000);
   scene.background = new THREE.Color(0x0b0d10);
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // the world view turns colour management off for the page; without this the plan's colours wash out
   scene.add(new THREE.HemisphereLight(0xffffff, 0x555566, 1.6));
   const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(0.4, 1, 0.7); scene.add(sun);
   PG = {canvas, renderer, scene, camera, geo: new THREE.BoxGeometry(1, 1, 1), meshes: []};
@@ -721,7 +756,7 @@ async function planLoad() {
   const file = $('planFile').value;
   $('planInfo').textContent = 'Lädt …';
   try {
-    await planThree();
+    await loadThree();
     const r = await fetch('/api/schematic/blocks?file=' + encodeURIComponent(file)), j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     if ($('planFile').value !== file) return; // another plan was picked meanwhile
@@ -814,5 +849,6 @@ setInterval(loadNeeds, 15000);
 if (!location.hash && matchMedia('(min-width: 900px)').matches) location.replace('#bots'); // the desktop has room for the dock
 route();
 </script>
+<script src="/oneview/blocks.js"></script><script src="/oneview/planview.js"></script><script src="/oneview/view.js"></script>
 </body>
 </html>

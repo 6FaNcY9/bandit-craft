@@ -2,9 +2,9 @@
 'use strict';
 // Checks against a running stand (stand.js); exit 0 and "stand ok", or exit 1 with the failed line.
 //   node tools/oneview-stand/check.js [--port 8195] [--out <dir>]
-// Part A: the hub's HTTP side. Part B (tasks 10-12): the page in headless Chromium through chrome(); --out is where
+// Part A: the hub's HTTP side. Part B (tasks 10-12): the page in headless Chromium through chrome() and settle(); --out is where
 // its screenshots go. Needs no npm module.
-const {execFileSync} = require('node:child_process');
+const {execFileSync, spawn} = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -35,6 +35,34 @@ function chrome(args) {
   } catch (e) { throw new Error(`chromium ${args.at(-1)}: ${e.signal || e.status} ${String(e.stderr || '').slice(-1500)}`); }
 }
 
+// The page in real time over the DevTools protocol: virtual time (chrome()) runs out while the world still loads in its
+// worker. Waits until the page expression `ready` is true or `ms` pass, then returns the DOM; `shot` saves a screenshot.
+async function settle(hash, [width, height], ready, shot, ms = 30000) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oneview-cdp-'));
+  const ch = spawn('nix', ['shell', 'nixpkgs#chromium', '-c', 'chromium', '--headless=new', '--password-store=basic', '--no-first-run', '--hide-scrollbars',
+    '--enable-unsafe-swiftshader', '--use-angle=swiftshader', `--user-data-dir=${dir}`, '--remote-debugging-port=0', 'about:blank'], {stdio: 'ignore', env: {...process.env, TMPDIR: '/tmp'}});
+  try {
+    const port = await until(() => fs.readFileSync(path.join(dir, 'DevToolsActivePort'), 'utf8').split('\n')[0], 'chromium: no DevToolsActivePort', 60000);
+    const tab = await until(async () => (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page'), 'chromium: no page');
+    const ws = new WebSocket(tab.webSocketDebuggerUrl), wait = new Map();
+    let id = 0;
+    ws.onmessage = (e) => { const m = JSON.parse(e.data); wait.get(m.id)?.(m.result); wait.delete(m.id); };
+    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+    const send = (method, params = {}) => new Promise((res) => { wait.set(++id, res); ws.send(JSON.stringify({id, method, params})); });
+    const ev = async (expression) => (await send('Runtime.evaluate', {expression, returnByValue: true})).result.value;
+    await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
+    await send('Page.navigate', {url: `${BASE}/${hash}`});
+    await until(() => ev(ready), '', ms).catch(() => {}); // the caller's checks say what is missing
+    if (shot) fs.writeFileSync(shot, Buffer.from((await send('Page.captureScreenshot')).data, 'base64'));
+    return await ev('document.documentElement.outerHTML');
+  } finally {
+    ch.kill();
+    // its helper processes outlive the browser for a moment and would write the profile again
+    await until(() => { try { execFileSync('pgrep', ['-f', dir]); } catch { return true; } }, '', 10000).catch(() => {});
+    fs.rmSync(dir, {recursive: true, force: true, maxRetries: 5});
+  }
+}
+
 async function partA() {
   const st = await until(async () => { const s = (await get('/api/world/stats')).json; return s?.hub?.sections === 34 * 24 && s; }, '/api/world/stats: hub.sections never reached 34 * 24');
   ok(st.hub.ungenerated === 1, `/api/world/stats: hub.ungenerated is ${st.hub.ungenerated}, want 1`);
@@ -51,16 +79,24 @@ async function partA() {
 }
 
 // Part B: the page in a phone and a desktop window, one --dump-dom per URL; a shown element has no hidden attribute.
-const PHONE = '--window-size=390,844', DESKTOP = '--window-size=1280,800';
+const PHONE = '--window-size=390,844';
 const page = (hash, size = PHONE) => chrome([size, '--dump-dom', `${BASE}/${hash}`]);
 function shown(dom, attr) {
   const tag = dom.split('<script>')[0].match(new RegExp(`<[a-z]+[^>]*\\s${attr}[^>]*>`))?.[0];
   ok(tag, `no element with ${attr}`);
   return !/\shidden[\s=>]/.test(tag);
 }
+// every known chunk of the stand (34) is counted and has a mesh
+const WORLD = '(v => +v.dataset.chunks >= 34 && +v.dataset.meshes >= 34)(document.getElementById("view"))';
 async function partB() {
-  let d = page('');
+  fs.mkdirSync(OUT, {recursive: true});
+  let d = await settle('', [390, 844], WORLD, path.join(OUT, 'phone.png'));
   ok(!shown(d, 'id="sheet"') && !shown(d, 'id="chatBtn"') && shown(d, 'id="bar"'), '/: want #sheet and #chatBtn hidden, #bar shown');
+  // the phone look
+  const view = d.match(/<canvas id="view"[^>]*>/)?.[0] || '', num = (k) => Number(new RegExp(`data-${k}="(\\d+)"`).exec(view)?.[1]);
+  ok(num('chunks') >= 34 && num('meshes') >= 34, `/: <canvas id="view"> data-chunks ${num('chunks')}, data-meshes ${num('meshes')}, want both >= 34`);
+  ok(!shown(d, 'id="worldMsg"'), '/: #worldMsg is shown');
+  await settle('#bots', [1280, 800], WORLD, path.join(OUT, 'desktop-bots.png'));
   d = page('#bots');
   ok(shown(d, 'data-page="home"') && !shown(d, 'data-page="orders"'), '/#bots: want home shown, orders hidden');
   ok(shown(page('#bots/orders'), 'data-page="orders"'), '/#bots/orders: orders is hidden');
@@ -68,8 +104,7 @@ async function partB() {
   ok(shown(page('#plan/plan'), 'data-page="plan"'), '/#plan/plan: plan („Datei ansehen“) is hidden');
   d = page('#menu/server');
   ok(shown(d, 'data-page="server"') && /<body[^>]*\sdata-sheet="menu"/.test(d), '/#menu/server: want server shown and body data-sheet="menu"');
-  fs.mkdirSync(OUT, {recursive: true});
-  for (const [file, size, hash] of [['phone.png', PHONE, ''], ['phone-bots.png', PHONE, '#bots'], ['desktop-bots.png', DESKTOP, '#bots']]) {
+  for (const [file, size, hash] of [['phone-bots.png', PHONE, '#bots']]) {
     const out = path.join(OUT, file);
     fs.rmSync(out, {force: true});
     chrome([size, `--screenshot=${out}`, `${BASE}/${hash}`]);
