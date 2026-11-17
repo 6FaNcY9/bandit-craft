@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -120,6 +121,7 @@ public class BotUi extends JavaPlugin implements Listener {
   private HttpServer http;
   private ExecutorService pool;
   private BotMap map;
+  private WorldFeed world;
   private final Map<UUID, Long> lastMapClick = new HashMap<>(); // main thread only
   private final Map<UUID, Long> lastStaffLog = new HashMap<>(); // main thread only
   private static final long MAP_CLICK_COOLDOWN_MS = 500;
@@ -156,8 +158,10 @@ public class BotUi extends JavaPlugin implements Listener {
       getServer().getPluginManager().disablePlugin(this);
       return;
     }
+    world = new WorldFeed(this, Bukkit.getWorlds().get(0), new SecureRandom().nextLong() & Long.MAX_VALUE); // a fresh boot each enable: the hub sees the restart
+    world.start();
     http.createContext("/", this::handle);
-    pool = Executors.newFixedThreadPool(4);
+    pool = Executors.newFixedThreadPool(6);
     http.setExecutor(pool);
     http.start();
     staffKey = new NamespacedKey(this, "staff");
@@ -174,6 +178,7 @@ public class BotUi extends JavaPlugin implements Listener {
     if (http != null) http.stop(0);
     if (pool != null) pool.shutdownNow();
     if (map != null) map.stop();
+    if (world != null) world.stop();
   }
 
   // ---- HTTP -------------------------------------------------------------------------------
@@ -182,14 +187,14 @@ public class BotUi extends JavaPlugin implements Listener {
     return Bukkit.getScheduler().callSyncMethod(this, c).get(5, TimeUnit.SECONDS);
   }
 
-  private static void reply(HttpExchange x, int status, Object body) throws IOException {
+  static void reply(HttpExchange x, int status, Object body) throws IOException {
     byte[] b = JSONValue.toJSONString(body).getBytes(StandardCharsets.UTF_8);
     x.getResponseHeaders().set("Content-Type", "application/json");
     x.sendResponseHeaders(status, b.length);
     x.getResponseBody().write(b);
   }
 
-  private static JSONObject error(String msg) {
+  static JSONObject error(String msg) {
     JSONObject o = new JSONObject();
     o.put("error", msg);
     return o;
@@ -210,6 +215,10 @@ public class BotUi extends JavaPlugin implements Listener {
         return;
       }
       String path = x.getRequestURI().getPath();
+      if (path.startsWith("/world/")) {
+        world.handle(x, path);
+        return;
+      }
       boolean get = x.getRequestMethod().equals("GET");
       if (path.equals("/events") && get) {
         events(x);

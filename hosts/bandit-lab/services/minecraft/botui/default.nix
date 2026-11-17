@@ -33,7 +33,8 @@ in
     cp ${./SectionCodecCheck.java} SectionCodecCheck.java
     cp ${./FeedQueue.java} FeedQueue.java
     cp ${./FeedQueueCheck.java} FeedQueueCheck.java
-    javac --release 25 -proc:none -Xlint:all,-classfile,-processing -Werror -cp 'libs/*' -d classes BotUi.java BotMap.java SectionCodec.java FeedQueue.java
+    cp ${./WorldFeed.java} WorldFeed.java
+    javac --release 25 -proc:none -Xlint:all,-classfile,-processing -Werror -cp 'libs/*' -d classes BotUi.java BotMap.java SectionCodec.java FeedQueue.java WorldFeed.java
     # The check runs here but stays out of the jar: it is compiled into its own directory.
     mkdir checks
     javac --release 25 -proc:none -Xlint:all,-classfile,-processing -Werror -cp classes -d checks SectionCodecCheck.java FeedQueueCheck.java
