@@ -548,13 +548,13 @@ function startWorld() {
   worldMsg();
   loadThree().then(() => {
     worker = new Worker('/oneview/worker.js');
+    const pause = () => worker.postMessage({t: 'pause', on: document.hidden});
+    pause(); // first: the view's first message makes the worker fetch, and a page opened in a hidden tab must not
+    document.addEventListener('visibilitychange', pause);
     if (last) worker.postMessage({t: 'seq', seq: last.worldSeq});
     view = OV.makeView($('view'), {worker, onPick});
     worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; view.onWorker(m); worldMsg(); };
-    const pause = () => worker.postMessage({t: 'pause', on: document.hidden});
-    pause();
-    document.addEventListener('visibilitychange', pause);
-  }, (e) => { $('worldMsg').textContent = e.message; });
+  },(e) => { $('worldMsg').textContent = e.message; });
 }
 window.addEventListener('load', startWorld);
 // the camera looks almost straight down only in the top view

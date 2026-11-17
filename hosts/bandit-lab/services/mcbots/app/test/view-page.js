@@ -9,5 +9,8 @@ assert.ok(html.includes('/api/schematic/blocks') && html.includes('Datei ansehen
 for (const need of ['id="view"', 'id="bar"', 'data-sheet="bots"', 'data-sheet="plan"', 'data-sheet="menu"', 'id="chatBtn"', 'id="sheet"', 'id="stopAll"', 'id="me"', '/api/architect/status']) assert.ok(html.includes(need), need);
 assert.match(html, /<button[^>]*id="chatBtn"[^>]*hidden/);
 for (const page of ['home', 'orders', 'chests', 'project', 'plan', 'server']) assert.ok(html.includes(`data-page="${page}"`), page);
+// a page opened in a hidden tab pauses the worker before the view's first message makes it fetch
+const start = html.slice(html.indexOf('function startWorld'), html.indexOf("window.addEventListener('load', startWorld)"));
+assert.match(start, /new Worker\([^)]*\);\n\s*const pause = [^\n]*\n\s*pause\(\);/, 'pause is the first message to the worker');
 // the world's files run after the inline script, which uses them only from the load event
 assert.deepStrictEqual([...html.slice(html.indexOf('</script>')).matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]), ['/oneview/blocks.js', '/oneview/planview.js', '/oneview/view.js']);
