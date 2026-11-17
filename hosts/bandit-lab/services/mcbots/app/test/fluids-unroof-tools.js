@@ -355,3 +355,46 @@
   }
   console.log('tools: no sword digging, shovel replaced ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+(async () => { // dig-down beside the base: never into water (bot20, bot21 drowned in the aquifer under the base, 2026-11-17)
+  const assert = require('node:assert/strict');
+  const {EventEmitter} = require('node:events');
+  const {Vec3} = require('vec3');
+  const {toBand, wetColumn, DEEP_BAND} = require('../bots');
+  const home = {x: 0, y: 64, z: 0};
+  const run = (cell) => {
+    const bot = Object.assign(new EventEmitter(), {entity: {position: new Vec3(10, 64, 0)}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []}});
+    bot.blockAt = (p) => { const n = cell(p.x, p.y, p.z); return n === null ? null : {name: n, boundingBox: n === 'stone' ? 'block' : 'empty', position: p, getProperties: () => ({})}; };
+    let halted = false;
+    const walks = [];
+    bot.pathfinder = {searchRadius: 80, stop() {}, setGoal(g) { if (g === null) halted = true; }, goto: async (goal) => {
+      halted = false;
+      if (goal.y === undefined) { walks.push([goal.x, goal.z]); bot.entity.position = new Vec3(goal.x, 64, goal.z); return; }
+      while (bot.entity.position.y > goal.y) { // a staircase: one step aside on the way
+        const p = bot.entity.position;
+        bot.entity.position = new Vec3(p.x, p.y - 1, p.y - 1 === 40 ? p.z + 1 : p.z);
+        bot.emit('physicsTick');
+        await new Promise((res) => setImmediate(res));
+        if (halted) throw new Error('The goal was changed');
+      }
+    }};
+    const r = {bot, supplyChest: home, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []};
+    return toBand(r, {type: 'mine', t: {}, args: {}, cancelled: false}, DEEP_BAND.deepslate, 'deepslate').then(() => 'ok', (e) => e.message).then((out) => ({out, walks, y: bot.entity.position.y}));
+  };
+  const ground = (x, y) => (y <= 63 ? 'stone' : 'air');
+  // the column straight out (56 0) has water at Y 5: the next one round the circle (40 40) is taken
+  let res = await run((x, y, z) => (x === 56 && z === 0 && y === 5 ? 'water' : ground(x, y)));
+  assert.deepStrictEqual(res.walks, [[40, 40]], 'the wet column is skipped for a dry one');
+  assert.equal(res.out, 'ok', res.out);
+  // an aquifer under every column: no dig at all
+  res = await run((x, y) => (y === 5 ? 'water' : ground(x, y)));
+  assert.match(res.out, /^no dry column to dig down beside the base: water at 56 5 0;/);
+  assert.deepStrictEqual([res.walks, res.y], [[], 64], 'all wet: the bot stays on top');
+  // water off the column, met by the staircase: the shaft stops at once
+  res = await run((x, y, z) => (x === 56 && y === 30 && z === 2 ? 'water' : ground(x, y)));
+  assert.match(res.out, /^stopped digging down for deepslate: water at 56 30 2/);
+  assert.equal(res.y, 30, 'stopped where the water came beside it, not at the band');
+  // a column not loaded is not dry
+  assert.match(wetColumn(() => null, 0, 0, 64, 0), /^not loaded at 0 64 0/);
+  console.log('descent: dry column, wet shaft stops ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
