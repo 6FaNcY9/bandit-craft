@@ -25,8 +25,12 @@ node tools/world-check/equality.js --spot X,Y,Z --bot bot10 --bot-spot X,Y,Z
    blast can reach about 9 blocks from the spot. Before anything is written the spot +-10 must be inside the model's
    area, all known and all air in the model, and a real-world sample of it (2000 cells) must hold only air, else
    exit 2 (the model alone is not trusted to guard a write; the sample is random, so it is a check, not a proof).
+   The spot's chunks must be loaded (a player or bot nearby), else `fill` answers "not loaded" and the run exits 2;
+   so does any other refusal of fill, setblock or summon.
    Steps: basin, sticky piston, water, water away, TNT, clean-up; after each one it waits 5 s and compares 2000
-   random cells of the spot +-6 (the plugin's maximum: 500 would miss a 4-cell change most of the time). The
+   random cells of the spot +-6 (the plugin's maximum: 500 would miss a 4-cell change most of the time), then reads one
+   cell from the model that the step must have changed (basin stone, the glass the piston pushed, water, air again; not for
+   TNT), exit 1 when it holds anything else: a compare alone also passes when a step changed nothing. The
    clean-up (`fill ... air` over the +-6 box, kill dropped items) also runs when a step fails and on Ctrl-C or
    SIGTERM; if even that fails the command is printed to run by hand. The commands are printed before the first
    write, for a kill -9.
@@ -49,7 +53,8 @@ node tools/world-check/load.js compare before.json after.json
 ```
 
 Every 60 s it reads `/api/admin/status` (Paper's 1 minute mspt), `/api/debug` (`loopDelayMs.p99`, null on an old
-hub) and `/api/world/stats` (`plugin.mainMsLastMinute`, null when the model is off) and writes the means.
+hub) and `/api/world/stats` (`plugin.mainMsLastMinute` and `plugin.encodeMsLastMinute`, null when the model is off) and
+writes the means. A failed reading after the first costs that row only (`failedSamples` in the file).
 `compare` prints the deltas and exits 1 unless mspt rose by at most 0.5 and the loop p99 by at most 2 ms (both
 deltas rounded to 0.1). A null loop p99 leaves that limit unjudged; a missing mspt fails.
 

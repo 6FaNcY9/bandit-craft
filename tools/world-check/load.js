@@ -15,7 +15,8 @@ async function sampleOnce(api) {
   const status = await api('/api/admin/status');
   const debug = await api('/api/debug');
   const stats = await api('/api/world/stats').catch(() => null); // 503 when the model is off
-  return {mspt: parseMspt(status.mspt), loopP99: debug.loopDelayMs?.p99 ?? null, pluginMainMs: stats?.plugin?.mainMsLastMinute ?? null};
+  return {mspt: parseMspt(status.mspt), loopP99: debug.loopDelayMs?.p99 ?? null, pluginMainMs: stats?.plugin?.mainMsLastMinute ?? null,
+    pluginEncodeMs: stats?.plugin?.encodeMsLastMinute ?? null};
 }
 
 async function measure(a) {
@@ -24,10 +25,16 @@ async function measure(a) {
   const api = makeApi(a.hub || HUB), rows = [];
   for (let i = 0; i < minutes; i++) {
     if (i) await sleep(60000);
-    rows.push(await sampleOnce(api));
+    try {
+      rows.push(await sampleOnce(api));
+    } catch (e) { // the first one fails fast (wrong hub); a later one costs one row, not the run
+      if (!i) throw e;
+      rows.push({error: e.message});
+    }
     console.log(`${i + 1}/${minutes}: ${JSON.stringify(rows[i])}`);
   }
-  const out = {at: new Date().toISOString(), minutes, mspt: mean(rows.map((r) => r.mspt)), loopP99: mean(rows.map((r) => r.loopP99)), pluginMainMs: mean(rows.map((r) => r.pluginMainMs))};
+  const out = {at: new Date().toISOString(), minutes, failedSamples: rows.filter((r) => r.error).length, mspt: mean(rows.map((r) => r.mspt)),
+    loopP99: mean(rows.map((r) => r.loopP99)), pluginMainMs: mean(rows.map((r) => r.pluginMainMs)), pluginEncodeMs: mean(rows.map((r) => r.pluginEncodeMs))};
   fs.writeFileSync(a.out, JSON.stringify(out, null, 2) + '\n');
   console.log(`wrote ${a.out}: ${JSON.stringify(out)}`);
 }
@@ -38,6 +45,7 @@ function compare([, beforeFile, afterFile]) {
   console.log(`mspt (1 min mean)  ${before.mspt} -> ${after.mspt}  delta ${r.msptDelta ?? 'n/a'}  (limit 0.5)`);
   console.log(`loop p99 ms        ${before.loopP99} -> ${after.loopP99}  delta ${r.loopP99Delta ?? 'n/a'}  (limit 2)`);
   console.log(`plugin main ms/min ${before.pluginMainMs} -> ${after.pluginMainMs}  (info only)`);
+  console.log(`plugin encode ms/min ${before.pluginEncodeMs} -> ${after.pluginEncodeMs}  (info only, encoder thread)`);
   console.log(r.ok ? 'PASS' : 'FAIL: the model costs more than the limits');
   return r.ok ? 0 : 1;
 }
