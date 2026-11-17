@@ -13,6 +13,12 @@ assert.strictEqual(cellStatus(stairs, 'minecraft:stone'), 2);
 for (const free of ['minecraft:air', 'minecraft:cave_air', 'minecraft:short_grass', 'minecraft:water[level=3]', 'minecraft:lava[level=0]']) assert.strictEqual(cellStatus(stairs, free), 0, free);
 assert.strictEqual(cellStatus({name: 'cobblestone', props: {}, anySolid: true}, 'minecraft:deepslate'), 1);
 assert.strictEqual(cellStatus({name: 'redstone_lamp', props: {}}, 'minecraft:redstone_lamp'), 1); // the model strips lit and powered
+// cells the bots never place (placing.skip) are built when the block of that name stands there
+const upper = {name: 'oak_door', props: {half: 'upper', facing: 'east', hinge: 'left', open: 'false'}};
+assert.strictEqual(cellStatus(upper, 'minecraft:oak_door[facing=east,half=upper,hinge=left,open=false,powered=false]'), 1);
+assert.strictEqual(cellStatus({name: 'red_bed', props: {part: 'head', facing: 'east'}}, 'minecraft:red_bed[facing=east,occupied=false,part=head]'), 1);
+assert.strictEqual(cellStatus(upper, 'minecraft:stone'), 2);
+assert.strictEqual(cellStatus(upper, 'minecraft:air'), 0);
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-'));
   const write = (names) => fs.writeFileSync(path.join(dir, 'p.litematic'), writeLitematic({name: 'p', regions: [{position: {x: 0, y: 0, z: 0}, size: {x: 17, y: 1, z: 17},

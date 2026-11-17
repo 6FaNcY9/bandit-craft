@@ -24,6 +24,8 @@ function parseState(state) {
 function cellStatus(want, state) {
   const have = parseState(state);
   if (placing.matches(want, have)) return 1;
+  // The bots never place what placing.skip drops (door upper halves, tall plants, bed heads, piston heads) and count it done by name.
+  if (placing.placement(want.name, want.props) === null && have.name === want.name) return 1;
   return isAir(state) || build.REPLACEABLE.has(have.name) || FLUID.test(have.name) ? 0 : 2;
 }
 
