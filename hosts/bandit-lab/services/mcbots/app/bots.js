@@ -1581,7 +1581,7 @@ function noPathAge(map, key, now = Date.now()) {
   return t !== undefined && now - t < NOPATH_MS ? now - t : null;
 }
 const WIDER = [250, 600]; // search budgets tried after a "No path" at the usual 80
-async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null, again = false} = {}) {
+async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null, again = false, stop = null} = {}) {
   guard(job);
   const known = r.bot?.entity ? chunkKey(x, y, z, r.bot.entity.position.floored()) : null;
   const age = again || !known ? null : noPathAge(r.noPath, known);
@@ -1616,6 +1616,10 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
     };
     watch = setTimeout(look, WATCH_MS);
   };
+  // `stop`: checked every tick, a reason ends the walk at once with that reason, no retry (a shaft meeting water).
+  let stopped = null;
+  const tick = stop && (() => { if (!stopped && (stopped = stop())) halt(); });
+  if (tick) r.bot.on('physicsTick', tick);
   try {
     // Something else (combat, a block update) can stop the path mid-walk; walk
     // again instead of failing the job, unless the deadline or a stop hit.
@@ -1630,6 +1634,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         return;
       } catch (e) {
         guard(job);
+        if (stopped) throw new Error(stopped);
         // The deadline clears the goal, so its error reads "The goal was changed": name the deadline instead (bot1's
         // 90 s in a sand-roofed cave looked like a fight in the archive, 2026-10-15).
         const why = stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : e.message;
@@ -1670,6 +1675,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   } finally {
     clearTimeout(deadline);
     clearTimeout(watch);
+    if (tick) r.bot.removeListener('physicsTick', tick);
     if (wider) pf.searchRadius = budget;
     if (boxed && !r.digBox) r.digBox = boxed;
   }
@@ -2660,6 +2666,41 @@ function outOfBase(home, me, margin) {
   const d = Math.hypot(me.x - home.x, me.z - home.z), k = (BASE_NO_MINE + margin) / d;
   return d > 1 ? [Math.round(home.x + (me.x - home.x) * k), Math.round(home.z + (me.z - home.z) * k)] : [home.x + BASE_NO_MINE + margin, home.z];
 }
+// Under the base lies an aquifer (water at -307..-246, Y -2..12): bot20 and bot21 dug into it for deepslate and drowned
+// (2026-11-17). Why a dig-down at x z from Y top to bottom is unsafe: a fluid in or beside the column, or a block not
+// loaded (unknown counts as wet, never as dry). null: dry.
+function wetColumn(blockAt, x, z, top, bottom) {
+  for (let y = top; y >= bottom; y--) {
+    for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const b = blockAt(new Vec3(x + dx, y, z + dz));
+      if (!b) return `not loaded at ${x + dx} ${y} ${z + dz}`;
+      if (FLUID.test(b.name) || b.getProperties?.().waterlogged) return `${b.name} at ${x + dx} ${y} ${z + dz}`;
+    }
+  }
+  return null;
+}
+// The first dry column just outside the base circle: straight out past the bot first (as outOfBase), then round the circle
+// in 45° steps, nearest first. None dry: an error, no dig.
+function descentColumn(blockAt, home, me, margin, top, bottom) {
+  const far = BASE_NO_MINE + margin, a0 = Math.hypot(me.x - home.x, me.z - home.z) > 1 ? Math.atan2(me.z - home.z, me.x - home.x) : 0;
+  const wet = [];
+  for (const k of [0, 1, -1, 2, -2, 3, -3, 4]) {
+    const a = a0 + (k * Math.PI) / 4, x = Math.round(home.x + far * Math.cos(a)), z = Math.round(home.z + far * Math.sin(a));
+    const why = wetColumn(blockAt, x, z, top, bottom);
+    if (!why) return [x, z];
+    wet.push(why);
+  }
+  throw new Error(`no dry column to dig down beside the base: ${wet.join('; ')}`);
+}
+// Water or lava in, under or beside the feet or head of a bot digging down: why to stop the shaft, or null.
+function shaftWet(blockAt, pos) {
+  const p = pos.floored();
+  for (const d of [[0, 0, 0], [0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [1, 1, 0], [-1, 1, 0], [0, 1, 1], [0, 1, -1]]) {
+    const b = blockAt(p.offset(...d));
+    if (b && FLUID.test(b.name)) return `${b.name} at ${at(p.offset(...d))}`;
+  }
+  return null;
+}
 async function leaveBase(r, job, what, margin) {
   const me = r.bot.entity.position, [x, z] = outOfBase(r.supplyChest, me, margin);
   await goNear(r, job, x, Math.floor(me.y), z, 3, {xz: true, doing: `walking out of the base for ${what} (nothing is mined under it)`});
@@ -2667,12 +2708,23 @@ async function leaveBase(r, job, what, margin) {
 async function toBand(r, job, band, what) {
   const {bot} = r;
   const target = Math.round((band[0] + band[1]) / 2);
-  // Down (or up) only outside the base: walk out first, away from the supply chest.
-  if (underBase(r.supplyChest, bot.entity.position)) await leaveBase(r, job, what, 8);
+  // Down (or up) only outside the base: walk out first, away from the supply chest, to a column without water.
+  if (underBase(r.supplyChest, bot.entity.position)) {
+    const me = bot.entity.position, down = target < me.y;
+    if (!down) await leaveBase(r, job, what, 8);
+    else {
+      const [x, z] = descentColumn((p) => bot.blockAt(p), r.supplyChest, me, 8, Math.floor(me.y), band[1]);
+      await goNear(r, job, x, Math.floor(me.y), z, 3, {xz: true, doing: `walking out of the base for ${what} (nothing is mined under it)`});
+    }
+  }
+  const wet = () => {
+    const why = shaftWet((p) => bot.blockAt(p), bot.entity.position);
+    return why && `stopped digging down for ${what}: ${why} (a shaft into water drowns the bot)`;
+  };
   for (let leg = 0; leg < 12 && outside(band, bot.entity.position.y) > 2; leg++) {
     const y = bot.entity.position.y > target ? Math.max(target, Math.floor(bot.entity.position.y) - 16) : Math.min(target, Math.floor(bot.entity.position.y) + 16);
     const p = bot.entity.position;
-    await goNear(r, job, p.x, y, p.z, 2, {goal: new goals.GoalY(y), doing: `digging down to Y ${target} for ${what} (now Y ${Math.floor(p.y)})`});
+    await goNear(r, job, p.x, y, p.z, 2, {goal: new goals.GoalY(y), doing: `digging down to Y ${target} for ${what} (now Y ${Math.floor(p.y)})`, stop: y < p.y ? wet : null});
   }
 }
 
@@ -4477,4 +4529,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
