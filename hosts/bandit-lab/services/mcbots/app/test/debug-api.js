@@ -158,6 +158,11 @@ const {BotRunner} = require('../bots');
     assert.deepStrictEqual([off.status, await off.json(), off.headers.get('cache-control'), off.headers.get('x-content-type-options')], [503, {error: 'world model is off'}, 'no-store', 'nosniff']);
     assert.strictEqual((await fetch(wstats, {method: 'POST', headers: {'tailscale-user-login': 'a@github', 'content-type': 'application/json', origin: `http://127.0.0.1:${port}`}, body: '{}'})).status, 404);
     assert.strictEqual((await (await fetch(`http://127.0.0.1:${port}/api/state`, {headers: {'tailscale-user-login': 'a@github'}})).json()).worldSeq, 0);
+    // the plan route: same gate, same 503 without a model; the hub has no architect route (the page's chat button hides on 404)
+    const planUrl = `http://127.0.0.1:${port}/api/plan/status?bot=bot1`;
+    assert.strictEqual((await fetch(planUrl)).status, 403, 'plan route sits behind the login');
+    assert.strictEqual((await fetch(planUrl, {headers: {'tailscale-user-login': 'a@github'}})).status, 503);
+    assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/architect/status`, {headers: {'tailscale-user-login': 'a@github'}})).status, 404);
     // the page's scripts: the codec and public/oneview/*.js, behind the login, with a policy of their own
     const H = {'tailscale-user-login': 'a@github'};
     const ov = (f, h = H) => fetch(`http://127.0.0.1:${port}/oneview/${f}`, {headers: h});

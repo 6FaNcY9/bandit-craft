@@ -11,6 +11,7 @@ const schematicLib = require('./schematic');
 const {WorldModel, startBlueMap} = require('./world');
 const {WINDOW_MS, loopDelayMeter} = require('./debug');
 const worldApi = require('./worldapi');
+const planApi = require('./planapi');
 const {Hub, RemoteRunner, createWorkerServer} = require('./hub');
 const {EventLog} = require('./events');
 const archive = require('./archive');
@@ -756,8 +757,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {'Content-Type': 'image/png', 'Cache-Control': 'max-age=300', 'X-Content-Type-Options': 'nosniff'});
     return res.end(body);
   }
-  if (url.pathname.startsWith('/api/world/')) {
-    const [code, headers, body] = await worldApi.handle(req.method, url, worldModel);
+  if (url.pathname.startsWith('/api/world/') || url.pathname === '/api/plan/status') {
+    const [code, headers, body] = await (url.pathname === '/api/plan/status' ? planApi.handle(req.method, url, {model: worldModel, projects, dir: SCHEMATIC_DIR}) : worldApi.handle(req.method, url, worldModel));
     res.writeHead(code, {...headers, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': CSP, 'Referrer-Policy': 'no-referrer'});
     return res.end(body);
   }

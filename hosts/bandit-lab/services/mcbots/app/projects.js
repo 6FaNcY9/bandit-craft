@@ -43,9 +43,9 @@ class Projects {
     if (delete this.all[bot]) this.save();
   }
 
-  // What the dashboard needs (not the arguments: a blueprint is several KB).
+  // What the dashboard needs (not the arguments: a blueprint is several KB); a schematic says which plan it is.
   view() {
-    return Object.fromEntries(Object.entries(this.all).map(([bot, p]) => [bot, {type: p.type, summary: summary(p.args), paused: p.paused, t: p.t}]));
+    return Object.fromEntries(Object.entries(this.all).map(([bot, p]) => [bot, {type: p.type, summary: summary(p.args), paused: p.paused, t: p.t, ...(p.type === 'schematic' && {file: p.args.file, origin: [p.args.origin?.x, p.args.origin?.y, p.args.origin?.z]})}]));
   }
 
   save() {
