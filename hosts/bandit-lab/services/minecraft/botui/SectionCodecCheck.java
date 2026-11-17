@@ -39,6 +39,9 @@ final class SectionCodecCheck {
     }
 
     public static void main(String[] args) throws IOException {
+        boolean ea = false;
+        assert ea = true;
+        if (!ea) throw new AssertionError("run with -ea");
         if (args.length == 2 && args[0].equals("--write")) {
             Path out = Path.of(args[1]);
             Files.createDirectories(out.toAbsolutePath().getParent());
