@@ -176,10 +176,11 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
   const later = async (ms) => { skew += ms; const s = S++; hub.table.set('/api/world/changes?since=' + s, () => json({seq: s + 1, sections: [], more: false})); send({t: 'seq', seq: s + 1}); await settle(); return asked('/api/plan/status?', k5).length; };
   send({t: 'plans', list: [{key: 'a.litematic@0,64,0', bot: 'bot1'}]}); await settle();
   assert.strictEqual(asked('/api/plan/status?', k5).length, 1);
-  const steps = [[4900, 1], [100, 2], [9900, 2], [100, 3], [19900, 3], [100, 4], [29900, 4], [100, 5], [30000, 6]];
+  // "not yet" steps stop 1 s short: settle() runs in real time and a loaded builder must not tip them over
+  const steps = [[4000, 1], [1000, 2], [9000, 2], [1000, 3], [19000, 3], [1000, 4], [29000, 4], [1000, 5], [30000, 6]];
   for (const [ms, want] of steps) assert.strictEqual(await later(ms), want, `after +${ms}`);
   hub.table.set('/api/plan/status?bot=bot1', () => json({...planReply, blocks: planReply.blocks.map((b) => [...b.slice(0, 4), 1])}));
-  assert.deepStrictEqual([await later(30000), await later(4900), await later(100)], [7, 7, 8], 'a change: back to 5 s');
+  assert.deepStrictEqual([await later(30000), await later(4000), await later(1000)], [7, 7, 8], 'a change: back to 5 s');
   skew += 60000; send({t: 'pause', on: false}); await settle(); assert.strictEqual(asked('/api/plan/status?', k5).length, 8, 'no new worldSeq, no ask');
   send({t: 'plans', list: []}); await settle();
 
