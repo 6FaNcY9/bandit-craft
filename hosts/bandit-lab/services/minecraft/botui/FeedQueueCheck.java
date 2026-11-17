@@ -128,13 +128,33 @@ final class FeedQueueCheck {
         a.done(new FeedQueue.Work(0, 0, FeedQueue.Kind.IMPORT), 47, List.of(rec(0, 0, 0, "k")));
         assert a.outboxSize() == 0;
 
-        // a mark made after the snapshot survives done(); one before it does not
+        // a mark made after the snapshot survives done(), so does one less than SETTLE_TICKS before it; a settled one does not
         FeedQueue m = new FeedQueue(1); m.setArea(0, 0, 0, 0);
         m.mark(0, 0, 10);
         FeedQueue.Work mw = m.next(15); assert mw.kind() == FeedQueue.Kind.DIRTY;
         m.mark(0, 0, 16);
         m.done(mw, 15, List.of()); assert m.dirty(0, 0);
-        m.done(mw, 17, List.of()); assert !m.dirty(0, 0);
+        m.done(mw, 20, List.of()); assert m.dirty(0, 0);
+        m.done(mw, 21, List.of()); assert !m.dirty(0, 0);
+
+        // settle counts from the oldest mark, clearing from the newest: a piston's blocks still move when the snapshot is taken
+        FeedQueue pm = new FeedQueue(1); pm.setArea(0, 0, 0, 0);
+        pm.mark(0, 0, 0); pm.mark(0, 0, 4);
+        FeedQueue.Work pw = pm.next(5); assert pw.kind() == FeedQueue.Kind.DIRTY;
+        pm.done(pw, 5, List.of()); assert pm.dirty(0, 0);
+        assert pm.next(44).kind() == FeedQueue.Kind.IMPORT && pm.next(44) == null;                 // debounced from 5
+        pw = pm.next(45); assert pw.kind() == FeedQueue.Kind.DIRTY;
+        pm.done(pw, 45, List.of()); assert !pm.dirty(0, 0);
+
+        // a failed snapshot comes back through DIRTY after the debounce; outside the area it is ignored
+        FeedQueue rt = new FeedQueue(1); rt.setArea(0, 0, 0, 0);
+        rt.done(rt.next(0), 0, List.of());                                        // imported, nothing pending
+        rt.retry(0, 0, 100); rt.retry(9, 9, 100);
+        assert rt.dirtyCount() == 1;
+        for (int t = 100; t < 140; t++) assert rt.next(t) == null;
+        FeedQueue.Work rw = rt.next(140); assert rw.kind() == FeedQueue.Kind.DIRTY && rw.cx() == 0 && rw.cz() == 0;
+        rt.mark(0, 0, 200); rt.retry(0, 0, 150);                                  // the encoder's older tick does not move the newest mark back
+        rt.done(rw, 202, List.of()); assert rt.dirty(0, 0);
 
         // starvation: a chunk marked on every tick (clock, flowing water) still gets a snapshot per debounce window
         FeedQueue s = new FeedQueue(1); s.setArea(0, 0, 0, 0);

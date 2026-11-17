@@ -83,11 +83,18 @@ final class FeedQueue {
     synchronized void mark(int cx, int cz, long tick) {
         if (!in(cx, cz)) return;
         long[] p = dirtyAt.computeIfAbsent(SectionCodec.chunkKey(cx, cz), k -> new long[] {tick, tick});
-        p[1] = tick;
+        p[1] = Math.max(p[1], tick); // retry() can bring an older tick than a mark already made
     }
 
     synchronized void offerSweep(int cx, int cz) {
         if (in(cx, cz)) sweeps.add(SectionCodec.chunkKey(cx, cz));
+    }
+
+    /** A snapshot that failed at tick (no done()): the chunk comes back as DIRTY once DEBOUNCE_TICKS have passed since tick. */
+    synchronized void retry(int cx, int cz, long tick) {
+        if (!in(cx, cz)) return;
+        lastSnap.merge(SectionCodec.chunkKey(cx, cz), tick, Math::max);
+        mark(cx, cz, tick);
     }
 
     /**
@@ -123,8 +130,9 @@ final class FeedQueue {
      * Takes the records of a snapshot taken at tick. One older than a snapshot already taken for the chunk is ignored whole (the chunk can be
      * handed out again before an earlier done(), and the encoder may finish out of order); an equal tick is taken.
      * A record whose hash equals the newest one accepted for its section is dropped, a newer record replaces a queued one;
-     * kind 1 is kept once per chunk. The chunk is clean when no mark came at or after the snapshot;
-     * otherwise it stays dirty, and as DEBOUNCE_TICKS > SETTLE_TICKS its next snapshot waits only for the debounce, whichever mark was first.
+     * kind 1 is kept once per chunk. The chunk is clean when its newest mark had settled at the snapshot (SETTLE_TICKS before it: a piston
+     * event comes 2-3 ticks before its blocks stop moving); otherwise it stays dirty, and as DEBOUNCE_TICKS > SETTLE_TICKS its next snapshot
+     * waits only for the debounce, whichever mark was first.
      */
     synchronized void done(Work w, long tick, List<Rec> recs) {
         if (!in(w.cx(), w.cz())) return; // the area moved while the snapshot was made
@@ -133,7 +141,7 @@ final class FeedQueue {
         if (last != null && tick < last) return;
         accepted.put(chunk, tick);
         lastSnap.merge(chunk, tick, Math::max);
-        dirtyAt.computeIfPresent(chunk, (k, p) -> p[1] < tick ? null : p);
+        dirtyAt.computeIfPresent(chunk, (k, p) -> p[1] + SETTLE_TICKS > tick ? p : null);
         for (Rec r : recs) {
             long rc = SectionCodec.chunkKey(r.cx(), r.cz());
             if (r.kind() == 1) {

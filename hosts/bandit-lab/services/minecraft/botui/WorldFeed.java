@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,11 +58,16 @@ import org.bukkit.scheduler.BukkitTask;
  */
 final class WorldFeed implements Listener {
     static final long TICK_BUDGET_NANOS = 1_000_000;
+    // A full sweep pass of the first area (1681 chunks, all loaded) takes 1681 / 6 = 280 s.
     static final int SWEEP_PER_SEC = 6, IMPORT_PER_SEC = 20;
+    private static final int SWEEP_SCAN = 256; // area coordinates looked at per sweep call: one call stays cheap when few chunks are loaded
+    private static final int CHUNK_MAX = 1_875_000, AREA_MAX_CHUNKS = 65_536; // the 30M-block world border
     private static final int ENCODER_BACKLOG = 64; // ChunkSnapshots are large: the drain hands out no work while this many wait
     private static final int SY_MIN = -4, SY_MAX = 19, Y_MIN = -64, Y_MAX = 319, PULL_WAIT_MAX_S = 25, DIRTY_MAX_CHUNKS = 4096;
     private static final int SAMPLE_MAX = 2000, SAMPLE_SECTIONS = 25, SAMPLE_TIMEOUT_S = 30, MAX_BODY = 4096;
     private static final String[] BOX_KEYS = {"x1", "y1", "z1", "x2", "y2", "z2"};
+    // An empty section (only air of any kind; Paper's snapshot holds plain air there) through the same encoder as any other.
+    private static final byte[] AIR = SectionCodec.encode(Collections.nCopies(SectionCodec.CELLS, "minecraft:air").toArray(String[]::new)), AIR_HASH = SectionCodec.hash(AIR);
 
     private final Plugin plugin;
     private final World world;
@@ -80,8 +86,8 @@ final class WorldFeed implements Listener {
     // Main thread only.
     private BukkitTask task;
     private FeedQueue.Work parked; // an unloaded chunk waiting for the next second's load budget
-    private int loadWindow, loads, sweepAt;
-    private long minuteAt, mainNanos, maxTickNanos;
+    private int loadWindow, loads, sweepAt, passLoaded, spentTick;
+    private long minuteAt, mainNanos, maxTickNanos, tickNanos;
 
     WorldFeed(Plugin plugin, World world, long boot) {
         this.plugin = plugin;
@@ -112,6 +118,7 @@ final class WorldFeed implements Listener {
     // ---- main thread ------------------------------------------------------------------------
 
     private void tick() {
+        if (area == null) return; // no pull yet (Deploy A has no area): no work at all
         long t0 = System.nanoTime();
         int tick = Bukkit.getCurrentTick();
         if (tick - loadWindow >= 20) {
@@ -132,9 +139,8 @@ final class WorldFeed implements Listener {
                 load(w);
             }
         }
-        long now = System.nanoTime(), dt = now - t0;
-        mainNanos += dt;
-        maxTickNanos = Math.max(maxTickNanos, dt);
+        long now = System.nanoTime();
+        spent(now - t0);
         if (now - minuteAt >= 60_000_000_000L) {
             minuteAt = now;
             mainMsLastMinute = mainNanos / 1e6;
@@ -145,14 +151,37 @@ final class WorldFeed implements Listener {
         }
     }
 
-    /** Once a second: SWEEP_PER_SEC loaded chunks of the area, round-robin, so a change no event saw heals. */
+    /** Main-thread time of this feed: per minute, and per server tick for the drain, load callbacks and unload snapshots together. */
+    private void spent(long dt) {
+        int tick = Bukkit.getCurrentTick();
+        if (tick != spentTick) {
+            spentTick = tick;
+            tickNanos = 0;
+        }
+        tickNanos += dt;
+        mainNanos += dt;
+        maxTickNanos = Math.max(maxTickNanos, tickNanos);
+    }
+
+    /**
+     * Once a second: the next SWEEP_PER_SEC loaded chunks of the area, round-robin over its coordinates, so a change no event saw heals.
+     * loadedInArea is the count of the last full pass.
+     */
     private void sweep() {
-        List<Chunk> in = new ArrayList<>();
-        for (Chunk c : world.getLoadedChunks()) if (queue.inArea(c.getX(), c.getZ())) in.add(c);
-        loadedInArea = in.size();
-        for (int i = 0; i < Math.min(SWEEP_PER_SEC, in.size()); i++) {
-            sweepAt = (sweepAt + 1) % in.size();
-            queue.offerSweep(in.get(sweepAt).getX(), in.get(sweepAt).getZ());
+        int[] a = area;
+        int width = a[2] - a[0] + 1, n = width * (a[3] - a[1] + 1); // pull() caps the area at AREA_MAX_CHUNKS
+        for (int scanned = 0, offered = 0; scanned < SWEEP_SCAN && offered < SWEEP_PER_SEC; scanned++) {
+            if (sweepAt >= n) { // a pass is done (or the area shrank)
+                sweepAt = 0;
+                loadedInArea = passLoaded;
+                passLoaded = 0;
+            }
+            int cx = a[0] + sweepAt % width, cz = a[1] + sweepAt / width;
+            sweepAt++;
+            if (!world.isChunkLoaded(cx, cz)) continue;
+            passLoaded++;
+            offered++;
+            queue.offerSweep(cx, cz);
         }
     }
 
@@ -162,10 +191,10 @@ final class WorldFeed implements Listener {
             if (stopped) return;
             long t0 = System.nanoTime();
             int tick = Bukkit.getCurrentTick();
-            if (err != null) fail(w, err);
+            if (err != null) fail(w, tick, err);
             else if (c == null) encoder.execute(() -> queue.done(w, tick, List.of(new FeedQueue.Rec(1, w.cx(), 0, w.cz(), null, null))));
             else snapshot(w, c);
-            mainNanos += System.nanoTime() - t0;
+            spent(System.nanoTime() - t0);
         });
     }
 
@@ -173,9 +202,9 @@ final class WorldFeed implements Listener {
         int tick = Bukkit.getCurrentTick(); // done() needs the tick the snapshot was taken at, not when the encoder finished
         ChunkSnapshot s;
         try {
-            s = c.getChunkSnapshot(false, false, false);
+            s = c.getChunkSnapshot(false, false, false, false); // the 3-argument default copies light data
         } catch (RuntimeException e) {
-            fail(w, e);
+            fail(w, tick, e);
             return;
         }
         snapshots++;
@@ -184,17 +213,17 @@ final class WorldFeed implements Listener {
             try {
                 encode(w, tick, s);
             } catch (RuntimeException e) {
-                fail(w, e);
+                fail(w, tick, e);
             } finally {
                 waiting.decrementAndGet();
             }
         });
     }
 
-    /** Never done() on a failure: a newer tick with no records would hide an older real snapshot. The chunk comes back as a sweep. */
-    private void fail(FeedQueue.Work w, Throwable e) {
+    /** Never done() on a failure: a newer tick with no records would hide an older real snapshot. The chunk comes back as DIRTY after the debounce. */
+    private void fail(FeedQueue.Work w, long tick, Throwable e) {
         if (failed.incrementAndGet() <= 10) plugin.getLogger().warning("world feed: chunk " + w.cx() + "," + w.cz() + " failed: " + e);
-        queue.offerSweep(w.cx(), w.cz());
+        queue.retry(w.cx(), w.cz(), tick);
     }
 
     // ---- encoder thread ---------------------------------------------------------------------
@@ -204,6 +233,10 @@ final class WorldFeed implements Listener {
         List<FeedQueue.Rec> recs = new ArrayList<>(SY_MAX - SY_MIN + 1);
         String[] cells = new String[SectionCodec.CELLS];
         for (int sy = SY_MIN; sy <= SY_MAX; sy++) {
+            if (s.isSectionEmpty(sy - SY_MIN)) { // the snapshot's section index counts from the bottom section
+                recs.add(new FeedQueue.Rec(0, w.cx(), sy, w.cz(), AIR_HASH, AIR));
+                continue;
+            }
             for (int i = 0; i < SectionCodec.CELLS; i++) // cell i = (y << 8) | (z << 4) | x, local 0..15; the snapshot takes world y
                 cells[i] = stripped.computeIfAbsent(s.getBlockData(i & 15, sy * 16 + (i >> 8), (i >> 4) & 15).getAsString(), SectionCodec::strip);
             byte[] blob = SectionCodec.encode(cells);
@@ -334,7 +367,7 @@ final class WorldFeed implements Listener {
         if (!world.equals(e.getWorld()) || !queue.dirty(c.getX(), c.getZ()) || queue.outboxSize() >= FeedQueue.OUTBOX_MAX || waiting.get() >= ENCODER_BACKLOG) return;
         long t0 = System.nanoTime();
         snapshot(new FeedQueue.Work(c.getX(), c.getZ(), FeedQueue.Kind.DIRTY), c);
-        mainNanos += System.nanoTime() - t0;
+        spent(System.nanoTime() - t0);
     }
 
     // ---- HTTP (BotUi's pool) ----------------------------------------------------------------
@@ -382,6 +415,8 @@ final class WorldFeed implements Listener {
 
     private void pull(HttpExchange x, long ack, int wait, int[] a) throws Exception {
         if (a[0] > a[2] || a[1] > a[3]) throw new IllegalArgumentException("area needs cx1 <= cx2 and cz1 <= cz2");
+        for (int v : a) if (v < -CHUNK_MAX || v > CHUNK_MAX) throw new IllegalArgumentException("area chunk " + v + " outside +-" + CHUNK_MAX);
+        if ((long) (a[2] - a[0] + 1) * (a[3] - a[1] + 1) > AREA_MAX_CHUNKS) throw new IllegalArgumentException("area spans more than " + AREA_MAX_CHUNKS + " chunks");
         queue.setArea(a[0], a[1], a[2], a[3]);
         area = a;
         byte[] f = queue.batch(ack);

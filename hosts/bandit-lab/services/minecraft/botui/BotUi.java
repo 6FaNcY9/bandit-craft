@@ -207,7 +207,7 @@ public class BotUi extends JavaPlugin implements Listener {
   }
 
   private void handle(HttpExchange x) throws IOException {
-    try (x) {
+    try { // not try (x): that closes the exchange before the catch, and the 500 would never reach the client
       String auth = x.getRequestHeaders().getFirst("Authorization");
       if (auth == null
           || !MessageDigest.isEqual(auth.getBytes(StandardCharsets.UTF_8), ("Bearer " + new String(token, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8))) {
@@ -249,8 +249,10 @@ public class BotUi extends JavaPlugin implements Listener {
       try {
         reply(x, 500, error("internal"));
       } catch (IOException ignored) {
-        // connection already gone
+        // connection already gone, or a reply was already started
       }
+    } finally {
+      x.close();
     }
   }
 
