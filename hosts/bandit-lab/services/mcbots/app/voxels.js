@@ -4,7 +4,7 @@
 // pure part, tested in test.js); server.js feeds it bot.blockAt for a bot whose chunks cover the box.
 const MAX_SIDE = 80, MAX_HIGH = 200, MAX_CELLS = 600000;
 // Passable or tiny things that are never drawn: air and plants/torches/rails/signs (a model of them would add noise, not information).
-const NOT_DRAWN = /^(air|cave_air|void_air|short_grass|tall_grass|grass|fern|large_fern|seagrass|tall_seagrass|kelp|kelp_plant|vine|cave_vines|cave_vines_plant|glow_lichen|dead_bush|sugar_cane|snow|cobweb|fire|torch|wall_torch|soul_torch|soul_wall_torch|redstone_torch|redstone_wall_torch|redstone_wire|ladder|rail|powered_rail|detector_rail|activator_rail|lever|[a-z_]*(_flower|_sapling|_carpet|_sign|_wall_sign|_button|_pressure_plate|_tulip|_orchid|_bluet|_mushroom)|dandelion|poppy|azure_bluet|cornflower|lily_of_the_valley|sweet_berry_bush|wheat|carrots|potatoes|beetroots)$/;
+const {NOT_DRAWN} = require('./public/oneview/blocks.js');
 const FLUID = /^(water|lava|bubble_column)$/;
 const SEE = (n) => NOT_DRAWN.test(n) || FLUID.test(n) || /(^|_)glass(_pane)?$|_leaves$|^(ice|barrier|light)$/.test(n);
 const YIELD_EVERY = 20000; // reads between turns of the event loop (the hub also runs bot physics)
