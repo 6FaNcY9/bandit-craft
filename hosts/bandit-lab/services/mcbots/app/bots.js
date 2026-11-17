@@ -3234,7 +3234,10 @@ async function helpOnce(r, job) {
     const key = `need:${need.item}`;
     if (r.world.claimedByOther?.(r.name, key)) continue;
     if (r.world && !(await r.world.claim(r.name, key))) continue;
-    const hold = setInterval(() => Promise.resolve(r.world?.claim(r.name, key)).catch(() => {}), 45000);
+    const hold = setInterval(() => {
+      if (job.cancelled) { clearInterval(hold); r.world?.release(r.name, key); return; } // a zombie refresher would re-claim forever and idle the crew
+      Promise.resolve(r.world?.claim(r.name, key)).catch(() => {});
+    }, 45000);
     // The wheat farm digs only natural ground inside its box: iron for another bot lies outside it.
     const limits = {digOnly: r.digOnly, digBox: r.digBox};
     r.digOnly = r.digBox = null;
@@ -3460,7 +3463,10 @@ function producer(r, job, args) {
     if (next.idle) return {idle: next.idle};
     if (next.key.startsWith('get:') && r.world && !(await r.world.claim(r.name, `produce:${next.key}`))) return {idle: 'the other bots have the open steps'};
     PRODUCING.set(next.key, {by: r.name, until: now + 30 * 60000});
-    const claim = `produce:${next.key}`, hold = setInterval(() => Promise.resolve(r.world?.claim(r.name, claim)).catch(() => {}), 45000);
+    const claim = `produce:${next.key}`, hold = setInterval(() => {
+      if (job.cancelled) { clearInterval(hold); r.world?.release(r.name, claim); return; } // a zombie refresher would re-claim forever and idle the crew
+      Promise.resolve(r.world?.claim(r.name, claim)).catch(() => {});
+    }, 45000);
     job.progress = next.label;
     job.t.doing = `producing: ${next.label}`;
     try {

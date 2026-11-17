@@ -476,6 +476,22 @@ assert.ok(claims.claim('bot2', 'o:1,2,3'));
 assert.deepStrictEqual(claims.claimStats('bot1'), {granted: 1, refused: 0, timedOut: 0});
 assert.deepStrictEqual(claims.claimStats('bot2'), {granted: 1, refused: 1, timedOut: 0});
 assert.deepStrictEqual(claims.claimStats('nobody'), {granted: 0, refused: 0, timedOut: 0});
+{ // A cancelled job's claim-refresher (bots.js produce/openNeeds) must stop and release, or a zombie interval
+  // re-claims every 45 s and idles the whole crew on "the other bots have the open steps" (lab 2026-11-17).
+  const w = new WorldModel(), job = {cancelled: false};
+  const tick = () => { if (job.cancelled) { w.release('botA', 'produce:k'); return; } w.claim('botA', 'produce:k'); }; // the refresher body the fix runs
+  assert.ok(w.claim('botA', 'produce:k'));
+  tick(); assert.ok(!w.claim('botB', 'produce:k'), 'a live job holds the claim');
+  job.cancelled = true; tick(); // the fix: on cancel the refresher releases instead of re-claiming
+  assert.ok(w.claim('botB', 'produce:k'), 'after cancel the claim is free for another bot');
+}
+{ // TTL safety net: a claim nobody refreshes (a bot that died mid-produce) expires after CLAIM_TTL_MS.
+  let clk = 1000; const w = new WorldModel({now: () => clk});
+  assert.ok(w.claim('botA', 'produce:k'));
+  assert.ok(!w.claim('botB', 'produce:k'), 'held before the TTL elapses');
+  clk += W.CLAIM_TTL_MS;
+  assert.ok(w.claim('botB', 'produce:k'), 'an unrefreshed claim expires after CLAIM_TTL_MS');
+}
 // Protected boxes are inclusive; a block outside every box may be dug.
 const boxes = [[-80, -144, 80, 80], [112, 368, 272, 592]];
 assert.ok(W.insideAreas(boxes, 0, 0) && W.insideAreas(boxes, 80, 80) && W.insideAreas(boxes, 200, 400));
