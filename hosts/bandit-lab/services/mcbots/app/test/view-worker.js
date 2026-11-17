@@ -32,10 +32,12 @@ const answer = (url) => {
 
 // The worker's world: no require, no module; a message log, a URL log, and a count of fetches in flight.
 const posts = [], urls = [];
-let inflight = 0, last = Date.now();
+let inflight = 0, last = Date.now(), manual = false;
+const timers = [];
 const ctx = vm.createContext({
   TextDecoder,
-  setTimeout: (f, ms) => setTimeout(f, ms).unref(), // the worker's 5 s plan timer must not hold the test process
+  // the worker's 5 s plan timer must not hold the test process; `manual` collects timers so a test can fire them and read their delays
+  setTimeout: (f, ms) => { if (!manual) return setTimeout(f, ms).unref(); timers.push({f, ms}); return timers.length; },
   clearTimeout,
   postMessage: (msg, transfer) => { posts.push({msg, transfer}); last = Date.now(); },
   importScripts: (...files) => { for (const f of files) { const b = path.basename(f); vm.runInContext(fs.readFileSync(b === 'worldsection.js' ? path.join(root, b) : path.join(root, 'public', 'oneview', b), 'utf8'), ctx, {filename: b}); } },
@@ -90,7 +92,7 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
   assert.strictEqual(asked('/api/world/changes?', n).length, 1);
   n = posts.length; send({t: 'seq', seq: 2}); await settle();
   assert.strictEqual(of('reset', n).length, 1);
-  // 3b a changes answer that lands after a reset belongs to the old world: dropped (else seq 2 would reset again)
+  // 3b a changes answer that lands after a reset belongs to the old world: dropped (else the cache would sit at 50 and never ask since=1)
   hub.table.set('/api/world/changes?since=2', () => json({seq: 50, sections: [], more: false}));
   hub.table.set('/api/world/changes?since=1', () => json({seq: 2, sections: [], more: false}));
   hub.gate = new Promise((r) => { hub.release = r; });
@@ -98,6 +100,33 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
   hub.gate = null; hub.release(); await settle();
   send({t: 'seq', seq: 2}); await settle();
   assert.ok(urls.includes('/api/world/changes?since=1')); assert.strictEqual(of('reset', n).length, 0);
+
+  // 3c a changes reply is fresher than the /ws seq behind it (7 after 6): the next 6 is no reset and asks nothing
+  hub.table.set('/api/world/changes?since=2', () => json({seq: 7, sections: [], more: false}));
+  send({t: 'seq', seq: 6}); await settle();
+  n = posts.length; const k = urls.length;
+  send({t: 'seq', seq: 6}); await settle();
+  assert.deepStrictEqual([of('reset', n).length, urls.length], [0, k]);
+
+  // 3d a failing changes call backs off 2 s, 4 s, 8 s ... and asks nothing in between; a good one starts the count over
+  manual = true;
+  const fail = (since) => hub.table.set('/api/world/changes?since=' + since, () => json(null, 500));
+  const asks = (since) => asked('/api/world/changes?since=' + since).length;
+  fail(7); send({t: 'seq', seq: 8}); await settle();
+  for (const ms of [2000, 4000, 8000]) {
+    assert.deepStrictEqual([timers.length, timers[0].ms], [1, ms]);
+    assert.strictEqual(asks(7), Math.log2(ms / 1000));
+    send({t: 'seq', seq: 8}); await settle(); assert.strictEqual(asks(7), Math.log2(ms / 1000)); // more messages do not ask either
+    timers.shift().f(); await settle();
+  }
+  hub.table.set('/api/world/changes?since=7', () => json({seq: 8, sections: [], more: false}));
+  assert.deepStrictEqual([timers.length, timers[0].ms], [1, 16000]); timers.shift().f(); await settle();
+  assert.deepStrictEqual([timers.length, asks(7)], [0, 5]);
+  fail(8); send({t: 'seq', seq: 9}); await settle();
+  assert.deepStrictEqual([timers.length, timers[0].ms], [1, 2000]);
+  hub.table.set('/api/world/changes?since=8', () => json({seq: 9, sections: [], more: false}));
+  timers.shift().f(); await settle(); assert.strictEqual(timers.length, 0);
+  manual = false;
 
   // 4 Review Focus 2: every fetch fails: one net false and no exception; 2 s later it goes on
   hub.down = true; n = posts.length;

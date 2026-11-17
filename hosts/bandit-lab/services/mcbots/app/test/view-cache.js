@@ -59,3 +59,8 @@ const want = [sec(-18, 0, -2), sec(-16, 0, -2), sec(-17, -1, -2), sec(-17, 1, -2
 c.neighbours(-17, 0, -2).forEach((s, i) => assert.ok(s && s === want[i], "nb " + i)); // identity: every section is a separate object
 assert.deepStrictEqual([c.neighbours(-18, -4, -3)[2], c.neighbours(-18, -4, -3)[0], c.loaded().length], [null, null, 216]);
 c.setView(0, 0); assert.strictEqual(c.evict().length, 9); assert.strictEqual(c.size(), 0);
+// 12 a changes reply is fresher than the /ws seq that follows it: that is no reset; a seq below the last one sent still is
+c = makeCache({viewR: 0}); c.setView(0, 0); c.onSeq(5); assert.strictEqual(c.onSeq(6), 'changes');
+c.changes({seq: 7, sections: [], more: false}, 6);
+assert.deepStrictEqual([c.onSeq(6), c.seq(), c.onSeq(7), c.onSeq(8)], [null, 7, null, 'changes']);
+assert.deepStrictEqual([c.onSeq(0), c.onSeq(5), c.seq(), c.onSeq(6)], [null, 'reset', 5, 'changes']);

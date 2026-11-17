@@ -6,7 +6,7 @@
   const OV = self.OV;
   const PLAN_EVERY = 5000, RETRY = 2100; // RETRY is a little over the cache's 2 s first back-off, so its wait is over when we pump
   let cache = null, cut = 319, worldSeq = 0, paused = false, netOk = true;
-  let changing = false, blocked = false, epoch = 0, retry = 0, tick = 0;
+  let changing = false, blocked = false, changeFails = 0, epoch = 0, retry = 0, unblock = 0, tick = 0;
   const plans = new Map(); // key -> {bot, at, seq, busy, reply, sent, cut}: at/seq of the last fetch, sent/cut of the last message
 
   const post = (msg, transfer = []) => self.postMessage(msg, transfer);
@@ -53,7 +53,7 @@
     } catch (err) { reply = null; }
     changing = false;
     // a reply that lands after a reset belongs to the old world: dropped
-    if (e === epoch) { if (reply) cache.changes(reply, seen); else blocked = true; }
+    if (e === epoch) { if (reply) { changeFails = 0; cache.changes(reply, seen); } else { changeFails++; blocked = true; } }
     pump();
   }
 
@@ -87,7 +87,9 @@
         if (!changing && !blocked && worldSeq > cache.seq()) pull();
         for (let q; (q = cache.next());) load(q);
       }
-      if ((!netOk || blocked) && !retry) retry = setTimeout(() => { retry = 0; blocked = false; pump(); }, RETRY);
+      if (!netOk && !retry) retry = setTimeout(() => { retry = 0; pump(); }, RETRY);
+      // a failing changes call waits 2 s, 4 s ... 30 s like the cache's requests
+      if (blocked && !unblock) unblock = setTimeout(() => { unblock = 0; blocked = false; pump(); }, Math.min(30000, 1000 * 2 ** changeFails));
     }
     if (!paused) for (const [key, p] of plans) if (!p.busy && p.seq !== worldSeq && Date.now() - p.at >= PLAN_EVERY) follow(key, p);
     if (plans.size && !tick) tick = setTimeout(() => { tick = 0; pump(); }, PLAN_EVERY);

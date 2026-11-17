@@ -17,7 +17,7 @@
     const stale = new Map();  // request key -> {...request, gen}: fetch again
     const wait = new Map();   // request key -> {fails, until}
     const flying = new Map(); // id -> request in flight
-    let view = null, seq = 0, gen = 0, ids = 0;
+    let view = null, seq = 0, pub = 0, gen = 0, ids = 0; // pub: the last seq the page sent; seq may run ahead of it (changes replies are fresher)
 
     const mark = (r, cx, cz) => { const q = req(r, cx, cz); stale.set(q.key, {...q, gen}); };
     const section = (cx, sy, cz) => cols.get(req(0, cx, cz).key)?.secs.get(sy)?.sec ?? null;
@@ -99,10 +99,9 @@
 
       onSeq(n) {
         if (!(n > 0)) return null;
-        if (seq === 0) { seq = n; return null; }
-        if (n > seq) return 'changes';
-        if (n === seq) return null;
-        cols.clear(); tiles.clear(); stale.clear(); wait.clear(); flying.clear(); seq = n;
+        if (seq === 0) { seq = pub = n; return null; }
+        if (n >= pub) { pub = n; return n > seq ? 'changes' : null; }
+        cols.clear(); tiles.clear(); stale.clear(); wait.clear(); flying.clear(); seq = pub = n;
         return 'reset';
       },
 
