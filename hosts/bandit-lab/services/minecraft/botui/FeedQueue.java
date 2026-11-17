@@ -28,7 +28,7 @@ final class FeedQueue {
     private final long boot;
     private int ax1 = 1, az1 = 1, ax2 = 0, az2 = 0; // empty until setArea
     private long imported; // imports are handed out row by row, so a big area costs no memory
-    private final HashMap<Long, Long> dirtyAt = new HashMap<>(); // chunk -> tick of its newest mark
+    private final HashMap<Long, long[]> dirtyAt = new HashMap<>(); // chunk -> {first pending mark, newest mark}
     private final HashMap<Long, Long> lastSnap = new HashMap<>(); // chunk -> tick of its last snapshot
     private final LinkedHashSet<Long> sweeps = new LinkedHashSet<>();
     private final HashMap<Long, Long> newest = new HashMap<>(); // section -> hash of the newest record accepted, queued or sent
@@ -78,21 +78,26 @@ final class FeedQueue {
     }
 
     synchronized void mark(int cx, int cz, long tick) {
-        if (in(cx, cz)) dirtyAt.put(SectionCodec.chunkKey(cx, cz), tick);
+        if (!in(cx, cz)) return;
+        long[] p = dirtyAt.computeIfAbsent(SectionCodec.chunkKey(cx, cz), k -> new long[] {tick, tick});
+        p[1] = tick;
     }
 
     synchronized void offerSweep(int cx, int cz) {
         if (in(cx, cz)) sweeps.add(SectionCodec.chunkKey(cx, cz));
     }
 
-    /** DIRTY (oldest settled mark whose chunk was not snapshotted for DEBOUNCE_TICKS), then IMPORT, then SWEEP; null when nothing is due or the outbox is full. */
+    /**
+     * DIRTY (the chunk whose first pending mark is oldest, once that is SETTLE_TICKS old and the chunk was not snapshotted for DEBOUNCE_TICKS;
+     * counting from the first mark keeps a chunk marked every tick from starving), then IMPORT, then SWEEP; null when nothing is due or the outbox is full.
+     */
     synchronized Work next(long tick) {
         if (outbox.size() >= OUTBOX_MAX) return null;
         Long due = null;
-        for (Map.Entry<Long, Long> e : dirtyAt.entrySet()) {
+        for (Map.Entry<Long, long[]> e : dirtyAt.entrySet()) {
             Long snap = lastSnap.get(e.getKey());
-            if (tick - e.getValue() >= SETTLE_TICKS && (snap == null || tick - snap >= DEBOUNCE_TICKS)
-                && (due == null || e.getValue() < dirtyAt.get(due))) due = e.getKey();
+            if (tick - e.getValue()[0] >= SETTLE_TICKS && (snap == null || tick - snap >= DEBOUNCE_TICKS)
+                && (due == null || e.getValue()[0] < dirtyAt.get(due)[0])) due = e.getKey();
         }
         if (due != null) {
             lastSnap.put(due, tick); // also keeps a drain loop from getting this chunk twice before done()
@@ -113,13 +118,14 @@ final class FeedQueue {
 
     /**
      * Takes the records of a snapshot taken at tick. A record whose hash equals the newest one accepted for its section is dropped,
-     * a newer record replaces a queued one; kind 1 is kept once per chunk. Marks older than the snapshot are cleared, newer ones stay.
+     * a newer record replaces a queued one; kind 1 is kept once per chunk. The chunk is clean when no mark came at or after the snapshot;
+     * otherwise it stays dirty, and as DEBOUNCE_TICKS > SETTLE_TICKS its next snapshot waits only for the debounce, whichever mark was first.
      */
     synchronized void done(Work w, long tick, List<Rec> recs) {
         if (!in(w.cx(), w.cz())) return; // the area moved while the snapshot was made
         long chunk = SectionCodec.chunkKey(w.cx(), w.cz());
         lastSnap.put(chunk, tick);
-        dirtyAt.computeIfPresent(chunk, (k, mark) -> mark < tick ? null : mark);
+        dirtyAt.computeIfPresent(chunk, (k, p) -> p[1] < tick ? null : p);
         for (Rec r : recs) {
             long rc = SectionCodec.chunkKey(r.cx(), r.cz());
             if (r.kind() == 1) {

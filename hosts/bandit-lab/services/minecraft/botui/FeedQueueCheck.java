@@ -135,5 +135,22 @@ final class FeedQueueCheck {
         m.mark(0, 0, 16);
         m.done(mw, 15, List.of()); assert m.dirty(0, 0);
         m.done(mw, 17, List.of()); assert !m.dirty(0, 0);
+
+        // starvation: a chunk marked on every tick (clock, flowing water) still gets a snapshot per debounce window
+        FeedQueue s = new FeedQueue(1); s.setArea(0, 0, 0, 0);
+        s.done(s.next(0), 0, List.of());                                          // imported at tick 0, long before the marks
+        List<Integer> shots = new ArrayList<>();
+        for (int t = 200; t <= 450; t++) {
+            if (t <= 400) s.mark(0, 0, t);
+            FeedQueue.Work sw2 = s.next(t);
+            if (sw2 == null) continue;
+            assert sw2.kind() == FeedQueue.Kind.DIRTY;
+            shots.add(t);
+            s.done(sw2, t, List.of());
+        }
+        assert !shots.isEmpty() && shots.get(0) <= 200 + FeedQueue.SETTLE_TICKS + FeedQueue.DEBOUNCE_TICKS;
+        for (int i = 1; i < shots.size(); i++) assert shots.get(i) - shots.get(i - 1) >= FeedQueue.DEBOUNCE_TICKS
+            && shots.get(i) - shots.get(i - 1) <= FeedQueue.DEBOUNCE_TICKS + FeedQueue.SETTLE_TICKS;
+        assert shots.size() >= 5 && shots.get(shots.size() - 1) > 400 && !s.dirty(0, 0);   // the last marks were snapshotted too
     }
 }
