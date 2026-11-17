@@ -88,6 +88,51 @@ assert.ok(cmds.includes('setblock -317 105 -21 minecraft:crafting_table'));
   assert.ok(g1.blocks.every((b) => b.x >= 0 && b.x < 3 && b.y >= 0 && b.y < 15 && b.z >= 0 && b.z < 21));
 }
 
+{ // A1 wizard tower: modules, box, palette, openings, every stair against a wall, every block connected to the footing
+  const {tower, towerModule, MODULES, inBox} = require('../castle/tower.js');
+  const cells = tower(), key = (x, y, z) => `${x},${y},${z}`, at = new Map(cells.map((b) => [key(b.x, b.y, b.z), b]));
+  for (const m of MODULES) assert.ok(m.x2 - m.x1 < 32 && m.y2 - m.y1 < 24 && m.z2 - m.z1 < 32, `${m.id} too big`);
+  for (let i = 0; i < MODULES.length; i++) for (let j = i + 1; j < MODULES.length; j++) {
+    const a = MODULES[i], c = MODULES[j];
+    assert.ok(!(a.x1 <= c.x2 && a.x2 >= c.x1 && a.y1 <= c.y2 && a.y2 >= c.y1 && a.z1 <= c.z2 && a.z2 >= c.z1), `${a.id} overlaps ${c.id}`);
+  }
+  for (const b of cells) assert.equal(MODULES.filter((m) => inBox(m, b.x, b.y, b.z)).length, 1, `cell ${key(b.x, b.y, b.z)}`);
+  const conn = (b) => b.x === -291 && b.z >= 20 && b.z <= 22 && b.y >= 116 && b.y <= 120;
+  assert.ok(cells.every((b) => conn(b) || (b.x >= -290 && b.x <= -274 && b.z >= 13 && b.z <= 29 && b.y >= 103 && b.y <= 167)), 'box');
+  assert.ok(!cells.some((b) => b.z > 29 || b.x > -274));
+  const A1 = /^(cobblestone|cobbled_deepslate|deepslate_bricks|polished_deepslate|stone_bricks|deepslate_tiles|deepslate_tile_slab|spruce_planks|spruce_stairs|iron_bars|lantern|campfire)$/;
+  assert.ok(cells.every((b) => A1.test(b.name)), [...new Set(cells.map((b) => b.name))].join());
+  for (const x of [-290, -289]) for (let y = 117; y <= 119; y++) assert.ok(!at.has(key(x, y, 21)), 'K1 door');
+  for (const z of [13, 14]) for (let y = 114; y <= 116; y++) assert.ok(!at.has(key(-282, y, z)), 'north door');
+  assert.equal(at.get(key(-288, 116, 21))?.name, 'spruce_planks', 'landing');
+  const wall = (x, z) => { const dx = Math.abs(x + 282), dz = Math.abs(z - 21); return dx <= 8 && dz <= 8 && dx + dz <= 12 && (dx > 6 || dz > 6 || dx + dz > 10); };
+  const stairs = cells.filter((b) => b.name === 'spruce_stairs');
+  assert.equal(stairs.length, 31);
+  for (const b of stairs) assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([u, v]) => wall(b.x + u, b.z + v) && at.has(key(b.x + u, b.y, b.z + v))), `stair ${key(b.x, b.y, b.z)}`);
+  const lan = cells.filter((b) => b.name === 'lantern');
+  assert.equal(lan.length, 24);
+  for (const b of lan) assert.ok(b.props.hanging === 'true' && at.has(key(b.x, b.y + 1, b.z)), `lantern ${key(b.x, b.y, b.z)}`);
+  const fires = cells.filter((b) => b.name === 'campfire');
+  assert.equal(fires.length, 4);
+  assert.ok(fires.every((b) => b.y === 153 && at.get(key(b.x, 152, b.z))?.name === 'polished_deepslate'), 'campfires on the deck');
+  assert.equal(cells.filter((b) => b.y === 130 && wall(b.x, b.z)).length, 92);
+  const top = cells.reduce((a, b) => (b.y > a.y ? b : a));
+  assert.deepEqual([top.x, top.y, top.z, top.name], [-282, 167, 21, 'deepslate_tile_slab']);
+  // supported: every cell reaches the footing through face neighbours
+  const seen = new Set(cells.filter((b) => b.y === 103).map((b) => key(b.x, b.y, b.z))), todo = [...seen];
+  while (todo.length) {
+    const [x, y, z] = todo.pop().split(',').map(Number);
+    for (const [u, v, w] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const k = key(x + u, y + v, z + w);
+      if (at.has(k) && !seen.has(k)) { seen.add(k); todo.push(k); }
+    }
+  }
+  assert.equal(seen.size, cells.length, 'floating cells');
+  const s1 = towerModule('s1'); // s1 reaches x -291 for the connector's lintel row
+  assert.deepEqual([s1.origin, s1.size], [{x: -291, y: 120, z: 13}, {x: 18, y: 6, z: 17}]);
+  assert.equal(s1.blocks.length, cells.filter((b) => inBox(MODULES[2], b.x, b.y, b.z)).length);
+}
+
 (async () => {
   // round trip through the real writer and parser, placed at the warehouse origin
   const {writeLitematic} = require('../litematic-write.js');
