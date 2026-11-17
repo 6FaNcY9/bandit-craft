@@ -29,7 +29,13 @@ in
     cp ${joml} libs/joml.jar
     cp ${./BotUi.java} BotUi.java
     cp ${./BotMap.java} BotMap.java
-    javac --release 25 -proc:none -Xlint:all,-classfile,-processing -Werror -cp 'libs/*' -d classes BotUi.java BotMap.java
+    cp ${./SectionCodec.java} SectionCodec.java
+    cp ${./SectionCodecCheck.java} SectionCodecCheck.java
+    javac --release 25 -proc:none -Xlint:all,-classfile,-processing -Werror -cp 'libs/*' -d classes BotUi.java BotMap.java SectionCodec.java
+    # The check runs here but stays out of the jar: it is compiled into its own directory.
+    mkdir checks
+    javac --release 25 -proc:none -Xlint:all,-classfile,-processing -Werror -cp classes -d checks SectionCodecCheck.java
+    java -ea -cp classes:checks botui.SectionCodecCheck ${../../mcbots/app/test/fixtures/world-sections.bin}
     cp ${./plugin.yml} classes/plugin.yml
     jar --create --file $out --date 1980-01-01T00:00:02Z -C classes .
   ''

@@ -35,3 +35,16 @@ const frame = s.encodeBatch({boot: 5n, batch: 7, records: recs});
 assert.throws(() => s.decodeBatch(frame.subarray(0, frame.length - 1)), /bad batch/);
 assert.throws(() => s.decodeBatch(Buffer.concat([frame, Buffer.from([0])])), /bad batch/);
 assert.throws(() => s.decodeSection(Buffer.concat([s.encodeSection(['a', 'b', 'c'], idx).subarray(0, -1024), Buffer.alloc(1024, 0xff)])), /bad section/); // index 3 of 3
+// golden fixture written by the Java encoder
+const fx = s.decodeBatch(require('node:fs').readFileSync(require('node:path').join(__dirname, 'fixtures/world-sections.bin')));
+assert.deepStrictEqual([fx.boot, fx.batch, fx.records.map((r) => [r.kind, r.cx, r.sy, r.cz])], [1n, 7, [[0, -17, 5, -2], [0, -1, -4, 0], [0, 3, 19, 18], [1, 40, 0, -41]]]);
+assert.deepStrictEqual(s.decodeSection(fx.records[0].blob), {palette: ['minecraft:air'], idx: null});
+const two = s.decodeSection(fx.records[1].blob);
+assert.deepStrictEqual(two.palette, ['minecraft:stone', 'minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]', 'minecraft:redstone_lamp']);
+assert.strictEqual(two.idx[s.cellIndex(1, 2, 3)], 1); assert.strictEqual(two.idx[4095], 2); assert.strictEqual(two.idx[0], 0);
+const three = s.decodeSection(fx.records[2].blob);
+assert.strictEqual(three.palette.length, 17); assert.strictEqual(fx.records[2].blob[1], 5); assert.strictEqual(three.idx[4095], 4095 % 17);
+for (const r of fx.records.slice(0, 3)) {           // both encoders agree byte for byte
+  const d = s.decodeSection(r.blob);
+  assert.ok(s.encodeSection(d.palette, d.idx).equals(r.blob)); assert.ok(s.sectionHash(r.blob).equals(r.hash));
+}
