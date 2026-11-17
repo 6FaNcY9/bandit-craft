@@ -39,6 +39,24 @@ const assert = require('node:assert');
     assert.deepStrictEqual(say, ['scaffold left standing: 1 blocks: 3 64 4 dirt']);
     assert.deepStrictEqual([...fake.stray.keys()], ['3,64,4'], 'the cell is kept for a later cleanup, not thrown away');
   }
+  { // a failed dig is tried again at a later job end, 3 times at most, and the records outlive a restart: 641 loose dirt
+    // blocks stood round the castle, 179 failed digs there had been forgotten and every deploy forgot the rest (2026-11-17)
+    const fs = require('node:fs'), path = require('node:path'), s = new Map();
+    P.retry(s, {x: 1, y: 70, z: 1, name: 'dirt'});
+    assert.strictEqual(s.get('1,70,1').tries, 1);
+    P.retry(s, s.get('1,70,1'), 0);
+    assert.strictEqual(s.get('1,70,1').tries, 1, 'a stop is no failed try');
+    P.retry(s, s.get('1,70,1'));
+    P.retry(s, s.get('1,70,1'));
+    assert.strictEqual(s.size, 0, 'the third failure gives it up');
+    const fake = {scaffoldFile: path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'scaffold-')), '.scaffold-bot1.json'), pillars: new Map(), stray: new Map()};
+    P.record(fake.pillars, 2, 64, 2, 'dirt');
+    P.record(fake.stray, 3, 64, 3, 'cobblestone', 2);
+    require('../bots').BotRunner.prototype.saveScaffold.call(fake);
+    const back = new Map();
+    P.restore(back, JSON.parse(fs.readFileSync(fake.scaffoldFile, 'utf8')).concat([{x: 'bad'}, null]));
+    assert.deepStrictEqual([...back.values()], [{x: 2, y: 64, z: 2, name: 'dirt'}, {x: 3, y: 64, z: 3, name: 'cobblestone', tries: 2}], 'both kinds come back, junk is skipped');
+  }
   { // unloaded cells are kept, take() hands them over and empties the map, the map is capped
     const c3 = new Map();
     P.record(c3, 1, 60, 1, 'dirt'); P.record(c3, 2, 60, 1, 'dirt');

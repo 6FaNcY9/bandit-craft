@@ -431,6 +431,12 @@ class BotRunner {
     this.supplyChest = supplyChest;
     this.pillars = new Map(); // blocks placed to climb to logs (pillars.js), dug back down by unpillar()
     this.stray = new Map(); // scaffold a death or disconnect left standing: dug by clearStray when a later job ends near it
+    // Both outlive a restart (a deploy restarts every worker) in the schematic dir, the one a worker can write too.
+    this.scaffoldFile = process.env.SCHEMATIC_DIR || process.env.STATE_DIR ? require('node:path').join(SCHEMATIC_DIR, `.scaffold-${name}.json`) : null;
+    if (this.scaffoldFile) {
+      try { pillars.restore(this.stray, JSON.parse(require('node:fs').readFileSync(this.scaffoldFile, 'utf8'))); } catch {} // none saved yet
+      setInterval(() => this.saveScaffold(), 10000).unref(); // shortcut: a restart loses the last 10 s of records; save on each record if that shows
+    }
     // VeloAuth account password, derived per bot from a shared seed.
     this.password = loginSeed ? require('node:crypto').createHash('sha256').update(`${loginSeed}:${name}`).digest('hex').slice(0, 32) : null;
     this.port = port;
@@ -484,6 +490,18 @@ class BotRunner {
     const left = pillars.take(this.pillars);
     for (const c of left) pillars.record(this.stray, c.x, c.y, c.z, c.name); // keep them, don't abandon: a later job end near here digs them (clearStray)
     if (left.length) this.emit('info', `scaffold left standing: ${left.length} blocks: ${left.slice(0, 20).map((c) => `${c.x} ${c.y} ${c.z} ${c.name}`).join(', ')}`);
+  }
+
+  // The scaffold records as a file (read back into stray by the constructor), written only when they changed.
+  saveScaffold() {
+    const text = JSON.stringify([...this.pillars.values(), ...this.stray.values()]);
+    if (!this.scaffoldFile || text === this.scaffoldSaved) return;
+    const fs = require('node:fs');
+    try {
+      fs.writeFileSync(`${this.scaffoldFile}.tmp`, text);
+      fs.renameSync(`${this.scaffoldFile}.tmp`, this.scaffoldFile);
+      this.scaffoldSaved = text;
+    } catch {} // a full disk costs only the cleanup, never the bot
   }
 
   emit(kind, text, jobId, chatText = text) { // text is the English log line; chatText what the player hears
@@ -1032,10 +1050,11 @@ class BotRunner {
       }
     }
     clearInterval(ticker);
+    // A few of the floating leftovers an earlier death or failed dig left within reach, so the world tidies as the bots
+    // work; first, so a pillar this job end fails to dig waits for a later one instead of a second try from the same spot.
+    if (!job.cancelled && this.online) await clearStray(this, job).catch(() => {});
     // Pillars the job left in the open come down before the next one (its own, unchanged ones only; pillars.js).
     if (!job.cancelled && this.online) await unpillar(this, job).catch(() => {});
-    // ... and a few of the floating leftovers an earlier death left within reach, so the world tidies as the bots work.
-    if (!job.cancelled && this.online) await clearStray(this, job).catch(() => {});
     const took = Math.round((Date.now() - job.startedAt) / 1000);
     const count = job.type === 'trade' && job.progress ? `, ${job.progress}` : ''; // chat lines of a trade carry its emeralds
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
@@ -2067,6 +2086,7 @@ async function unpillar(r, job, target = null) {
     try {
       await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);
     } catch (e) {
+      pillars.retry(r.stray, c, job.cancelled ? 0 : 1); // tried again at a later job end near it (clearStray)
       guard(job);
       r.emit('info', `pillar at ${c.x} ${c.y} ${c.z} left standing: ${e.message.slice(0, 60)}`);
     }
@@ -2091,6 +2111,7 @@ async function clearStray(r, job) {
     try {
       await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);
     } catch (e) {
+      pillars.retry(r.stray, c, job.cancelled ? 0 : 1);
       guard(job); // a stop is not a failure; the rest waits for a later job end
     }
   }

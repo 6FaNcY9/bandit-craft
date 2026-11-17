@@ -10,11 +10,27 @@ const key = (x, y, z) => `${x},${y},${z}`;
 const isPillarStep = (face, ref, feet) => !!face && face.x === 0 && face.y === 1 && face.z === 0 && !!ref && ref.x === Math.floor(feet.x) && ref.z === Math.floor(feet.z) && ref.y < feet.y;
 
 const MAX_CELLS = 512;
-const record = (cells, x, y, z, name) => {
+const record = (cells, x, y, z, name, tries = 0) => {
   cells.delete(key(x, y, z)); // re-insert as the newest
-  cells.set(key(x, y, z), {x, y, z, name});
+  cells.set(key(x, y, z), tries ? {x, y, z, name, tries} : {x, y, z, name});
   if (cells.size > MAX_CELLS) cells.delete(cells.keys().next().value); // oldest goes
 };
+
+// A dig of cell c failed: keep it for a later job end, given up after the third failure (2026-11-17: 179 failed digs at
+// the castle had been forgotten at once). `add` 0 keeps it as it was (a Stop is no failed try).
+const MAX_TRIES = 3;
+const retry = (cells, c, add = 1) => {
+  const tries = (c.tries || 0) + add;
+  if (tries < MAX_TRIES) record(cells, c.x, c.y, c.z, c.name, tries);
+  else cells.delete(key(c.x, c.y, c.z));
+};
+
+// Cells read back from the saved file (bots.js saveScaffold) after a restart; anything else in it is skipped.
+function restore(cells, list) {
+  for (const c of Array.isArray(list) ? list : []) {
+    if (c && [c.x, c.y, c.z].every(Number.isInteger) && /^[a-z_]{1,48}$/.test(c.name)) record(cells, c.x, c.y, c.z, c.name, Number.isInteger(c.tries) ? c.tries : 0);
+  }
+}
 
 // The cells still recorded, emptied: what a respawn or a disconnect leaves standing.
 function take(cells) {
@@ -62,4 +78,4 @@ function openAbove(blockAt, x, y, z, up = 24) {
   return true;
 }
 
-module.exports = {take, record, changed, due, isPillarStep, openAbove, key};
+module.exports = {take, record, retry, restore, changed, due, isPillarStep, openAbove, key};
