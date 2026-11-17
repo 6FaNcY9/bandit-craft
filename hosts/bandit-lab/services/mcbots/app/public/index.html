@@ -14,6 +14,10 @@
   #world { position: fixed; top: 0; left: 0; right: 0; bottom: var(--bar); overflow: hidden; background: #0b0d10; }
   #view { display: block; width: 100%; height: 100%; touch-action: none; }
   #tags { position: absolute; inset: 0; pointer-events: none; }
+  #tags > div { position: absolute; left: 0; top: 0; padding: 0 6px; border-radius: 6px; background: #000b; font-size: 12px; white-space: nowrap; }
+  #cutY { position: absolute; right: 8px; top: 64px; bottom: 120px; width: 44px; margin: 0; writing-mode: vertical-lr; direction: rtl; } /* clear of #stopAll and #fab; the top is high */
+  #cutLbl { position: absolute; right: 60px; top: 64px; }
+  .ring { width: 26px; height: 26px; border-radius: 50%; flex: none; background: radial-gradient(#262a31 52%, transparent 55%), conic-gradient(var(--ok) var(--p), #3a4049 0); }
   #conn { position: absolute; top: 18px; left: 16px; }
   #stopAll { position: absolute; top: 8px; right: 8px; }
   #fab { position: absolute; right: 8px; bottom: 8px; display: grid; gap: 8px; }
@@ -83,7 +87,7 @@
 </style>
 </head>
 <body>
-<div id="world"><canvas id="view"></canvas><div id="tags"></div><span class="dot" id="conn" title="Verbindung"></span><button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹</button><div id="fab"><button class="b" id="camTop" title="Von oben">🗺️</button><button class="b" id="cutBtn" title="Höhe">▤</button></div><input type="range" id="cutY" min="-64" max="319" value="319" hidden><div id="pickBar" hidden></div><div id="worldMsg" hidden></div></div>
+<div id="world"><canvas id="view"></canvas><div id="tags"></div><span class="dot" id="conn" title="Verbindung"></span><button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹</button><div id="fab"><button class="b" id="camTop" title="Von oben">🗺️</button><button class="b" id="cutBtn" title="Höhe">▤</button></div><input type="range" id="cutY" min="-64" max="319" value="319" hidden><span class="badge" id="cutLbl" hidden></span><div id="pickBar" hidden></div><div id="worldMsg" hidden></div></div>
 
 <div id="sheet" hidden>
 <div class="row between" id="sheetHead"><div class="row" id="seg"></div><button class="b" id="sheetClose" title="Schließen">✕</button></div>
@@ -150,6 +154,7 @@
 
 <!-- Projekt -->
 <main data-page="project" hidden>
+  <section class="card row" id="planChips"><span class="mut">Kein Bauplan aktiv.</span></section>
   <section class="card" id="projCard">
     <div class="row between"><h2 id="projTitle">Projekt</h2><span class="mut small" id="projCrew"></span></div>
     <div class="row"><div class="bar big"><i id="projBar"></i></div><b id="projNum"></b></div>
@@ -407,6 +412,7 @@ function connect() {
   ws.onmessage = (e) => {
     last = JSON.parse(e.data);
     worker?.postMessage({t: 'seq', seq: last.worldSeq});
+    toWorld();
     renderBots();
     renderPicks();
     renderProject();
@@ -438,7 +444,11 @@ function renderBots() {
           el('button', {class: 'b', onclick: (e) => { e.stopPropagation(); picked = new Set([b.name]); store.set('picked', [...picked]); renderPicks(); sheet('bots', 'orders'); }}, '🎯 Auftrag'),
           r.proj));
       r.detail.onclick = (e) => e.stopPropagation();
-      r.root.onclick = () => { open = open === b.name ? null : b.name; store.set('openBot', open); renderBots(); };
+      r.root.onclick = () => {
+        open = open === b.name ? null : b.name; store.set('openBot', open); renderBots();
+        const cur = last.bots.find((x) => x.name === b.name); // b is the first snapshot of this bot
+        if (cur?.pos && /overworld/.test(cur.dimension || '')) view?.flyTo(...cur.pos);
+      };
       rows.set(b.name, r);
       $('botRows').append(r.root);
     }
@@ -531,7 +541,26 @@ $('gatherGo').onclick = () => {
 // ---- world ----
 const COLORS = ['#60a5fa', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c'];
 function ownerPos() { return last?.world?.players?.find((p) => p.name?.toLowerCase() === me().toLowerCase()) || null; }
-let worker = null, view = null, worldNet = true; // null until startWorld() ran: /ws messages come before the files have loaded
+let worker = null, view = null, layers = null, worldNet = true; // null until startWorld() ran: /ws messages come before the files have loaded
+let followed = ''; // the plan list last sent to the worker
+const planMsgs = new Map(); // plan key -> the worker's last plan message, for the chips
+function toWorld() { // /ws state into the world: markers and the plans to follow
+  if (!layers) return;
+  layers.bots(last);
+  const list = OV.planview.plansOf(last.projects).map(({key, bot}) => ({key, bot})), k = JSON.stringify(list);
+  if (k !== followed) { followed = k; worker.postMessage({t: 'plans', list}); }
+}
+function onPlan(m) {
+  layers.plan(m);
+  if (m.state === 'gone') planMsgs.delete(m.key); else planMsgs.set(m.key, m);
+  const chips = [...planMsgs.values()].map((p) => {
+    const ring = el('span', {class: 'ring'}), b = p.box, side = b && Math.max(b.x2 - b.x1, b.y2 - b.y1, b.z2 - b.z1) + 1;
+    ring.style.setProperty('--p', `${p.percent || 0}%`); // CSSOM: the CSP blocks style attributes
+    return el('button', {class: 'b', onclick: () => b && view.flyTo((b.x1 + b.x2 + 1) / 2, (b.y1 + b.y2 + 1) / 2, (b.z1 + b.z2 + 1) / 2, side * 1.5 + 10)},
+      ring, el('b', {}, p.state === 'big' ? 'zu groß' : `${p.percent} %${p.counts.unknown > 0 ? ' ?' : ''}`), p.key.slice(0, p.key.lastIndexOf('@')).replace(/\.litematic$/, ''));
+  });
+  $('planChips').replaceChildren(...(chips.length ? chips : [el('span', {class: 'mut'}, 'Kein Bauplan aktiv.')]));
+}
 function worldMsg() {
   const t = view?.stats().meshes ? '' : worldNet ? 'Welt lädt …' : 'Keine Welt-Daten';
   $('worldMsg').textContent = t;
@@ -553,10 +582,21 @@ function startWorld() {
     document.addEventListener('visibilitychange', pause);
     if (last) worker.postMessage({t: 'seq', seq: last.worldSeq});
     view = OV.makeView($('view'), {worker, onPick});
-    worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; view.onWorker(m); worldMsg(); };
+    layers = OV.makeLayers(view, $('tags'));
+    worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; if (m.t === 'plan') onPlan(m); else view.onWorker(m); worldMsg(); };
+    if (last) toWorld();
   },(e) => { $('worldMsg').textContent = e.message; });
 }
 window.addEventListener('load', startWorld);
+// the cut slider: everything above Höhe is hidden, 319 shows all
+let cutT = 0;
+$('cutBtn').onclick = () => { $('cutY').hidden = $('cutLbl').hidden = !$('cutY').hidden; cutLabel(); };
+function cutLabel() { const y = +$('cutY').value; $('cutLbl').textContent = y >= 319 ? 'Höhe: alles' : `Höhe ${y}`; $('cutBtn').classList.toggle('sel', y < 319); }
+$('cutY').oninput = () => {
+  cutLabel();
+  clearTimeout(cutT);
+  cutT = setTimeout(() => worker?.postMessage({t: 'cut', y: +$('cutY').value}), 150);
+};
 // the camera looks almost straight down only in the top view
 $('camTop').onclick = () => view?.topDown(view.camera.getWorldDirection(new THREE.Vector3()).y > -0.999);
 $('conn').onclick = () => { const s = view?.stats(); if (s) say(`${s.chunks} Chunks · ${String(s.tris).replace(/\B(?=(\d{3})+$)/g, ' ')} Dreiecke`); };
@@ -849,6 +889,6 @@ setInterval(loadNeeds, 15000);
 if (!location.hash && matchMedia('(min-width: 900px)').matches) location.replace('#bots'); // the desktop has room for the dock
 route();
 </script>
-<script src="/oneview/blocks.js"></script><script src="/oneview/planview.js"></script><script src="/oneview/view.js"></script>
+<script src="/oneview/blocks.js"></script><script src="/oneview/planview.js"></script><script src="/oneview/view.js"></script><script src="/oneview/layers.js"></script>
 </body>
 </html>

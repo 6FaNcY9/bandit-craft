@@ -13,4 +13,4 @@ for (const page of ['home', 'orders', 'chests', 'project', 'plan', 'server']) as
 const start = html.slice(html.indexOf('function startWorld'), html.indexOf("window.addEventListener('load', startWorld)"));
 assert.match(start, /new Worker\([^)]*\);\n\s*const pause = [^\n]*\n\s*pause\(\);/, 'pause is the first message to the worker');
 // the world's files run after the inline script, which uses them only from the load event
-assert.deepStrictEqual([...html.slice(html.indexOf('</script>')).matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]), ['/oneview/blocks.js', '/oneview/planview.js', '/oneview/view.js']);
+assert.deepStrictEqual([...html.slice(html.indexOf('</script>')).matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]), ['/oneview/blocks.js', '/oneview/planview.js', '/oneview/view.js', '/oneview/layers.js']);

@@ -104,15 +104,26 @@ async function partB() {
   ok(shown(page('#plan/plan'), 'data-page="plan"'), '/#plan/plan: plan („Datei ansehen“) is hidden');
   d = page('#menu/server');
   ok(shown(d, 'data-page="server"') && /<body[^>]*\sdata-sheet="menu"/.test(d), '/#menu/server: want server shown and body data-sheet="menu"');
-  for (const [file, size, hash] of [['phone-bots.png', PHONE, '#bots']]) {
-    const out = path.join(OUT, file);
-    fs.rmSync(out, {force: true});
-    chrome([size, `--screenshot=${out}`, `${BASE}/${hash}`]);
-    ok(fs.existsSync(out), `no screenshot ${out}`);
+  const out = path.join(OUT, 'phone-bots.png');
+  fs.rmSync(out, {force: true});
+  await settle('#bots', [390, 844], WORLD, out);
+  ok(fs.existsSync(out), `no screenshot ${out}`);
+  // bots, players and plans in the world; the first poll taps the plan's chip, so the camera flies to the house
+  const PLAN = `${WORLD} && (v => { const b = document.querySelector("#planChips button"); if (b && !self.flew) { self.flew = 1; b.click(); return false; }`
+    + ` return !!b && +v.dataset.bots === 2 && +v.dataset.plans === 1; })(document.getElementById("view"))`;
+  for (const [file, size] of [['phone-plan.png', [390, 844]], ['desktop-plan.png', [1280, 800]]]) {
+    d = await settle('#plan', size, PLAN, path.join(OUT, file));
+    const text = (re) => (d.match(re)?.[1] || '').replace(/<[^>]+>/g, ' ');
+    const chips = text(/id="planChips"[^>]*>([\s\S]*?)<\/section>/), p = Number(/(\d+) %/.exec(chips)?.[1]);
+    ok(chips.includes('haus') && p >= 1 && p <= 99 && !chips.includes('?'), `/#plan ${file}: #planChips "${chips.trim()}", want haus and a percent 1..99 without "?"`);
+    const view = d.match(/<canvas id="view"[^>]*>/)?.[0] || '';
+    ok(/data-bots="2"/.test(view) && /data-plans="1"/.test(view), `/#plan ${file}: ${view}, want data-bots="2" and data-plans="1"`);
+    const tags = text(/id="tags"[^>]*>([\s\S]*?)<\/div><span/);
+    ok(tags.includes('bot8') && tags.includes('bot9'), `/#plan ${file}: #tags "${tags.trim()}", want bot8 and bot9`);
   }
 }
 
-module.exports = {chrome, get, ok, until, BASE, OUT};
+module.exports = {chrome, get, ok, until, settle, BASE, OUT};
 
 if (require.main === module) {
   (async () => {
