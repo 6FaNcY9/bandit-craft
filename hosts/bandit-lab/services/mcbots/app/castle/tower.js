@@ -39,7 +39,8 @@ function tower() {
   each((dx, dz, x, z) => {
     if (isWall(dx, dz)) {
       for (let y = 103; y <= 112; y++) put(x, y, z, 'cobblestone');
-      for (let y = 113; y <= 151; y++) put(x, y, z, isOuter(dx, dz) ? outerCell(x, y, z) : 'deepslate_bricks');
+      // inner face stone bricks (owner 2026-11-17): saves ~1700 deepslate, the outside stays dark
+      for (let y = 113; y <= 151; y++) put(x, y, z, isOuter(dx, dz) ? outerCell(x, y, z) : 'stone_bricks');
       put(x, 152, z, 'polished_deepslate');
       if (isOuter(dx, dz)) {
         put(x, 153, z, 'stone_bricks');

@@ -121,6 +121,7 @@ assert.ok(cmds.includes('setblock -317 105 -21 minecraft:crafting_table'));
   assert.equal(fires.length, 4);
   assert.ok(fires.every((b) => b.y === 153 && at.get(key(b.x, 152, b.z))?.name === 'polished_deepslate'), 'campfires on the deck');
   assert.equal(cells.filter((b) => b.y === 130 && wall(b.x, b.z)).length, 92);
+  assert.equal(at.get(key(-275, 130, 21))?.name, 'stone_bricks', 'inner face');
   const top = cells.reduce((a, b) => (b.y > a.y ? b : a));
   assert.deepEqual([top.x, top.y, top.z, top.name], [-282, 167, 21, 'purple_stained_glass']);
   // supported: every cell reaches the footing through face neighbours
