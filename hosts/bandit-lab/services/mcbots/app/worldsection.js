@@ -1,7 +1,8 @@
 'use strict';
 // Codec for the world model: one 16x16x16 section as a palette blob, and batch frames of section records.
 // Byte for byte the same layout as the Java encoder (SectionCodec); the formats are in the world-model plan.
-const crypto = require('node:crypto');
+const crypto = typeof require === 'function' ? require('node:crypto') : null; // the browser's copy only decodes
+const utf8 = new TextDecoder('utf-8', {ignoreBOM: true});
 
 const SY_MIN = -4, SY_MAX = 19;
 const CELLS = 4096;
@@ -32,15 +33,16 @@ function encodeSection(palette, idx) {
 
 function decodeSection(buf) {
   if (buf.length < 4 || buf[0] !== 1) throw bad('section');
-  const bits = buf[1], n = buf.readUInt16LE(2);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const bits = buf[1], n = dv.getUint16(2, true);
   if (n < 1 || n > CELLS || bits !== bitsFor(n)) throw bad('section');
   const palette = [];
   let o = 4;
   for (let i = 0; i < n; i++) {
     if (o + 2 > buf.length) throw bad('section');
-    const len = buf.readUInt16LE(o); o += 2;
+    const len = dv.getUint16(o, true); o += 2;
     if (o + len > buf.length) throw bad('section');
-    palette.push(buf.toString('utf8', o, o + len));
+    palette.push(utf8.decode(buf.subarray(o, o + len)));
     o += len;
   }
   if (buf.length !== o + (CELLS * bits >> 3)) throw bad('section');
@@ -72,16 +74,17 @@ function encodeBatch({boot, batch, records}) {
 
 function decodeBatch(buf) {
   if (buf.length < 15 || buf[0] !== 1) throw bad('batch');
-  const boot = buf.readBigUInt64LE(1), batch = buf.readUInt32LE(9), count = buf.readUInt16LE(13);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const boot = dv.getBigUint64(1, true), batch = dv.getUint32(9, true), count = dv.getUint16(13, true);
   const records = [];
   let o = 15;
   for (let i = 0; i < count; i++) {
     if (o + 10 > buf.length || buf[o] > 2) throw bad('batch');
-    const rec = {kind: buf[o], cx: buf.readInt32LE(o + 1), sy: buf.readInt8(o + 5), cz: buf.readInt32LE(o + 6)};
+    const rec = {kind: buf[o], cx: dv.getInt32(o + 1, true), sy: dv.getInt8(o + 5), cz: dv.getInt32(o + 6, true)};
     o += 10;
     if (rec.kind === 0) {
       if (o + 12 > buf.length) throw bad('batch');
-      const len = buf.readUInt32LE(o + 8);
+      const len = dv.getUint32(o + 8, true);
       if (o + 12 + len > buf.length) throw bad('batch');
       rec.hash = buf.subarray(o, o + 8); rec.blob = buf.subarray(o + 12, o + 12 + len);
       o += 12 + len;
@@ -92,4 +95,5 @@ function decodeBatch(buf) {
   return {boot, batch, records};
 }
 
-module.exports = {encodeSection, decodeSection, sectionHash, encodeBatch, decodeBatch, cellIndex, nameOf, isAir, SY_MIN, SY_MAX};
+const api = {encodeSection, decodeSection, sectionHash, encodeBatch, decodeBatch, cellIndex, nameOf, isAir, SY_MIN, SY_MAX};
+if (typeof module === 'object' && module.exports) module.exports = api; else (self.OV = self.OV || {}).section = api;

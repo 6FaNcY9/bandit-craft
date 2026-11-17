@@ -158,6 +158,16 @@ const {BotRunner} = require('../bots');
     assert.deepStrictEqual([off.status, await off.json(), off.headers.get('cache-control'), off.headers.get('x-content-type-options')], [503, {error: 'world model is off'}, 'no-store', 'nosniff']);
     assert.strictEqual((await fetch(wstats, {method: 'POST', headers: {'tailscale-user-login': 'a@github', 'content-type': 'application/json', origin: `http://127.0.0.1:${port}`}, body: '{}'})).status, 404);
     assert.strictEqual((await (await fetch(`http://127.0.0.1:${port}/api/state`, {headers: {'tailscale-user-login': 'a@github'}})).json()).worldSeq, 0);
+    // the page's scripts: the codec and public/oneview/*.js, behind the login, with a policy of their own
+    const H = {'tailscale-user-login': 'a@github'};
+    const ov = (f, h = H) => fetch(`http://127.0.0.1:${port}/oneview/${f}`, {headers: h});
+    assert.strictEqual((await ov('blocks.js', {})).status, 403);
+    const js = await ov('worldsection.js');
+    assert.deepStrictEqual([js.status, js.headers.get('content-type'), js.headers.get('content-security-policy'), js.headers.get('cache-control')],
+      [200, 'text/javascript; charset=utf-8', "default-src 'none'; script-src 'self'; connect-src 'self'", 'no-store']);
+    assert.ok((await js.text()).includes('decodeBatch'));
+    assert.strictEqual((await ov('blocks.js')).status, 200);
+    for (const bad of ['nope.js', '..%2Fserver.js', 'blocks.js.map', '']) assert.strictEqual((await ov(bad)).status, 404, bad);
     assert.ok('loopDelayMs' in j, 'loop delay in /api/debug');
     // the hub inside the real server: a worker joins, "all" reaches it, and an absent worker never blocks a Stop
     const wport = port + 1 < 65535 ? port + 1 : port - 1;

@@ -159,6 +159,9 @@ if (ARCHIVE) setInterval(() => { try { archive.append(path.join(ARCHIVE, 'states
 const page = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 const legacy = fs.readFileSync(path.join(__dirname, 'public', 'legacy.html')); // the old page, under "Mehr"
 const three = fs.readFileSync(path.join(__dirname, 'public', 'vendor', 'three.min.js')); // three.js r159 (MIT), the last release with a classic-script build
+// The one-view page's scripts, read once: the hub's codec (the same file the tests run) plus public/oneview/*.js, served at /oneview/<name>.js.
+const oneview = new Map([['worldsection.js', fs.readFileSync(path.join(__dirname, 'worldsection.js'))], ...fs.readdirSync(path.join(__dirname, 'public', 'oneview')).filter((f) => /^[\w-]+\.js$/.test(f)).map((f) => [f, fs.readFileSync(path.join(__dirname, 'public', 'oneview', f))])]);
+const ONEVIEW_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'"; // a worker takes its policy from its own script
 // The page is one file with inline script and style: allow exactly those two
 // bodies by hash, plus this server's own files ('self': the vendored three.js of the 3D map);
 // no CDN, no eval, no other origin.
@@ -670,6 +673,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'});
     return res.end(three);
   }
+  const ovFile = req.method === 'GET' && url.pathname.startsWith('/oneview/') && oneview.get(url.pathname.slice(9));
+  if (ovFile) return send(200, 'text/javascript; charset=utf-8', ovFile, ONEVIEW_CSP);
   // The 3D map's presets (the zones); no secrets.
   if (req.method === 'GET' && url.pathname === '/api/areas') {
     const zones = places.list.filter((p) => p.box);

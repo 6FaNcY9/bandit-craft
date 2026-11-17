@@ -48,3 +48,18 @@ for (const r of fx.records.slice(0, 3)) {           // both encoders agree byte 
   const d = s.decodeSection(r.blob);
   assert.ok(s.encodeSection(d.palette, d.idx).equals(r.blob)); assert.ok(s.sectionHash(r.blob).equals(r.hash));
 }
+// the browser's copy is this same file: no require, no Buffer on the decode path
+const vm = require('node:vm'), fs = require('node:fs');
+const ctx = vm.createContext({TextDecoder}); ctx.self = ctx;
+vm.runInContext(fs.readFileSync(require.resolve('../worldsection'), 'utf8'), ctx);
+assert.strictEqual(typeof ctx.Buffer, 'undefined');
+const bin = new Uint8Array(fs.readFileSync(`${__dirname}/fixtures/world-sections.bin`));
+const web = ctx.OV.section.decodeBatch(bin), node = s.decodeBatch(Buffer.from(bin));
+assert.strictEqual(web.records.length, 4);
+web.records.forEach((r, i) => {
+  const n = node.records[i];
+  assert.deepStrictEqual([r.kind, r.cx, r.sy, r.cz], [n.kind, n.cx, n.sy, n.cz]);
+  if (r.kind !== 0) return;
+  const w = ctx.OV.section.decodeSection(r.blob), d = s.decodeSection(n.blob);
+  assert.deepStrictEqual([[...w.palette], w.idx && Array.from(w.idx)], [d.palette, d.idx && Array.from(d.idx)]);
+});
