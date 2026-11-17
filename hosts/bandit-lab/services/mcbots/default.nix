@@ -170,6 +170,8 @@ in {
             INGAME_VIEWERS = "fancy8869=*;MidariBread=MisaBot,EM_Trader";
             # The BotUi plugin through the mc-bridge-botui forwarder; its bearer token is RCON_PASSWORD (seed.env).
             BOTUI_URL = "http://${bridgeGw}:8101";
+            # Block model of the main world (app/worldmodel.js): "x,z,radius" in blocks; base and castle first.
+            WORLD_AREA = "-270,-20,320";
             # Rescue of stranded bots (app/rescue.js) over the sandbox's own console; password in seed.env.
             SANDBOX_RCON_HOST = bridgeGw;
             SANDBOX_RCON_PORT = "25576";
