@@ -31,12 +31,13 @@ const assert = require('node:assert');
     assert.strictEqual(c2.size, 0);
     assert.deepStrictEqual(P.due(c2, {blockAt: (x, y, z) => ({name: w2.get(`${x},${y},${z}`)})}), [], 'the replacement is not dug');
   }
-  { // the runner reports what stays standing, once
-    const say = [], fake = {pillars: new Map(), emit: (k, x) => say.push(x)};
+  { // the runner reports what stays standing once, and keeps the cells (stray) to dig at a later job end
+    const say = [], fake = {pillars: new Map(), stray: new Map(), emit: (k, x) => say.push(x)};
     P.record(fake.pillars, 3, 64, 4, 'dirt');
     require('../bots').BotRunner.prototype.reportScaffold.call(fake);
     require('../bots').BotRunner.prototype.reportScaffold.call(fake);
     assert.deepStrictEqual(say, ['scaffold left standing: 1 blocks: 3 64 4 dirt']);
+    assert.deepStrictEqual([...fake.stray.keys()], ['3,64,4'], 'the cell is kept for a later cleanup, not thrown away');
   }
   { // unloaded cells are kept, take() hands them over and empties the map, the map is capped
     const c3 = new Map();
@@ -58,6 +59,16 @@ const assert = require('node:assert');
   assert.ok(P.openAbove(sky({y: 72, name: 'oak_leaves'}), 0, 66, 0));
   assert.ok(!P.openAbove(sky({y: 80, name: 'stone'}), 0, 66, 0));
   assert.ok(!P.openAbove(() => null, 0, 66, 0));
+  { // stray cleanup (clearStray): due only for floating cells (open to the sky), a roofed one stays
+    const s = new Map();
+    P.record(s, 5, 70, 5, 'dirt'); // floating: air above
+    P.record(s, 6, 70, 5, 'dirt'); // under a stone roof at y 72
+    const at = (x, y, z) => (x === 6 && y > 70 && z === 5 ? {name: 'stone', boundingBox: 'block'}
+      : (x === 5 || x === 6) && y === 70 && z === 5 ? {name: 'dirt', boundingBox: 'block'}
+      : {name: 'air', boundingBox: 'empty'});
+    const open = (x, y, z) => P.openAbove(at, x, y, z);
+    assert.deepStrictEqual(P.due(s, {blockAt: at, open}).map((c) => `${c.x},${c.y},${c.z}`), ['5,70,5'], 'only the floating stray block is due, the roofed one stays');
+  }
 }
 { // server admin (admin.js): RCON packets, validation, restart, no agent access (2026-10-10)
   const AD = require('../admin');

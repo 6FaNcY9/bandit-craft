@@ -425,6 +425,7 @@ class BotRunner {
     this.corners = new misa.Corners(); // per player: the "ecke" orders of the building words
     this.supplyChest = supplyChest;
     this.pillars = new Map(); // blocks placed to climb to logs (pillars.js), dug back down by unpillar()
+    this.stray = new Map(); // scaffold a death or disconnect left standing: dug by clearStray when a later job ends near it
     // VeloAuth account password, derived per bot from a shared seed.
     this.password = loginSeed ? require('node:crypto').createHash('sha256').update(`${loginSeed}:${name}`).digest('hex').slice(0, 32) : null;
     this.port = port;
@@ -476,6 +477,7 @@ class BotRunner {
   // Scaffold the bot could not dig down before it lost the world (death, dimension change, disconnect): say where it stands.
   reportScaffold() {
     const left = pillars.take(this.pillars);
+    for (const c of left) pillars.record(this.stray, c.x, c.y, c.z, c.name); // keep them, don't abandon: a later job end near here digs them (clearStray)
     if (left.length) this.emit('info', `scaffold left standing: ${left.length} blocks: ${left.slice(0, 20).map((c) => `${c.x} ${c.y} ${c.z} ${c.name}`).join(', ')}`);
   }
 
@@ -793,7 +795,7 @@ class BotRunner {
       this.log(this.name, this.lastError);
       if (/too fast|throttl/i.test(this.lastError)) this.backoff = Math.max(this.backoff, 30000);
     });
-    bot.on('blockUpdate', (o, n) => { if (this.pillars.size && n) pillars.changed(this.pillars, n.position.x, n.position.y, n.position.z, o?.name, n.name); });
+    bot.on('blockUpdate', (o, n) => { if (n) { if (this.pillars.size) pillars.changed(this.pillars, n.position.x, n.position.y, n.position.z, o?.name, n.name); if (this.stray.size) pillars.changed(this.stray, n.position.x, n.position.y, n.position.z, o?.name, n.name); } }); // a player's change drops the cell from both
     bot.on('respawn', () => this.reportScaffold()); // another dimension or a new life: the old cells are not ours to dig any more
     bot.once('end', (why) => {
       this.reportScaffold();
@@ -1022,6 +1024,8 @@ class BotRunner {
     clearInterval(ticker);
     // Pillars the job left in the open come down before the next one (its own, unchanged ones only; pillars.js).
     if (!job.cancelled && this.online) await unpillar(this, job).catch(() => {});
+    // ... and a few of the floating leftovers an earlier death left within reach, so the world tidies as the bots work.
+    if (!job.cancelled && this.online) await clearStray(this, job).catch(() => {});
     const took = Math.round((Date.now() - job.startedAt) / 1000);
     const count = job.type === 'trade' && job.progress ? `, ${job.progress}` : ''; // chat lines of a trade carry its emeralds
     if (job.interrupted) this.emit('info', `interrupted: ${jobLabel(job)} (it continues after the respawn/reconnect)`);
@@ -2040,6 +2044,29 @@ async function unpillar(r, job, target = null) {
     } catch (e) {
       guard(job);
       r.emit('info', `pillar at ${c.x} ${c.y} ${c.z} left standing: ${e.message.slice(0, 60)}`);
+    }
+  }
+}
+
+const STRAY_REACH = 40; // blocks from the bot: a dead life's leftover scaffold is dug when a later job ends this close, never a trek across the world
+const STRAY_PER_JOB = 16; // at most this many per job end, so a finish stays quick; a tall column comes down top-down over the next few finishes
+
+// Scaffold a past death or disconnect left standing (r.stray, from reportScaffold): at a job's end, dig the floating
+// leftovers within reach, tallest first, so the dirt pillars around where a bot works come down over time. Only the
+// bot's own recorded block, still open to the sky, outside protected areas; a roofed or buried cell stays.
+async function clearStray(r, job) {
+  if (!r.stray?.size || !r.bot?.entity) return;
+  const feet = r.bot.entity.position;
+  const blockAt = (x, y, z) => r.bot.blockAt(new Vec3(x, y, z));
+  const open = (x, y, z) => pillars.openAbove(blockAt, x, y, z);
+  const cells = pillars.due(r.stray, {blockAt, protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), feet, within: STRAY_REACH, open}).slice(0, STRAY_PER_JOB);
+  for (const c of cells) {
+    guard(job);
+    r.stray.delete(pillars.key(c.x, c.y, c.z));
+    try {
+      await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);
+    } catch (e) {
+      guard(job); // a stop is not a failure; the rest waits for a later job end
     }
   }
 }
