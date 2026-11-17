@@ -61,7 +61,7 @@ function makeModel({store, fetch, url, token, area, now = Date.now, lru = 2048, 
       }
     });
     if (frame.boot !== boot) { boot = frame.boot; ack = 0; } // the plugin restarted: its batch numbers start over
-    if (frame.records.length) ack = frame.batch;
+    ack = frame.batch; // every stored frame is acked, an empty one too: if it has a batch id of its own, the next one must not wait behind it
     lastPull = now();
     if (changed) lastChange = lastPull;
     return changed;

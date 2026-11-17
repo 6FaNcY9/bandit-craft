@@ -88,7 +88,7 @@ async function inline() {
     assert.strictEqual((await m.handle('constructor', {})).status, 404);
     assert.strictEqual((await m.handle('height', undefined)).status, 400);
     const st = m.stats();
-    assert.deepStrictEqual([st.boot, st.ack, st.sections, st.ungenerated, st.seq, st.badRecords], ['2', 1, 24, 1, 24, 0]);
+    assert.deepStrictEqual([st.boot, st.ack, st.sections, st.ungenerated, st.seq, st.badRecords], ['2', 2, 24, 1, 24, 0]);
     JSON.stringify(st);                                                                       // plain JSON: no bigint left in it
   } finally { store.close(); }
 }
@@ -115,11 +115,11 @@ async function pulls() {
     assert.strictEqual(await m.pullOnce(), 0);                                                // empty frame, batch 2
     assert.deepStrictEqual(urls.map((u) => u.match(/ack=(\d+)/)[1]), ['0', '0', '0', '0', '1', '1']);
 
-    // an empty frame of a new boot sends ack back to 0; an empty frame of the same boot leaves it
-    ({urls, fetch: f} = feed([frame(1n, 5, [{kind: 1, cx: 9, sy: 0, cz: 9}]), frame(1n, 0, []), frame(2n, 0, []), frame(2n, 0, [])]));
+    // every decoded frame is acked, an empty one too (the plugin may give it a batch id of its own); a new boot starts over first
+    ({urls, fetch: f} = feed([frame(1n, 3, []), frame(1n, 5, [{kind: 1, cx: 9, sy: 0, cz: 9}]), frame(1n, 6, []), frame(2n, 0, []), frame(2n, 2, [])]));
     m = makeModel({store, fetch: f, url: 'http://p', token: 't', area});
-    for (let i = 0; i < 4; i++) await m.pullOnce();
-    assert.deepStrictEqual(urls.map((u) => u.match(/ack=(\d+)/)[1]), ['0', '5', '5', '0']);
+    for (let i = 0; i < 5; i++) await m.pullOnce();
+    assert.deepStrictEqual(urls.map((u) => u.match(/ack=(\d+)/)[1]), ['0', '3', '5', '6', '0']);
 
     // all records of a batch go through one transaction; a failure inside rolls the batch back and does not ack
     let txs = 0, puts = 0;
