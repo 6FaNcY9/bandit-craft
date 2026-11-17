@@ -253,6 +253,12 @@ assert.equal(deathCause('bot1', 'bot2 was slain by Zombie'), null);
 assert.equal(deathCause('bot1', '<bot1> fell from a high place'), null);
 assert.equal(deathCause('bot1', 'bot1 joined the game'), null);
 assert.equal(deathCause('bot1', 'bot10 fell from a high place'), null);
+// The team prefix comes first on the main server: three tower deaths read "no mob" with no cause (2026-11-17).
+assert.equal(deathCause('bot19', '[Arbeiter·Holz+Kohle] bot19 fell from a high place'), 'fell from a high place');
+assert.equal(deathCause('bot1', '[Helfer] bot1 hit the ground too hard'), 'hit the ground too hard');
+assert.equal(deathCause('bot1', '[Helfer] bot10 fell from a high place'), null);
+assert.equal(deathCause('bot1', '<vino> bot1 fell from a high place'), null);
+assert.equal(deathCause('bot1', '[Helfer] bot2 was slain by bot1'), null);
 {
   // A fight during a dig ends the dig before the weapon goes into the hand (wrong-tool digs, 2026-10-10).
   const {Combat} = require('../combat');

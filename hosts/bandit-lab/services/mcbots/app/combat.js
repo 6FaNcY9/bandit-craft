@@ -26,11 +26,11 @@ const hasShield = (bot) => bot.inventory?.slots?.[bot.getEquipmentDestSlot?.('of
 
 // Vanilla's death messages (en_us): "bot2 was doomed to fall by Creeper" went unnamed (main server 2026-10-17).
 const DEATH_PHRASE = /^(was (slain|shot|speared|killed|blown up|fireballed|pummeled|impaled|skewered|stung|squashed|squished|poked|pricked|doomed to fall|knocked into the void|burned|struck by lightning|frozen|obliterated|roasted|stabbed)|fell|hit the ground|drowned|died|burned|went (up in flames|off with a bang)|tried to swim in lava|discovered the floor was lava|walked into|blew up|suffocated|starved|froze|withered|experienced kinetic energy|didn't want to live|left the confines of this world|removed an elytra)/;
-// "bot1 fell from a high place" -> "fell from a high place"; null for chat and other players.
+// "bot1 fell from a high place" -> "fell from a high place"; null for chat and other players. A team prefix may come
+// first ("[Arbeiter·Holz+Kohle] bot19 fell from a high place", main server 2026-11-17); chat ("<vino> …") never counts.
 const deathCause = (name, msg) => {
-  if (!msg.startsWith(`${name} `)) return null;
-  const rest = msg.slice(name.length + 1);
-  return DEATH_PHRASE.test(rest) ? rest : null;
+  const m = msg.match(new RegExp(`^(?:[^<][^<]*? )?${name.replace(/\W/g, '\\$&')} (.+)$`));
+  return m && DEATH_PHRASE.test(m[1]) ? m[1] : null;
 };
 // A hit counts from up to 6 blocks, eye to hitbox (the server's interaction range 3 plus its allowance for lag 3): bot50
 // hit a still creeper from 6.0 blocks, not from 6.5 (sandbox 2026-10-17). A player swings at 3; a bot strikes from 5,
