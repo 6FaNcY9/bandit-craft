@@ -389,6 +389,19 @@ assert.ok(wm.experience.get('mine:stone').ok + wm.experience.get('mine:stone').f
   cap.learn('mine:new', {ok: true});
   assert.deepStrictEqual([cap.experience.size, cap.learned('chest:0,0,0:stone') !== null, cap.learned('chest:1,0,0:stone'), cap.learned('mine:new') !== null], [2000, true, null, true]);
 }
+{ // a chest no bot can reach self-evicts from the storage index after CHEST_EVICT_FAILS straight failures; a success resets it
+  const ev = new W.WorldModel({now: () => clock});
+  ev.noteChest('-273,65,-155', {iron_ingot: 5});
+  for (let i = 0; i < 4; i++) ev.learn('chest:-273,65,-155:iron_ingot', {ok: false});
+  assert.ok(ev.chests.has('-273,65,-155')); // four failures: still indexed
+  ev.learn('chest:-273,65,-155:iron_ingot', {ok: false});
+  assert.ok(!ev.chests.has('-273,65,-155')); // fifth straight failure: gone
+  ev.noteChest('1,2,3', {stone: 1});
+  for (let i = 0; i < 4; i++) ev.learn('chest:1,2,3:stone', {ok: false});
+  ev.learn('chest:1,2,3:stone', {ok: true}); // a success resets the streak
+  for (let i = 0; i < 4; i++) ev.learn('chest:1,2,3:stone', {ok: false});
+  assert.ok(ev.chests.has('1,2,3'));
+}
 wm.setPlayers(W.parsePlayers(bm, 'the_nether'));
 assert.strictEqual(wm.player('steve').dim, 'the_nether');
 wm.postNeed('bot2', 'hopper', 9, {x: -356, y: 72, z: -191}, 'waiting for material');

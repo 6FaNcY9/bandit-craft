@@ -62,6 +62,9 @@ const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-
 // three bots 90 s every 5 min all night (main server 2026-10-20). The wait is shared (experience key reach:), kept 4 h.
 const backoff = (n) => Math.min(7200000, 300000 * 2 ** (n - 1));
 const REACH_KEEP_MS = 4 * 3600000;
+// A chest no bot can walk to after this many straight failed reaches drops out of the storage index (a walled-in
+// phantom chest at -273 65 -155 kept drawing bots on the lab, 2026-11-17); any success resets the streak.
+const CHEST_EVICT_FAILS = 5;
 const validExperience = (v) => !!v && [v.ok, v.fail, v.streak, v.secs, v.units, v.lastFail, v.t].every((n) => Number.isFinite(n) && n >= 0);
 
 class WorldModel {
@@ -117,6 +120,8 @@ class WorldModel {
     r.t = this.now();
     if (r.ok + r.fail > 40) { r.ok = Math.floor(r.ok / 2); r.fail = Math.floor(r.fail / 2); r.secs = Math.floor(r.secs / 2); r.units = Math.floor(r.units / 2); }
     this.keepExperience(key, r);
+    // Self-evict a chest that never opens: its index entry (and so chests.json on the next write) stops offering it.
+    if (key.startsWith('chest:') && r.streak >= CHEST_EVICT_FAILS) this.chests.delete(key.slice(6).split(':')[0]);
     if (this.experienceFile && !this.experienceTimer) {
       this.experienceTimer = setTimeout(() => {
         this.experienceTimer = null;
