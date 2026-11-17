@@ -7,6 +7,7 @@ const MODULES = {
   barracks: ['castle-kaserne1', () => require('./armoury.js').barracks()], // origin -333 104 -30
 };
 for (const {id} of require('./shell.js').MODULES) MODULES[`shell-${id}`] = [`castle-k1-${id}`, () => require('./shell.js').shellModule(id)];
+for (const {id} of require('./tower.js').MODULES) MODULES[`tower-${id}`] = [`castle-a1-${id}`, () => require('./tower.js').towerModule(id)];
 
 const [what, out] = process.argv.slice(2);
 if (!MODULES[what] || !out) { console.error(`unknown module (one of: ${Object.keys(MODULES).join(', ')}) or no output path`); process.exit(1); }
