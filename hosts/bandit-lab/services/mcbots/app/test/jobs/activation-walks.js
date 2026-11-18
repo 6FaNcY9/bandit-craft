@@ -102,4 +102,36 @@ module.exports = async () => {
     blocks.set('11,61,11', 'stone'); blocks.set('11,58,11', 'stone');
     assert.deepStrictEqual([mv.safeToBreak(bot.blockAt(new Vec3(11, 61, 11))), mv.safeToBreak(bot.blockAt(new Vec3(11, 58, 11)))], [false, true], 'the roof above the box no, the fill inside yes');
   }
+  { // a job end's walk to an old dirt leftover digs natural ground only, and a built block dug is reported: finished tower
+    // walls went missing while bot20 fetched its old dirt (main server 2026-11-18)
+    const {guardDigs, BotRunner, JOBS, TIDY_DIG} = require('../../bots');
+    const P = require('../../pillars');
+    const md = require('minecraft-data')('26.1');
+    const {Vec3} = require('vec3');
+    const blocks = new Map([['5,66,5', 'dirt'], ['0,66,0', 'stone_bricks']]);
+    const walks = [], said = [];
+    let runner = null;
+    const bot = {
+      blockAt: (p) => { const n = blocks.get(`${p.x},${p.y},${p.z}`); return n ? {name: n, type: md.blocksByName[n].id, stateId: 1, position: p, boundingBox: 'block', getProperties: () => ({})} : {name: 'air', type: 0, position: p, boundingBox: 'empty', getProperties: () => ({})}; },
+      entity: {position: new Vec3(0, 66, 3), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, registry: md,
+      inventory: {items: () => [{type: md.itemsByName.stone_pickaxe.id, name: 'stone_pickaxe'}], emptySlotCount: () => 30, slots: []},
+      pathfinder: {goto: async () => { walks.push(String(runner.digOnly)); throw new Error('No path'); }, stop() {}, setGoal() {}, isMining: () => false}, tool: {equipForBlock: async () => {}},
+      dig: async () => {}, equip: async () => {}, placeBlock: async () => {}, stopDigging() {}, on() {}, getEquipmentDestSlot: () => 5,
+    };
+    runner = Object.assign(Object.create(BotRunner.prototype), {name: 'bot5', chatJobs: new Set(), bot, world: {hostilesNear: () => [], claim: async () => true, release() {}}, emit: (k, t) => said.push(t), log() {}, protectedAreas: [], supplyChest: null, combat: {epoch: 0}, current: null, online: true, queue: [], pillars: new Map(), stray: new Map()});
+    guardDigs(runner, bot);
+    P.record(runner.stray, 5, 66, 5, 'dirt');
+    const real = JOBS.schematic;
+    JOBS.schematic = async () => {};
+    runner.queue.push({id: 1, type: 'schematic', args: {}, status: 'queued'});
+    await runner.pump();
+    JOBS.schematic = real;
+    assert.ok(walks.length > 0, 'the job end walked to the leftover');
+    assert.ok(walks.every((w) => w === String(TIDY_DIG)), `every such walk digs natural ground only (${[...new Set(walks)]})`);
+    assert.strictEqual(runner.digOnly, null, 'released when the job is over');
+    assert.ok(TIDY_DIG.test('oak_leaves') && TIDY_DIG.test('dirt') && !TIDY_DIG.test('stone_bricks') && !TIDY_DIG.test('spruce_stairs'));
+    await bot.dig(bot.blockAt(new Vec3(0, 66, 0)), true);
+    await bot.dig(bot.blockAt(new Vec3(5, 66, 5)), true);
+    assert.deepStrictEqual(said.filter((t) => t.startsWith('dug ')), ['dug stone_bricks at 0 66 0 (aimed: no job)'], 'a built block dug is reported, dirt is not');
+  }
 };

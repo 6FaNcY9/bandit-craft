@@ -71,6 +71,11 @@ const RESUME_WINDOW_MS = 1800000; // saved jobs wait this long after a hub start
 // Kept on deposit: what a bot needs to craft a replacement tool or light a mine.
 // Natural ground an excavation may remove; never placed blocks (cobblestone is a wall).
 const {NATURAL, DIRS, BORDER_K} = require('./road');
+// The walks of a job end's tidy-up (clearStray, unpillar) dig natural ground and leaves only. Not NATURAL itself:
+// goNear lifts that limit to climb out of a hole.
+const TIDY_DIG = new RegExp(`${NATURAL.source}|^[a-z_]*leaves$`);
+// Built blocks: a dig of one is reported (guardDigs), so the step that dug a finished wall shows in the events.
+const BUILT = /^polished_|(bricks|_planks|_stairs|_slab|_bars|_tiles|_wall|_fence|_pane|glass|lantern|campfire|beacon)$/;
 const roadJob = require('./roadjob');
 const {makeRide} = require('./cartride');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
@@ -1050,6 +1055,9 @@ class BotRunner {
       }
     }
     clearInterval(ticker);
+    // With the leftovers remembered across restarts (pillars.js restore) these walks head for old dirt round a tower
+    // and could tunnel its finished walls on the way (main server 2026-11-18): natural ground only, the rest waits.
+    this.digOnly = TIDY_DIG;
     // A few of the floating leftovers an earlier death or failed dig left within reach, so the world tidies as the bots
     // work; first, so a pillar this job end fails to dig waits for a later one instead of a second try from the same spot.
     if (!job.cancelled && this.online) await clearStray(this, job).catch(() => {});
@@ -1869,7 +1877,11 @@ function guardDigs(runner, bot) {
   const nativeDig = withLook('Digging', dig, digRefusal);
   bot.dig = (block, ...rest) => {
     const why = digRefusal(block);
-    return why ? Promise.reject(new Error(why)) : nativeDig(block, ...rest);
+    if (why) return Promise.reject(new Error(why));
+    const p = block?.position;
+    // Walls of a finished tower floor went missing during builds, and nothing said which step dug them (2026-11-18).
+    if (p && BUILT.test(block.name)) runner.emit('info', `dug ${block.name} at ${p.x} ${p.y} ${p.z} (${bot.pathfinder?.isMining?.() ? 'on a walk' : 'aimed'}: ${String(runner.current?.t?.doing || runner.current?.type || 'no job').slice(0, 80)})`);
+    return nativeDig(block, ...rest);
   };
   // Block and entity activation (bone meal, a bed, shears) look first too; only Stop matters there (R5-1).
   // mineflayer's openBlock (openContainer) calls activateBlock without awaiting it: a refusal there was an
@@ -4609,4 +4621,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, partnerOf, depositList, chestAway};
