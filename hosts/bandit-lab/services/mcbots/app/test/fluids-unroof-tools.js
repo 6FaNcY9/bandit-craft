@@ -226,6 +226,27 @@
     assert.equal(digSpotBack({...dug, y: 20}, band, base), null, 'out of the band: dig down as before');
     assert.equal(digSpotBack({...dug, x: base.x + 200}, band, base), null, 'too far: dig down as before');
     assert.equal(digSpotBack(undefined, band, base), null, 'nothing dug yet');
+    // Mined out down in the band: the nearest spot any bot dug (world.digSpots) before a blind far hop (bot19 hopped 134
+    // blocks from under the base to -267 3 -67, twice on 2026-11-18).
+    const {deepSpot} = require('../bots');
+    const below = {x: -265, y: -6, z: -160}, good = {x: -267, y: 3, z: -67};
+    assert.deepStrictEqual(deepSpot([{x: 500, y: -20, z: 500}, good], band, below), good, 'the nearest one, past two hops is too far');
+    assert.equal(deepSpot([{x: -260, y: -5, z: -130}], band, below), null, 'within 48 the search saw it empty');
+    assert.equal(deepSpot([{...good, y: 30}], band, below), null, 'out of the band');
+    assert.equal(deepSpot([], band, below), null, 'none learned yet');
+    // A dug deep block is shared once per 16 blocks of a job; a shared spot that had nothing free is marked.
+    const {noteDigSpot, dropDigSpot} = require('../bots');
+    const {WorldModel} = require('../world');
+    const r = {world: new WorldModel()}, job = {t: {}};
+    noteDigSpot(r, job, 'deepslate', {x: -267, y: 3, z: -67});
+    noteDigSpot(r, job, 'deepslate', {x: -260, y: 3, z: -60}); // 10 away: not again
+    noteDigSpot(r, job, 'deepslate', {x: -250, y: 3, z: -60});
+    assert.deepStrictEqual(r.world.digSpots('deepslate'), [{x: -267, y: 3, z: -67}, {x: -250, y: 3, z: -60}]);
+    job.t.digSpot = 'dig:deepslate:-250,3,-60';
+    dropDigSpot(r, job);
+    assert.deepStrictEqual(r.world.digSpots('deepslate'), [{x: -267, y: 3, z: -67}], 'nothing free there: left out');
+    assert.equal(job.t.digSpot, null);
+    dropDigSpot({world: null}, {t: {}}); // nothing walked to, no world: nothing to do
   }
   const {shiftLeash} = require('../bots');
   // T04: the walk aims at the nearest free blocks, never at skipped ones, and at most k of them

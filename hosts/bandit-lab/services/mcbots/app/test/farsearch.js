@@ -120,3 +120,31 @@ first.then(async () => {
   assert.ok(Math.hypot(pos.x - dug.x, pos.z - dug.z) < 4 && pos.y === dug.y, `it walked back to the dug block: ${JSON.stringify(walks)}`);
   assert.ok(!walks.some(([name]) => name === 'GoalY'), 'no new stair');
 }).catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Mined out under the base, deep rock walks to the nearest spot any bot dug it at, not on a blind far hop (bot19 hopped
+// 134 blocks to -267 3 -67, twice on 2026-11-18); nothing free there: the spot is marked, and the far search goes on.
+first.then(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots'), {WorldModel} = require('../world');
+  const home = {x: -271, y: 66, z: -214}, good = {x: -200, y: -10, z: -100}; // off the hop lines: a hop south from here ends near -267 3 -67
+  const world = new WorldModel();
+  world.learn(`dig:deepslate:${good.x},${good.y},${good.z}`, {ok: true});
+  const pos = new Vec3(-265, -6, -160), walks = [], infos = [];
+  const job = {id: 4, type: 'mine', args: {block: 'deepslate', count: 4}, t: {upkeep: true}, collected: 0, progress: ''};
+  let there = false;
+  const bot = {entity: {position: pos}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null,
+    blockAt: () => null, game: {dimension: 'overworld'}, on() {}, once() {},
+    pathfinder: {searchRadius: 100, stop() {}, setGoal() {}, goto: async (g) => {
+      if (there || walks.length > 12) job.cancelled = true; // the walk after the spot (or lost): stop the job
+      walks.push([g.constructor.name, g.x, g.y, g.z]);
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+      there ||= Math.hypot(pos.x - good.x, pos.z - good.z) < 4;
+    }}};
+  const r = {name: 'bot19', emit: (k, t) => infos.push(t), log() {}, bot, supplyChest: home, protectedAreas: [], world, skip: new Map(), acquireFailed: new Map(), conflict() {}, combat: {busy: false, hostilesNear: () => [], fit: () => true}, moves: null};
+  await assert.rejects(JOBS.mine(r, job), /stopped/);
+  assert.ok(there, `it walked to the shared spot: ${JSON.stringify(walks)}`);
+  assert.ok(walks.every(([name]) => name !== 'GoalY'), 'no dig-down');
+  const hop = infos.findIndex((t) => /sucht weiter/.test(t));
+  assert.ok(hop >= 0 && walks.length >= 2, `the far search only after the spot: ${infos.join('|')}`);
+  assert.deepStrictEqual(world.digSpots('deepslate'), [], 'nothing free there: marked');
+}).catch((e) => { console.error(e); process.exitCode = 1; });

@@ -388,6 +388,17 @@ wm.noteExperience('mine:bad key', {ok: 1, fail: 0, streak: 0, secs: 0, units: 0,
 assert.deepStrictEqual([wm.learned('mine:gravel'), wm.learned('mine:bad key')], [null, null]);
 assert.throws(() => wm.learn('chest:1,2.5,3:stone', {ok: true}), /invalid experience/);
 assert.throws(() => wm.learn('craft:stone', {ok: true, secs: Infinity}), /invalid experience/);
+{ // where a bot dug deep rock is shared, for the next one to go there (2026-11-18: bot19 walked to the base, dug down and
+  // far-searched 488 blocks for deepslate it had dug at -264 2 -62 an hour before); a spot whose last visit found none is left out
+  const w = new W.WorldModel();
+  w.learn('dig:deepslate:-264,2,-62', {ok: true});
+  w.learn('dig:deepslate:-100,-20,50', {ok: true});
+  w.learn('dig:tuff:-1,-30,1', {ok: true});
+  w.learn('dig:deepslate:5,-10,5', {ok: true}); w.learn('dig:deepslate:5,-10,5', {ok: false});
+  assert.deepStrictEqual(w.digSpots('deepslate'), [{x: -264, y: 2, z: -62}, {x: -100, y: -20, z: 50}]);
+  assert.deepStrictEqual(w.digSpots('stone'), []);
+  assert.throws(() => w.learn('dig:deepslate:1,2', {ok: true}), /invalid experience/);
+}
 for (let i = 0; i < 39; i++) wm.learn('mine:stone', {ok: false});
 assert.ok(wm.experience.get('mine:stone').ok + wm.experience.get('mine:stone').fail <= 40);
 { // the experience map is capped at 2000 keys, least recently learned first

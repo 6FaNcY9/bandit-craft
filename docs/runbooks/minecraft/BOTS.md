@@ -228,6 +228,8 @@ Spec `docs/superpowers/specs/2026-11-06-bot-control-design.md`, plan `docs/super
 - Far search (`app/farsearch.js`): when nothing free is in view (all protected, under the base, mined out) a non-shift job travels in
   hops of 96 blocks, one heading away from the base and protected boxes, ≤ 8 hops per search, ≤ 16 per run, 2 headings at most;
   progress `sucht weiter Richtung …` as an event and in `doing`. The full failure is "gave up" (retry after 4× `ORDER_RETRY_MS`).
+  Deep rock (deepslate, tuff) down in its band first walks to the nearest spot any bot dug it at (49-192 blocks away,
+  experience key `dig:<block>:x,y,z`, one per 16 dug blocks, shared through the hub); a spot found empty is left out.
   The keeper's jobs never search far (`noFar`, also over the worker link): bot1 walked 600 blocks north for 12 logs and died
   some 40 times at an ocean monument (main server 2026-11-09).
   `getItem` no longer learns a "no free … within" failure as a broken way (it used to block `mine:<item>` fleet-wide up to 24 h).

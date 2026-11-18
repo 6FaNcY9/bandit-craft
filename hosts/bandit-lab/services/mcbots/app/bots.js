@@ -2901,6 +2901,26 @@ function descentStart(home, me, anchor) {
 // hop (farsearch FAR_HOP) a new stair beside the base is the shorter way again.
 const DIG_BACK_MAX = 96;
 const digSpotBack = (area, band, me) => (area && outside(band, area.y) <= 4 && Math.hypot(area.x - me.x, area.z - me.z) <= DIG_BACK_MAX ? area : null);
+// Mined out down in the band, deep rock goes to the nearest spot any bot dug it at (world.digSpots) before a blind far
+// hop: under the base all was dug, and every job hopped 134 blocks to find some (bot19, twice on 2026-11-18). Not from
+// the surface: a staircase dug from there may cut the sorter (descentStart). Within 48 the search (64) saw it empty;
+// past two hops the walk costs more than it saves.
+const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const deepSpot = (spots, band, me) => spots.filter((p) => outside(band, p.y) <= 4 && flat(p, me) > 48 && flat(p, me) <= 2 * farsearch.FAR_HOP)
+  .sort((a, b) => flat(a, me) - flat(b, me))[0] || null;
+// A dug deep block is shared once per 16 blocks of a job (world.digSpots), and the shared spot it walked to has worked.
+function noteDigSpot(r, job, block, pos) {
+  job.t.digSpot = null;
+  if (job.t.digNoted && flat(job.t.digNoted, pos) < 16) return;
+  job.t.digNoted = {x: pos.x, z: pos.z};
+  try { r.world?.learn?.(`dig:${block}:${pos.x},${pos.y},${pos.z}`, {ok: true}); } catch {} // no hub: nothing shared
+}
+// The shared spot it walked to had nothing free (or no way there): left out until a bot digs there again.
+function dropDigSpot(r, job) {
+  if (!job.t.digSpot) return;
+  try { r.world?.learn?.(job.t.digSpot, {ok: false}); } catch {}
+  job.t.digSpot = null;
+}
 const EXPLORE_STEP = 32;
 // T04 (2026-10-20): one search toward the TOPK nearest free blocks instead of a walk to one that may be sealed in
 // (535 "could not reach" a day); only for a first block farther than TOPK_NEAR, so close work stays a single short walk.
@@ -3050,6 +3070,7 @@ async function collect(r, job, matching, count, what) {
       break;
     }
     if (!pos) {
+      dropDigSpot(r, job); // walked to a shared spot and nothing is free there
       // At the base everything in sight is under it (keeper's "mine stone 64" there failed at once, 2026-10-20): walk
       // out once, 4 past the circle so a shift anchored at the supply chest still has its ring up to the leash.
       if (!wood && left < 3 && underBase(r.supplyChest, me)) { // again when the digging led back in (bot2: 9 of 41, 2026-10-20)
@@ -3073,6 +3094,19 @@ async function collect(r, job, matching, count, what) {
             guard(job);
             job.t.doing = 'night: waiting for the morning before searching farther';
             await sleep(5000);
+          }
+          continue;
+        }
+        // Deep rock, down in the band: first a spot any bot dug it at lately, walked to as a hop is (along the band).
+        const spot = deep && outside(band, me.y) <= 4 ? deepSpot(r.world?.digSpots?.(names[0]) || [], band, me) : null;
+        if (spot) {
+          job.t.digSpot = `dig:${names[0]}:${spot.x},${spot.y},${spot.z}`;
+          try {
+            await goNear(r, job, spot.x, Math.floor(me.y), spot.z, 3, {xz: true, doing: `walking to ${at(spot)}, where ${what} was dug lately`});
+          } catch (e) {
+            guard(job);
+            dropDigSpot(r, job);
+            r.emit('info', `no way to ${at(spot)}: ${e.message.slice(0, 80)}`);
           }
           continue;
         }
@@ -3121,6 +3155,7 @@ async function collect(r, job, matching, count, what) {
       r.world?.release(r.name, key);
     }
     topWalked = false;
+    if (deep) noteDigSpot(r, job, names[0], pos);
     job.collected = ++got;
     job.progress = `${got}/${count}`;
     if (!job.t.open) Object.assign(job.t, {done: got, total: count});
@@ -4657,4 +4692,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, deepSpot, noteDigSpot, dropDigSpot, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};
