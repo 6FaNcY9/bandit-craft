@@ -5,14 +5,22 @@ const codec = require('../worldsection');
 const root = path.join(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// The fake hub: every chunk stone for sy -4..3 and air above, chunk 1,1 unknown (kind 2); `table` answers by URL first.
+// The fake hub: every chunk stone for sy -4..3 and air above, chunk 1,1 unknown (kind 2); `table` answers by URL first,
+// `secs` replaces single sections ('cx,sy,cz' -> blob), `grey` makes chunks ungenerated or unknown ('cx,cz' -> kind 1 or 2).
 const stone = codec.encodeSection(['minecraft:stone'], null), air = codec.encodeSection(['minecraft:air'], null);
-const hub = {down: false, gate: null, air: new Set(), table: new Map()};
-const rec = (cx, sy, cz) => { const blob = sy <= 3 && !hub.air.has(`${cx},${sy},${cz}`) ? stone : air; return {kind: 0, cx, sy, cz, hash: codec.sectionHash(blob), blob}; };
+const hub = {down: false, gate: null, air: new Set(), table: new Map(), secs: new Map(), grey: new Map()};
+const rec = (cx, sy, cz) => { const blob = hub.secs.get(`${cx},${sy},${cz}`) ?? (sy <= 3 && !hub.air.has(`${cx},${sy},${cz}`) ? stone : air); return {kind: 0, cx, sy, cz, hash: codec.sectionHash(blob), blob}; };
+// a section of one block state with some cells replaced: [[x, y, z, state], ...] in local coordinates
+const sectionOf = (base, cells) => {
+  const pal = [base], idx = new Uint16Array(4096);
+  for (const [x, y, z, s] of cells) { if (!pal.includes(s)) pal.push(s); idx[codec.cellIndex(x, y, z)] = pal.indexOf(s); }
+  return codec.encodeSection(pal, idx);
+};
 const batch = (cx, cz, r) => {
   const records = [];
   for (let x = cx - r; x <= cx + r; x++) for (let z = cz - r; z <= cz + r; z++) {
-    if (x === 1 && z === 1) records.push({kind: 2, cx: x, sy: 0, cz: z});
+    const kind = x === 1 && z === 1 ? 2 : hub.grey.get(`${x},${z}`);
+    if (kind) records.push({kind, cx: x, sy: 0, cz: z});
     else for (let sy = -4; sy <= 19; sy++) records.push(rec(x, sy, z));
   }
   return codec.encodeBatch({boot: 1n, batch: 1, records});
@@ -200,6 +208,54 @@ const asked = (prefix, from = 0) => urls.slice(from).filter((u) => u.startsWith(
     if (msg.t === 'chunk') { if (msg.state < 0) dead.add(k); else dead.delete(k); }
     if (msg.t === 'mesh') assert.ok(!dead.has(k), 'mesh after chunk -1: ' + k);
   }
+
+  // 7b the roof above a bot, in a fresh area with negative x (chunks -102..-97, 3..8): held without a fetch until its column is
+  // loaded, the newest probe replaces an unanswered one, leaves are no roof, an ungenerated or unknown chunk answers 0
+  hub.secs.set('-100,2,5', sectionOf('minecraft:stone', Array.from({length: 128}, (_, i) => [i & 7, 0, i >> 3, 'minecraft:air']))); // bottom layer air where x < 8
+  hub.secs.set('-99,4,5', sectionOf('minecraft:air', [[5, 0, 5, 'minecraft:dirt']])); // one lone dirt on the stone
+  hub.secs.set('-98,4,5', sectionOf('minecraft:air', [[9, 1, 5, 'minecraft:stone'], [9, 2, 5, 'minecraft:oak_leaves[distance=1,persistent=false,waterlogged=false]'],
+    [9, 3, 5, 'minecraft:stone'], [9, 4, 5, 'minecraft:short_grass'], [9, 5, 5, 'minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]'],
+    [9, 6, 5, 'minecraft:spruce_leaves[distance=7,persistent=true,waterlogged=false]'], [9, 7, 5, 'minecraft:stone'], [9, 10, 5, 'minecraft:stone']]));
+  hub.grey.set('-97,8', 1); hub.grey.set('-102,3', 2);
+  const probes = (from) => of('probe', from).map((p) => [p.x, p.y, p.z, p.roof]);
+  n = posts.length; const u7 = urls.length;
+  send({t: 'probe', x: -1558.5, y: 70, z: 85.5}); send({t: 'probe', x: -1558.5, y: 64.5, z: 85.5}); await settle();
+  assert.deepStrictEqual([probes(n), urls.length], [[], u7], 'held, and nothing fetched for it');
+  send({t: 'view', cx: -100, cz: 5, viewR: 1}); await settle();
+  // block -1559 (chunk -98, local 9), feet 64, head 65: of 66..73 only the stone at 67 and 71 and the stairs at 69 count
+  assert.deepStrictEqual(probes(n), [[-1558.5, 64.5, 85.5, 3]], 'only the newest, once its tile is there');
+  n = posts.length;
+  for (const [x, y, z] of [[-1548.5, 40, 131.5], [-1630.5, 40, 50.5], [-1580, 28.5, 90], [-1580, 315, 90]]) send({t: 'probe', x, y, z});
+  assert.deepStrictEqual(probes(n).map((p) => p[3]), [0, 0, 8, 0], 'ungenerated, unknown, stone across two sections, nothing above 319');
+
+  // 7c loose dirt: every mesh carries its count (0 without faces); the switch re-meshes only the section that has some
+  const firstFace = (from) => of('mesh', from).map((x) => [x.cx, x.sy, x.cz, x.loose, ...x.col.slice(0, 3)]);
+  assert.ok([...lastMesh()].every(([key, x]) => x.loose === (key === '-99,4,5' ? 1 : 0)), 'loose counts');
+  assert.deepStrictEqual([...lastMesh().get('-99,4,5').col.slice(0, 3)], [204, 34, 34], 'red (its -x face)');
+  n = posts.length; send({t: 'loose', on: false}); await settle();
+  assert.deepStrictEqual(firstFace(n), [[-99, 4, 5, 1, 98, 66, 38]], 'brown, the count stays');
+  n = posts.length; send({t: 'loose', on: true}); await settle();
+  assert.deepStrictEqual(firstFace(n), [[-99, 4, 5, 1, 204, 34, 34]], 'red again');
+
+  // 7d a cut at a section border: the re-meshes, then one ack; the sy 1 lid is dark under the stone above it and normal under the air
+  n = posts.length; send({t: 'cut', y: 31}); await settle();
+  const after = posts.slice(n).map((p) => p.msg), ack = after.findIndex((x) => x.t === 'cut');
+  assert.ok(ack > 0 && after.slice(0, ack).every((x) => x.t === 'mesh'), 're-meshes before the ack');
+  assert.deepStrictEqual(of('cut', n).map((x) => x.y), [31], 'one ack');
+  const lid = lastMesh().get('-100,1,5'), shades = {};
+  for (let i = 0; i < lid.col.length; i += 12) shades[lid.col[i]] = (shades[lid.col[i]] ?? 0) + 1; // the red channel of each face
+  assert.deepStrictEqual(shades, {41: 128, 138: 128}, 'stone 138, x 0.3 = 41 under stone');
+  send({t: 'cut', y: 319}); await settle();
+
+  // 7e eviction and a reset forget the loose sections: the switch then re-meshes nothing
+  send({t: 'view', cx: 700, cz: 0, viewR: 1}); await settle();
+  n = posts.length; send({t: 'loose', on: false}); await settle();
+  assert.strictEqual(of('mesh', n).length, 0, 'nothing evicted');
+  send({t: 'view', cx: -100, cz: 5, viewR: 1}); await settle();
+  assert.strictEqual(lastMesh().get('-99,4,5').loose, 1);
+  n = posts.length; send({t: 'seq', seq: 3}); send({t: 'loose', on: true});
+  assert.deepStrictEqual(posts.slice(n).map((p) => p.msg.t), ['reset'], 'nothing after a reset');
+  await settle();
 
   // 8 only the three routes
   for (const u of urls) assert.ok(/^\/api\/(world\/sections|world\/changes|plan\/status)\?/.test(u), u);

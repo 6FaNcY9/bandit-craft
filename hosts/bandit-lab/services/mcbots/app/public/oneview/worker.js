@@ -5,12 +5,18 @@
   importScripts('/oneview/worldsection.js', '/oneview/blocks.js', '/oneview/mesher.js', '/oneview/worldcache.js', '/oneview/planview.js');
   const OV = self.OV;
   const PLAN_EVERY = 5000, RETRY = 2100; // RETRY is a little over the cache's 2 s first back-off, so its wait is over when we pump
-  let cache = null, cut = 319, worldSeq = 0, paused = false, netOk = true;
+  let cache = null, cut = 319, worldSeq = 0, paused = false, netOk = true, looseOn = true, want = null; // want: the probe that waits for its column
   let changing = false, blocked = false, changeFails = 0, epoch = 0, retry = 0, unblock = 0, tick = 0;
   const plans = new Map(); // key -> {bot, at, every, seq, busy, reply, sent, cut}: at/seq of the last fetch, every its wait, sent/cut of the last message
+  const states = new Map(); // 'cx,cz' -> the chunk state last posted: the probe needs it and the cache keeps it to itself
+  const looseKeys = new Set(); // 'cx,sy,cz' of the sections whose last mesh had loose dirt: the loose switch re-meshes only these
 
   const post = (msg, transfer = []) => self.postMessage(msg, transfer);
-  const drop = ([cx, cz]) => post({t: 'chunk', cx, cz, state: -1});
+  const drop = ([cx, cz]) => {
+    states.delete(cx + ',' + cz);
+    for (let sy = OV.section.SY_MIN; sy <= OV.section.SY_MAX; sy++) looseKeys.delete(cx + ',' + sy + ',' + cz);
+    post({t: 'chunk', cx, cz, state: -1});
+  };
   const setNet = (ok) => { if (ok !== netOk) { netOk = ok; post({t: 'net', ok}); } };
   // a stalled request must fail into the retry paths; the hub answers within 35 s; no AbortSignal.timeout (Safari < 16) means no timeout
   const sig = () => ({signal: self.AbortSignal?.timeout?.(40000)});
@@ -19,15 +25,17 @@
     const sec = cache.section(cx, sy, cz);
     if (!sec) return;
     const nb = cache.neighbours(cx, sy, cz);
-    if (cut < (sy + 1) * 16) nb[3] = null; // the cut layer gets a lid
-    const m = OV.mesher.meshSection(sec, nb, Math.max(0, Math.min(16, cut + 1 - sy * 16)));
-    if (!m) return post({t: 'mesh', cx, sy, cz, pos: null, col: null, idx: null});
-    post({t: 'mesh', cx, sy, cz, pos: m.pos, col: m.col, idx: m.idx}, [m.pos.buffer, m.col.buffer, m.idx.buffer]);
+    // the cut layer gets a lid, dark where the real block above it is drawn (lid only matters when the cut is this section's top layer)
+    const m = OV.mesher.meshSection(sec, nb, Math.max(0, Math.min(16, cut + 1 - sy * 16)), {lid: cut < (sy + 1) * 16, loose: looseOn});
+    const key = cx + ',' + sy + ',' + cz;
+    if (m?.loose) looseKeys.add(key); else looseKeys.delete(key);
+    if (!m) return post({t: 'mesh', cx, sy, cz, pos: null, col: null, idx: null, loose: 0});
+    post({t: 'mesh', cx, sy, cz, pos: m.pos, col: m.col, idx: m.idx, loose: m.loose}, [m.pos.buffer, m.col.buffer, m.idx.buffer]);
   }
 
   function apply(out) {
     const gone = cache.evict(); // before meshing: the late reply of a tile the view left then makes no mesh
-    for (const [cx, cz, state] of out.chunks) post({t: 'chunk', cx, cz, state});
+    for (const [cx, cz, state] of out.chunks) { states.set(cx + ',' + cz, state); post({t: 'chunk', cx, cz, state}); }
     for (const [cx, sy, cz] of out.mesh) mesh(cx, sy, cz);
     gone.forEach(drop);
   }
@@ -83,9 +91,24 @@
     if (p.reply) show(key, p); else post({t: 'plan', key, state: sent});
   }
 
+  // Rock above a bot, from the cache only: drawn cells other than leaves 2..9 blocks above its feet, once its column is loaded.
+  function probe() {
+    const {x, y, z} = want, bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z), state = states.get((bx >> 4) + ',' + (bz >> 4));
+    if (state === undefined) return;
+    let roof = 0;
+    for (let v = by + 2; state === 0 && v <= by + 9; v++) { // an unknown or ungenerated chunk has no roof; a missing section is air
+      const s = cache.section(bx >> 4, v >> 4, bz >> 4);
+      const name = s && OV.blocks.nameOf(s.palette[s.idx ? s.idx[OV.section.cellIndex(bx & 15, v & 15, bz & 15)] : 0]);
+      if (name && OV.blocks.drawn(name) && !name.endsWith('leaves')) roof++;
+    }
+    want = null;
+    post({t: 'probe', x, y, z, roof});
+  }
+
   function pump() {
     if (cache) {
       cache.evict().forEach(drop);
+      if (want) probe();
       if (!paused) {
         if (!changing && !blocked && worldSeq > cache.seq()) pull();
         for (let q; (q = cache.next());) load(q);
@@ -104,11 +127,12 @@
       cache.setView(m.cx, m.cz);
     } else if (m.t === 'seq') {
       worldSeq = m.seq;
-      if (cache && cache.onSeq(m.seq) === 'reset') { epoch++; changeFails = 0; post({t: 'reset'}); } // 'changes' is picked up by pump()
+      if (cache && cache.onSeq(m.seq) === 'reset') { epoch++; changeFails = 0; states.clear(); looseKeys.clear(); post({t: 'reset'}); } // 'changes' is picked up by pump()
     } else if (m.t === 'cut') {
       const old = cut;
       cut = m.y;
       if (cache && cut !== old) for (const [cx, sy, cz] of cache.loaded()) if (sy >= Math.min(old, cut) >> 4) mesh(cx, sy, cz);
+      post({t: 'cut', y: cut}); // the page moves its camera on this ack, so the new meshes are already there
       for (const [key, p] of plans) { p.cut = cut; p.every = PLAN_EVERY; if (p.reply) show(key, p); }
     } else if (m.t === 'plans') {
       const keep = new Set(m.list.map((x) => x.key));
@@ -117,7 +141,11 @@
         const p = plans.get(key);
         if (p) { p.bot = bot; p.every = PLAN_EVERY; } else plans.set(key, {bot, at: -Infinity, every: PLAN_EVERY, seq: null, busy: false, reply: null, sent: null, cut});
       }
-    } else if (m.t === 'pause') paused = m.on;
+    } else if (m.t === 'loose') {
+      looseOn = m.on;
+      for (const k of [...looseKeys]) mesh(...k.split(',').map(Number));
+    } else if (m.t === 'probe') want = m;
+    else if (m.t === 'pause') paused = m.on;
     pump();
   };
 })();
