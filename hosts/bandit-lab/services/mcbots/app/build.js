@@ -651,6 +651,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       const k = keyOf(blk.position);
       if (!inSite(blk.position)) return 0;
       if (blk.position.y < lo.y || pillars.has(k)) return 100;
+      // Above the build only natural ground may go: the s4 repair dug its way out of its room through the finished
+      // s5 above it, 18 blocks (main server 2026-11-18). Its own walls are the way out (walled in, put back later).
+      if (blk.position.y > hi.y && !natural.test(blk.name)) return 100;
       if (!plan.cells.has(k)) return 0;
       return noPath >= 2 && PLAIN.test(blk.name) ? 0 : 100;
     };
