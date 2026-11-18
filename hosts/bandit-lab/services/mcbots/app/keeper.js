@@ -82,7 +82,7 @@ for (const [item, ingots] of [['iron_pickaxe', 3], ['iron_sword', 2]]) {
 }
 // Any quota item without a chain above: let the acquire planner (bots.js getItem) find its own way, then shelve the result.
 // shortcut: it does not know the keeper's reserves (128 logs, supply chest only); give an item its own PLANS entry when that matters.
-const getPlan = (item) => (n, c) => [['get', {item, count: n}], ['deposit', {...c, only: item}]];
+const getPlan = (item) => (n, c) => [['get', {item, count: n, total: true}], ['deposit', {...c, only: item}]]; // total: what it carries counts
 const WORKSITE = new Set(['chop', 'mine']); // jobs that start with a walk to the work site, when one is set
 
 // The castle armoury (spec 2026-11-15-castle-armoury): kept from the base chest, everything into the gear-point chest

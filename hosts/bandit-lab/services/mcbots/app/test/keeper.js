@@ -53,7 +53,8 @@ const {WorldModel} = require('../world');
   const stoneBot = bots.find((b) => b.sent.some((x) => x[0] === 'mine'));
   assert.ok(stoneBot && stoneBot !== logBot);
   assert.deepStrictEqual(stoneBot.sent, [['mine', {block: 'stone', count: 64}], ['deposit', {...chest, only: 'cobblestone'}]]);
-  // 2026-10-20: a quota item without a PLANS entry is fetched by the acquire planner (get) and shelved
+  // 2026-10-20: a quota item without a PLANS entry is fetched by the acquire planner (get) and shelved; the get counts
+  // what the bot already carries (total: a delivery; bot19 made 128 more tiles while carrying 212, 2026-11-18)
   {
     let t2 = Date.now();
     const solo = fake('bot9'), w2 = new WorldModel({now: () => t2});
@@ -62,7 +63,7 @@ const {WorldModel} = require('../world');
     t2 += IDLE_MS; k2.tick();
     w2.noteStock('bot9', {cobblestone: 1});
     solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
-    assert.deepStrictEqual(solo.sent, [['get', {item: 'diamond', count: 5}], ['deposit', {...chest, only: 'diamond'}]]);
+    assert.deepStrictEqual(solo.sent, [['get', {item: 'diamond', count: 5, total: true}], ['deposit', {...chest, only: 'diamond'}]]);
   }
   // 2026-11-11: a full supply chest is emptied to the hall by an idle bot with room, once per cooldown (1443 cobblestone, 1 slot free)
   {

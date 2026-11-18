@@ -351,7 +351,9 @@ const VALIDATE = {
   // N of any item, by whatever way the game offers (acquire.js): the plan is worked out, not described.
   get: (a) => {
     if (!/^[a-z_]{1,48}$/.test(a.item || '')) throw new Error('item must be an item name like iron_pickaxe');
-    return {item: a.item, count: num(a.count ?? 1, 1, 256, 'count')};
+    // total: `count` in hand in all (a delivery counts what the bot carries), else `count` more than it holds.
+    if (a.total !== undefined && typeof a.total !== 'boolean') throw new Error('total must be true or false');
+    return {item: a.item, count: num(a.count ?? 1, 1, 256, 'count'), ...(a.total ? {total: true} : {})};
   },
   // Kill (shear) `count` animals of one kind within `radius` of x,y,z and pick the drops up.
   hunt: (a) => {
@@ -3439,7 +3441,7 @@ async function acquireStep(r, job, step, all) {
 async function getItem(r, job) {
   const {item, count} = job.args;
   const held = () => crafting.count(r.bot, item);
-  job.target ??= held() + count; // a resumed job keeps its goal
+  job.target ??= job.args.total ? count : held() + count; // a resumed job keeps its goal
   for (let steps = 0; held() < job.target; steps++) {
     guard(job);
     if (steps >= 80) throw new Error(`still ${job.target - held()} ${item} short after 80 steps`);

@@ -475,3 +475,27 @@
   assert.ok(treeLog(bot, new Vec3(0, 64, 0)), 'leaves up to 2 off the top still make it a tree');
   console.log('treeLog: trees yes, roof beams no ok');
 }
+
+// A delivery's get (total: true) counts what the bot already carries: bot19 held 212 deepslate_tiles, was sent
+// "get 128 + deposit" again after a restart and made 128 more (2026-11-18). A plain get still means "count more".
+(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS, VALIDATE} = require('../bots');
+  assert.deepStrictEqual(VALIDATE.get({item: 'deepslate_tiles', count: 128, total: true}), {item: 'deepslate_tiles', count: 128, total: true});
+  assert.deepStrictEqual(VALIDATE.get({item: 'deepslate_tiles', count: 128}), {item: 'deepslate_tiles', count: 128}, 'no total: as before');
+  assert.throws(() => VALIDATE.get({item: 'deepslate_tiles', count: 1, total: 'yes'}));
+  const held = [{name: 'deepslate_tiles', count: 64}, {name: 'deepslate_tiles', count: 64}, {name: 'deepslate_tiles', count: 64}, {name: 'deepslate_tiles', count: 20}];
+  const r = {name: 'bot19', emit() {}, log() {}, acquireFailed: new Map(), protectedAreas: [], world: {chests: new Map(), learn() {}, learned: () => null},
+    bot: {entity: {position: new Vec3(0, 64, 0)}, registry: require('minecraft-data')('26.1'), inventory: {items: () => held}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null}};
+  const job = (args) => ({id: 1, type: 'get', args, t: {}, collected: 0, progress: ''});
+  const steps = [];
+  const old = {craft: JOBS.craft, mine: JOBS.mine};
+  try {
+    JOBS.craft = JOBS.mine = async (rr, j) => { steps.push(j.type); throw new Error('stop here'); };
+    await JOBS.get(r, job(VALIDATE.get({item: 'deepslate_tiles', count: 128, total: true})));
+    assert.deepStrictEqual(steps, [], 'holds 212 of 128: nothing to make');
+    await assert.rejects(JOBS.get(r, job(VALIDATE.get({item: 'deepslate_tiles', count: 128}))));
+    assert.ok(steps.length > 0, 'a plain get makes 128 on top of the 212');
+  } finally { Object.assign(JOBS, old); }
+  console.log('get total: counts what the bot holds ok');
+})().catch((e) => { console.error(e); process.exit(1); });
