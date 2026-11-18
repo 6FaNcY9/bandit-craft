@@ -1241,6 +1241,13 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           await restock(next.t.p.item);
           if (!count()[next.t.p.item]) { waiting.add(next.t.p.item); next = null; }
         }
+        // Out of dirt and glass the walks here cannot climb (see scafoldingBlocks): dirt is waited for and made like
+        // the build's material, or the bot hangs below the walls until "no progress".
+        // Only after a walk failed (noPath): a build that needs no climb (glass on a chest's lid) does not wait for it.
+        if (noPath && (lacking.get(SCAFFOLD) || 0) > Date.now() && !count()[SCAFFOLD] && !count()[GLASS]) {
+          waiting.add(SCAFFOLD);
+          next = null; // no more tries until there is dirt
+        }
         // A piston head in a cell does not hold the supports back: a dirt support beside a piston carried power
         // from a redstone dot and kept it out, while the supports waited for that last cell (sandbox
         // 2026-10-13). Taking them out cuts the power and updates the piston: it retracts, a sticky one with its block.
@@ -1426,6 +1433,10 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           if (/must be holding an item/.test(e.message)) { skip.set(k, Date.now() + 5000); continue; }
           if (!/could not reach/.test(e.message)) throw e;
           noPath++;
+          // No dirt or glass to climb with: bot20 hung three times below s5's walls with only cobblestone, which a
+          // goto climbed with at once (main server 2026-11-18). Take dirt; with none in the chests restock marks it
+          // lacking, and it is waited for and made (help) like the build's material.
+          if (!count()[SCAFFOLD] && !count()[GLASS] && !((lacking.get(SCAFFOLD) || 0) > Date.now())) await restock(SCAFFOLD);
           // Still on the same spot after several cells: its own walls, not the distance.
           const feet = bot.entity.position.floored(), spot = ckey(feet);
           sameSpot = spot === lastSpot ? sameSpot + 1 : 0;
