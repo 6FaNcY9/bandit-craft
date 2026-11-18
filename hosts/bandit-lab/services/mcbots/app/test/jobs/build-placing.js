@@ -323,15 +323,16 @@ module.exports = async () => {
     const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}}, job).catch((e) => e);
     await new Promise((res) => setTimeout(res, 400));
     const doing = job.t.doing;
-    // Its walks dig nothing built above it: the s4 repair dug out through the finished s5 (main server 2026-11-18).
+    // Its walks dig nothing built above it or beside it: the s4 repair dug out through the finished s5, the cap's walk
+    // through K1's wall (main server 2026-11-18).
     const veto = bot.pathfinder.movements.exclusionAreasBreak[0], dig = (x, y, z, name) => veto({position: new Vec3(x, y, z), name});
-    const vetoes = [dig(0, 70, 0, 'stone_bricks'), dig(0, 70, 0, 'dirt'), dig(5, 70, 5, 'stone_bricks')];
+    const vetoes = [dig(0, 70, 0, 'stone_bricks'), dig(0, 70, 0, 'dirt'), dig(5, 70, 5, 'stone_bricks'), dig(5, 70, 5, 'dirt'), dig(5, 70, 5, 'oak_leaves')];
     job.cancelled = true;
     await Promise.race([run, new Promise((res) => setTimeout(() => res('hung'), 3000))]);
     fs.rmSync(dir, {recursive: true, force: true});
     assert.match(String(doing), /^waiting for material: .*dirt/, `it waits for dirt to climb with (doing: ${doing})`);
     assert.strictEqual(walks, 1, 'and walks no more until there is dirt');
-    assert.deepStrictEqual(vetoes, [100, 0, 0], 'above the build a built block stays, ground and anything off its footprint may go');
+    assert.deepStrictEqual(vetoes, [100, 0, 100, 0, 0], 'above and beside the build a built block stays, ground and leaves may go');
   }
   { // a work torch or a crafting table the bots put down in a planned cell comes out without clearAll; a chest stays, and
     // a torch in an air cell stays without tight: "no progress for 300 s: in the way: wall_torch ..." (castle roof, main server 2026-11-16)

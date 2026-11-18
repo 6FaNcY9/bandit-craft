@@ -649,7 +649,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const PLAIN = /^(cobblestone|target|redstone_lamp|note_block|dirt|stone_slab|smooth_stone_slab|stone_bricks)$/;
     const vetoBreak = (blk) => {
       const k = keyOf(blk.position);
-      if (!inSite(blk.position)) return 0;
+      // Off the site its walks dig natural ground and leaves only: the cap's walk from the tower top to the depot dug
+      // K1's finished wall at -292 129 15, the s5 job's two of its stones at -303 115 8 (main server 2026-11-18).
+      if (!inSite(blk.position)) return natural.test(blk.name) || /leaves$/.test(blk.name) ? 0 : 100;
       if (blk.position.y < lo.y || pillars.has(k)) return 100;
       // Above the build only natural ground may go: the s4 repair dug its way out of its room through the finished
       // s5 above it, 18 blocks (main server 2026-11-18). Its own walls are the way out (walled in, put back later).
