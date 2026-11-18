@@ -487,15 +487,14 @@
   const held = [{name: 'deepslate_tiles', count: 64}, {name: 'deepslate_tiles', count: 64}, {name: 'deepslate_tiles', count: 64}, {name: 'deepslate_tiles', count: 20}];
   const r = {name: 'bot19', emit() {}, log() {}, acquireFailed: new Map(), protectedAreas: [], world: {chests: new Map(), learn() {}, learned: () => null},
     bot: {entity: {position: new Vec3(0, 64, 0)}, registry: require('minecraft-data')('26.1'), inventory: {items: () => held}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null}};
-  const job = (args) => ({id: 1, type: 'get', args, t: {}, collected: 0, progress: ''});
-  const steps = [];
-  const old = {craft: JOBS.craft, mine: JOBS.mine};
-  try {
-    JOBS.craft = JOBS.mine = async (rr, j) => { steps.push(j.type); throw new Error('stop here'); };
-    await JOBS.get(r, job(VALIDATE.get({item: 'deepslate_tiles', count: 128, total: true})));
-    assert.deepStrictEqual(steps, [], 'holds 212 of 128: nothing to make');
-    await assert.rejects(JOBS.get(r, job(VALIDATE.get({item: 'deepslate_tiles', count: 128}))));
-    assert.ok(steps.length > 0, 'a plain get makes 128 on top of the 212');
-  } finally { Object.assign(JOBS, old); }
+  // Stopped from the start: the goal is set, then the first step would stop it. JOBS is not swapped (other parts run
+  // in the same process at the same time).
+  const job = (args) => ({id: 1, type: 'get', args, t: {}, collected: 0, progress: '', cancelled: true});
+  const total = job(VALIDATE.get({item: 'deepslate_tiles', count: 128, total: true}));
+  await JOBS.get(r, total);
+  assert.equal(total.target, 128, 'holds 212 of 128: done without a step');
+  const plain = job(VALIDATE.get({item: 'deepslate_tiles', count: 128}));
+  await assert.rejects(JOBS.get(r, plain), /stopped/);
+  assert.equal(plain.target, 340, 'a plain get makes 128 on top of the 212');
   console.log('get total: counts what the bot holds ok');
 })().catch((e) => { console.error(e); process.exit(1); });
