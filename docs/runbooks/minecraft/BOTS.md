@@ -895,8 +895,9 @@ before chopping or mining). Without `SUPPLY_CHEST` or quotas the panel is absent
 - **Stock** comes from whichever bot last opened the chest (`deposit`,
   `withdraw`, `stock` jobs, also from laptop workers). Numbers older than 15 min
   or unknown: an idle bot is sent to count (`stock` job).
-- **Planning** every 5 s: the first quota below target with nobody on it goes to an
-  idle bot (idle for 10 s, no queue, not dead, online; lab bots and connected workers
+- **Planning** every 5 s: the first quota a quarter or more below target (a target of 4
+  or less: any piece) with nobody on it goes to the idle bot nearest to the chest
+  (idle for 10 s, no queue, not dead, online; lab bots and connected workers
   alike), at most two bots at once, at most 64 items per chain, as normal queued
   jobs: logs = `chop` + `deposit only logs`; cobblestone = `mine stone` + `deposit
   only cobblestone`; coal = `mine coal_ore` + `deposit only coal`; torch = `withdraw

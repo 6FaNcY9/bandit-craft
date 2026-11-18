@@ -314,3 +314,20 @@ const {WorldModel} = require('../world');
   k.tick();
   assert.deepStrictEqual(bots.filter((b) => b.sent.length).map((b) => b.name), ['bot21'], 'the nearest one');
 }
+{ // no trip for a few: a chain starts once a quarter of the target is missing. "cobblestone 56/128, fetching 64" left
+  // 8 short, a whole walk out of the base for 8 blocks (2026-11-18); the armoury the same (a 400-block round trip)
+  const {Keeper, IDLE_MS} = require('../keeper');
+  let t = 1e6;
+  const base = {x: -271, y: 66, z: -214}, arm = {x: -322, y: 105, z: -26}, w = new WorldModel({now: () => t});
+  const fake = (name) => ({name, sent: [], idle: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'x'}, queue: []}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }});
+  const bots = [fake('bot1'), fake('bot3')];
+  const k = new Keeper({runners: new Map(bots.map((b) => [b.name, b])), world: w, chest: base, quotas: [['cobblestone', 128], ['logs', 64]], now: () => t});
+  k.setEnabled(true);
+  k.armoury = arm;
+  w.noteStock('bot1', {cobblestone: 120, oak_log: 40, bread: 400, iron_ingot: 400}, 10, base);
+  w.noteStock('bot1', {iron_ingot: 64, bread: 56, torch: 32, oak_log: 16, iron_helmet: 2, iron_chestplate: 2, iron_leggings: 2, iron_boots: 2, iron_sword: 2, iron_axe: 2, iron_pickaxe: 2, shield: 2}, 10, arm);
+  k.tick();
+  t += IDLE_MS;
+  k.tick();
+  assert.deepStrictEqual(bots.map((b) => b.sent.map(([type, a]) => a.only || a.item || type)), [['chop', 'logs'], []], '8 cobblestone and 8 bread short: no trip; 24 logs short: one');
+}

@@ -6,7 +6,7 @@
 // reported by `deposit`, `withdraw` and `stock` jobs). Every few seconds, while
 // switched on, the keeper
 //   1. asks an idle bot to count the chest when the numbers are missing or old,
-//   2. for the first quota below its target with nobody on it, gives an idle
+//   2. for the first quota a quarter below its target with nobody on it, gives the nearest idle
 //      bot a short job chain (chop/mine ..., deposit) through the same enqueue()
 //      the dashboard uses, so everything a human can see or stop works here too.
 // It starts switched off (or as it was, with a state file: server.js passes one) and never takes a bot that has a
@@ -20,6 +20,9 @@ const COOLDOWN_MS = 10 * 60 * 1000; // after a chain that did not raise the stoc
 const ASSIGN_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_WANT = 4096;
 const MAX_JOB = 64; // items per chain: short chains, fresh numbers in between
+// A chain only once a quarter of the target is missing: "cobblestone 56/128, fetching 64" then sent a bot out of the base
+// for the last 8 (2026-11-18). A target of 4 or less still refills each piece.
+const worthATrip = (q) => q.missing > 0 && 4 * q.missing >= q.want;
 const FULL_SLOTS = 2, TIDY_ROOM = 12; // a chest this full gets emptied by a bot with this many free slots (9 stacks carried)
 
 const KINDS = {
@@ -220,7 +223,7 @@ class Keeper {
     // shortcut: urgency only, not the plan's cost or the bots' travel time; weigh those once the archive shows which plans run long.
     this.notes.clear();
     const short = [...this.quotas].map(([item, want]) => ({item, want, missing: want - have(stock.items, item) - (this.work.get(item)?.n || 0)}))
-      .filter((q) => q.missing > 0 && !this.work.has(q.item)).sort((a, b) => b.missing / b.want - a.missing / a.want);
+      .filter((q) => worthATrip(q) && !this.work.has(q.item)).sort((a, b) => b.missing / b.want - a.missing / a.want);
     for (const {item, want, missing} of short) {
       if ((this.cooldown.get(item) || 0) > t) {
         this.notes.set(item, `no progress last time, retrying in ${Math.ceil((this.cooldown.get(item) - t) / 60000)} min`);
@@ -268,7 +271,7 @@ class Keeper {
       return;
     }
     const short = ARMOURY_STOCK.map(([item, want]) => ({item, want, missing: want - have(stock.items, item)}))
-      .filter((q) => q.missing > 0 && !this.work.has(`armoury:${q.item}`)).sort((a, b) => b.missing / b.want - a.missing / a.want);
+      .filter((q) => worthATrip(q) && !this.work.has(`armoury:${q.item}`)).sort((a, b) => b.missing / b.want - a.missing / a.want);
     for (const {item, want, missing} of short) {
       const key = `armoury:${item}`, n = Math.min(missing, MAX_JOB);
       if ((this.cooldown.get(key) || 0) > t) { this.armouryNotes.set(item, 'no progress last time'); continue; }
