@@ -63,6 +63,8 @@ Spec `docs/superpowers/specs/2026-11-15-castle-armoury-design.md`. A dashboard m
 -322 105 -26) is a gear point beside the `supply` chest: every bot's rearm after a death, the night rearm, the food rearm,
 the pickaxe rearm and `ensureGear` go to the nearer of the two and fall back to the other when it lacks something
 (owner 2026-11-18: a bot beside the base walked 750 blocks to the armoury and back). The `supply` chest stays the material store.
+A worn-out iron pickaxe or axe is replaced only within 48 blocks of the nearer chest while a lesser one is carried (bot19 climbed
+from 100 blocks down twice, 2026-11-18); a missing sword, shield or armour piece never waits.
 At the armoury a bot hands back duplicates (1 sword, 1 axe, 2 pickaxes, 1 shield, worn armour stay; `gear.js handBack`).
 Guests get it only when named in `GEAR_GUESTS` (MisaBot), only within 250 blocks, and never hand back. No marker: as before.
 The keeper (when on) also keeps the gear-point chest at `keeper.js ARMOURY_STOCK` (64 ingots, 64 bread, 32 torches, 16 logs,

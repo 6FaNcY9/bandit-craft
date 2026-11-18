@@ -429,6 +429,25 @@ module.exports = async () => {
       const old = mk2(null);
       await B.care(old, job2);
       assert.deepStrictEqual(calls, [], 'no armoury: a 1-ingot gap fetches nothing, as before');
+      // A worn-out iron pickaxe waits while a lesser one digs on and no gear source is near: bot19 climbed towards the
+      // armoury twice from 100 blocks down with a stone pickaxe in its pack (2026-11-18). A missing sword never waits.
+      const deep = (x, y, z, swap) => {
+        const w = mk2({x: -20, y: 64, z: 0}), inv = w.bot.inventory.items();
+        w.bot.entity.position = new Vec3(x, y, z);
+        w.bot.inventory.slots[45] = {name: 'shield'};
+        for (const [from, to] of swap) inv.splice(inv.findIndex((i) => i.name === from), 1, ...(to ? [{name: to, count: 1}] : []));
+        return w;
+      };
+      await B.care(deep(100, 0, 100, [['iron_pickaxe', 'stone_pickaxe']]), job2);
+      assert.deepStrictEqual(calls, [], 'a stone pickaxe digs on: no walk to the armoury');
+      await B.care(deep(-20, 60, 10, [['iron_pickaxe', 'stone_pickaxe']]), job2);
+      assert.deepStrictEqual(calls.slice(0, 1), ['rearm@-20'], 'beside the armoury it is replaced at once');
+      calls.length = 0;
+      await B.care(deep(100, 0, 100, [['iron_pickaxe', null]]), job2);
+      assert.deepStrictEqual(calls.slice(0, 1), ['rearm@-20'], 'no pickaxe at all: as before');
+      calls.length = 0;
+      await B.care(deep(100, 0, 100, [['iron_pickaxe', 'stone_pickaxe'], ['iron_sword', null]]), job2);
+      assert.deepStrictEqual(calls.slice(0, 1), ['rearm@-20'], 'a missing sword never waits');
     } finally {
       Object.assign(B.JOBS, real);
     }

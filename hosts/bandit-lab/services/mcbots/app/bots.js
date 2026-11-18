@@ -2442,6 +2442,13 @@ async function ensureGear(r, job) {
   // Nothing to make at all: no need either. (gearPlan(n('iron_ingot'), ...) asked what the carried iron makes, and a bot
   // with none returned before it fetched any, sandbox 2026-10-18.)
   if (!gearJob.ingotsWanted(owned)) { r.world?.dropNeed?.(r.name, 'iron_ingot'); return; }
+  // A worn-out pickaxe or axe waits while a lesser one still works and no gear source is within 48: bot19's iron pickaxe
+  // broke 100 blocks down at -264 2 -62 and it climbed towards the armoury twice ("could not reach", 2026-11-18) with a
+  // stone pickaxe in its pack. Never a sword, shield or armour piece: those keep it alive. A block the lesser tool cannot
+  // dig gets its pickaxe from upkeep (replacePickaxe).
+  const src = gearSources(r)[0], me = bot.entity?.position;
+  const near = src && me && Math.hypot(me.x - src.x, me.y - src.y, me.z - src.z) <= 48;
+  if (!near && gearJob.gearPlan(Infinity, owned).every((item) => /^iron_(pick)?axe$/.test(item) && owned.some((n) => n.endsWith(item.slice(4))))) return;
   // The armoury first: a ready piece there is taken before a new one is crafted (spec 2026-11-15-castle-armoury).
   let atArmoury = false;
   if (r.gearChest && gearPoint(r) === r.gearChest && !jobWants(job, 'iron_ore')) {
