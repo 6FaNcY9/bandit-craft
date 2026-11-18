@@ -299,3 +299,18 @@ const {WorldModel} = require('../world');
   assert.ok(b2.some((b) => b.sent[0]?.[0] === 'chop'), 'logs first');
   assert.strictEqual(b2.filter((b) => b.sent.length).length, 2);
 }
+{ // the idle bot nearest to the chest takes the chain, not the first in the list (bot20 at the castle came before bot21
+  // beside the base, 2026-11-18); another dimension or no position goes last, as before among equals
+  const {Keeper, IDLE_MS} = require('../keeper');
+  let t = 1e6;
+  const base = {x: -271, y: 66, z: -214}, w = new WorldModel({now: () => t});
+  const fake = (name, pos, dimension = 'overworld') => ({name, sent: [], idle: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'x'}, queue: [], pos, dimension}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }});
+  const bots = [fake('bot20', [-288, 141, 14]), fake('bot2', [-270, 60, -210], 'the_nether'), fake('bot21', [-298, 58, -165]), fake('bot9', null)];
+  const k = new Keeper({runners: new Map(bots.map((b) => [b.name, b])), world: w, chest: base, quotas: [['logs', 64]], now: () => t});
+  k.setEnabled(true);
+  w.noteStock('bot21', {oak_log: 0}, 10, base);
+  k.tick();
+  t += IDLE_MS;
+  k.tick();
+  assert.deepStrictEqual(bots.filter((b) => b.sent.length).map((b) => b.name), ['bot21'], 'the nearest one');
+}

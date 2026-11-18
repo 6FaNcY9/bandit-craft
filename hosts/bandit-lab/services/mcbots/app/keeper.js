@@ -195,7 +195,10 @@ class Keeper {
     this.finish(snaps, t, stock);
 
     const busy = new Set([...this.work.values()].map((w) => w.bot).concat(this.counting ? [this.counting.bot] : []));
-    const free = () => [...this.runners.values()].filter((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS)[0];
+    // The idle bot nearest to the chest: the first in the list sent bot20 from the castle before bot21 beside the base (2026-11-18).
+    const away = (s) => (s?.pos && (!s.dimension || s.dimension.endsWith('overworld')) ? Math.hypot(s.pos[0] - this.chest.x, s.pos[2] - this.chest.z) : Infinity);
+    const free = () => [...this.runners.values()].filter((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS)
+      .sort((a, b) => (away(snaps.get(a.name)) - away(snaps.get(b.name))) || 0)[0];
 
     // 1. numbers missing or old: have a bot read the chest
     if (!stock || t - stock.t > STOCK_MAX_AGE_MS) {
