@@ -59,3 +59,5 @@ assert.match(viewJs, /canvas\.dataset\.loose = s\.loose; canvas\.dataset\.cut = 
 const layersJs = fs.readFileSync(path.join(__dirname, '../public/oneview/layers.js'), 'utf8');
 assert.match(layersJs, /color: c, transparent: true, opacity: 0\.45, depthTest: false, depthWrite: false/, 'each marker has a ghost that shows through rock');
 assert.match(layersJs, /m\.tag\.textContent = y < 60 \? `\$\{name\} · Höhe \$\{Math\.floor\(y\)\}` : name;/, 'an underground tag says the Höhe');
+assert.match(html, /main \{[^}]*grid-template-columns: minmax\(0, 1fr\)/, 'a long row never makes the cards wider than a phone');
+assert.match(html, /\/\(\\S\+\)\\\.litematic\/\.exec\(\(lead \|\| crew\[0\]\)\?\.job\.label/, 'the project title comes from the builder label "schematic <file>.litematic …"');
