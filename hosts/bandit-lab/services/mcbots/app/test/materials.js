@@ -456,3 +456,22 @@
   assert.ok(placed.length >= 1, 'with it, it is sealed');
   console.log('sealFluids: the road job\'s exception ok');
 })().catch((e) => { console.error(e); process.exit(1); });
+// chop takes logs of trees only: castle K1's roof beams (spruce logs under deepslate slabs) were felled (main 2026-11-16..18)
+{
+  const assert = require('node:assert/strict');
+  const {Vec3} = require('vec3');
+  const {treeLog} = require('../bots');
+  const world = new Map();
+  for (let y = 64; y <= 68; y++) world.set(`0,${y},0`, 'oak_log'); // a tree: leaves round its top
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) world.set(`${dx},68,${dz}`, 'oak_leaves');
+  for (let z = 10; z <= 14; z++) { world.set(`20,133,${z}`, 'spruce_log'); world.set(`20,134,${z}`, 'deepslate_tile_slab'); } // a roof beam
+  world.set('40,70,0', 'crimson_stem'); world.set('40,71,1', 'nether_wart_block'); // a nether tree
+  const bot = {blockAt: (p) => ({name: world.get(`${p.x},${p.y},${p.z}`) || 'air'})};
+  const cache = new Map();
+  assert.ok(treeLog(bot, new Vec3(0, 64, 0), cache) && treeLog(bot, new Vec3(0, 66, 0), cache), 'every log of a tree counts');
+  assert.ok(!treeLog(bot, new Vec3(20, 133, 12), cache), 'a beam under a roof is no tree');
+  assert.ok(treeLog(bot, new Vec3(40, 70, 0)), 'a crimson stem with wart blocks is');
+  world.delete('1,68,0'); world.delete('-1,68,0'); world.delete('0,68,1'); world.delete('0,68,-1'); world.set('2,70,2', 'oak_leaves');
+  assert.ok(treeLog(bot, new Vec3(0, 64, 0)), 'leaves up to 2 off the top still make it a tree');
+  console.log('treeLog: trees yes, roof beams no ok');
+}

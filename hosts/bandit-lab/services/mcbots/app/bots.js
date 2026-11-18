@@ -2924,6 +2924,21 @@ async function fetchWood(r, job, force) {
   }
 }
 
+// A log of a tree: the top of its column has leaves (nether stems: wart blocks) within 2. Building beams have none:
+// chop jobs took 50 spruce beams and the slabs over them out of castle K1's roof (main server 2026-11-16..18).
+const CANOPY = /(_leaves|_wart_block|^shroomlight)$/;
+function treeLog(bot, p, cache = new Map()) {
+  let top = p.y;
+  while (top < p.y + 32 && /_(log|stem)$/.test(bot.blockAt(new Vec3(p.x, top + 1, p.z))?.name || '')) top++;
+  const k = `${p.x},${top},${p.z}`;
+  if (!cache.has(k)) {
+    let tree = false;
+    for (let dy = 0; dy <= 2 && !tree; dy++) for (let dx = -2; dx <= 2 && !tree; dx++) for (let dz = -2; dz <= 2 && !tree; dz++) tree = CANOPY.test(bot.blockAt(new Vec3(p.x + dx, top + dy, p.z + dz))?.name || '');
+    cache.set(k, tree);
+  }
+  return cache.get(k);
+}
+
 async function collect(r, job, matching, count, what) {
   const {bot} = r;
   // An ore below Y 0 is the deepslate variant: mining iron_ore also takes deepslate_iron_ore.
@@ -2962,7 +2977,8 @@ async function collect(r, job, matching, count, what) {
     // Zones out before the nearest 64 are kept: beside the base those were all dirt under it, and the plaza's 64 dirt
     // failed with "no free dirt" (bot1 and bot2, 2026-10-19). Digging a target is direct (not pathfinder), hence here.
     const seen = bot.findBlocks({matching: ids, maxDistance: range, count: 1024});
-    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood || !underBase(r.supplyChest, p)))
+    const canopy = new Map(); // one look per tree top
+    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood ? treeLog(bot, p, canopy) : !underBase(r.supplyChest, p)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore or deep rock, nothing inside the band near enough, and the bot is not in the band: go there first.
     const start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : null;
@@ -4621,4 +4637,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};
