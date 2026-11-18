@@ -1300,17 +1300,19 @@ const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOf
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
 // without armour and died six times in six minutes at the iron farm (main server 2026-10-17); with gear they build on.
 const UNFIT_NIGHT_JOBS = new Set(['schematic', 'produce']);
-// Where gear and food come from: the armoury, else the supply chest; a guest uses the armoury only near it and has no
-// supply chest (spec 2026-11-15-castle-armoury). gearSources adds the supply chest as the fallback, each chest once.
+// Where gear and food come from: the nearer of the armoury and the supply chest, the other as the fallback, each chest
+// once; without a position the armoury first. Owner 2026-11-18: bot19 walked 482 blocks from beside the base to the
+// armoury and 268 back. A guest uses the armoury only near it and has no supply chest (spec 2026-11-15-castle-armoury).
 function gearPoint(r) {
-  const g = r.gearChest;
-  if (!g) return r.supplyChest || null;
-  const p = r.bot?.entity?.position;
-  if (!r.gearRange || (p && Math.hypot(p.x - g.x, p.z - g.z) <= r.gearRange)) return g;
-  return r.supplyChest || null;
+  return gearSources(r)[0] || null;
 }
 const sameSpot = (a, b) => a.x === b.x && a.y === b.y && a.z === b.z;
-const gearSources = (r) => [gearPoint(r), r.supplyChest].filter((c, i, all) => c && all.findIndex((d) => d && sameSpot(c, d)) === i);
+function gearSources(r) {
+  const g = r.gearChest, p = r.bot?.entity?.position;
+  const armoury = g && (!r.gearRange || (p && Math.hypot(p.x - g.x, p.z - g.z) <= r.gearRange)) ? g : null;
+  const all = [armoury, r.supplyChest].filter((c, i, list) => c && list.findIndex((d) => d && sameSpot(c, d)) === i);
+  return p ? all.sort((a, b) => Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(p.x - b.x, p.z - b.z)) : all;
+}
 // Re-arm at each source in turn until `done()`: an empty armoury never costs the supply chest's gear and food (review 2026-11-16).
 async function rearmUntil(r, job, done, onError) {
   for (const at of gearSources(r)) {

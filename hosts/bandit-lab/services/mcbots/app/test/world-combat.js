@@ -458,6 +458,12 @@ assert.deepStrictEqual(runner.supplyChest, {x: 1, y: 2, z: 3});
   assert.deepStrictEqual(gearSources({gearChest: null, supplyChest: B}), [B]);
   assert.deepStrictEqual(gearSources({gearChest: B, supplyChest: B}), [B], 'the same chest once');
   assert.deepStrictEqual(gearSources({gearChest: null, supplyChest: null}), []);
+  // The nearer one first (owner 2026-11-18): bot19 at -194 -2 -209 walked 482 blocks to the armoury, then 268 back to the base.
+  const deep = (x, z) => ({entity: {position: {x, y: -2, z}}});
+  assert.deepStrictEqual(gearPoint({gearChest: A, supplyChest: B, bot: deep(-194, -209)}), B, 'beside the base: the base chest');
+  assert.deepStrictEqual(gearSources({gearChest: A, supplyChest: B, bot: deep(-194, -209)}), [B, A], 'the armoury stays the fallback');
+  assert.deepStrictEqual(gearPoint({gearChest: A, supplyChest: B, bot: deep(-300, 0)}), A, 'at the castle: the armoury');
+  assert.deepStrictEqual(gearSources({gearChest: A, supplyChest: B, bot: deep(-300, 0)}), [A, B]);
 }
 { // graves go first: the running job is interrupted, queued right behind them, and goes on afterwards
   const q = new BotRunner('bot3', {host: 'x', port: 1, log: () => {}, world: null, protectedAreas: [], onEvent: () => {}});
