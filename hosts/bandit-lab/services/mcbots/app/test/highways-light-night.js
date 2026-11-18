@@ -274,3 +274,19 @@ const assert = require('node:assert');
   assert.ok(!infos.some((m) => /skipped light point/.test(m)), infos.join('|'));
   console.log('light: hand swap re-equips ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+(async () => { // a lit zone and a bot with no torches is done, not "no torches available" 7 zones in 30 s (bot19 2026-11-18 22:30)
+  const {JOBS} = require('../bots');
+  const {Vec3} = require('vec3');
+  const blocks = new Map([['0,0,0', {name: 'stone', boundingBox: 'block', light: 0}], ['0,1,0', {name: 'air', boundingBox: 'empty', light: 12}], ['0,2,0', {name: 'air', boundingBox: 'empty', light: 12}]]);
+  const infos = [];
+  const bot = {
+    blockAt: (p) => { const b = blocks.get(`${p.x},${p.y},${p.z}`); return b ? {...b, position: new Vec3(p.x, p.y, p.z)} : null; },
+    entity: {position: new Vec3(0, 1, 0), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, health: 20,
+    registry: {blocks: {}, blocksByName: {torch: {id: 1}, wall_torch: {id: 2}}, foodsByName: {}}, inventory: {items: () => [], emptySlotCount: () => 20, slots: []},
+    pathfinder: {goto: async (g) => { bot.entity.position = new Vec3(g.x, g.y, g.z); }, stop() {}, setGoal() {}, movements: {}}, findBlocks: () => [],
+  };
+  const r = {bot, world: {hostilesNear: () => [], snapshot: () => ({blocks: []})}, emit: (k, t) => infos.push(t), protectedAreas: [], supplyChest: null, combat: {fit: () => true}};
+  await JOBS.light(r, {t: {}, cancelled: false, type: 'light', args: {x1: 0, y1: 0, z1: 0, x2: 0, y2: 2, z2: 0, zone: 'Lit'}});
+  assert.ok(infos.some((m) => /^lit Lit: 0 torches/.test(m)), infos.join('|'));
+  console.log('light: lit zone without torches ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });

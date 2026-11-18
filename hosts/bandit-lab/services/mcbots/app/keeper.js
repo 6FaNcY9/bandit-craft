@@ -200,7 +200,7 @@ class Keeper {
     const busy = new Set([...this.work.values()].map((w) => w.bot).concat(this.counting ? [this.counting.bot] : []));
     // The idle bot nearest to the chest: the first in the list sent bot20 from the castle before bot21 beside the base (2026-11-18).
     const away = (s) => (s?.pos && (!s.dimension || s.dimension.endsWith('overworld')) ? Math.hypot(s.pos[0] - this.chest.x, s.pos[2] - this.chest.z) : Infinity);
-    const free = () => [...this.runners.values()].filter((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS)
+    const free = (ok = () => true) => [...this.runners.values()].filter((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && ok(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS)
       .sort((a, b) => (away(snaps.get(a.name)) - away(snaps.get(b.name))) || 0)[0];
 
     // 1. numbers missing or old: have a bot read the chest
@@ -263,10 +263,12 @@ class Keeper {
 
   // 3. the armoury, after the supply chest's quotas, sharing their bots (MAX_BOTS), cooldowns and finish().
   tickArmoury(t, baseStock, busy, free) {
+    // By day only, as planLighting: bot1 died to skeletons on a night armoury count at -296 63 -58 (2026-11-18 22:17).
+    const dayFree = () => free((s) => s.isDay === true);
     const stock = this.armouryStock();
     this.armouryNotes.clear();
     if (!stock || t - stock.t > STOCK_MAX_AGE_MS) {
-      const r = !this.countingArmoury && busy.size < MAX_BOTS && free();
+      const r = !this.countingArmoury && busy.size < MAX_BOTS && dayFree();
       if (r) this.assign(r, [['stock', {...this.armoury}]], () => { this.countingArmoury = {bot: r.name, at: t}; busy.add(r.name); }, `${r.name}: counting what is in the armoury`);
       return;
     }
@@ -277,7 +279,7 @@ class Keeper {
       if ((this.cooldown.get(key) || 0) > t) { this.armouryNotes.set(item, 'no progress last time'); continue; }
       const jobs = armouryPlan(item, n, this.chest, this.armoury, baseStock.items);
       if (!Array.isArray(jobs)) { this.armouryNotes.set(item, jobs.blocked); continue; }
-      const r = busy.size < MAX_BOTS && free();
+      const r = busy.size < MAX_BOTS && dayFree();
       if (!r) { this.armouryNotes.set(item, 'waiting for a free bot'); continue; }
       this.assign(r, jobs, () => {
         this.work.set(key, {bot: r.name, n, at: t, before: have(stock.items, item), seen: false});

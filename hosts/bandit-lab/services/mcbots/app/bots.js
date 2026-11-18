@@ -3857,13 +3857,13 @@ const JOBS = {
       const ids = ['torch', 'wall_torch'].map((n) => bot.registry.blocksByName[n]?.id).filter((n) => n !== undefined);
       return bot.findBlocks({matching: ids, maxDistance: 9, count: 64}).some((v) => new Vec3(x, y, z).distanceTo(v) <= 7);
     }, (x, z) => chestPoints.some((c) => Math.hypot(c.x - x, c.z - z) < 2));
-    let lit = 0;
+    let lit = 0, dry = false;
     // A spot the server refused a torch on waits 24 h, not every keeper round (2026-11-11).
     const refused = (r.refusedLight ||= new Map()), key = (p) => `${p.x},${p.y},${p.z}`;
     for (const p of points) {
       guard(job);
       if ((refused.get(key(p)) || 0) > Date.now()) continue;
-      if (!await getTorch()) break;
+      if (!await getTorch()) { dry = true; break; }
       try { await goNear(r, job, p.x, p.y, p.z, 2); } catch { guard(job); continue; }
       guard(job);
       if (bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) > 3) continue;
@@ -3880,7 +3880,9 @@ const JOBS = {
         if (/^torch$/.test(bot.blockAt(new Vec3(p.x, p.y, p.z))?.name || '')) lit++;
       } catch (e) { guard(job); refused.set(key(p), Date.now() + 24 * 3600000); r.emit('info', `skipped light point ${p.x} ${p.y} ${p.z} for 24 h: ${e.message.slice(0, 60)}`); }
     }
-    if (!count() && lit === 0) throw new Error('no torches available');
+    // Only when a dark spot needed one: a lit zone and an empty hand threw at once, with no torch fetch, for 7 zones in 30 s
+    // every keeper round (bot19 2026-11-18 22:30; bot19 79, bot1 39 such failures in the archive).
+    if (dry && lit === 0) throw new Error('no torches available');
     r.emit('info', `lit ${a.zone || `box ${a.x1},${a.y1},${a.z1}..${a.x2},${a.y2},${a.z2}`}: ${lit} torches`);
   },
   help: (r, job) => helpOnce(r, job),
