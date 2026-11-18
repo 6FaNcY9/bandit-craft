@@ -37,7 +37,8 @@ function chrome(args) {
 
 // The page in real time over the DevTools protocol: virtual time (chrome()) runs out while the world still loads in its
 // worker. Waits until the page expression `ready` is true or `ms` pass, then returns the DOM; `shot` saves a screenshot.
-async function settle(hash, [width, height], ready, shot, ms = 30000) {
+// `after(ev, grab)` runs once `ready` is over, in the same page: ev(expression) evaluates, grab(file) saves a screenshot.
+async function settle(hash, [width, height], ready, shot, ms = 30000, after = null) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oneview-cdp-'));
   const ch = spawn('nix', ['shell', 'nixpkgs#chromium', '-c', 'chromium', '--headless=new', '--password-store=basic', '--no-first-run', '--hide-scrollbars',
     '--enable-unsafe-swiftshader', '--use-angle=swiftshader', `--user-data-dir=${dir}`, '--remote-debugging-port=0', 'about:blank'], {stdio: 'ignore', env: {...process.env, TMPDIR: '/tmp'}});
@@ -52,8 +53,10 @@ async function settle(hash, [width, height], ready, shot, ms = 30000) {
     const ev = async (expression) => (await send('Runtime.evaluate', {expression, returnByValue: true})).result.value;
     await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
     await send('Page.navigate', {url: `${BASE}/${hash}`});
+    const grab = async (file) => fs.writeFileSync(file, Buffer.from((await send('Page.captureScreenshot')).data, 'base64'));
     await until(() => ev(ready), '', ms).catch(() => {}); // the caller's checks say what is missing
-    if (shot) fs.writeFileSync(shot, Buffer.from((await send('Page.captureScreenshot')).data, 'base64'));
+    await after?.(ev, grab);
+    if (shot) await grab(shot);
     return await ev('document.documentElement.outerHTML');
   } finally {
     ch.kill();
@@ -123,12 +126,55 @@ async function partB() {
   }
 }
 
+// Underground view and loose dirt. The stand holds 4 loose dirt cells: the free-standing pillar (3) and the wrong block in the air at
+// the plan's corner; the dirt block with two drawn neighbours is not loose, and a scan of the stand world found no natural loose dirt.
+// bot9 stands in a cave under 6 rock cells (y 40), so a tap on its row must cut at 41. Real-time waits: the page counts once a second.
+const LOOSE = 4, DATA = 'document.getElementById("view").dataset';
+const CUT = 'JSON.stringify({hidden: cutY.hidden, value: cutY.value, label: cutLbl.textContent, cut: ' + DATA + '.cut})';
+// red vertices (the loose colour at any light) in the meshes that hold loose dirt
+const RED = '(() => { let n = 0; view.scene.traverse((o) => { const c = o.geometry?.attributes.color; if (c && o.userData.loose) for (let i = 0; i < c.array.length; i += 3) if (c.array[i] >= 120 && c.array[i + 1] <= 45 && c.array[i + 2] <= 45) n++; }); return n; })()';
+async function partUnder() {
+  const shots = ['phone-loose.png', 'phone-under.png'].map((f) => path.join(OUT, f));
+  await settle('', [390, 844], `${WORLD} && +${DATA}.loose === ${LOOSE}`, null, 60000, async (ev, grab) => {
+    const wait = (expr, line) => until(() => ev(expr), line);
+    const chip = () => ev('(c => c.hidden ? "hidden" : c.textContent)(document.getElementById("looseChip"))');
+    await sleep(1500); // one counter refresh: the number must hold
+    ok(+await ev(`${DATA}.loose`) === LOOSE, `/: data-loose is ${await ev(`${DATA}.loose`)}, want ${LOOSE}`);
+    ok(await chip() === `🟥 ${LOOSE} lose Erde`, `/: #looseChip "${await chip()}", want "🟥 ${LOOSE} lose Erde"`);
+    // the pillar and the block with two neighbours in view; the loose switch must change colours only: same triangles with the red off and on
+    await ev('view.flyTo(-254, 65, -10.5, 22)');
+    await sleep(1500);
+    await grab(shots[0]);
+    const tris = await ev(`${DATA}.tris`);
+    ok(await ev(RED) > 0, '/: no red vertices with the loose switch on');
+    for (const on of [false, true]) {
+      await ev('document.getElementById("looseChip").click()');
+      await wait(on ? `${RED} > 0` : `${RED} === 0`, `/: the red does not go ${on ? 'on' : 'off'} after a tap on #looseChip`);
+      await sleep(1500);
+      ok(await ev(`${DATA}.tris`) === tris && await chip() === `🟥 ${LOOSE} lose Erde`, `/: after the red goes ${on ? 'on' : 'off'}: data-tris ${await ev(`${DATA}.tris`)} (want ${tris}), #looseChip "${await chip()}"`);
+    }
+    // a tap on bot9's row in the 🤖 sheet: the roof is rock, so the cut goes to Höhe 41 by itself
+    await ev('document.querySelector("#bar [data-sheet=bots]").click()');
+    await wait('[...document.querySelectorAll(".botrow")].some((r) => r.textContent.includes("bot9"))', '/: no bot9 row in the 🤖 sheet');
+    await ev('[...document.querySelectorAll(".botrow")].find((r) => r.textContent.includes("bot9")).click()');
+    let s = '';
+    await until(async () => { s = JSON.parse(await ev(CUT)); return !s.hidden && s.value === '41' && s.label === 'Höhe 41' && s.cut === '41'; }, '')
+      .catch(() => { throw new Error(`bot9 row: ${JSON.stringify(s)}, want #cutY shown at 41, #cutLbl "Höhe 41", data-cut "41"`); });
+    await wait(`+${DATA}.loose === 0 && document.getElementById("looseChip").hidden`, 'bot9 row: the loose dirt above the cut is still counted');
+    await sleep(1500); // the camera follows the ack
+    await grab(shots[1]);
+    ok((await ev('document.getElementById("tags").textContent')).includes('bot9 · Höhe 40'), `bot9 row: #tags has no "bot9 · Höhe 40"`);
+  });
+  for (const f of shots) ok(fs.existsSync(f), `no screenshot ${f}`);
+}
+
 module.exports = {chrome, get, ok, until, settle, BASE, OUT};
 
 if (require.main === module) {
   (async () => {
     await partA();
     await partB();
+    await partUnder();
     console.log('stand ok');
   })().catch((e) => { console.error(`FAIL ${e.message}`); process.exit(1); });
 }

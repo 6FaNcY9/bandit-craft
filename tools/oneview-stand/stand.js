@@ -40,11 +40,15 @@ process.on('SIGTERM', () => shutdown(0));
 
 // ---- the fake world: area -270,-20,40 = chunks cx -20..-15, cz -4..1 ----
 const groundY = (x, z) => 63 + Math.round(4 * Math.sin(x / 9) * Math.cos(z / 7));
-const extra = new Map(); // "x,y,z" -> state: the plan's floor, one wrong block, the live pillar
+const extra = new Map(); // "x,y,z" -> state: the plan's floor, one wrong block, the live pillar, the loose-dirt blocks
+// the cave under bot9: a 5 x 4 x 5 room at y 40-43, a 1-wide tunnel east of it and a shaft from the tunnel up to the open air
+const inCave = (x, y, z, h) => (x >= -264 && x <= -260 && z >= -24 && z <= -20 && y >= 40 && y <= 43)
+  || (z === -22 && y >= 40 && y <= 41 && x > -260 && x <= -254) || (x === -254 && z === -22 && y >= 40 && y <= h);
 function stateAt(x, y, z) {
   const k = extra.get(`${x},${y},${z}`);
   if (k) return k;
   const h = groundY(x, z);
+  if (inCave(x, y, z, h)) return x === -263 && z === -23 && y <= 42 ? 'minecraft:water' : 'minecraft:air'; // a water column in the room
   if (y > h) return y <= 62 ? 'minecraft:water' : 'minecraft:air';
   return y === h ? 'minecraft:grass_block' : y <= 59 ? 'minecraft:stone' : 'minecraft:dirt';
 }
@@ -79,7 +83,13 @@ for (let y = 0; y < 5; y++) for (let z = 0; z < 6; z++) for (let x = 0; x < 6; x
   if (y === 0) extra.set(`${ORIGIN.x + x},${ORIGIN.y},${ORIGIN.z + z}`, 'minecraft:stone_bricks'); // the bottom layer is built
 }
 plan.push({x: 2, y: 1, z: 2, name: 'oak_stairs', props: {facing: 'east'}});
-extra.set(`${ORIGIN.x},${ORIGIN.y + 3},${ORIGIN.z}`, 'minecraft:dirt'); // wrong: a wall block belongs here
+extra.set(`${ORIGIN.x},${ORIGIN.y + 3},${ORIGIN.z}`, 'minecraft:dirt'); // wrong: a wall block belongs here (also loose dirt: nothing around it)
+
+// loose dirt on flat ground (y 63): a free-standing pillar of 3 (all loose) and one dirt block with two drawn side neighbours (not loose)
+for (let y = 64; y <= 66; y++) extra.set(`-256,${y},-11`, 'minecraft:dirt');
+extra.set('-252,64,-11', 'minecraft:dirt');
+extra.set('-251,64,-11', 'minecraft:cobblestone');
+extra.set('-252,64,-10', 'minecraft:cobblestone');
 
 // ---- the fake plugin ----
 let batch = 0, waiter = null;
@@ -123,14 +133,14 @@ const plugin = http.createServer((req, res) => {
   await new Promise((res) => child.stdout.on('data', (b) => { if (String(b).includes('listening')) res(); }));
   child.stdout.pipe(process.stderr); // the hub log stays visible, stdout keeps only the URL
 
-  // two fake worker bots: bot8 walks a circle, bot9 stands
+  // two fake worker bots: bot8 walks a circle, bot9 stands in the cave
   const ws = new WebSocket(`ws://127.0.0.1:${workerPort}/worker`, {headers: {Authorization: `Bearer ${WORKER_TOKEN}`}});
   ws.on('error', () => {});
   ws.on('open', () => {
     ws.send(JSON.stringify({t: 'hello', v: 1, host: 'stand', wid: 'a1'.repeat(16), bots: ['bot8', 'bot9']}));
     const tick = () => { const a = Date.now() / 1000 * 0.6; ws.send(JSON.stringify({t: 'status', bots: [
       {name: 'bot8', online: true, health: 20, food: 20, dimension: 'overworld', pos: [-266 + 6 * Math.cos(a), 68, -10 + 6 * Math.sin(a)]},
-      {name: 'bot9', online: true, health: 20, food: 20, dimension: 'overworld', pos: [-262, 68, -22]},
+      {name: 'bot9', online: true, health: 20, food: 20, dimension: 'overworld', pos: [-262, 40, -22]}, // in the cave
     ]})); };
     tick();
     const t = setInterval(tick, 1000);
