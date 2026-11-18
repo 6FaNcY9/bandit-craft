@@ -34,8 +34,8 @@ assert.match(html.slice(html.indexOf('r.root.onclick'), html.indexOf('rows.set(b
 assert.match(html.slice(html.indexOf('function onPlan'), html.indexOf('function worldMsg')), /if \(!b\) return; probing = null; if \(cutAuto\) setCut\(319\); view\.flyTo\(/, 'a plan-chip tap voids the probe and removes an automatic cut');
 { // ruling U2: the worker cannot cancel a probe, so only the answer to the last tap counts; a slider move voids it
   const body = html.slice(html.indexOf('// the cut slider'), html.indexOf('// the camera looks almost straight down'));
-  const els = {}, sent = [], $ = (id) => (els[id] ||= {hidden: true, value: '319', textContent: '', classList: {toggle() {}}});
-  const page = new Function('$', 'worker', 'setTimeout', 'clearTimeout', `${body}; return {onProbe, tap: (p) => { probing = p; }, auto: () => cutAuto};`)($, {postMessage: (m) => sent.push(m)}, () => 0, () => {});
+  const els = {}, sent = [], levels = [], $ = (id) => (els[id] ||= {hidden: true, value: '319', textContent: '', classList: {toggle() {}}});
+  const page = new Function('$', 'worker', 'view', 'setTimeout', 'clearTimeout', `${body}; return {onProbe, tap: (p) => { probing = p; }, auto: () => cutAuto};`)($, {postMessage: (m) => sent.push(m)}, {level: (y) => levels.push(y)}, () => 0, () => {});
   const A = {x: -449.5, y: 40, z: 101.5}, B = {x: -270.5, y: 64, z: -20.5}, answer = (p, roof) => page.onProbe({t: 'probe', ...p, roof});
   page.tap(A); page.tap(B); answer(A, 9); answer(B, 0);
   assert.deepStrictEqual(sent, [], 'a late answer for the first tap sets no cut after the second tap');
@@ -43,7 +43,7 @@ assert.match(html.slice(html.indexOf('function onPlan'), html.indexOf('function 
   assert.deepStrictEqual(sent, [{t: 'cut', y: 41}], 'covered: a cut at head height, once');
   assert.ok(page.auto() && !els.cutY.hidden && !els.cutLbl.hidden && els.cutLbl.textContent === 'Höhe 41' && +els.cutY.value === 41, 'slider and label show the automatic cut');
   page.tap(B); answer(B, 2);
-  assert.deepStrictEqual(sent.at(-1), {t: 'cut', y: 319}, 'not covered: the automatic cut goes'); assert.ok(!page.auto());
+  assert.deepStrictEqual(sent.at(-1), {t: 'cut', y: 319}, 'not covered: the automatic cut goes'); assert.ok(!page.auto()); assert.deepStrictEqual(levels, [319], 'removing a cut raises the camera at once');
   page.tap(A); answer(A, 4); els.cutY.value = '26'; els.cutY.oninput();
   assert.ok(sent.length === 3 && !page.auto(), 'a slider move makes the automatic cut a cut by hand');
   page.tap(B); answer(B, 0);

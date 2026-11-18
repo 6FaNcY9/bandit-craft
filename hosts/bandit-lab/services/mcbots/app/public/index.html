@@ -613,6 +613,7 @@ function setCut(y, auto = false) { // a cut not from the slider; the camera foll
   $('cutY').value = y;
   if (y < 319) $('cutY').hidden = $('cutLbl').hidden = false;
   cutLabel();
+  if (y >= 319) view?.level(319); // removing a cut only raises the camera, no need to wait for the ack
   worker.postMessage({t: 'cut', y});
 }
 $('cutY').oninput = () => {
