@@ -22,6 +22,7 @@
   #stopAll { position: absolute; top: 8px; right: 8px; }
   #fab { position: absolute; right: 8px; bottom: 8px; display: grid; gap: 8px; }
   #conn { cursor: pointer; } #conn::after { content: ""; position: absolute; inset: -18px; } /* a 45 px target around the dot */
+  #looseChip { position: absolute; top: 8px; left: 48px; } /* right of #conn's target */
   #pickBar { position: absolute; left: 8px; right: 64px; bottom: 8px; display: flex; gap: 8px; align-items: center; padding: 6px 6px 6px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; white-space: nowrap; } /* right: clear of #fab */
   #pickBar span { flex: 1; } #pickBar button { min-width: 44px; justify-content: center; }
   #worldMsg { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: var(--mut); pointer-events: none; }
@@ -87,7 +88,7 @@
 </style>
 </head>
 <body>
-<div id="world"><canvas id="view"></canvas><div id="tags"></div><span class="dot" id="conn" title="Verbindung"></span><button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹</button><div id="fab"><button class="b" id="camTop" title="Von oben">🗺️</button><button class="b" id="cutBtn" title="Höhe">▤</button></div><input type="range" id="cutY" min="-64" max="319" value="319" hidden><span class="badge" id="cutLbl" hidden></span><div id="pickBar" hidden></div><div id="worldMsg" hidden></div></div>
+<div id="world"><canvas id="view"></canvas><div id="tags"></div><span class="dot" id="conn" title="Verbindung"></span><button class="b" id="looseChip" hidden></button><button class="b stop" id="stopAll" title="Alle Bots anhalten">⏹</button><div id="fab"><button class="b" id="camTop" title="Von oben">🗺️</button><button class="b" id="cutBtn" title="Höhe">▤</button></div><input type="range" id="cutY" min="-64" max="319" value="319" hidden><span class="badge" id="cutLbl" hidden></span><div id="pickBar" hidden></div><div id="worldMsg" hidden></div></div>
 
 <div id="sheet" hidden>
 <div class="row between" id="sheetHead"><div class="row" id="seg"></div><button class="b" id="sheetClose" title="Schließen">✕</button></div>
@@ -447,7 +448,12 @@ function renderBots() {
       r.root.onclick = () => {
         open = open === b.name ? null : b.name; store.set('openBot', open); renderBots();
         const cur = last.bots.find((x) => x.name === b.name); // b is the first snapshot of this bot
-        if (cur?.pos && /overworld/.test(cur.dimension || '')) view?.flyTo(...cur.pos);
+        if (view && cur?.pos && /overworld/.test(cur.dimension || '')) {
+          const [x, y, z] = cur.pos;
+          view.flyTo(x, Math.max(y + 2, 70), z); // above ground; the probe's answer takes it down with a cut
+          probing = {x, y, z};
+          worker.postMessage({t: 'probe', x, y, z});
+        }
       };
       rows.set(b.name, r);
       $('botRows').append(r.root);
@@ -543,6 +549,7 @@ $('gatherGo').onclick = () => {
 const COLORS = ['#60a5fa', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c'];
 function ownerPos() { return last?.world?.players?.find((p) => p.name?.toLowerCase() === me().toLowerCase()) || null; }
 let worker = null, view = null, layers = null, worldNet = true, worldErr = ''; // null until startWorld() ran: /ws messages come before the files have loaded
+let looseOn = store.get('looseOn', true); // red loose dirt
 let followed = ''; // the plan list last sent to the worker
 const planMsgs = new Map(); // plan key -> the worker's last plan message, for the chips
 function toWorld() { // /ws state into the world: markers and the plans to follow
@@ -557,7 +564,7 @@ function onPlan(m) {
   const chips = [...planMsgs.values()].map((p) => {
     const ring = el('span', {class: 'ring'}), b = p.box, side = b && Math.max(b.x2 - b.x1, b.y2 - b.y1, b.z2 - b.z1) + 1;
     ring.style.setProperty('--p', `${p.percent || 0}%`); // CSSOM: the CSP blocks style attributes
-    return el('button', {class: 'b', onclick: () => b && view.flyTo((b.x1 + b.x2 + 1) / 2, (b.y1 + b.y2 + 1) / 2, (b.z1 + b.z2 + 1) / 2, side * 1.5 + 10)},
+    return el('button', {class: 'b', onclick: () => { if (!b) return; probing = null; if (cutAuto) setCut(319); view.flyTo((b.x1 + b.x2 + 1) / 2, (b.y1 + b.y2 + 1) / 2, (b.z1 + b.z2 + 1) / 2, side * 1.5 + 10); }},
       ring, el('b', {}, p.state === 'big' ? 'zu groß' : `${p.percent} %${p.counts.unknown > 0 ? ' ?' : ''}`), p.key.slice(0, p.key.lastIndexOf('@')).replace(/\.litematic$/, ''));
   });
   $('planChips').replaceChildren(...(chips.length ? chips : [el('span', {class: 'mut'}, 'Kein Bauplan aktiv.')]));
@@ -566,6 +573,10 @@ function worldMsg() {
   const t = worldErr || (view?.stats().meshes ? '' : worldNet ? 'Welt lädt …' : 'Keine Welt-Daten');
   $('worldMsg').textContent = t;
   $('worldMsg').hidden = !t;
+  const n = view?.stats().loose || 0, chip = $('looseChip'); // N stays while the red is off
+  chip.textContent = `🟥 ${n} lose Erde`;
+  chip.hidden = !n;
+  chip.classList.toggle('sel', looseOn);
 }
 function onPick(x, y, z) { // a tap on the world: send the chosen bots there
   const bar = $('pickBar'), close = () => { bar.hidden = true; };
@@ -581,28 +592,44 @@ function startWorld() {
     worker = new Worker('/oneview/worker.js');
     const pause = () => worker.postMessage({t: 'pause', on: document.hidden});
     pause(); // first: the view's first message makes the worker fetch, and a page opened in a hidden tab must not
+    worker.postMessage({t: 'loose', on: looseOn});
     worker.onerror = worldFail;
     document.addEventListener('visibilitychange', pause);
     if (last) worker.postMessage({t: 'seq', seq: last.worldSeq});
     view = OV.makeView($('view'), {worker, onPick});
     layers = OV.makeLayers(view, $('tags'));
-    worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; if (m.t === 'plan') onPlan(m); else view.onWorker(m); worldMsg(); };
+    worker.onmessage = ({data: m}) => { if (m.t === 'net') worldNet = m.ok; if (m.t === 'plan') onPlan(m); else if (m.t === 'cut') view.level(m.y); else if (m.t === 'probe') onProbe(m); else view.onWorker(m); worldMsg(); };
     if (last) toWorld();
   } catch (e) { worldFail(e); } },(e) => { $('worldMsg').textContent = e.message; });
 }
 window.addEventListener('load', startWorld);
 // the cut slider: everything above Höhe is hidden, 319 shows all
-let cutT = 0;
+let cutT = 0, cutAuto = false, probing = null; // cutAuto: a bot-row tap set the cut; probing: the {x, y, z} whose probe answer still counts
 $('cutBtn').onclick = () => { $('cutY').hidden = $('cutLbl').hidden = !$('cutY').hidden; cutLabel(); };
 function cutLabel() { const y = +$('cutY').value; $('cutLbl').textContent = y >= 319 ? 'Höhe: alles' : `Höhe ${y}`; $('cutBtn').classList.toggle('sel', y < 319); }
+function setCut(y, auto = false) { // a cut not from the slider; the camera follows on the worker's ack
+  cutAuto = auto;
+  clearTimeout(cutT);
+  $('cutY').value = y;
+  if (y < 319) $('cutY').hidden = $('cutLbl').hidden = false;
+  cutLabel();
+  worker.postMessage({t: 'cut', y});
+}
 $('cutY').oninput = () => {
+  cutAuto = false; probing = null; // a hand on the slider wins over a bot-row tap
   cutLabel();
   clearTimeout(cutT);
   cutT = setTimeout(() => worker?.postMessage({t: 'cut', y: +$('cutY').value}), 150);
 };
+function onProbe(m) { // the worker cannot cancel a probe: only the answer to the last bot-row tap counts
+  if (!probing || m.x !== probing.x || m.y !== probing.y || m.z !== probing.z) return;
+  probing = null;
+  if (m.roof >= 3) setCut(Math.floor(m.y) + 1, true); else if (cutAuto) setCut(319);
+}
 // the camera looks almost straight down only in the top view
 $('camTop').onclick = () => view?.topDown(view.camera.getWorldDirection(new THREE.Vector3()).y > -0.999);
 $('conn').onclick = () => { const s = view?.stats(); if (s) say(`${s.chunks} Chunks · ${String(s.tris).replace(/\B(?=(\d{3})+$)/g, ' ')} Dreiecke`); };
+$('looseChip').onclick = () => { looseOn = !looseOn; store.set('looseOn', looseOn); worker.postMessage({t: 'loose', on: looseOn}); worldMsg(); };
 
 // ---- chests ----
 let chests = [];

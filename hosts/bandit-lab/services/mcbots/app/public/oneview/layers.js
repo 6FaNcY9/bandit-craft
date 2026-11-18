@@ -8,8 +8,9 @@
   function makeLayers(view, tagsEl) {
     const {scene} = view, canvas = tagsEl.parentElement.querySelector('canvas');
     const body = new THREE.BoxGeometry(0.6, 1.8, 0.6).translate(0, 0.9, 0), cube = new THREE.BoxGeometry(1, 1, 1), m4 = new THREE.Matrix4();
-    const mats = new Map(), marks = new Map(), plans = new Map(); // colour -> material; name -> marker; key -> [InstancedMesh]
+    const mats = new Map(), ghosts = new Map(), marks = new Map(), plans = new Map(); // colour -> material, colour -> ghost material; name -> marker; key -> [InstancedMesh]
     const mat = (c) => mats.get(c) || mats.set(c, new THREE.MeshBasicMaterial({color: c})).get(c);
+    const ghostMat = (c) => ghosts.get(c) || ghosts.set(c, new THREE.MeshBasicMaterial({color: c, transparent: true, opacity: 0.45, depthTest: false, depthWrite: false})).get(c); // over everything: a bot in rock, water or under the lid still shows
 
     // once per drawn frame: markers ease, tags follow; frames are asked for only while a marker moves
     scene.onBeforeRender = () => {
@@ -36,14 +37,16 @@
         let m = marks.get(name);
         if (!m) {
           const tag = tagsEl.appendChild(document.createElement('div'));
-          tag.textContent = name;
-          m = {mesh: new THREE.Mesh(body, mat(c)), tag, from: new THREE.Vector3(x, y, z), to: new THREE.Vector3(x, y, z), t0: 0};
+          m = {mesh: new THREE.Mesh(body, mat(c)), ghost: new THREE.Mesh(body, ghostMat(c)), tag, from: new THREE.Vector3(x, y, z), to: new THREE.Vector3(x, y, z), t0: 0};
+          m.mesh.add(m.ghost);
           m.mesh.position.copy(m.to); // a hidden tab draws no frame, and the next update eases from here
           scene.add(m.mesh);
           marks.set(name, m);
         } else if (m.to.x !== x || m.to.y !== y || m.to.z !== z) { m.from.copy(m.mesh.position); m.to.set(x, y, z); m.t0 = now; }
         else if (m.mesh.material === mat(c)) continue;
         m.mesh.material = mat(c);
+        m.ghost.material = ghostMat(c);
+        m.tag.textContent = y < 60 ? `${name} · Höhe ${Math.floor(y)}` : name; // underground: the Höhe to pull the slider to
         changed = true;
       }
       canvas.dataset.bots = marks.size;

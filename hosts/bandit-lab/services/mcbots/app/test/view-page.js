@@ -25,3 +25,37 @@ for (const gone of ['Trag oben', 'Erst oben']) assert.ok(!html.includes(gone), g
 assert.match(html, /top: 50vh; top: 50dvh;/); assert.match(html, /bottom: 50vh; bottom: 50dvh;/);
 // Safari before 15.5 has no worker-src fallback to script-src: without it the worker falls to default-src 'none'
 assert.ok(fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8').includes("connect-src 'self'; worker-src 'self';"), 'worker-src in the page CSP');
+// underground: the camera follows the cut's ack, a covered bot gets an automatic cut, ghosts and heights, the loose chip
+assert.ok(html.match(/<div id="world">.*<\/div>\n/)[0].includes('<button class="b" id="looseChip" hidden></button>'), 'the loose chip sits in the world, a 44 px button');
+assert.match(html, /chip = \$\('looseChip'\)[^\n]*\n\s*chip\.textContent = `🟥 \$\{n\} lose Erde`;\n\s*chip\.hidden = !n;/, 'N via textContent, hidden at 0');
+assert.match(html, /store\.get\('looseOn', true\)/); assert.match(html, /worker\.postMessage\(\{t: 'loose', on: looseOn\}\)/);
+assert.match(html, /else if \(m\.t === 'cut'\) view\.level\(m\.y\); else if \(m\.t === 'probe'\) onProbe\(m\);/, 'the camera moves on the worker\'s ack');
+assert.match(html.slice(html.indexOf('r.root.onclick'), html.indexOf('rows.set(b.name, r)')), /view\.flyTo\(x, Math\.max\(y \+ 2, 70\), z\);[^\n]*\n\s*probing = \{x, y, z\};\n\s*worker\.postMessage\(\{t: 'probe', x, y, z\}\);/, 'a bot-row tap flies above ground and probes');
+assert.match(html.slice(html.indexOf('function onPlan'), html.indexOf('function worldMsg')), /if \(!b\) return; probing = null; if \(cutAuto\) setCut\(319\); view\.flyTo\(/, 'a plan-chip tap voids the probe and removes an automatic cut');
+{ // ruling U2: the worker cannot cancel a probe, so only the answer to the last tap counts; a slider move voids it
+  const body = html.slice(html.indexOf('// the cut slider'), html.indexOf('// the camera looks almost straight down'));
+  const els = {}, sent = [], $ = (id) => (els[id] ||= {hidden: true, value: '319', textContent: '', classList: {toggle() {}}});
+  const page = new Function('$', 'worker', 'setTimeout', 'clearTimeout', `${body}; return {onProbe, tap: (p) => { probing = p; }, auto: () => cutAuto};`)($, {postMessage: (m) => sent.push(m)}, () => 0, () => {});
+  const A = {x: -449.5, y: 40, z: 101.5}, B = {x: -270.5, y: 64, z: -20.5}, answer = (p, roof) => page.onProbe({t: 'probe', ...p, roof});
+  page.tap(A); page.tap(B); answer(A, 9); answer(B, 0);
+  assert.deepStrictEqual(sent, [], 'a late answer for the first tap sets no cut after the second tap');
+  page.tap(A); answer(A, 3); answer(A, 3);
+  assert.deepStrictEqual(sent, [{t: 'cut', y: 41}], 'covered: a cut at head height, once');
+  assert.ok(page.auto() && !els.cutY.hidden && !els.cutLbl.hidden && els.cutLbl.textContent === 'Höhe 41' && +els.cutY.value === 41, 'slider and label show the automatic cut');
+  page.tap(B); answer(B, 2);
+  assert.deepStrictEqual(sent.at(-1), {t: 'cut', y: 319}, 'not covered: the automatic cut goes'); assert.ok(!page.auto());
+  page.tap(A); answer(A, 4); els.cutY.value = '26'; els.cutY.oninput();
+  assert.ok(sent.length === 3 && !page.auto(), 'a slider move makes the automatic cut a cut by hand');
+  page.tap(B); answer(B, 0);
+  assert.strictEqual(sent.length, 3, 'a cut by hand stays');
+  page.tap(A); els.cutY.oninput(); answer(A, 5);
+  assert.strictEqual(sent.length, 3, 'a slider move voids the waiting probe');
+}
+const viewJs = fs.readFileSync(path.join(__dirname, '../public/oneview/view.js'), 'utf8');
+assert.match(viewJs, /let base = cam\.y = Math\.max\(cam\.y, 70\)/, 'a saved camera starts above ground: the cut is not kept');
+assert.match(viewJs, /function level\(y\) \{ lvl = y; cam\.y = y >= 319 \? base : Math\.min\(base, y \+ 1\);/, 'the target goes underground only with a cut');
+assert.match(viewJs, /function flyTo\(x, y, z, r = 30\) \{ base = y; [^\n]*level\(lvl\); \}/);
+assert.match(viewJs, /canvas\.dataset\.loose = s\.loose; canvas\.dataset\.cut = lvl;/); assert.match(viewJs, /return \{flyTo, level,/);
+const layersJs = fs.readFileSync(path.join(__dirname, '../public/oneview/layers.js'), 'utf8');
+assert.match(layersJs, /color: c, transparent: true, opacity: 0\.45, depthTest: false, depthWrite: false/, 'each marker has a ghost that shows through rock');
+assert.match(layersJs, /m\.tag\.textContent = y < 60 \? `\$\{name\} · Höhe \$\{Math\.floor\(y\)\}` : name;/, 'an underground tag says the Höhe');

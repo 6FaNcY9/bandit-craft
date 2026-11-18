@@ -20,7 +20,7 @@
     const tileGeo = new THREE.PlaneGeometry(16, 16).rotateX(-Math.PI / 2).translate(8, 0, 8);
     const tileMat = [null, 0x555b66, 0x9aa1aa].map((color) => color && new THREE.MeshBasicMaterial({color, transparent: true, opacity: 0.25})); // by chunk state: 1 ungenerated, 2 unknown
     const secs = new Map(), tiles = new Map(), known = new Set(); // "cx,sy,cz" -> mesh, "cx,cz" -> tile, "cx,cz" of state 0
-    let tris = 0;
+    let tris = 0, loose = 0; // loose: loose dirt cells in the drawn sections
 
     // ---- terrain ----
     function dropMesh(k) {
@@ -28,10 +28,11 @@
       if (!m) return;
       terrain.remove(m);
       tris -= m.geometry.index.count / 3;
+      loose -= m.userData.loose;
       m.geometry.dispose();
       secs.delete(k);
     }
-    function setMesh({cx, sy, cz, pos, col, idx}) {
+    function setMesh({cx, sy, cz, pos, col, idx, loose: n = 0}) {
       const k = `${cx},${sy},${cz}`;
       dropMesh(k);
       if (!pos) return;
@@ -44,9 +45,11 @@
       m.position.set(cx * 16, sy * 16, cz * 16);
       m.matrixAutoUpdate = false;
       m.updateMatrix();
+      m.userData.loose = n;
       terrain.add(m);
       secs.set(k, m);
       tris += idx.length / 3;
+      loose += n;
     }
     function setChunk(cx, cz, state) {
       const k = `${cx},${cz}`, t = tiles.get(k);
@@ -62,10 +65,10 @@
         tiles.set(k, m);
       } else if (t) { scene.remove(t); tiles.delete(k); }
     }
-    const stats = () => ({chunks: known.size, meshes: secs.size, tris});
+    const stats = () => ({chunks: known.size, meshes: secs.size, tris, loose});
     let statT = 0;
     function counted() { // the check reads these, at most once a second
-      statT ||= setTimeout(() => { statT = 0; const s = stats(); canvas.dataset.chunks = s.chunks; canvas.dataset.meshes = s.meshes; canvas.dataset.tris = s.tris; }, 1000);
+      statT ||= setTimeout(() => { statT = 0; const s = stats(); canvas.dataset.chunks = s.chunks; canvas.dataset.meshes = s.meshes; canvas.dataset.tris = s.tris; canvas.dataset.loose = s.loose; canvas.dataset.cut = lvl; }, 1000);
     }
     function onWorker(m) {
       if (m.t === 'mesh') setMesh(m);
@@ -79,6 +82,7 @@
     // ---- camera: a target on the ground, seen from r blocks at azimuth az and elevation el ----
     const cam = {...DEF};
     try { const s = JSON.parse(localStorage.getItem('cam')); for (const k in DEF) if (Number.isFinite(s?.[k])) cam[k] = s[k]; } catch {}
+    let base = cam.y = Math.max(cam.y, 70), lvl = 319; // base: the height of the last flyTo; lvl: the cut the target follows (not kept, so a saved target starts above ground)
     let atCx = NaN, atCz = NaN, saveT = 0, queued = false;
     function moved() {
       cam.r = clamp(cam.r, 8, 400); cam.el = clamp(cam.el, 0.15, 1.55);
@@ -166,11 +170,12 @@
       v.set(x, y, z).project(camera);
       return {x: ((v.x + 1) / 2) * canvas.clientWidth, y: ((1 - v.y) / 2) * canvas.clientHeight, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1};
     }
-    function flyTo(x, y, z, r = 30) { Object.assign(cam, {x, y, z, r}); moved(); }
+    function level(y) { lvl = y; cam.y = y >= 319 ? base : Math.min(base, y + 1); moved(); counted(); } // the target goes underground only together with a cut
+    function flyTo(x, y, z, r = 30) { base = y; Object.assign(cam, {x, z, r}); level(lvl); }
     function topDown(on) { cam.el = on ? 1.55 : 0.9; moved(); }
 
     moved();
-    return {flyTo, topDown, draw, project, onWorker, stats, scene, camera};
+    return {flyTo, level, topDown, draw, project, onWorker, stats, scene, camera};
   }
 
   (self.OV = self.OV || {}).makeView = makeView;
