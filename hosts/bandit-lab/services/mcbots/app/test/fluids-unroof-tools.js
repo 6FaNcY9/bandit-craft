@@ -217,6 +217,15 @@
     assert.deepStrictEqual(descentStart(home, depot, {x: -270, z: -215}), home, 'a job tied to the base walks back to it');
     assert.equal(descentStart(null, depot, null), false, 'no base: no dig-down');
     assert.ok(DEEP_BAND.deepslate[1] <= 0 && DEEP_BAND.deepslate[0] >= -60, 'deepslate band lies below Y 0');
+    // Back from a detour (rearm at the base chest) to where it dug: bot19 dug at -194 -2 -209, then walked to the base,
+    // dug a new stair and far-searched 134 blocks (500 in all, 2026-11-18).
+    const {digSpotBack} = require('../bots');
+    const band = DEEP_BAND.deepslate, base = {x: -271, y: 66, z: -214}, dug = {x: -194, y: -2, z: -209};
+    assert.deepStrictEqual(digSpotBack(dug, band, base), dug, 'in the band and near: walk back down there');
+    assert.deepStrictEqual(digSpotBack({...dug, y: 4}, band, base), {...dug, y: 4}, 'just above the band is no reason for a new stair');
+    assert.equal(digSpotBack({...dug, y: 20}, band, base), null, 'out of the band: dig down as before');
+    assert.equal(digSpotBack({...dug, x: base.x + 200}, band, base), null, 'too far: dig down as before');
+    assert.equal(digSpotBack(undefined, band, base), null, 'nothing dug yet');
   }
   const {shiftLeash} = require('../bots');
   // T04: the walk aims at the nearest free blocks, never at skipped ones, and at most k of them

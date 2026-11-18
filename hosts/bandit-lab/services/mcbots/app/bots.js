@@ -2895,6 +2895,12 @@ function descentStart(home, me, anchor) {
   if (anchor && !near(anchor)) return false;
   return near(me) ? null : {x: home.x, y: home.y, z: home.z};
 }
+// Where a dig-down after a detour (a rearm, a deposit) goes instead: back to the block it dug last (job.t.area), when
+// that lies in the band (as the dig-down tests it) and near. The old stairs are there: bot19 walked to the base, dug a
+// new stair and far-searched 134 blocks, 500 in all, with its dug spot 77 blocks away (2026-11-18). Farther than one far
+// hop (farsearch FAR_HOP) a new stair beside the base is the shorter way again.
+const DIG_BACK_MAX = 96;
+const digSpotBack = (area, band, me) => (area && outside(band, area.y) <= 4 && Math.hypot(area.x - me.x, area.z - me.z) <= DIG_BACK_MAX ? area : null);
 const EXPLORE_STEP = 32;
 // T04 (2026-10-20): one search toward the TOPK nearest free blocks instead of a walk to one that may be sealed in
 // (535 "could not reach" a day); only for a first block farther than TOPK_NEAR, so close work stays a single short walk.
@@ -2988,6 +2994,16 @@ async function collect(r, job, matching, count, what) {
     const start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : null;
     if (band && start !== false && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
       descents++; // twice at most, then mine what is in reach
+      const back = digSpotBack(job.t.area, band, me);
+      if (back) {
+        try {
+          await goNear(r, job, back.x, back.y, back.z, 3, {doing: `walking back down to where it dug ${what} at ${at(back)}`});
+          continue;
+        } catch (e) {
+          guard(job);
+          r.emit('info', `no way back to ${at(back)}, digging down instead: ${e.message.slice(0, 80)}`);
+        }
+      }
       if (start) await goNear(r, job, start.x, start.y, start.z, 4, {xz: true, doing: `walking to the base to dig down for ${what} (never under a build)`});
       await toBand(r, job, band, what);
       continue;
@@ -4641,4 +4657,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};

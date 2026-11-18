@@ -99,3 +99,24 @@ first.then(async () => {
   job.cancelled = true;
   await assert.rejects(run, /stopped/);
 }).catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Deep rock after a detour: back at the base (rearm), the dig-down walks back to the block it dug last (77 blocks away)
+// instead of a new stair beside the base and a far search (bot19, 500 blocks, 2026-11-18).
+first.then(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots');
+  const home = {x: -271, y: 66, z: -214}, dug = {x: -194, y: -2, z: -209};
+  const pos = new Vec3(-268, 66, -212), walks = [];
+  const job = {id: 3, type: 'mine', args: {block: 'deepslate', count: 4}, t: {upkeep: true, area: dug}, collected: 0, progress: ''};
+  const bot = {entity: {position: pos}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null,
+    blockAt: () => null, game: {dimension: 'overworld'}, on() {}, once() {},
+    pathfinder: {searchRadius: 100, stop() {}, setGoal() {}, goto: async (g) => {
+      walks.push([g.constructor.name, g.x, g.y, g.z]);
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+      if (walks.length > 12 || Math.hypot(pos.x - dug.x, pos.z - dug.z) < 4) job.cancelled = true; // there (or lost): stop the job
+    }}};
+  const r = {name: 'bot19', emit() {}, log() {}, bot, supplyChest: home, protectedAreas: [], world: null, skip: new Map(), acquireFailed: new Map(), conflict() {}, combat: {busy: false, hostilesNear: () => [], fit: () => true}, moves: null};
+  await assert.rejects(JOBS.mine(r, job), /stopped/);
+  assert.ok(Math.hypot(pos.x - dug.x, pos.z - dug.z) < 4 && pos.y === dug.y, `it walked back to the dug block: ${JSON.stringify(walks)}`);
+  assert.ok(!walks.some(([name]) => name === 'GoalY'), 'no new stair');
+}).catch((e) => { console.error(e); process.exitCode = 1; });
