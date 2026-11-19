@@ -140,10 +140,18 @@ class Combat {
   // Whether this mob counts against the bot now: a wall stops its hits and shots, so one behind a wall does not, unless it
   // is close enough to come around the corner or its kind just hit the bot (a shot through a gap the ray misses).
   canGetAt(e, now) {
+    const {bot} = this.r;
+    const eye = bot.entity.position.offset(0, 1.62, 0), at = mobLocation(e).position.offset(0, (e.height || 1.8) * 0.85, 0);
+    return at.distanceTo(eye) <= AROUND_CORNER || this.inSight(e, now);
+  }
+
+  // A ray from the eyes reaches it, or its kind just hit the bot. fight() only for these: a zombie in a sealed cave beside
+  // a mine stopped every dig (audit 2026-11-19 SURVIVAL-8).
+  inSight(e, now) {
     const {bot, hits = []} = this.r;
     const eye = bot.entity.position.offset(0, 1.62, 0), at = mobLocation(e).position.offset(0, (e.height || 1.8) * 0.85, 0);
     const d = at.distanceTo(eye);
-    if (d <= AROUND_CORNER || hits.some((h) => h.by === e.name && now - h.t < 10000)) return true;
+    if (hits.some((h) => h.by === e.name && now - h.t < 10000)) return true;
     try {
       return !bot.world.raycast(eye, at.minus(eye).normalize(), d);
     } catch {
@@ -358,7 +366,7 @@ class Combat {
     const creeper = threats.find((e) => e.name === 'creeper' && mobLocation(e).position.distanceTo(me) < 6); // an ignored one too, once close
     if (creeper && !r.sheltered) return this.duel(creeper); // kited by any bot: walking backwards keeps it off, armour or not
     if (this.blocking && closeDist > 6) this.block(false);
-    if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt')) return this.fight(close);
+    if (close && s.defend && closeDist <= FIGHT_RANGE && (!this.busy || this.mode === 'hunt') && this.inSight(close, now)) return this.fight(close);
     // Only a fit bot walks up to a mob, never to a creeper: bot2, unarmoured and unarmed, hunted a creeper and was blown
     // up, and died four times in ten minutes (main server 2026-10-16). An unfit bot still hits what comes close.
     if (near && near.name !== 'creeper' && (this.fit() || this.r.current?.type === 'guard') && s.defend && dist <= s.fightRange && !this.busy && !r.sheltered && !this.r.inventoryBusy && !bot.currentWindow && !this.hazardNear(mobLocation(near).position)) return this.hunt(near);

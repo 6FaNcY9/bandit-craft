@@ -97,4 +97,13 @@ const assert = require('node:assert');
   t = mk([mob(1, 'zombie', 20)]);
   await t.c.tick();
   assert.strictEqual(t.c.mode, null, 'nor walks off from one 20 blocks away');
+  // A zombie 4 blocks off in a sealed cave beside the mine: each fight() stopped the dig, and the mine job froze (SURVIVAL-8).
+  t = mk([mob(1, 'zombie', 4)], {wallAt: 2});
+  fought = 0;
+  t.c.fight = async () => { fought++; };
+  for (let i = 0; i < 3; i++) await t.c.tick();
+  assert.strictEqual(fought, 0, 'no fight through a wall');
+  t.c.r.hits = [{by: 'zombie', t: Date.now()}];
+  await t.c.tick();
+  assert.strictEqual(fought, 1, 'one that just hit the bot through a gap is fought');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
