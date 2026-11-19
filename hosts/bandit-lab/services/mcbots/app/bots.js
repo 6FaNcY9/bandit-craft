@@ -1610,7 +1610,7 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
   // shortcut: a full path found in time may still dip under the floor mid-leg; only its end and ranking are held.
   // shortcut: an xz walk (y is then the bot's own) to ground that lies wholly under the floor (a ravine below y 51)
   // ends with "no way there"; no unbanded retry on purpose, that retry is the sink this floor stops.
-  const low = r.bot?.entity ? Math.min(Math.floor(r.bot.entity.position.y), Math.floor(y), SEA) - LEG_SINK : -Infinity;
+  const low = r.bot?.entity ? Math.min(Math.floor(r.bot.entity.position.y), Number.isFinite(y) ? Math.floor(y) : Infinity, SEA) - LEG_SINK : -Infinity;
   const banded = (g) => {
     const end = g.isEnd.bind(g), h = g.heuristic.bind(g);
     g.isEnd = (n) => n.y >= low && end(n);
