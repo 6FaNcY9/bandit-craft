@@ -284,6 +284,14 @@ module.exports = async () => {
       assert.deepStrictEqual(order, [], 'nothing dug');
       blocks.clear();
     }
+    { // ... in a row only: six such blocks between dug ones (an obsidian frame in a clear) are left and the rest is dug (final review 2026-11-19)
+      for (let y = 55; y <= 60; y++) { blocks.set(`0,${y},0`, 'dirt'); blocks.set(`1,${y},0`, 'stone'); }
+      order.length = 0;
+      const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      await assert.rejects(JOBS.excavate({...r, bot: hard}, {...job, t: {}, unreachable: new Set(), args: {...job.args, y1: 55}}), /6 blocks of the room were not dug/);
+      assert.strictEqual(order.length, 6, 'every stone dug');
+      blocks.clear();
+    }
     { // spawners are no missing pickaxe: clear leaves all of them and still digs the layer below (W1 review)
       for (let x = 0; x <= 1; x++) for (let y = 59; y <= 60; y++) blocks.set(`${x},${y},0`, 'spawner');
       blocks.set('0,58,0', 'spawner'); blocks.set('1,58,0', 'stone');

@@ -4506,7 +4506,7 @@ const JOBS = {
           try {
             await upkeep(r, job, [b.type]);
             job.t.doing = `digging out the room at ${x1} ${y1} ${z1}`;
-            if (await digAt(r, job, pos, (n) => n === b.name)) dug++;
+            if (await digAt(r, job, pos, (n) => n === b.name)) { dug++; noTool = 0; }
             else left++;
           } catch (e) {
             // One block nobody can reach or dig safely is left, as the mine job does; it ended the whole
@@ -4515,7 +4515,7 @@ const JOBS = {
             // A block that needs a better pickaxe (or a spawner) is left too, not the end of a shaft with 70 layers to go (bots-3-3).
             const tool = /^no pickaxe for |^needs a tool|refusing to dig/.test(e.message);
             if (!tool && !/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
-            // shortcut: 5 blocks in one layer that need a better pickaxe end the whole shaft or part; upgrade to a per-block-type skip if bots give up shafts in ore-rich layers
+            // shortcut: 5 blocks in a row (no dug block between) that need a better pickaxe end the whole shaft or part; upgrade to a per-block-type skip if bots give up shafts in ore-rich layers
             if (/^no pickaxe for |^needs a tool/.test(e.message) && ++noTool > 4) throw e; // no fitting pickaxe at all: end with its reason, not a "blocked shaft" after a replacePickaxe per block (W1); spawners do not count
             left++;
             if (tool || /No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
