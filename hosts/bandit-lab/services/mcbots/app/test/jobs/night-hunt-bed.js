@@ -507,4 +507,25 @@ module.exports = async () => {
       Object.assign(B.JOBS, real);
     }
   }
+  { // light: a dark spot the walk could not get near rests 24 h, as a refused torch does; the keeper re-walked it every
+    // 30 min (audit bots-3-4)
+    const {JOBS} = require('../../bots');
+    const {Vec3} = require('vec3');
+    const blocks = new Map([['0,0,0', {name: 'stone', boundingBox: 'block', light: 0}], ['0,1,0', {name: 'air', boundingBox: 'empty', light: 0}], ['0,2,0', {name: 'air', boundingBox: 'empty', light: 0}]]);
+    let walks = 0;
+    const bot = {
+      blockAt: (p) => { const b = blocks.get(`${p.x},${p.y},${p.z}`); return b ? {...b, position: new Vec3(p.x, p.y, p.z)} : null; },
+      entity: {position: new Vec3(0, 1, 9), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, health: 20, heldItem: null,
+      registry: {blocks: {}, blocksByName: {torch: {id: 1}, wall_torch: {id: 2}}, foodsByName: {}}, inventory: {items: () => [{name: 'torch', count: 30}], emptySlotCount: () => 20, slots: []},
+      pathfinder: {goto: async () => { walks++; bot.entity.position = new Vec3(0, 1, 6); }, stop() {}, setGoal() {}, movements: {}}, findBlocks: () => [],
+      equip: async (it) => { bot.heldItem = it; }, placeBlock: async () => { throw new Error('no torch expected'); },
+    };
+    const r = {bot, world: {hostilesNear: () => [], snapshot: () => ({blocks: []})}, emit() {}, protectedAreas: [], supplyChest: null, combat: {fit: () => true}};
+    const job = () => ({t: {}, cancelled: false, type: 'light', args: {x1: 0, y1: 0, z1: 0, x2: 0, y2: 2, z2: 0, zone: 'Far'}});
+    await JOBS.light(r, job());
+    assert.ok(walks > 0, 'the first round walks to the spot');
+    walks = 0; r.noPath = null; bot.entity.position = new Vec3(0, 1, 9); // next keeper round, the 10 min no-path memory is gone
+    await JOBS.light(r, job());
+    assert.strictEqual(walks, 0, 'the second round does not walk to a spot it could not reach');
+  }
 };

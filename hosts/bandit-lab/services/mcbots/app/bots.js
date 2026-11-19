@@ -3943,9 +3943,11 @@ const JOBS = {
       guard(job);
       if ((refused.get(key(p)) || 0) > Date.now()) continue;
       if (!await getTorch()) { dry = true; break; }
-      try { await goNear(r, job, p.x, p.y, p.z, 2); } catch { guard(job); continue; }
+      // A spot the walk cannot get near rests 24 h too: each keeper round walked to it again, minutes per zone (audit bots-3-4).
+      const far = () => { refused.set(key(p), Date.now() + 24 * 3600000); };
+      try { await goNear(r, job, p.x, p.y, p.z, 2); } catch { guard(job); far(); continue; }
       guard(job);
-      if (bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) > 3) continue;
+      if (bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) > 3) { far(); continue; }
       const here = bot.blockAt(new Vec3(p.x, p.y, p.z)), below = bot.blockAt(new Vec3(p.x, p.y - 1, p.z));
       if (!here || !below || !['air', 'cave_air'].includes(here.name) || below.boundingBox !== 'block' || (here.light ?? 15) >= LIGHT_GOAL) continue;
       try {
