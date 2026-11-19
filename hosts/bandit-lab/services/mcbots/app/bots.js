@@ -76,6 +76,7 @@ const {NATURAL, DIRS, BORDER_K, kindOf} = require('./road');
 const TIDY_DIG = new RegExp(`${NATURAL.source}|^[a-z_]*leaves$`);
 // Built blocks: a dig of one is reported (guardDigs), so the step that dug a finished wall shows in the events.
 const BUILT = /^polished_|(bricks|_planks|_stairs|_slab|_bars|_tiles|_wall|_fence|_pane|glass|lantern|campfire|beacon)$/;
+const ROCK_NAMES = /^(stone|deepslate|andesite|diorite|granite|tuff|calcite|dripstone_block|smooth_basalt|[a-z_]*_ore)$/; // natural rock (walk veto in rock zones)
 const roadJob = require('./roadjob');
 const {makeRide} = require('./cartride');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
@@ -1238,7 +1239,10 @@ function safeMovements(bot, areas, runner = null) {
     if (runner) runner.keptBuilt = blk;
     return 100;
   };
-  mv.exclusionAreasBreak = [veto, held, built, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
+  // Nor natural rock in a rock zone (the castle rock, owner 2026-11-19), for every walk: bot1's walk to the spruce wood
+  // dug down to Y -4 under the castle's west edge. Soil, grass and leaves stay free; a build clears its cells with digAt.
+  const rock = (blk) => (ROCK_NAMES.test(blk.name) && inZone('rock', blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
+  mv.exclusionAreasBreak = [veto, held, built, rock, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
   const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
   mv.exclusionAreasPlace = [veto, lid];

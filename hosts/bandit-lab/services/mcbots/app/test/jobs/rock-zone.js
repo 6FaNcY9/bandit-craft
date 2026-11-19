@@ -26,4 +26,17 @@ module.exports = async () => {
   };
   assert.match(await mineIn([new Vec3(6, 60, 5)]), /^no free stone within 64 blocks .*seen 1, 0 outside base and protected areas/, 'no stone from the castle rock');
   assert.match(await mineIn([new Vec3(6, 75, 5)]), /seen 1, 1 outside base and protected areas, 1 within leash 64, 1 blocked/, 'above the zone it is free (the zone keeps its height)');
+
+  // Walks dig no natural rock in the zone either (bot1's walk to the spruce wood dug down to Y -4 under the castle's
+  // west edge, 2026-11-19); soil, grass and leaves stay free, so a walk over the hill still finds its way.
+  const {safeMovements} = require('../../bots');
+  const walker = Object.assign(new (require('node:events'))(), {registry, entity: {position: new Vec3(0, 64, 0)}, pathfinder: {}, blockAt: () => null});
+  const cost = (r, name, x, y, z) => safeMovements(walker, [], r).exclusionAreasBreak.reduce((a, f) => a + f({type: registry.blocksByName[name].id, name, position: new Vec3(x, y, z), boundingBox: 'block'}), 0);
+  for (const r of [{current: {type: 'goto'}}, {current: {type: 'schematic'}, planVeto: true}, null]) {
+    const who = r?.current?.type || 'no job';
+    for (const name of ['stone', 'deepslate', 'granite', 'iron_ore', 'deepslate_coal_ore']) assert.ok(cost(r, name, 5, 60, 5) >= 100, `${who}: a walk leaves ${name} of the castle rock standing`);
+    for (const name of ['dirt', 'grass_block', 'oak_leaves', 'short_grass']) assert.strictEqual(cost(r, name, 5, 60, 5), 0, `${who}: ${name} in the zone is still dug`);
+    assert.strictEqual(cost(r, 'stone', 5, 75, 5), 0, `${who}: stone above the zone is still dug`);
+    assert.strictEqual(cost(r, 'stone', 20, 60, 5), 0, `${who}: stone beside the zone is still dug`);
+  }
 };
