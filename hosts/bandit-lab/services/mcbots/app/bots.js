@@ -2489,7 +2489,6 @@ async function ensureGear(r, job) {
   // Standing at the armoury even a shield's single ingot is worth taking; elsewhere only a gap of 3 or more, as before.
   if ((wanted - n('raw_iron') >= 3 || (atArmoury && wanted > 0)) && gearSources(r).length && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
-    fetched = true;
     // Each source in turn (the armoury, then the supply chest) until `left()` is covered; one farther than 48 only by day and
     // when the storage index says it holds the item: one shield ingot cost a walk of 520 blocks (bots-2-1, audit 2026-11-19).
     const held = (at, item) => Object.entries(r.world?.stockAt?.(at)?.items || {}).some(([k, c]) => c > 0 && (item === 'logs' ? /_log$/.test(k) : k === item));
@@ -2497,6 +2496,7 @@ async function ensureGear(r, job) {
       for (const at of gearSources(r)) {
         if (left() <= 0) return;
         if (!(me && Math.hypot(me.x - at.x, me.y - at.y, me.z - at.z) <= 48) && (dark(bot) || !held(at, item))) continue;
+        fetched = true; // a skipped source is no visit: only a real try earns the 30-minute rest
         await JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count: left(), far: true, ...at}}))
           .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from ${place(r, at)}: ${e.message.slice(0, 80)}`); });
       }

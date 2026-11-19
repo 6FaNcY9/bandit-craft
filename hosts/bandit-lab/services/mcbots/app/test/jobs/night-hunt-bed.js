@@ -475,6 +475,12 @@ module.exports = async () => {
       await B.care(idx, job2);
       assert.ok(!calls.some((c) => c.endsWith('@-20')), 'no far walk at night: ' + calls.join(' '));
       calls.length = 0;
+      // far from every source in the dark every source is only skipped: that is no visit, so no 30-minute rest
+      Object.assign(idx, {gearTriedAt: 0, gearIdleUntil: 0});
+      idx.bot.entity.position = new Vec3(500, 64, 0);
+      await B.care(idx, job2);
+      assert.deepStrictEqual([calls, idx.gearIdleUntil], [[], 0], 'skipped sources rest nothing: ' + calls.join(' '));
+      calls.length = 0;
       const old = mk2(null);
       await B.care(old, job2);
       assert.deepStrictEqual(calls, [], 'no armoury: a 1-ingot gap fetches nothing, as before');
