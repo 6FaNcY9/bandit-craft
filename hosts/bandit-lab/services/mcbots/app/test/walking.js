@@ -349,7 +349,7 @@ const assert = require('node:assert');
   const {goNear} = require('../bots');
   const {Vec3} = require('vec3');
   // Stone up to y 64 everywhere; `over(x, y, z)` replaces a block (null: column not loaded).
-  const walk = async ({over = () => undefined, x = 300, opts, fail = () => null, start = new Vec3(0, 66, 0), dim = 'overworld', digOnly = /^(dirt|oak_leaves)$/, digBox = {box: 1}} = {}) => {
+  const walk = async ({over = () => undefined, x = 300, opts, fail = () => null, start = new Vec3(0, 66, 0), dim = 'overworld', type = 'goto', digOnly = /^(dirt|oak_leaves)$/, digBox = {box: 1}} = {}) => {
     const goals = [], digs = [], pos = start.clone();
     const r = {emit() {}, protectedAreas: [], world: {hostilesNear: () => []}, combat: {fit: () => false}, digOnly, digBox};
     const pf = {searchRadius: 600, stop() {}, setGoal() {}, goto: async (g) => {
@@ -365,7 +365,7 @@ const assert = require('node:assert');
         if (o !== undefined) return o;
         return p.y <= 64 ? {name: 'stone', boundingBox: 'block'} : {name: 'air', boundingBox: 'empty'};
       }};
-    const out = await goNear(r, {type: 'goto', t: {}, cancelled: false}, x, 66, 0, 2, opts).then(() => 'ok', (e) => e.message);
+    const out = await goNear(r, {type, t: {}, cancelled: false}, x, 66, 0, 2, opts).then(() => 'ok', (e) => e.message);
     return {goals, digs, out, r};
   };
   const roof = (name, gap = () => false) => (x, y) => (y === 70 && Math.abs(x) > 2 && !gap(x) ? {name, boundingBox: 'block'} : undefined);
@@ -424,6 +424,13 @@ const assert = require('node:assert');
   ({goals, digs} = await walk({over: roof('stone'), dim: 'the_nether'}));
   assert.strictEqual(goals[0].isEnd(node(goals[0], 66)), true, 'a nether leg may end under a roof');
   assert.ok(digs.every(([only]) => String(only) === '/^(dirt|oak_leaves)$/'), 'a nether walk sets no lock');
+  // 6e. only goto orders: a keeper trip or a haul to a roofed chest walks as before K14 (no sky goal, lock, sidestep or hop limit)
+  ({goals, digs} = await walk({over: roof('stone'), type: 'get'}));
+  assert.strictEqual(goals[0].isEnd(node(goals[0], 66)), true, 'a get walk may end under a roof');
+  assert.ok(digs.every(([only, box]) => String(only) === '/^(dirt|oak_leaves)$/' && box?.box === 1), 'a get walk sets no lock');
+  const out6e = await walk({over: roof('stone'), type: 'get', digBox: null, fail: (gl) => (gl.constructor.name === 'GoalNearXZ' ? Object.assign(new Error('No path to the goal!'), {best: {x: 20, y: 66, z: 0}}) : null)});
+  assert.strictEqual(xzGoals(out6e.goals).length, 1, 'a get walk does not sidestep');
+  assert.ok(out6e.goals.some((gl) => gl.constructor.name === 'GoalBlock'), 'a get walk hops into a covered cell as before');
   // 6b. a walk of 64 blocks or less builds no sky goal
   g = (await walk({x: 60, over: roof('stone'), opts: {xz: true}})).goals[0];
   assert.strictEqual(g.isEnd({x: 60, y: 66, z: 0}), true, 'a short walk may end under a roof');

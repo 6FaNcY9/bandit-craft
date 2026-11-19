@@ -1657,8 +1657,9 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     };
     return g;
   };
-  // Only the overworld has a sky: the nether's surface is its bedrock roof, no leg there could end open.
-  const skyOn = /overworld$/.test(r.bot?.game?.dimension);
+  // Only the overworld has a sky: the nether's surface is its bedrock roof, no leg there could end open. Only goto orders (Hingehen,
+  // Hierher rufen): other jobs walk to roofed targets (armoury, hall, sorter); widen per job type later from traces.
+  const skyOn = job.type === 'goto' && /overworld$/.test(r.bot?.game?.dimension);
   let locked = null, sidesteps = 0;
   // The lock only narrows the job's own limits: its dig rule AND leaves, its box kept (a level or seal job digs nothing at all).
   const lock = () => {
