@@ -122,6 +122,20 @@ const assert = require('node:assert');
     assert.strictEqual(outcome, null, 'a walking bot is not stalled');
     mock.timers.tick(5000); await flush(); await flush(); await flush();
     assert.match(String(outcome), /no way there within 90 s/);
+    // The deadline firing during a fight leaves combat's goal alone (retreat, air): halt's setGoal(null) killed it (audit bots-2-4).
+    outcome = null; r.noPath = null;
+    let cleared = 0;
+    const setGoal = bot.pathfinder.setGoal;
+    bot.pathfinder.setGoal = (g) => { if (g === null) cleared++; setGoal(g); };
+    goNear(r, {type: 'grave', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => { outcome = 'arrived'; }, (e) => { outcome = e.message; });
+    await flush();
+    r.combat.busy = true; pending(new Error('The goal was changed')); // combat takes the pathfinder
+    await flush();
+    for (let s = 0; s < 95; s += 5) { mock.timers.tick(5000); await flush(); }
+    assert.strictEqual(cleared, 0, 'no setGoal(null) while combat has the pathfinder');
+    r.combat.busy = false;
+    mock.timers.tick(1000); await flush(); await flush(); await flush();
+    assert.match(String(outcome), /no way there within 90 s/, 'the walk still ends at its deadline after the fight');
     console.log('goLeg: deadline after a night wait ok');
   };
   // execFile, not execFileSync: a blocked event loop failed the combat timing test next door (lastFight < 1 s).

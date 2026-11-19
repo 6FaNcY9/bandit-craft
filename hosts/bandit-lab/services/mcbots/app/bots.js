@@ -1692,6 +1692,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
   const pf = r.bot?.pathfinder, budget = pf?.searchRadius;
   const halt = () => {
     timedOut = true;
+    if (r.combat?.busy) return; // combat has the pathfinder (retreat, air): clearing its goal left the bot standing (audit bots-2-4)
     r.bot?.pathfinder.stop();
     r.bot?.pathfinder.setGoal(null); // makes a pending goto() reject; stop() alone left one hanging for minutes (2026-10-08)
   };
@@ -1734,9 +1735,9 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         // The deadline clears the goal, so its error reads "The goal was changed": name the deadline instead (bot1's
         // 90 s in a sand-roofed cave looked like a fight in the archive, 2026-10-15).
         const kept = !timedOut && /No path/.test(e.message) && r.keptBuilt?.position;
-        const why = stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : kept ? `${e.message} - only through built blocks (kept ${r.keptBuilt.name} at ${at(kept)})` : e.message;
+        const why = () => (stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : kept ? `${e.message} - only through built blocks (kept ${r.keptBuilt.name} at ${at(kept)})` : e.message);
         if (!timedOut && /No path/.test(e.message) && !countedNoPath) { countedNoPath = true; r.moves?.noPath.add(); } // once per walk, not per retry
-        const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${why}`);
+        const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${why()}`);
         // A fight takes the pathfinder over ("The goal was changed", 67 failed walks in 4 days): wait it
         // out, it is no failed try; the deadline still bounds the walk. Its end changes the goal too, with busy
         // already false (release), so a changed combat epoch counts as well: bot2's shaft failed 60 times in
