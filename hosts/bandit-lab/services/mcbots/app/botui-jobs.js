@@ -245,7 +245,7 @@ function build(key, data, env) {
     if (![0, 90, 180, 270].includes(v.rotation)) throw new Error('Drehung ungültig');
   }
   const z = has('zone');
-  let dim = v.at?.dim ?? v.chest?.dim ?? null;
+  let dim = v.at?.dim ?? v.chest?.dim ?? (key === 'summon' ? dimOf(ctx.dim) : null); // summon: the viewer's own spot, so their world (UIW-1)
   if (z) {
     const p = env.places.find((x) => x.name === data.zone && x.kind === z.place && x.box);
     if (!p) throw new Error('Zone nicht gefunden');

@@ -1130,6 +1130,15 @@ async function fake() {
     await ev('Midari', {a: 'areago', key: 'excavate'}); assert.equal(ui.state('Midari').flash.text, 'Fehler: Fremdes Gelände'); assert.equal(submits.length, ng); assert.ok(ui.state('Midari').sel.b);
     end();
   }
+  { // UIW-1: Hierher rufen / Alle rufen pick only bots in the viewer's world, never a sandbox bot
+    const jobs = require('../botui-jobs');
+    const snaps = [{name: 'bot1', online: true, dimension: 'overworld'}, {name: 'bot2', online: true, dimension: 'the_nether'}, {name: 'bot3', online: true, dimension: 'overworld', sandbox: true}];
+    const env = {ctx: {pos: [1, 64, 2], dim: 'minecraft:overworld', gaze: null}, sel: null, supply: null, places: [], snaps, allowed: '*', viewer: 'Fancy', schematics: []};
+    assert.deepEqual(jobs.build('summon', {who: 'alle'}, env).bots, ['bot1']);
+    assert.throws(() => jobs.build('summon', {who: 'bot2'}, env), /bot2 ist in einer anderen Welt/);
+    assert.throws(() => jobs.build('summon', {who: 'bot3'}, env), /bot3 ist in der Sandbox/);
+    assert.deepEqual(jobs.build('summon', {who: 'bot2'}, {...env, ctx: {...env.ctx, dim: 'the_nether'}}).bots, ['bot2']);
+  }
   console.log('botui ok');
   require('./botui-crawl'); // the menu crawler blocks the loop for a second: it runs here, alone, after the timing asserts
 })().catch((e) => { console.error(e); process.exit(1); });
