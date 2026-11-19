@@ -449,6 +449,15 @@ module.exports = async () => {
       assert.ok(placed.every((p) => p.y === 65 && p.item === 'cobblestone_wall'), 'on the ground');
       assert.ok(placed.length > 0 && placed.length < 16, 'the ring of 16 has a gap');
       assert.ok(placed.every((p) => p.x < 0 || p.x > 2 || p.z < 0 || p.z > 2), 'never inside the shaft');
+      // After the shaft the bot stands at its bottom: the ground is still found at the surface, the walk goes up over x/z
+      // (audit bots-3-5: it took rock at -38 for the ground and placed nothing).
+      placed.length = 0;
+      const goals = [];
+      bot.entity.position = new Vec3(1, -50, 1);
+      bot.pathfinder.goto = async (g) => { goals.push(g.constructor.name); };
+      await JOBS.rim({bot, name: 'bot16', world: {hostilesNear: () => []}, emit() {}, protectedAreas: []}, job);
+      assert.ok(placed.length > 0 && placed.every((p) => p.y === 65), `on the surface: ${placed.map((p) => p.y)}`);
+      assert.deepStrictEqual(goals.slice(0, 1), ['GoalNearXZ'], 'the walk to the shaft goes over x/z');
     } finally {
       JOBS.place = place0;
     }

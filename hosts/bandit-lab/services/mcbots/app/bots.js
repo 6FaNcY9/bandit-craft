@@ -4681,9 +4681,10 @@ const JOBS = {
     // The default wall is stone brick when the bot carries bricks (or the walls), else cobblestone.
     const item = job.args.item === 'cobblestone_wall' && bot.inventory?.items().some((i) => i.name === 'stone_bricks' || i.name === 'stone_brick_wall') ? 'stone_brick_wall' : job.args.item;
     const Vec3 = require('vec3').Vec3;
-    await goNear(r, job, (x1 + x2) >> 1, Math.floor(bot.entity.position.y), z1 - 2, 3, {doing: 'walking to the shaft'});
+    await goNear(r, job, (x1 + x2) >> 1, Math.floor(bot.entity.position.y), z1 - 2, 3, {xz: true, doing: 'walking to the shaft'});
+    // From above the top as well: after a shaft the bot stands at its bottom and took the rock there for the ground (audit bots-3-5).
     const ground = (x, z) => {
-      for (let y = Math.floor(bot.entity.position.y) + 12; y > -60; y--) {
+      for (let y = Math.max(top, Math.floor(bot.entity.position.y)) + 12; y > -60; y--) {
         const b = bot.blockAt(new Vec3(x, y, z));
         if (!b) return null;
         if (b.boundingBox === 'block' && !b.name.endsWith('_leaves') && !b.name.endsWith('_log')) return y;
