@@ -678,7 +678,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       // Above the build only natural ground may go: the s4 repair dug its way out of its room through the finished
       // s5 above it, 18 blocks (main server 2026-11-18). Its own walls are the way out (walled in, put back later).
       if (blk.position.y > hi.y && !natural.test(blk.name)) return 100;
-      if (!plan.cells.has(k)) return 0;
+      // In the box but no plan cell: not the build's, so ground and leaves only (a tidy-up box over the base core, main 2026-11-19).
+      if (!plan.cells.has(k)) return natural.test(blk.name) || /leaves$/.test(blk.name) ? 0 : 100;
       return noPath >= 2 && PLAIN.test(blk.name) ? 0 : 100;
     };
     // Nor on a material chest (it then stays shut: "did not open"), nor where dirt would later fall into a hopper.

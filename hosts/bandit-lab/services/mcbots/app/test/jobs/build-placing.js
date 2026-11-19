@@ -341,6 +341,42 @@ module.exports = async () => {
     assert.strictEqual(walks, 1, 'and walks no more until there is dirt');
     assert.deepStrictEqual(vetoes, [100, 0, 100, 0, 0], 'above and beside the build a built block stays, ground and leaves may go');
   }
+  { // K13: inside the site a cell the plan leaves alone keeps what stands there, but ground and leaves: a tidy-up's
+    // box over the base core would have let its walks dig storage walls, glass and bricks (main server 2026-11-19)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    palette[5] = {Name: str('minecraft:cobblestone')};
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+    const packed = 5n | (0n << 5n) | (5n << 10n); // cobblestone at x 0 and 2, x 1 is no plan cell
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 3, y: 1, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: [[0, Number(packed)]]}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-siteveto-'));
+    fs.writeFileSync(path.join(dir, 'gap.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('gap')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const job = {t: {}, cancelled: false, args: {file: 'gap.litematic', origin: {x: 0, y: 64, z: 0}, chests: [], tight: true}};
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const bot = {game: {dimension: 'overworld'}, on() {}, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, equip: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(20.5, 64, 20.5), yaw: 0, pitch: 0},
+      inventory: {items: () => [{name: 'cobblestone', count: 64, type: 2}], emptySlotCount: () => 35},
+      registry: {itemsByName: {cobblestone: item(2), dirt: item(3), glass: item(4)}, blocksByName: {}},
+      pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+      blockAt: (p) => ({name: p.y <= 63 ? 'stone' : 'air', position: p, getProperties: () => ({}), boundingBox: p.y <= 63 ? 'block' : 'empty', shapes: []})};
+    const schematic = require('../../build').makeSchematic({goNear: async () => { throw new Error('could not reach 0 64 0: no path'); }, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt: async () => false, deposit: async () => {}, natural: /^(stone|grass_block|dirt)$/, dir});
+    const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}}, job).catch((e) => e);
+    await new Promise((res) => setTimeout(res, 400));
+    const veto = bot.pathfinder.movements.exclusionAreasBreak[0], dig = (x, name) => veto({position: new Vec3(x, 64, 0), name});
+    const vetoes = ['stone_bricks', 'glass', 'chest', 'stone', 'dirt', 'oak_leaves'].map((name) => dig(1, name));
+    const planCell = dig(0, 'cobblestone');
+    job.cancelled = true;
+    await Promise.race([run, new Promise((res) => setTimeout(() => res('hung'), 3000))]);
+    fs.rmSync(dir, {recursive: true, force: true});
+    assert.deepStrictEqual(vetoes, [100, 100, 100, 0, 0, 0], 'in the site a non-plan cell gives up ground and leaves only');
+    assert.strictEqual(planCell, 100, 'a plan cell stays while a way is found');
+  }
   { // a work torch or a crafting table the bots put down in a planned cell comes out without clearAll; a chest stays, and
     // a torch in an air cell stays without tight: "no progress for 300 s: in the way: wall_torch ..." (castle roof, main server 2026-11-16)
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
