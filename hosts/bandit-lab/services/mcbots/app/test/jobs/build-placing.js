@@ -253,14 +253,17 @@ module.exports = async () => {
       blockAt: (p) => ({name: p.y <= 63 ? 'stone' : 'air', position: p, getProperties: () => ({}), boundingBox: p.y <= 63 ? 'block' : 'empty', shapes: []})};
     const schematic = require('../../build').makeSchematic({goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
       sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt: async () => false, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir});
-    const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}}, job).catch((e) => e);
+    const runner = {bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}};
+    const run = schematic(runner, job).catch((e) => e);
     await new Promise((res) => setTimeout(res, 400)); // a spinning loop yields to timers, so this fires either way
-    const doing = job.t.doing;
+    const doing = job.t.doing, vetoed = runner.planVeto;
     job.cancelled = true;
     const end = await Promise.race([run, new Promise((res) => setTimeout(() => res('hung'), 3000))]);
     fs.rmSync(dir, {recursive: true, force: true});
     assert.ok(end instanceof Error && /stopped/.test(end.message), `the loop ends on Stop: ${end}`);
     assert.match(String(doing), /^waiting for material: .*observer/, `it waits for the missing observer instead of spinning without a word (doing: ${doing})`);
+    // bots.js spares the walks' built-block veto only while vetoBreak stands, not in the retry wait after a throw
+    assert.deepStrictEqual([vetoed, runner.planVeto], [true, false], 'planVeto is up while the build runs, down after it');
   }
   { // a support on a chest's lid is glass: dirt there kept 43 sorter chests shut (main server 2026-11-15)
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');

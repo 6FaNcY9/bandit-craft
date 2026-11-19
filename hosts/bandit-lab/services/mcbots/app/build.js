@@ -1035,6 +1035,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     try {
       mv.exclusionAreasBreak.push(vetoBreak);
       mv.exclusionAreasPlace.push(vetoPlace);
+      r.planVeto = true; // bots.js spares the walks its built-block veto only while vetoBreak stands
       const wanted = new Set(plan.targets.map((t) => bot.registry.itemsByName[t.p.item]?.id));
       // Climb and bridge with dirt only, never the build's material: dirt in an air cell comes out at the end, while
       // the cobblestone the pathfinder also uses stayed in the sorter's air cells as the owner's (sandbox 2026-10-13).
@@ -1515,6 +1516,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       }
       throw e;
     } finally {
+      r.planVeto = false;
       for (const [list, veto] of [[mv.exclusionAreasBreak, vetoBreak], [mv.exclusionAreasPlace, vetoPlace]]) {
         const i = list.indexOf(veto);
         if (i >= 0) list.splice(i, 1);
