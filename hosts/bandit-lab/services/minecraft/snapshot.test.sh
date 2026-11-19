@@ -15,7 +15,8 @@ export LOG="$tmp/log" REAL_STAT="$real_stat" REAL_INSTALL="$real_install"
 stub systemctl 'echo active'
 stub machinectl 'echo running'
 stub journalctl 'echo "Saved the game"'
-stub nixos-container 'echo "nixos-container $*" >>"$LOG"'
+# nixos-container: log, and record whether the host lock fd 9 reached it (it must not).
+stub nixos-container 'echo "nixos-container $*" >>"$LOG"; if [ -e /proc/self/fd/9 ]; then echo "lock fd leaked" >>"$LOG"; fi'
 # setpriv: log, drop the options, run the rest (unprivileged here).
 stub setpriv 'echo "setpriv $*" >>"$LOG"; while [[ $1 == --* ]]; do shift; done; exec "$@"'
 stub stat 'if [ "$2" = "%u %g" ]; then echo "${FAKE_OWNER:-590823 590823}"; else exec "$REAL_STAT" "$@"; fi'
@@ -38,6 +39,8 @@ MC_MACHINE=mc-public MC_DATA="$data" bash "$script" "$tmp/dest" >/dev/null
 [ ! -s "$tmp/fifo" ]
 [ "$(grep -c '^nixos-container run mc-public -- setpriv --reuid=minecraft' "$LOG")" = 3 ]
 grep -q 'save-off' "$LOG" && grep -q 'save-all flush' "$LOG" && grep -q 'save-on' "$LOG"
+[ "$(grep -c 'lock fd leaked' "$LOG")" = 0 ] # the box must not inherit the host lock
+grep -q 'timeout 30 nixos-container run' "$script" # the host bounds the call, not only the box
 grep -q '^setpriv --reuid=590823 --regid=590823 --clear-groups rsync' "$LOG"
 
 # container: a symlinked data dir is refused, nothing copied

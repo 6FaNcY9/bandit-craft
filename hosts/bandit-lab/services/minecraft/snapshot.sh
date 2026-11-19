@@ -30,9 +30,10 @@ in_machine=()
 console() {
   if [ -n "$machine" ]; then
     # Inside the box as minecraft: a FIFO the box swapped for a symlink reaches only what minecraft may write.
+    # The host-side timeout holds even if the box stops the inner one; 9>&-: the box must not get the host lock.
     # shellcheck disable=SC2016 # $1/$2 expand in the inner sh
-    nixos-container run "$machine" -- setpriv --reuid=minecraft --regid=minecraft --clear-groups \
-      timeout 10 sh -c 'printf "%s\n" "$1" >>"$2"' _ "$1" "$fifo" >/dev/null
+    timeout 30 nixos-container run "$machine" -- setpriv --reuid=minecraft --regid=minecraft --clear-groups \
+      timeout 10 sh -c 'printf "%s\n" "$1" >>"$2"' _ "$1" "$fifo" >/dev/null 9>&-
   else
     printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null
   fi
