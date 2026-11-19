@@ -17,7 +17,7 @@ Phases 2 and 3 (relay, PROXY protocol, backups, store, opening) are not in here.
   private `minecraft-servers.env`, the private RCON and every sops secret except the container's tailnet
   auth key stay outside.
 - World: `/srv/mc-public/data` on the lab (`/srv/minecraft` inside). Console: `/run/minecraft/paper.stdin`
-  inside the container, root only. A deploy that changes the container restarts it and disconnects players.
+  inside the container, its `minecraft` user and root only. A deploy that changes the container restarts it and disconnects players.
 - Contract: bandit-nix `ci/lab-mc-public.nix`.
 
 ## Bring-up (owner only)
@@ -117,7 +117,7 @@ Each line names its host. `sudo` on the lab asks for the password.
 
 ## Console, whitelist, mute and ban (no RCON, the owner the only operator)
 
-On the lab; the console is a FIFO that only root inside the container can write:
+On the lab; the console is a FIFO of the container's `minecraft` user (mode 0660), written from inside the container:
 
 ```bash
 mcp() { sudo nixos-container run mc-public -- bash -c "echo '$*' > /run/minecraft/paper.stdin"; }
@@ -291,8 +291,10 @@ run alerts like the other backups. Not copied off-site yet: the S3 job is off fo
      chunk against its file instead.
 
 Real recovery: stop the container (`sudo systemctl stop container@mc-public`), restore the snapshot's
-`paper` directory over `/srv/mc-public/data/paper` keeping the owner (the container's root, uid
-589824), start the container.
+`paper` directory into a new directory `/srv/mc-public/data/paper.restored` keeping the owner (the box's
+`minecraft`, uid 590823; never restore over the live directory, the box may have planted links in it),
+move the old one aside (`mv paper paper.old`), move the restored one in (`mv paper.restored paper`), start
+the container.
 
 ## Discord chat bridge (ChatBridge)
 
@@ -339,12 +341,16 @@ if the file exists but cannot be read, no player is named in Discord until it ca
 
 On the lab (the name is looked up in the server's `usercache.json`; refuses when it finds none or more than one):
 
+Everything runs inside the box as its `minecraft` user, never as host root on box-owned paths (a planted
+symlink there would reach host files):
+
 ```bash
-f=/srv/mc-public/data/paper/plugins/ChatBridge/opt-out.txt
-optout() { u=$(sudo jq -r --arg n "$1" '.[] | select((.name|ascii_downcase) == ($n|ascii_downcase)) | .uuid' /srv/mc-public/data/paper/usercache.json); [ -n "$u" ] && [ "$(wc -l <<<"$u")" = 1 ] && echo "$u # $(date +%F)" | sudo tee -a "$f" || echo "not exactly one UUID for $1: '$u'"; }
+mcu() { sudo nixos-container run mc-public -- setpriv --reuid=minecraft --regid=minecraft --clear-groups "$@"; }
+f=/srv/minecraft/paper/plugins/ChatBridge/opt-out.txt
+optout() { u=$(mcu cat /srv/minecraft/paper/usercache.json | jq -r --arg n "$1" '.[] | select((.name|ascii_downcase) == ($n|ascii_downcase)) | .uuid'); [ -n "$u" ] && [ "$(wc -l <<<"$u")" = 1 ] && echo "$u # $(date +%F)" | mcu sh -c 'cat >>"$1"' _ "$f" || echo "not exactly one UUID for $1: '$u'"; }
 optout <Name>                       # add
-sudo sed -i '/^<uuid>/d' "$f"       # remove (the UUID from the file)
-sudo cat "$f"
+mcu sed -i '/^<uuid>/d' "$f"        # remove (the UUID from the file)
+mcu cat "$f"
 ```
 
 An account that never joined is not in `usercache.json`: take its id from

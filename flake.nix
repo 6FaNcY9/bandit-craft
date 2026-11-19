@@ -41,6 +41,7 @@
 
     checks.${system} = {
       restart-warn-test = import ./ci/restart-warn-test.nix {inherit pkgs;};
+      snapshot-test = import ./ci/snapshot-test.nix {inherit pkgs;};
       botui = import ./hosts/bandit-lab/services/minecraft/botui {inherit pkgs;};
       chatbridge = import ./hosts/bandit-lab/services/minecraft-public/chatbridge {inherit pkgs;};
       discord-admin = pkgs.runCommand "discord-admin-tests" {nativeBuildInputs = [pkgs.nodejs_22];} ''

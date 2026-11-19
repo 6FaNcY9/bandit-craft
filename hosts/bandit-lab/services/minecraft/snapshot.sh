@@ -8,8 +8,11 @@
 #
 # Backend: the nix-minecraft server MC_UNIT (systemd unit, console FIFO MC_CONSOLE).
 # MC_MACHINE set = that server runs inside the nspawn container of
-# this name: the unit and its journal are asked through -M, and the console FIFO is
-# reached through the container's root (/proc/<leader>/root), all from the host.
+# this name: the unit and its journal are asked through -M, and the console is written
+# from inside the box (nixos-container run, as its minecraft user). The box owns its
+# paths, so host root never opens them: the data dir must not be a symlink, and the
+# copy runs as the box uid that owns the data dir, into DEST (created for that uid;
+# its parents must be searchable by it).
 #
 # Not captured: the panel's own backups, caches, logs, BlueMap's rendered tiles
 # and downloaded client jar (regenerated). LuckPerms' H2 file is copied as a crash-consistent
@@ -22,14 +25,18 @@ unit=${MC_UNIT:-minecraft-server-paper}
 machine=${MC_MACHINE-}
 fifo=${MC_CONSOLE:-/run/minecraft/paper.stdin}
 in_machine=()
-if [ -n "$machine" ]; then
-  in_machine=(-M "$machine")
-  # A stopped container has no leader: the unit query below then decides (cold copy or refuse).
-  leader=$(machinectl show "$machine" -p Leader --value 2>/dev/null) || leader=
-  [ -n "$leader" ] && fifo=/proc/$leader/root$fifo
-fi
+[ -n "$machine" ] && in_machine=(-M "$machine")
 
-console() { printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null; }
+console() {
+  if [ -n "$machine" ]; then
+    # Inside the box as minecraft: a FIFO the box swapped for a symlink reaches only what minecraft may write.
+    # shellcheck disable=SC2016 # $1/$2 expand in the inner sh
+    nixos-container run "$machine" -- setpriv --reuid=minecraft --regid=minecraft --clear-groups \
+      timeout 10 sh -c 'printf "%s\n" "$1" >>"$2"' _ "$1" "$fifo" >/dev/null
+  else
+    printf "%s\n" "$1" | timeout 10 tee -a "$fifo" >/dev/null
+  fi
+}
 saved_since() { journalctl "${in_machine[@]}" -u "$unit" --since "@$1" -o cat 2>&1 | grep -q "Saved the game"; }
 
 # One snapshot at a time: a second run's save-on would re-enable autosave
@@ -94,9 +101,33 @@ if [ "$running" = true ]; then
   fi
 fi
 
-mkdir -p "$dest"
-rsync -a --delete \
-  --exclude=/backups --exclude=/cache --exclude=/logs --exclude=/bluemap \
-  "$data"/ "$dest"/
+excludes=(--exclude=/backups --exclude=/cache --exclude=/logs --exclude=/bluemap)
+if [ -z "$machine" ]; then
+  mkdir -p "$dest"
+  rsync -a --delete "${excludes[@]}" "$data"/ "$dest"/
+else
+  if [ -L "$data" ]; then
+    echo "refusing: $data is a symlink" >&2
+    exit 1
+  fi
+  # The box's data dir (parent of $data, host-owned above it) belongs to its mapped minecraft uid.
+  read -r uid gid < <(stat -c '%u %g' "${data%/*}")
+  for id in "$uid" "$gid"; do
+    if [ "$id" -lt 589824 ] || [ "$id" -gt 655359 ]; then
+      echo "refusing: ${data%/*} is owned by $uid:$gid, not by a box uid (589824-655359)" >&2
+      exit 1
+    fi
+  done
+  # cd as root, then check: a symlink swapped in after the test above is caught here, a later swap no longer matters.
+  cd "$data"
+  if [ "$(pwd -P)" != "$data" ]; then
+    echo "refusing: $data resolves to $(pwd -P)" >&2
+    exit 1
+  fi
+  # DEST's parents must be searchable by that uid (the backup's staging dir is 0711).
+  install -d -m 0700 -o "$uid" -g "$gid" "$dest"
+  setpriv --reuid="$uid" --regid="$gid" --clear-groups \
+    rsync -a --delete "${excludes[@]}" ./ "$dest"/
+fi
 resume || exit 1
 echo "snapshot complete: $dest"

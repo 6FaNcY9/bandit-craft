@@ -34,7 +34,7 @@
     broadcast-console-to-ops = false;
     difficulty = "hard"; # anarchy: the world is as dangerous as the players (owner's goal, 2026-11-10)
     enable-query = false;
-    enable-rcon = false; # the console is the systemd socket (/run/minecraft/paper.stdin), root in the container only
+    enable-rcon = false; # the console is the systemd socket (/run/minecraft/paper.stdin), the container's minecraft user and root only
     enable-status = true;
     enforce-secure-profile = true; # Mojang chat reporting works
     enforce-whitelist = true;
