@@ -184,16 +184,19 @@ class Combat {
     // and bot50 hung at y 60 in a pool with no air left, sandbox 2026-10-17). Under a roof: the nearest air it reaches.
     const at = bot.entity.position.floored();
     this.straightUp = false;
-    let roof = null;
+    let roof = null, roofY = null;
     for (let dy = 1; dy <= 24; dy++) {
       const b = bot.blockAt(at.offset(0, dy, 0));
       if (/^(cave_)?air$/.test(b?.name || '')) { this.straightUp = true; break; }
-      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) { roof = b; break; }
+      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) { roof = b; roofY = at.y + dy; break; }
     }
     const ids = ['air', 'cave_air'].map((n) => bot.registry.blocksByName[n]?.id).filter((i) => i !== undefined);
-    // Only above its feet: the nearest air was a cave under the pool floor (sandbox 2026-10-17).
-    const feet = bot.entity.position.y;
-    const spot = this.straightUp ? null : bot.findBlock({matching: ids, maxDistance: 12, useExtraInfo: (b) => { const under = bot.blockAt(b.position.offset(0, -1, 0)); return b.position.y > feet && !!under && (under.name === 'water' || under.boundingBox === 'empty'); }});
+    // From its feet block up: the nearest air was a cave under the pool floor (sandbox 2026-10-17). Under a roof, air in its
+    // own pocket (up to the roof) first: the nearest air was the sky over a lake, through the dirt roof the lake lies on,
+    // and bot1 drowned twice at -162 53 -176 with air 2 blocks beside it at its feet height (2026-11-19).
+    const feet = Math.floor(bot.entity.position.y);
+    const find = (top) => bot.findBlock({matching: ids, maxDistance: 12, useExtraInfo: (b) => { const under = bot.blockAt(b.position.offset(0, -1, 0)); return b.position.y >= feet && b.position.y <= top && !!under && (under.name === 'water' || under.boundingBox === 'empty'); }});
+    const spot = this.straightUp ? null : (roof && find(roofY)) || find(Infinity);
     // Air within about 2 blocks: it swims there itself. The pathfinder never made the one block to -221 47 -211, and
     // bot1 drowned beside it (main server 2026-10-19).
     const near = !!spot && spot.position.offset(0.5, 0.5, 0.5).distanceTo(bot.entity.position.offset(0, 1.62, 0)) <= 2.5;

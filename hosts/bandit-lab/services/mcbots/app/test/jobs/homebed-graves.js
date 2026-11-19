@@ -143,6 +143,12 @@ module.exports = async () => {
       'bot1', {now, chest: {x: -271, y: 66, z: -214}}), [{x: -351, y: 62, z: -173}]);
     assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -351 62 -173: shot', 3000), ev('bot1', 'info', 'grave at -351 62 -173: 8 items back', 2000)],
       'bot1', {now, chest: {x: -271, y: 66, z: -214}}), []);
+    // two deaths within 32 blocks in 24 h make a deadly spot (graveAfterDeath's repeat rule): no grave there is sent again.
+    // bot1 drowned twice in a flooded tunnel under a lake, and a graves round sent it back a third time (2026-11-19).
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -161 53 -176: drowned', 500000), ev('bot1', 'death', 'died at -162 53 -175: drowned', 20000),
+      ev('bot1', 'death', 'died at -300 64 -100: shot', 10000)], 'bot1', {now, chest: {x: -271, y: 66, z: -214}}), [{x: -300, y: 64, z: -100}]);
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at 5 64 5: drowned', 9000), ev('bot1', 'death', 'died at 5 64 5: drowned', 1000)],
+      'bot1', {now, chest: {x: 0, y: 64, z: 0}}), [], 'the same spot twice counts as two deaths');
 
     // graveCandidates: nearest first within 3 blocks; never players, items, orbs, invalid or far entities
     const ent = (id, name, x, y, z, extra = {}) => ({id, name, type: 'other', position: new Vec3(x, y, z), ...extra});

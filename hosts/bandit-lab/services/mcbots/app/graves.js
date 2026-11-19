@@ -25,19 +25,21 @@ function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [
       try { rows.push(...fs.readFileSync(path.join(archiveDir, name), 'utf8').split('\n').filter(Boolean).map((s) => JSON.parse(s).event).filter(Boolean)); } catch {}
     }
   }
-  const deaths = new Map(), fetched = [];
+  const deaths = new Map(), fetched = [], all = [];
   for (const e of rows) {
     const t = typeof e.t === 'number' ? e.t : Date.parse(e.t);
     if (e.bot !== bot || !Number.isFinite(t) || t < now - 24 * 60 * 60 * 1000 || t > now) continue;
     const m = e.kind === 'death' && DEATH.exec(e.text);
     const f = (e.kind === 'done' || e.kind === 'info') && FETCHED.exec(e.text);
-    if (m) deaths.set(m.slice(1).map(Number).join(' '), {x: +m[1], y: +m[2], z: +m[3], t});
+    if (m) { deaths.set(m.slice(1).map(Number).join(' '), {x: +m[1], y: +m[2], z: +m[3], t}); all.push({x: +m[1], z: +m[3], t}); }
     if (f) fetched.push({x: +f[1], y: +f[2], z: +f[3], t});
   }
   // A death says "died at" rounded, its grave job floors the spot: a fetch within 2 blocks after the death took it.
   const taken = (s) => fetched.some((f) => f.t >= s.t && Math.hypot(f.x - s.x, f.y - s.y, f.z - s.z) <= 2);
   const p = from || chest || {x: 0, y: 64, z: 0};
-  return [...deaths.entries()].filter(([, s]) => !taken(s) && s.y >= -64 && s.y <= 320 &&
+  // Not where it died twice (graveAfterDeath's repeat rule): bot1 drowned twice in a flooded tunnel under a lake, and a
+  // graves round sent it back there a third time (2026-11-19).
+  return [...deaths.entries()].filter(([, s]) => !taken(s) && deathsNear(all, s, now) < 2 && s.y >= -64 && s.y <= 320 &&
     (!chest || Math.hypot(s.x - chest.x, s.z - chest.z) <= FAR) && !insideAreas(areas, s.x, s.z))
     .map(([, s]) => s).sort((a, b) => Math.hypot(a.x-p.x,a.y-p.y,a.z-p.z) - Math.hypot(b.x-p.x,b.y-p.y,b.z-p.z)).slice(0, 40).map(({x,y,z}) => ({x,y,z}));
 }
