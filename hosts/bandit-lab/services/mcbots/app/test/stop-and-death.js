@@ -42,6 +42,11 @@ const {BotRunner} = require('../bots');
   assert.strictEqual(j.interruptions, 3);
   r.resumeLater(j, 'died'); // the fourth time it is given up
   assert.strictEqual(r.queue.length, 0);
+  // a Paper restart or a kick is no death: four disconnects keep a standing order (BOTS-1-5)
+  j = {...job, interruptions: 0};
+  for (let i = 0; i < 4; i++) { r.resumeLater(j, 'disconnected'); j = r.queue.shift(); }
+  assert.ok(j, 'still queued after four disconnects');
+  assert.strictEqual(j.interruptions, 0);
   // nothing runs while dead or (for a resumed job) offline
   const q = mk();
   let ran = 0;

@@ -84,7 +84,7 @@ const FOOD_RETRY_MS = 600000; // an empty chest is not worth a walk every minute
 const RESUMABLE = new Set(['graves', 'mine', 'chop', 'shift', 'goto', 'deposit', 'follow', 'come', 'guard', 'build', 'schematic', 'produce', 'excavate', 'clear', 'shaft', 'level', 'seal', 'hunt', 'bed', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm', 'tidy', 'trade', 'highway']);
 // Long jobs that survive a restart (see keptOf, saved by server.js, reported by workers).
 const KEEP = new Set(['shift', 'guard', 'mine', 'chop', 'build', 'schematic', 'produce', 'excavate', 'shaft', 'level', 'seal', 'hunt', 'homebed', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm', 'highway']); // a resumed build/excavate skips what is done
-const MAX_INTERRUPTIONS = 3; // deaths/disconnects of one job before it is given up
+const MAX_INTERRUPTIONS = 3; // deaths of one job before it is given up
 const TOOL_RE = /_(pickaxe|axe|shovel|hoe|sword)$|^(shears|bow|crossbow|fishing_rod|shield|trident|flint_and_steel|elytra)$/;
 // Above these a kept kind is filed like any other item (bot19 carried 448 sticks, 7 iron pickaxes, 3 tables, 2026-11-11).
 const KEEP_CAP = {stick: 64, coal: 64, torch: 64, crafting_table: 1, furnace: 1};
@@ -986,7 +986,7 @@ class BotRunner {
   resumeLater(j, why) {
     if (!j || !RESUMABLE.has(j.type)) return;
     j.interrupted = true;
-    const n = (j.interruptions || 0) + (why === 'died' || why === 'disconnected' ? 1 : 0); // only deaths/disconnects count; an order of the player never gives a job up
+    const n = (j.interruptions || 0) + (why === 'died' ? 1 : 0); // only deaths count; a disconnect (Paper restart, kick) or an order of the player never gives a job up (BOTS-1-5)
     if (n > MAX_INTERRUPTIONS) {
       this.emit('fail', `gave up: ${jobLabel(j)} (${why} ${n} times)`, j.id, `${chatLabel(j)}: zu oft unterbrochen`);
       return;
