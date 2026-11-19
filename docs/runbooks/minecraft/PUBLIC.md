@@ -43,8 +43,9 @@ Phases 2 and 3 (relay, PROXY protocol, backups, store, opening) are not in here.
 5. bandit-nix, branch `mc-public-phase1` rebased on `main`: `sops secrets/lab.yaml`, add
    `mc-public-tailscale-authkey` (the key from step 4). The key and the module must land together:
    `sops-isolation` fails on a declared key that is missing and on a key no module declares.
-6. Optional, on the lab before the first deploy: a quota for the world, so it cannot fill the disk. Without
-   it `mc-public-prepare` creates a plain directory.
+6. Required, on the lab before the first deploy: a quota for the world, so it cannot fill the disk. Without
+   it `mc-public-prepare` refuses to start the box (it checks for a subvolume with a qgroup limit). Quotas
+   must be on for the filesystem (`sudo btrfs quota enable /`, once).
 
    ```bash
    sudo mkdir -p /srv/mc-public
