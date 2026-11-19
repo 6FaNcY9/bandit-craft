@@ -70,6 +70,7 @@ final class SelfTest {
     // game to Discord: markdown and line breaks from a player stay text
     same("\\*\\*fett\\*\\* \\[x\\](http\\://a) \\`c\\` \\> q", ChatBridge.escape("**fett** [x](http://a) `c` > q"));
     same("a b", ChatBridge.escape("a\nb"));
+    same("\\<@123\\> \\<\\#4\\>", ChatBridge.escape("<@123> <#4>")); // no mention or channel pill
     same("https\\://x.example/a 12\\:30", ChatBridge.escape("https://x.example/a 12:30")); // no clickable link from the game
 
     // old copies: only this bot's own messages below the limit are taken, and a full page is searched on from its end

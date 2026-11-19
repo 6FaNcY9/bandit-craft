@@ -39,6 +39,7 @@
     enforce-secure-profile = true; # Mojang chat reporting works
     enforce-whitelist = true;
     gamemode = "survival";
+    hide-online-players = true; # the server list shows counts, no names: trackers cannot log when someone is offline
     level-name = "world";
     max-players = 20;
     # A radius: the world border cannot grow past it in any dimension, whatever `worldborder set` says.

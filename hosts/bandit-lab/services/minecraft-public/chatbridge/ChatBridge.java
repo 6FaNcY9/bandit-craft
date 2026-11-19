@@ -231,9 +231,9 @@ public final class ChatBridge extends JavaPlugin implements Listener {
     return PlainTextComponentSerializer.plainText().serialize(c);
   }
 
-  /** Player text as Discord shows it literally: no markdown, no link ("https\\://" is text), one line. Mentions are switched off in the request. */
+  /** Player text as Discord shows it literally: no markdown, no link ("https\\://" is text), one line. Mentions are switched off in the request; "<" is escaped so <@id> shows no mention pill. */
   static String escape(String s) {
-    return s.replaceAll("[\\p{Cc}\\p{Cf}]", " ").replaceAll("([\\\\*_~`|>#:\\[\\]])", "\\\\$1").strip();
+    return s.replaceAll("[\\p{Cc}\\p{Cf}]", " ").replaceAll("([\\\\*_~`|<>#:\\[\\]])", "\\\\$1").strip();
   }
 
   private void say(String line) {
