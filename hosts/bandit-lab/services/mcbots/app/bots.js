@@ -3458,6 +3458,8 @@ async function helpOnce(r, job) {
       r.emit('info', `helped ${need.bot}: delivered ${need.item}`);
     } catch (e) {
       guard(job);
+      // A full or walled-in chest rests the need too: produce retried it at once, forever, without a turn for the event loop.
+      fails.set(`${need.bot}:${need.item}`, Date.now() + ACQUIRE_FAIL_MS);
       r.emit('info', `could not help ${need.bot} with ${need.item}: ${e.message.slice(0, 80)}`);
     } finally {
       clearInterval(hold);

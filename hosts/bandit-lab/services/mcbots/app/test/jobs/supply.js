@@ -93,4 +93,26 @@ module.exports = async () => {
       /missing material: 9 cobblestone \(gathered 18, the limit is 18\)/);
     assert.deepStrictEqual(runs, [['mine', 9], ['mine', 9]]);
   }
+  // A6: a failed delivery rests the need. Before, helpOnce tried the same full chest again on each produce pass, and
+  // with settled promises only the loop never gave the event loop a turn (hub bots: keepalives and API starved).
+  {
+    const {helpOnce, JOBS} = require('../../bots');
+    const needs = [{bot: 'bot2', item: 'hopper', count: 5, to: {x: 1, y: 2, z: 3}, t: 1}];
+    const world = {openNeeds: () => needs, claimedByOther: () => false, claim: async () => true, release: () => {}};
+    const oldGet = JOBS.get, oldDeposit = JOBS.deposit, oldNow = Date.now;
+    let deposits = 0, now = oldNow(), ticked = false;
+    JOBS.get = async () => {};
+    JOBS.deposit = async () => { deposits++; throw new Error('chest full'); };
+    Date.now = () => now;
+    const r = {name: 'bot1', world, emit() {}};
+    const job = {type: 'produce', args: {}, cancelled: false};
+    setImmediate(() => { ticked = true; });
+    try {
+      assert.strictEqual(await helpOnce(r, job), true, 'the first try is work done');
+      let again = 0;
+      for (let s = 1; s <= 60; s++) { now += 1000; if (await helpOnce(r, job)) again++; } // produce passes over one simulated minute
+      assert.strictEqual(ticked, false, 'helpOnce alone never yields to the event loop');
+      assert.deepStrictEqual([deposits, again], [1, 0], 'the need rests: no second delivery within a minute, produce takes its wait');
+    } finally { JOBS.get = oldGet; JOBS.deposit = oldDeposit; Date.now = oldNow; }
+  }
 };
