@@ -46,10 +46,14 @@ module.exports = async () => {
     await nightShelter(stuck.r, job);
     assert.deepStrictEqual([stuck.placed, stuck.r.shelterAt ?? null, !!stuck.r.sheltered], [[], null, false], 'no lid when the bot did not drop');
     assert.ok(said.some((m) => /night shelter given up: did not drop/.test(m)), said.join(' | '));
+    // off the cell centre it steps to the centre first, then digs (R3, review 2026-11-19)
     const off = mk();
-    off.r.bot.entity.position = new Vec3(0.8, 91, 0.5);
+    off.r.bot.entity.position = new Vec3(0.8, 91, 0.3);
+    const digOff = off.r.bot.dig;
+    let firstAt = null;
+    off.r.bot.dig = async (b) => { firstAt ??= off.r.bot.entity.position.clone(); return digOff(b); };
     await nightShelter(off.r, job);
-    assert.strictEqual(off.dug.size, 0, 'off the cell centre: no hole');
+    assert.deepStrictEqual([off.placed, firstAt && [firstAt.x, firstAt.z]], [[90], [0.5, 0.5]], 'off the cell centre: centred, then the hole');
     // a builder shelters only while unfit (bot2 without armour at the iron farm, 2026-10-17)
     const fitB = mk(), bare = mk();
     fitB.r.combat = {fit: () => true};

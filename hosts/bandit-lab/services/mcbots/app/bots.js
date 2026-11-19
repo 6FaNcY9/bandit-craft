@@ -1409,7 +1409,12 @@ async function nightShelter(r, job) {
     if (!bot.inventory.items().some((i) => PILLAR_BLOCKS.includes(i.name)) && !/^(dirt|grass_block|podzol)$/.test(at(-1)?.name || '')) return;
     if (![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
     // More than 0.2 off the centre the 0.6-wide bot rests on the wall and does not fall (pathfinder reaches a node within 0.35).
-    if (Math.abs(bot.entity.position.x - feet.x - 0.5) > 0.2 || Math.abs(bot.entity.position.z - feet.z - 0.5) > 0.2) return;
+    // So it steps to the centre first, as unwedge does: its own cell is free, the move stays inside it.
+    if (Math.abs(bot.entity.position.x - feet.x - 0.5) > 0.2 || Math.abs(bot.entity.position.z - feet.z - 0.5) > 0.2) {
+      bot.entity.position.x = feet.x + 0.5;
+      bot.entity.position.z = feet.z + 0.5;
+      await sleep(100); // one tick sends the move
+    }
   }
   r.sheltered = true; // combat: no hunting out of the hole
   try {
