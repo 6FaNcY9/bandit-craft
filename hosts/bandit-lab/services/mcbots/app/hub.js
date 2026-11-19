@@ -66,6 +66,7 @@ function cleanSnapshot(s) {
     combat: optStr(s.combat, 32),
     sheltered: bool(s.sheltered), // in its night shelter
     gettingFood: bool(s.gettingFood), // hungry and fetching food
+    chest: obj(s.chest) && ['x', 'y', 'z'].every((k) => Number.isInteger(s.chest[k])) ? {x: s.chest.x, y: s.chest.y, z: s.chest.z} : null, // its own chest, for idle shifts and the bot page
     job: job && {label: str(job.label, 160), progress: str(job.progress, 160), type: str(job.type, 32), done: int(job.done), total: int(job.total), runningS: int(job.runningS)},
     activity: str(s.activity, 200),
     dead: bool(s.dead),

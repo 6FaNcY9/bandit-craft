@@ -300,7 +300,7 @@ function ground(viewer, bot, type, args) {
 function idleJob(bot, choice) {
   const guest = cfg.guestBots.includes(bot); // a guest's farm is one on its own ground
   const r = runners.get(bot), zoneOf = (kind) => idleLib.firstZone(places.list, kind, (p) => !(guest && misa.groundRule(cfg.protectedAreas, bot, choice.key, p.box)));
-  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest, guest, supplyChest, zoneOf, mark: choice.mark, away: (c) => chestAway(r, c)});
+  const v = idleLib.resolveIdle(choice, {chest: r.prefs?.chest ?? r.snapshot().chest, guest, supplyChest, zoneOf, mark: choice.mark, away: (c) => chestAway(r, c)});
   return {type: ORDER_JOBS[choice.key].type, args: ORDER_JOBS[choice.key].args(v, {})};
 }
 // The in-game dialog UI (botui.js), only with BOTUI_URL: the hub polls the Paper plugin, which only bridges clicks.

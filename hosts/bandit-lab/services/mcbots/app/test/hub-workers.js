@@ -187,6 +187,8 @@ const {BotRunner} = require('../bots');
   assert.deepStrictEqual([cleanSnapshot({awayChests: ['3,64,0', 7]}).awayChests, cleanSnapshot({}).awayChests], [['3,64,0', ''], []]);
   assert.deepStrictEqual([cleanSnapshot({gettingFood: true}).gettingFood, cleanSnapshot({}).gettingFood], [true, false], 'a worker bot fetching food is left alone too');
   assert.deepStrictEqual(cleanSnapshot({armour: ['iron_helmet', null, 5, 'leather_boots', 'x']}).armour, ['iron_helmet', null, '', 'leather_boots']);
+  // HUB-3: the worker bot's own chest reaches the hub (idle shifts, the bot page); a non-integer one is dropped
+  assert.deepStrictEqual([cleanSnapshot({chest: {x: 1, y: 2, z: 3}}).chest, cleanSnapshot({chest: {x: 1.5, y: 2, z: 3}}).chest, cleanSnapshot({}).chest], [{x: 1, y: 2, z: 3}, null, null]);
   const {RemoteRunner} = require('../hub');
   const sent = [];
   const rr = new RemoteRunner('bot5');
