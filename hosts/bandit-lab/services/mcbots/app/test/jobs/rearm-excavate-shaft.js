@@ -260,6 +260,16 @@ module.exports = async () => {
       await assert.rejects(JOBS.excavate({...r, bot: counting, emit() {}}, pass(seen)), /1 blocks of the room were not dug/);
       assert.strictEqual(walks, first, 'no walk to it in the next pass');
     }
+    { // a block that needs a better pickaxe is left, not the end of the shaft: the block below is still dug (bots-3-3)
+      for (const [k, v] of [['0,60,0', 'stone'], ['0,59,0', 'dirt'], ['0,58,0', 'iron_ore']]) blocks.set(k, v);
+      order.length = 0;
+      const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      const seen = new Set();
+      await assert.rejects(JOBS.excavate({...r, bot: hard}, Object.assign({...job, t: {}}, {unreachable: seen})), /1 blocks of the room were not dug/);
+      assert.deepStrictEqual(order, ['stone@60', 'iron_ore@58'], 'the block below is still dug');
+      assert.deepStrictEqual([...seen], ['overworld:0,59,0'], 'later passes do not try it again');
+      blocks.delete('0,59,0');
+    }
   }
   { // shaft: 1-high excavate layers top-down, one stair step per layer spiralling along the walls
     const {JOBS, VALIDATE, stairRing} = require('../../bots');

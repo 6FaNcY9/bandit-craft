@@ -4493,9 +4493,11 @@ const JOBS = {
             // One block nobody can reach or dig safely is left, as the mine job does; it ended the whole
             // shaft (2026-10-12: a pillar block hanging over the open shaft at -277 54 -209).
             guard(job);
-            if (!/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
+            // A block that needs a better pickaxe (or a spawner) is left too, not the end of a shaft with 70 layers to go (bots-3-3).
+            const tool = /^no pickaxe for |^needs a tool|refusing to dig/.test(e.message);
+            if (!tool && !/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
             left++;
-            if (/No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
+            if (tool || /No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
             r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);
           } finally {
             r.world?.release(r.name, k);
