@@ -349,7 +349,7 @@ const VEGETATION = /_(log|leaves|wood)$|^(vine|snow|sweet_berry_bush|bamboo|suga
 const RESERVE_SLOTS = 4; // inventory slots a restock leaves free (drops, a tool)
 // Floating parts (most of the owner's sorter hangs in the air, 1522 of 1770 cells had no neighbour to
 // click) get a pillar of this under them, in cells that are air in the schematic; dirt, so the clear pass
-// takes it out again at the end, and after a restart, when the record of the pillars is gone.
+// takes it out again at the end, after a restart too (the record of the pillars lives in the state directory).
 const SCAFFOLD = 'dirt';
 // What a restock stows first, by item: natural blocks the build does not use, and dirt over a stack (to climb and prop).
 // bot21 carried 186 andesite, diorite and granite and 110 dirt it had dug out, and a trip held 37 cobblestone
@@ -487,10 +487,20 @@ async function schematicPlan(dir, {file, origin, rotation = 0, mirror = 'none', 
       const readFilled = () => { try { return JSON.parse(fs.readFileSync(filledFile, 'utf8')); } catch { return []; } };
       const filled = new Set(readFilled());
       const saveFilled = () => { try { fs.writeFileSync(`${filledFile}.tmp`, JSON.stringify([...new Set([...readFilled(), ...filled])])); fs.renameSync(`${filledFile}.tmp`, filledFile); } catch {} };
+      // Support pillars standing, kept the same way: after a restart the end clear still takes them out (BUILD-4).
+      // One cell per write, so what another process put up or dug stays as it wrote it.
+      const pillarFile = path.join(dir, `.pillars-${file}-${origin.x},${origin.y},${origin.z}-${rotation}-${mirror}.json`);
+      const readPillars = () => { try { return JSON.parse(fs.readFileSync(pillarFile, 'utf8')); } catch { return []; } };
+      const pillars = new Set(readPillars());
+      const markPillar = (k, on) => {
+        if (pillars.has(k) === on) return;
+        if (on) pillars.add(k); else pillars.delete(k);
+        try { const all = new Set(readPillars()); if (on) all.add(k); else all.delete(k); fs.writeFileSync(`${pillarFile}.tmp`, JSON.stringify([...all])); fs.renameSync(`${pillarFile}.tmp`, pillarFile); } catch {}
+      };
       // leave: cells to clear that failed three times, later: chests to fill no bot reached three times;
       // both for the whole crew, until the end
       const air = airCells.map(keyOf);
-      return {targets, fluids, air: new Set(air), byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled};
+      return {targets, fluids, air: new Set(air), byKey: new Map(targets.map((t) => [keyOf(t), t])), cells: new Set(cells.map(keyOf)), unsupported, lo, hi, leave: new Set(), later: new Set(), filled, saveFilled, pillars, markPillar};
     })().catch((e) => {
       SCHEMATIC_PLANS.delete(k);
       throw e;
@@ -706,7 +716,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const asIs = new Set(); // rails over a hopper in another shape: not dug (the drop would go into the machine)
     const lacking = new Map(); // item -> until: not in any chest, looked again after 5 min
     const stuck = new Map(); // key -> what is in the way that the bot may not dig
-    const pillars = recordOf(dim, {blocks: ['scaffold', ...plan.targets.map(keyOf)]}); // cells holding a support pillar
+    const {pillars, markPillar} = plan; // cells holding a support pillar
     const tempFor = new Map(); // a support in a cell of the schematic (a hopper loop) -> the cell that needed it
     let allPlaced = false; // last loop found every cell placed: the pillars come out
     const unreached = new Set(); // what could not be cleared at the end, for the report
@@ -888,7 +898,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         const up = {x: c.x, y: c.y + 1, z: c.z}, uk = keyOf(up);
         if (!chestLids.has(uk) || plan.byKey.has(uk) || stateAt(up.x, up.y, up.z)?.name !== SCAFFOLD) continue;
         job.t.doing = `taking the ${SCAFFOLD} off ${c.name} at ${keyOf(c)}`;
-        if (await digAt(r, job, v(up), (n) => n === SCAFFOLD).catch(() => { guard(job); return false; })) pillars.delete(uk);
+        if (await digAt(r, job, v(up), (n) => n === SCAFFOLD).catch(() => { guard(job); return false; })) markPillar(uk, false);
       }
       return bot.openContainer(bot.blockAt(v(t)));
     };
@@ -1068,7 +1078,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         let clear = null;
         stuck.clear();
         const me = bot.entity.position;
-        for (let y = hi.y; y >= lo.y - 1 && !clear; y--) {
+        // Under the site only pillars come out, and a pillar reaches down to SCAFFOLD_MAX below its cell (BUILD-4).
+        for (let y = hi.y; y >= (allPlaced ? lo.y - SCAFFOLD_MAX : lo.y - 1) && !clear; y--) {
           let best = Infinity;
           for (let z = lo.z - 1; z <= hi.z + 1; z++) {
             for (let x = lo.x - 1; x <= hi.x + 1; x++) {
@@ -1104,7 +1115,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           try {
             job.t.doing = `clearing ${clear.name} at ${clear.x} ${clear.y} ${clear.z} from the build site`;
             // A support taken out of a schematic cell may drop what it held: those drops are picked up. Rock is left lying: 2-3 blocks a minute against 50 (sandbox).
-            if (await digAt(r, job, v(clear), (n) => n === clear.name, {pickup: tempFor.has(clear.k)})) { placed.delete(clear.k); pillars.delete(clear.k); tempFor.delete(clear.k); lastProgress = Date.now(); first = false; } // dug: not "already complete"
+            if (await digAt(r, job, v(clear), (n) => n === clear.name, {pickup: tempFor.has(clear.k)})) { placed.delete(clear.k); markPillar(clear.k, false); tempFor.delete(clear.k); lastProgress = Date.now(); first = false; } // dug: not "already complete"
             else skip.set(clear.k, Date.now() + 30000);
           } catch (e) {
             guard(job);
@@ -1429,7 +1440,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           const h = stateAt(t.x, t.y, t.z);
           if (t.pillar) {
             if (h?.name === t.name) {
-              pillars.add(k);
+              markPillar(k, true);
               if (plan.byKey.has(k)) tempFor.set(k, t.for);
               lastProgress = Date.now();
             } else skip.set(k, Date.now() + 30000);

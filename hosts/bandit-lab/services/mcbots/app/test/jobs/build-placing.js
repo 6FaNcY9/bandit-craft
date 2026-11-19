@@ -375,4 +375,58 @@ module.exports = async () => {
     fs.rmSync(dir, {recursive: true, force: true});
     assert.deepStrictEqual(dug.sort(), ['crafting_table', 'wall_torch'], `own work blocks in planned cells come out; a chest and an air cell's torch stay (dug: ${dug})`);
   }
+  { // BUILD-4: a floating cell's dirt pillar comes out all the way down, also below the cell under the site (audit 2026-11-19)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    palette[5] = {Name: str('minecraft:cobblestone')};
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 1, y: 1, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: [[0, 5]]}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-pillar-'));
+    fs.writeFileSync(path.join(dir, 'float.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('float')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const world = new Map();
+    const at = (p) => world.get(`${p.x},${p.y},${p.z}`) ?? (p.y <= 63 ? 'stone' : 'air');
+    // stopAt: the job is stopped at its first click with this item; fresh: a new build.js, as after a worker restart
+    const float = async ({stopAt = null, fresh = false} = {}) => {
+      const job = {t: {}, cancelled: false, args: {file: 'float.litematic', origin: {x: 0, y: 70, z: 0}, chests: []}}; // 6 above the ground at y 63
+      const on = {};
+      let held = null;
+      const bot = {game: {dimension: 'overworld'}, on(e, f) { on[e] = f; }, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(20.5, 64, 20.5), yaw: 0, pitch: 0},
+        inventory: {items: () => [{name: 'cobblestone', count: 64, type: 2}, {name: 'dirt', count: 64, type: 3}], emptySlotCount: () => 34},
+        equip: async (it) => { held = it.name; },
+        _genericPlace: async (ref, face) => {
+          if (held === stopAt) { job.cancelled = true; return; }
+          const p = ref.position.plus(face);
+          world.set(`${p.x},${p.y},${p.z}`, held);
+          on.blockUpdate?.(null, {position: p});
+        },
+        registry: {itemsByName: {cobblestone: item(2), dirt: item(3), glass: item(4)}, blocksByName: {}},
+        pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+        blockAt: (p) => ({name: at(p), position: p, getProperties: () => ({}), boundingBox: at(p) === 'air' ? 'empty' : 'block', shapes: []})};
+      const digAt = async (rr, jj, p) => { world.set(`${p.x},${p.y},${p.z}`, 'air'); on.blockUpdate?.(null, {position: p}); return true; };
+      if (fresh) delete require.cache[require.resolve('../../build')];
+      const schematic = require('../../build').makeSchematic({goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+        sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir});
+      const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}}, job).catch((e) => e);
+      const end = await Promise.race([run, new Promise((res) => setTimeout(() => res('hung'), 3000))]);
+      job.cancelled = true;
+      await run;
+      return {end, doing: job.t.doing, dirt: [...world].filter(([, n]) => n === 'dirt').map(([k]) => k)};
+    };
+    let res = await float();
+    assert.strictEqual(at({x: 0, y: 70, z: 0}), 'cobblestone', `the floating cell stands (end: ${res.end}, doing: ${res.doing})`);
+    assert.deepStrictEqual(res.dirt, [], `no dirt left under the site (end: ${res.end})`);
+    world.clear();
+    res = await float({stopAt: 'cobblestone'}); // the pillar stands, then the worker restarts
+    assert.strictEqual(res.dirt.length, 6, `the pillar stood before the restart (end: ${res.end})`);
+    res = await float({fresh: true});
+    fs.rmSync(dir, {recursive: true, force: true});
+    assert.deepStrictEqual(res.dirt, [], `after a restart the pillar still comes out (end: ${res.end}, doing: ${res.doing})`);
+  }
 };
