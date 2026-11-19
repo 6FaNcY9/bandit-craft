@@ -140,11 +140,11 @@ setInterval(() => {
     }
   }
   // Idle bots without an owner order help with another bot's need (the needs board, bots.js helpOnce); only when
-  // there is one, so an idle crew does not log a help job every minute.
+  // there is one, so an idle crew does not log a help job every minute. A stopped or held bot does not help.
   const open = world.openNeeds();
   for (const [name, runner] of runners) {
     const s = runner.snapshot();
-    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !started.has(name) && !cfg.guestBots.includes(name) && !cfg.mainBots.includes(name) && open.some((n) => n.bot !== name)) {
+    if (s.online && !s.job && !(s.queue || []).length && !ownerOrders.has(name) && !started.has(name) && !idleStopAll && !idleHeld.has(name) && !(orderRetryAt.get(name) > Date.now()) && !cfg.guestBots.includes(name) && !cfg.mainBots.includes(name) && open.some((n) => n.bot !== name)) {
       try { runner.enqueue('help', {}); } catch {}
     }
   }

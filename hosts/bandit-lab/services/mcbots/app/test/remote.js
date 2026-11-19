@@ -145,6 +145,16 @@ const {handle} = require('../remote');
       assert.deepEqual(await call('POST', '/api/project', L, {bot: 'bot1', action: 'pause'}), [200, {ok: true}]);
       assert.deepEqual(await call('POST', '/api/project', L, {bot: 'bot2', action: 'stop'}), [200, {ok: true}]);
       assert.deepEqual(Object.keys(orders()), ['bot2'], 'the paused shaft is no standing order any more');
+      // HUB-5: the help sweep leaves a stopped bot alone (bot5 was stopped by Stop all above); a fresh idle bot helps
+      const m2 = [];
+      const w2 = await new Promise((res, rej) => { const ws = new (require('ws'))(`ws://127.0.0.1:${wport}/worker`, {headers: T}); ws.on('message', (d) => m2.push(JSON.parse(String(d)))); ws.on('open', () => res(ws)); ws.on('error', rej); });
+      w2.send(JSON.stringify({t: 'hello', v: 1, host: 'pc', bots: ['bot6', 'bot7']}));
+      w2.send(JSON.stringify({t: 'status', bots: [{name: 'bot6', online: true}, {name: 'bot7', online: true}]}));
+      w2.send(JSON.stringify({t: 'observe', needs: [{bot: 'bot7', item: 'iron_ingot', count: 3, to: {x: 0, y: 64, z: 0}, why: 'test'}]}));
+      wk.send(JSON.stringify({t: 'status', bots: [{name: 'bot5', online: true}]}));
+      const helps = (ms) => ms.filter((m) => m.t === 'job' && m.type === 'help');
+      for (let i = 0; i < 1400 && !helps(m2).length; i++) await new Promise((r) => setTimeout(r, 50)); // the sweep runs once a minute
+      assert.deepEqual([helps(m2).map((m) => m.bot), helps(msgs).length], [['bot6'], 0], 'bot6 helps, the stopped bot5 does not');
     } finally {
       child.kill('SIGKILL');
     }
