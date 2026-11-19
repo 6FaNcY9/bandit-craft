@@ -643,7 +643,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     // Glass where the schematic wants another block is our scaffolding, and it drops nothing. The owner may give a
     // site free (a scaffold stood in the sorter's site on the main server, 2026-10-14): then anything but a
     // container comes out, so nothing of theirs spills.
-    const clearable = (k, name) => (job.args.tight && /torch$/.test(name)) || natural.test(name) || VEGETATION.test(name) || ours(k, name) || pillars.has(k) || name === GLASS ||
+    const clearable = (k, name) => (job.args.tight && /torch$/.test(name)) || natural.test(name) || VEGETATION.test(name) || ours(k, name) || (pillars.has(k) && name === SCAFFOLD) || name === GLASS ||
       (job.args.clearAll === true && !CONTAINER.test(name)) ||
       // The bots' own work lights and crafting tables in a cell the schematic fills: "in the way" stopped 4 bots 1.5 h (main 2026-11-16).
       (plan.byKey.has(k) && /^(torch|wall_torch|crafting_table)$/.test(name)) ||

@@ -429,8 +429,15 @@ module.exports = async () => {
     res = await float({stopAt: 'cobblestone'}); // the pillar stands, then the worker restarts
     assert.strictEqual(res.dirt.length, 6, `the pillar stood before the restart (end: ${res.end})`);
     res = await float({fresh: true});
-    fs.rmSync(dir, {recursive: true, force: true});
     assert.deepStrictEqual(res.dirt, [], `after a restart the pillar still comes out (end: ${res.end}, doing: ${res.doing})`);
+    // K9: a stale record (its dirt went another way, a real block stands there now) never clears that block as scaffold
+    world.clear();
+    await float({stopAt: 'cobblestone'});
+    world.set('0,65,0', 'stone_bricks'); // the owner's tower block where the pillar's dirt stood
+    res = await float({fresh: true});
+    fs.rmSync(dir, {recursive: true, force: true});
+    assert.strictEqual(at({x: 0, y: 65, z: 0}), 'stone_bricks', `a real block in a stale pillar cell stays (end: ${res.end}, doing: ${res.doing})`);
+    assert.deepStrictEqual(res.dirt, [], `the rest of the pillar still comes out (end: ${res.end})`);
   }
   { // BUILD-5: a chest whose fill item is in no chest waits for it and asks for it; the block on its lid was left as
     // "1 cells left that this bot cannot place or reach" and the job failed after 300 s (audit 2026-11-19)
