@@ -1295,6 +1295,15 @@ const guard = (job) => {
   if (job.cancelled) throw new Cancelled('stopped');
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const HUB_DOWN = 'hub unreachable: not digging without block reservations';
+// A hub restart for a deploy takes about a minute: the job waits for the link instead of failing (bots-2-5).
+async function hubBack(r, job, ms = 180000) {
+  for (const end = Date.now() + ms; r.world?.unreachable; await sleep(1000)) {
+    guard(job);
+    if (Date.now() > end) throw new Error(HUB_DOWN);
+    job.t.doing = 'waiting for the hub';
+  }
+}
 
 // Jobs pause while combat has the pathfinder (retreating from a hostile).
 async function waitCalm(r, job, until = Infinity) {
@@ -3064,7 +3073,7 @@ async function collect(r, job, matching, count, what) {
     // A reservation is only valid once the shared table granted it: on a
     // remote worker the hub decides (one round trip), so a lab bot and a
     // laptop bot never dig the same block.
-    if (r.world?.unreachable) throw new Error('hub unreachable: not digging without block reservations');
+    await hubBack(r, job);
     let pos = null;
     let key = null;
     // Ores: nearest first, so a vein is finished before the next one. Stone and
@@ -4470,6 +4479,7 @@ const JOBS = {
           if (all ? skipAll.test(b.name) || buildJob.CONTAINER.test(b.name) : b.boundingBox === 'empty' || !NATURAL.test(b.name)) continue;
           const k = `${dim}:${x},${y},${z}`;
           if (job.unreachable?.has(k)) { left++; continue; } // no way there in an earlier pass of this layer
+          if (r.world?.unreachable) throw new Error(HUB_DOWN); // a lost hub is no "held by another bot": a shaft would skip its layers (bots-3-2)
           if (r.world && !(await r.world.claim(r.name, k))) {
             left++;
             continue;

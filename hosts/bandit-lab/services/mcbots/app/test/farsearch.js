@@ -175,3 +175,26 @@ for (const depot of [6, 40]) first.then(async () => {
   if (depot === 6) assert.ok(Math.hypot(down[1] - me.x, down[2] - me.z) <= 24, `natural ground near: dug down there, no walk home: ${JSON.stringify(walks)}`);
   else assert.ok(Math.hypot(down[1] - home.x, down[2] - home.z) < 80, `built all round: dug down beside the base: ${JSON.stringify(walks)}`);
 }).catch((e) => { console.error(e); process.exitCode = 1; });
+
+// A hub restart for a deploy (link down a few seconds): collect waits for the hub instead of failing the job (bots-2-5).
+first.then(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots');
+  const bot = {entity: {position: new Vec3(10, 64, 20)}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null,
+    blockAt: () => null, game: {dimension: 'overworld'}, on() {}, once() {},
+    pathfinder: {searchRadius: 100, stop() {}, setGoal() {}, goto: async () => {}}};
+  const world = {unreachable: true, hostilesNear: () => [], claim: async () => true, release() {}};
+  const r = {name: 'bot2', emit() {}, log() {}, bot, protectedAreas: [], world, skip: new Map(), acquireFailed: new Map(), conflict() {}, combat: {busy: false, hostilesNear: () => [], fit: () => true}, moves: null};
+  const job = {id: 4, type: 'mine', args: {block: 'sand', count: 4}, t: {upkeep: true}, collected: 0, progress: ''};
+  let failed = null;
+  const run = JOBS.mine(r, job).catch((e) => { failed = e; });
+  await new Promise((res) => setTimeout(res, 3000));
+  assert.equal(failed, null, `still running with the link down: ${failed?.message}`);
+  assert.match(job.t.doing, /waiting for the hub/);
+  world.unreachable = false;
+  await new Promise((res) => setTimeout(res, 1500));
+  assert.doesNotMatch(job.t.doing || '', /waiting for the hub/, 'back to work once the link is up');
+  job.cancelled = true;
+  await run;
+  assert.doesNotMatch(failed?.message || '', /hub unreachable/);
+}).catch((e) => { console.error(e); process.exitCode = 1; });
