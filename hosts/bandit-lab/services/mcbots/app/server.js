@@ -436,7 +436,7 @@ function resumeJobs() {
     if (remote) r.kept = list; // keep them in the saved file until the worker's next status reports them
     for (const j of list) {
       try {
-        r.enqueue(j.type, j.args);
+        r.enqueue(j.type, j.args, {noFar: j.noFar === true});
         events.add(name, 'info', `resumed after restart: ${j.type}`);
       } catch {} // an entry the validator refuses is dropped
     }

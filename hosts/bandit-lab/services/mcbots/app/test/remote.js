@@ -101,8 +101,11 @@ const {handle} = require('../remote');
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
     const port = await new Promise((res) => { const s = require('node:net').createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
     const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-hub-'));
+    const wport = await new Promise((res) => { const s = require('node:net').createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
+    // HUB-2: a hub restart keeps the keeper's noFar (kept entry shape {type, args, noFar?: true}); only an exact true counts
+    fs.writeFileSync(path.join(stateDir, 'jobs.json'), JSON.stringify({bot5: [{type: 'chop', args: {count: 12}, noFar: true}, {type: 'mine', args: {block: 'stone', count: 5}, noFar: 'yes'}]}));
     const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: stateDir, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', REMOTE_TOKEN: token, MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
+      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: stateDir, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', REMOTE_TOKEN: token, WORKER_PORT: String(wport), WORKER_TOKEN: token, MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     try {
@@ -113,9 +116,15 @@ const {handle} = require('../remote');
       });
       const call = async (method, p, headers, body) => { const r = await fetch(`http://127.0.0.1:${port}${p}`, {method, headers, body: body && JSON.stringify(body)}); return [r.status, await r.json()]; };
       const T = {authorization: `Bearer ${token}`};
+      const msgs = [];
+      const wk = await new Promise((res, rej) => { const ws = new (require('ws'))(`ws://127.0.0.1:${wport}/worker`, {headers: T}); ws.on('message', (d) => msgs.push(JSON.parse(String(d)))); ws.on('open', () => res(ws)); ws.on('error', rej); });
+      wk.send(JSON.stringify({t: 'hello', v: 1, host: 'laptop', bots: ['bot5']}));
+      wk.send(JSON.stringify({t: 'status', bots: [{name: 'bot5', online: true}]}));
+      for (let i = 0; i < 100 && msgs.filter((m) => m.t === 'job').length < 2; i++) await new Promise((r) => setTimeout(r, 50));
+      assert.deepEqual(msgs.filter((m) => m.t === 'job').map((m) => [m.type, m.noFar]), [['chop', true], ['mine', undefined]], 'resumed with noFar');
       const [code, fleet] = await call('GET', '/api/remote/fleet', T);
       assert.equal(code, 200);
-      assert.deepEqual(fleet.bots.map((b) => b.name), ['bot1', 'bot2']);
+      assert.deepEqual(fleet.bots.map((b) => b.name), ['bot1', 'bot2', 'bot5']);
       assert.deepEqual(Object.keys(fleet.bots[0]), ['name', 'online', 'job', 'queued', 'paused']);
       assert.deepEqual(await call('POST', '/api/remote/stop', T, {}), [200, {ok: true, unreached: []}]);
       assert.deepEqual(await call('POST', '/api/remote/resume', T, {bot: 'bot1'}), [400, {error: 'no paused project'}]);

@@ -90,7 +90,7 @@ function cleanSnapshot(s) {
 function cleanKept(v) {
   return tailFrom(list(v, 20, (j) => {
     try {
-      return Object.hasOwn(VALIDATE, j?.type) ? {type: j.type, args: VALIDATE[j.type](obj(j.args) || {})} : null;
+      return Object.hasOwn(VALIDATE, j?.type) ? {type: j.type, args: VALIDATE[j.type](obj(j.args) || {}), ...(j.noFar === true ? {noFar: true} : {})} : null;
     } catch {
       return null;
     }
@@ -427,7 +427,7 @@ class Hub {
     r.resume = null;
     for (const j of jobs) {
       try {
-        r.enqueue(j.type, j.args);
+        r.enqueue(j.type, j.args, {noFar: j.noFar === true});
         this.events?.add(r.name, 'info', `resumed after worker restart: ${j.type}`);
       } catch {} // an entry the validator refuses is dropped
     }

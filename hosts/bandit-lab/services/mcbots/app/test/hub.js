@@ -340,6 +340,17 @@ const assert = require('node:assert');
       status(c, {online: true, kept: []});
       await sleep(150);
       assert.deepStrictEqual(jobs(c).map((m) => m.type), ['stop'], 'the stopped jobs do not come back at login');
+      // HUB-2: the keeper's noFar survives a worker restart; only an exact true counts
+      const near = [{type: 'chop', args: {count: 12}, noFar: true}, {type: 'mine', args: {block: 'stone', count: 5}, noFar: 'yes'}];
+      status(c, {online: true, job: {type: 'chop', label: 'chop 12'}, kept: near});
+      await until(() => r20.kept.length === 2 && r20.snap.job, 'noFar jobs kept');
+      assert.deepStrictEqual(r20.kept, [near[0], {type: 'mine', args: {block: 'stone', count: 5}}]);
+      c.ws.close();
+      await until(() => !r20.snapshot().connected, 'worker gone 3');
+      c = await hello();
+      status(c, {online: true, kept: []});
+      await until(() => jobs(c).length === 2, 'noFar jobs queued again');
+      assert.deepStrictEqual(jobs(c).map((m) => [m.type, m.noFar]), [['chop', true], ['mine', undefined]]);
       c.ws.close();
       await until(() => !r20.snapshot().connected, 'bot20 offline');
     }
