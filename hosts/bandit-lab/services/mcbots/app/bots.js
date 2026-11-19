@@ -2477,7 +2477,7 @@ async function ensureGear(r, job) {
   const near = src && me && Math.hypot(me.x - src.x, me.y - src.y, me.z - src.z) <= 48;
   if (!near && gearJob.gearPlan(Infinity, owned).every((item) => /^iron_(pick)?axe$/.test(item) && owned.some((n) => n.endsWith(item.slice(4))))) return;
   // The armoury first: a ready piece there is taken before a new one is crafted (spec 2026-11-15-castle-armoury).
-  let atArmoury = false;
+  let atArmoury = false, fetched = false;
   if (r.gearChest && gearPoint(r) === r.gearChest && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
     atArmoury = true;
@@ -2489,10 +2489,14 @@ async function ensureGear(r, job) {
   // Standing at the armoury even a shield's single ingot is worth taking; elsewhere only a gap of 3 or more, as before.
   if ((wanted - n('raw_iron') >= 3 || (atArmoury && wanted > 0)) && gearSources(r).length && !jobWants(job, 'iron_ore')) {
     r.gearTriedAt = Date.now();
-    // Each source in turn (the armoury, then the supply chest) until `left()` is covered.
+    fetched = true;
+    // Each source in turn (the armoury, then the supply chest) until `left()` is covered; one farther than 48 only by day and
+    // when the storage index says it holds the item: one shield ingot cost a walk of 520 blocks (bots-2-1, audit 2026-11-19).
+    const held = (at, item) => Object.entries(r.world?.stockAt?.(at)?.items || {}).some(([k, c]) => c > 0 && (item === 'logs' ? /_log$/.test(k) : k === item));
     const fetch = async (item, left) => {
       for (const at of gearSources(r)) {
         if (left() <= 0) return;
+        if (!(me && Math.hypot(me.x - at.x, me.y - at.y, me.z - at.z) <= 48) && (dark(bot) || !held(at, item))) continue;
         await JOBS.withdraw(r, child(job, {type: 'withdraw', args: {item, count: left(), far: true, ...at}}))
           .catch((e) => { guard(job); r.emit('info', `gear: no ${item} from ${place(r, at)}: ${e.message.slice(0, 80)}`); });
       }
@@ -2514,7 +2518,7 @@ async function ensureGear(r, job) {
     if (smelts >= 3 && logs > 0 && !['coal', 'charcoal'].some((f) => n(f) >= Math.ceil(smelts / 8))) await fetch('logs', () => logs - (logsHeld() - before));
   }
   if (n('raw_iron') < 3 && !n('iron_ingot')) {
-    if (atArmoury) r.gearIdleUntil = Date.now() + GEAR_IDLE_MS;
+    if (atArmoury || fetched) r.gearIdleUntil = Date.now() + GEAR_IDLE_MS;
     return;
   }
   const smeltN = Math.min(n('raw_iron'), wanted);

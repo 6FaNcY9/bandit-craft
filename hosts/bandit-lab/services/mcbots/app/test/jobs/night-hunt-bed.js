@@ -446,11 +446,35 @@ module.exports = async () => {
       const job2 = {t: {}, cancelled: false, type: 'chop', args: {}};
       const r = mk2({x: -20, y: 64, z: 0});
       await B.care(r, job2);
-      assert.deepStrictEqual(calls.slice(0, 2), ['rearm@-20', 'iron_ingot@-20'], 'the shield ingot is taken at the armoury: ' + calls.join(' '));
+      // only there (raw iron too, on the spot): the supply chest 260 blocks off for one shield ingot is no walk (bots-2-1, audit 2026-11-19)
+      assert.deepStrictEqual(calls, ['rearm@-20', 'iron_ingot@-20', 'raw_iron@-20'], 'the shield ingot is taken at the armoury: ' + calls.join(' '));
       calls.length = 0;
       r.gearTriedAt = Date.now() - 6 * 60000; // six minutes later
       await B.care(r, job2);
       assert.deepStrictEqual(calls, [], 'a visit that got nothing waits 30 minutes');
+      // beside the supply chest, chestplate missing, store empty: no walk to the armoury, and a rest after the empty round
+      const sup = mk2({x: -20, y: 64, z: 0});
+      sup.bot.entity.position = new Vec3(240, 64, 0);
+      delete sup.bot.inventory.slots[6];
+      await B.care(sup, job2);
+      assert.deepStrictEqual(calls, ['iron_ingot@240', 'raw_iron@240'], 'only the near source: ' + calls.join(' '));
+      calls.length = 0;
+      sup.gearTriedAt = Date.now() - 6 * 60000;
+      await B.care(sup, job2);
+      assert.deepStrictEqual(calls, [], 'an empty round off the armoury waits 30 minutes too: ' + calls.join(' '));
+      // the far armoury only when the storage index says it holds the item, and not in the dark
+      const idx = mk2({x: -20, y: 64, z: 0});
+      idx.bot.entity.position = new Vec3(240, 64, 0);
+      delete idx.bot.inventory.slots[6];
+      idx.world.stockAt = (c) => (c.x === -20 ? {items: {iron_ingot: 8}} : null);
+      await B.care(idx, job2);
+      assert.deepStrictEqual(calls, ['iron_ingot@240', 'iron_ingot@-20', 'raw_iron@240'], 'the indexed far chest: ' + calls.join(' '));
+      calls.length = 0;
+      Object.assign(idx, {gearTriedAt: 0, gearIdleUntil: 0});
+      idx.bot.time = {timeOfDay: 14000};
+      await B.care(idx, job2);
+      assert.ok(!calls.some((c) => c.endsWith('@-20')), 'no far walk at night: ' + calls.join(' '));
+      calls.length = 0;
       const old = mk2(null);
       await B.care(old, job2);
       assert.deepStrictEqual(calls, [], 'no armoury: a 1-ingot gap fetches nothing, as before');
