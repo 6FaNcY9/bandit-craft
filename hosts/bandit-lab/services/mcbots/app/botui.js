@@ -50,6 +50,7 @@ const GO = {followme: {key: 'followme', data: {}}, summon: {key: 'summon', data:
   goto: {key: 'goto', data: {}, loc: true}, wheatfarm: {key: 'wheatfarm', data: {}}, lightspawner: {key: 'lightspawner', data: {}, loc: true},
   stock: {key: 'stock', data: {}, loc: true}, tidy: {key: 'tidy', data: {radius: 16}, loc: true},
   animalfarm: {key: 'animalfarm', data: {}}, cropfarm: {key: 'cropfarm', data: {}}};
+const FIRST = new Set(['followme', 'summon', 'guardhere']);
 // loc: the order takes x/y/z from the payload (jobs.presetOf bounds-checks them). animalfarm/cropfarm: a saved farm by name (Tiere & Felder).
 
 const GRID_BACK = ['shiftm', 'craftm', 'smeltm', 'enchm', 'botm', 'chestjobs'];
@@ -170,7 +171,8 @@ const ACTIONS = {
     } else if (data.job === 'animalfarm' || data.job === 'cropfarm') extra = {zone: String(data.zone)}; // jobs.build finds it among the pens/fields
     else if (spec.loc) extra = Object.fromEntries(['x', 'y', 'z'].filter((k) => data[k] !== undefined).map((k) => [k, data[k]]));
     const o = jobs.build(spec.key, {who: bot, ...spec.data, ...extra}, {ctx: st.ctx, sel: st.sel, supply: supplyFor(ui, viewer), places, snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
-    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace}));
+    // come/follow/guard go ahead of the running job, as chatEnqueue does for chat: behind guard or a shift they never start (UIW-2)
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, replace: o.replace, ...(FIRST.has(data.job) ? {first: true} : {})}));
     ui.flash(st, `${bot}: ${o.say}`, true);
   },
   // The chest is the one the viewer is looking at: the coordinates come from the gaze, jobs.build checks they match.
@@ -533,7 +535,7 @@ const ACTIONS = {
   comeall: (st, data, ui, viewer) => {
     st.screen = {name: 'ov'};
     const o = jobs.build('summon', {who: 'alle'}, {ctx: st.ctx, sel: st.sel, supply: null, places: ui.api.places(), snaps: ui.api.snapshots(), allowed: ui.viewerBots[viewer], viewer, schematics: []});
-    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args}));
+    done(ui.api.submit(viewer, {bots: o.bots, type: o.type, args: o.args, first: true}));
     ui.flash(st, `${o.bots.length} Bots kommen zu dir`, true);
   },
   // A one-time link for the viewer (uploads.js); the dialog opens it in the browser.

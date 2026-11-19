@@ -222,7 +222,7 @@ function stopAll() {
 // The body of POST /api/job after the origin check, also behind the in-game UI (botui.js); throws the refusal.
 // "all" skips remote bots whose worker is away, so a Stop reaches every bot that can still hear it; naming an offline bot is an error.
 // remember: false keeps the job out of the standing orders and projects (the "Wenn frei" jobs restart by the idle sweep).
-function submitJob({bots, type, args, replace, remember = true}) {
+function submitJob({bots, type, args, replace, first, remember = true}) {
   if (type === 'setchest') remember = false; // a setting, not an order to repeat
   const all = bots === 'all';
   const targets = all ? [...runners.values()].filter((r) => !(r instanceof RemoteRunner) || r.conn) : (Array.isArray(bots) ? bots : []).map((n) => runners.get(n));
@@ -237,8 +237,8 @@ function submitJob({bots, type, args, replace, remember = true}) {
       const pos = r.snapshot().pos;
       const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, drowned: world.drownSpots(), from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
       if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); skipped.push(r.name); continue; }
-      // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
-      r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' ? {first: true} : {})});
+      // Graves (and first: the menu's come/follow/guard) go ahead of the running job, which goes on afterwards; the owner's standing order stays.
+      r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' || first === true ? {first: true} : {})});
       if (remember && type !== 'graves') type === 'stop' ? ownerOrders.delete(r.name) : ownerOrders.set(r.name, {type, args: perBotArgs});
       if (remember) { orderFails.delete(r.name); type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {

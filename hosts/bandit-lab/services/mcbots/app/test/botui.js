@@ -383,7 +383,7 @@ async function fake() {
     await click('Midari', {a: 'stopmine'});
     assert.deepEqual(submits.at(-1), ['Midari', {bots: ['MisaBot'], type: 'stop', args: {}}]);
     await ui.handle({type: 'click', player: 'Midari', pos: [1, 64, 2], data: {a: 'comeall'}});
-    assert.deepEqual(submits.at(-1)[1].bots, ['MisaBot']); assert.equal(submits.at(-1)[1].type, 'goto');
+    assert.deepEqual(submits.at(-1)[1].bots, ['MisaBot']); assert.equal(submits.at(-1)[1].type, 'goto'); assert.equal(submits.at(-1)[1].first, true);
     await ui.handle({type: 'closed', player: 'Fancy'});
     const n = f.of('/menu').length;
     await ui.tick();
@@ -437,9 +437,11 @@ async function fake() {
     const ev = (player, data, extra = {}) => ui.handle({type: 'click', player, data, ...extra});
     const bars = () => f.of('/actionbar').map((c) => c.body);
     await ev('Fancy', {a: 'go', bot: 'bot1', job: 'followme'});
-    assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'follow', args: {player: 'Fancy'}, replace: false}]);
+    assert.deepEqual(submits.at(-1), ['Fancy', {bots: ['bot1'], type: 'follow', args: {player: 'Fancy'}, replace: false, first: true}]); // UIW-2: ahead of a running guard/shift
+    await ev('Fancy', {a: 'go', bot: 'bot1', job: 'summon'}, {pos: [1.5, 64, 2.5]});
+    assert.deepEqual(submits.at(-1)[1], {bots: ['bot1'], type: 'goto', args: {x: 1, y: 64, z: 2}, replace: false, first: true});
     await ev('Fancy', {a: 'go', bot: 'bot1', job: 'deposit'});
-    assert.deepEqual(submits.at(-1)[1].args, {x: 9, y: 9, z: 9});
+    assert.deepEqual(submits.at(-1)[1].args, {x: 9, y: 9, z: 9}); assert.equal(submits.at(-1)[1].first, undefined); // work orders still queue
     await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'deposit'}); // no bot chest, no supply chest
     const n = submits.length;
     assert.equal(submits.at(-1)[0], 'Fancy');
@@ -450,7 +452,7 @@ async function fake() {
     assert.deepEqual(bars().at(-1), {player: 'Midari', text: 'Keine Baumfarm eingerichtet'});
     assert.equal(submits.length, n);
     await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'guardhere'}, {pos: [5.5, 64, 6.5]});
-    assert.deepEqual(submits.at(-1)[1], {bots: ['MisaBot'], type: 'guard', args: {x: 5, y: 64, z: 6, radius: 16}, replace: false});
+    assert.deepEqual(submits.at(-1)[1], {bots: ['MisaBot'], type: 'guard', args: {x: 5, y: 64, z: 6, radius: 16}, replace: false, first: true});
     await ev('Midari', {a: 'go', bot: 'MisaBot', job: 'rm'}); assert.equal(submits.length, n + 1);
     await ev('Midari', {a: 'stopmine'});
     assert.ok(bars().some((b) => /gestoppt/.test(b.text)));
