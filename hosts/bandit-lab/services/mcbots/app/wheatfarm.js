@@ -11,6 +11,7 @@
 // farmland (only a landing fall does); the bot never jumps on purpose and reaches cells from up to 3 blocks.
 const {Vec3} = require('vec3');
 const {insideAreas, normDim} = require('./world');
+const {overCap} = require('./storage');
 
 const MAX_SIDE = 9, REACH = 4;
 const SOIL = /^(dirt|grass_block|dirt_path)$/; // what a hoe turns into farmland (coarse_dirt only becomes dirt)
@@ -258,6 +259,13 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       // Food and gear (bots.js care): the farmer hands all its bread in, and bot3 was down to food 5 and 3 health on
       // its own field (main server 2026-10-17). Not in a pass for food: that is care's own last resort.
       if (care && !job.forFood) await care(r, job);
+      // The base chest above its bread cap (a reading under 30 min old): rest like cropfarm, the bread would only overflow it.
+      const stock = r.world?.stocks?.get(`${base.x},${base.y},${base.z}`);
+      if (!job.forFood && stock && Date.now() - stock.t <= 1800000 && overCap('bread', stock.items || {})) {
+        job.t.doing = 'enough bread in the base chest, waiting';
+        for (let i = 0; i < 60; i++) { guard(job); await sleep(1000); }
+        continue;
+      }
       if (r.world?.unreachable) throw new Error('hub unreachable: not farming without block reservations');
       const dim = normDim(bot.game?.dimension);
       if (Math.hypot(bot.entity.position.x - mid.x, bot.entity.position.z - mid.z) > 10) {

@@ -159,6 +159,18 @@ module.exports = async () => {
     f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'bread', count: 16, type: 3}, {name: 'wheat', count: 2, type: 4}]});
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(f.calls.deposit.slice(0, 2), ['bread', 'wheat']);
+    // ECON-3: the base chest holds bread above its cap (a fresh reading): the farm rests, nothing harvested or handed in
+    w = flat({'-1,64,1': 'water'});
+    w.put(0, 64, 0, 'farmland'); w.put(0, 65, 0, wheat(7));
+    f = fake({world: w, inv: [{name: 'bread', count: 16, type: 3}]});
+    f.r.world.stocks = new Map([['-9,65,-9', {items: {bread: 640}, t: Date.now()}]]);
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual([f.calls.deposit, f.calls.dig], [[], []]);
+    assert.match(f.job.t.doing, /enough bread/);
+    f.r.world.stocks.set('-9,65,-9', {items: {bread: 640}, t: Date.now() - 3600000});
+    f.job.cancelled = false;
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.deposit.slice(0, 1), ['bread'], 'an old reading does not stop the farm');
     // seeds above 64 go out with a plain deposit (filed in the hall), 64 stay to replant (bot3 with 1154, main server 2026-10-19)
     f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'bread', count: 16, type: 3}, {name: 'wheat_seeds', count: 200, type: 2}]});
     await assert.rejects(f.run(), Cancelled);
