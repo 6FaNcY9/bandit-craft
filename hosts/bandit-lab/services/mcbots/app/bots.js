@@ -1550,6 +1550,7 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
   };
   if (!opts.xz) await climb(covered);
   for (let i = 0; i < 20 && (!opts.goal || opts.xz) && r.bot?.entity; i++) {
+    if (opts.until?.()) return; // a walk that only has to bring something into view (light) ends between legs
     const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
     if (d <= LEG + 16) break;
     const lx = p.x + ((x - p.x) * LEG) / d, lz = p.z + ((z - p.z) * LEG) / d;
@@ -3848,9 +3849,12 @@ const JOBS = {
       if (!/torch$/.test(bot.blockAt(new Vec3(spot.spot.x, spot.spot.y, spot.spot.z))?.name || '')) throw new Error('torch did not stay beside the spawner');
       return;
     }
-    // An unloaded box reads as all lit: walk there first (bot19 "lit" five zones 200 blocks away from a hole, 2026-11-11).
+    // An unloaded box reads as all lit: walk there first (bot19 "lit" five zones 200 blocks away from a hole, 2026-11-11),
+    // but only until all of it is loaded: the walk's XZ last leg took bot19 down the base tunnels to y 30 under the wheat
+    // field (2026-11-19). Dark spots are walked to one by one below.
     const cx = Math.floor((a.x1 + a.x2) / 2), cz = Math.floor((a.z1 + a.z2) / 2);
-    if (!bot.blockAt(new Vec3(cx, a.y1, cz))) await goNear(r, job, cx, a.y1, cz, 8, {xz: true, doing: `walking to ${a.zone || 'the box'} to light it`});
+    const loaded = () => [a.x1, a.x2].every((x) => [a.z1, a.z2].every((z) => bot.blockAt(new Vec3(x, a.y1, z))));
+    if (!loaded()) await goNear(r, job, cx, a.y1, cz, 8, {xz: true, until: loaded, doing: `walking to ${a.zone || 'the box'} to light it`});
     guard(job);
     const chestPoints = [r.supplyChest, ...(r.world?.snapshot().blocks || []).filter((b) => ['chest', 'trapped_chest', 'barrel'].includes(b.type))].filter(Boolean);
     const points = lightCandidates(a, (x, y, z) => bot.blockAt(new Vec3(x, y, z)), (x, z) => insideAreas(r.protectedAreas, x, z), (x, y, z) => {

@@ -227,6 +227,22 @@ const assert = require('node:assert');
   assert.ok(walks > 0);
   console.log('light: unloaded zone walked to ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+(async () => { // a far zone: the walk ends once the whole box is loaded, before its XZ last leg dives through the base tunnels (bot19 at y 30 under the wheat field, 2026-11-19)
+  const {JOBS} = require('../bots');
+  const {Vec3} = require('vec3');
+  const goals = [], infos = [];
+  const open = (p) => ({name: p.y < 64 ? 'stone' : 'air', boundingBox: p.y < 64 ? 'block' : 'empty', light: 15, position: new Vec3(p.x, p.y, p.z)});
+  const bot = {
+    blockAt: (p) => (goals.length ? open(p) : null), entity: {position: new Vec3(-322, 105, -26), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, health: 20,
+    registry: {blocks: {}, blocksByName: {torch: {id: 1}, wall_torch: {id: 2}}, foodsByName: {}}, inventory: {items: () => [], emptySlotCount: () => 20, slots: []},
+    pathfinder: {goto: async (g) => { goals.push(g.constructor.name); bot.entity.position = new Vec3(g.x, g.y ?? bot.entity.position.y, g.z); }, stop() {}, setGoal() {}, movements: {}}, findBlocks: () => [],
+  };
+  const r = {bot, world: {hostilesNear: () => [], snapshot: () => ({blocks: []})}, emit: (k, t) => infos.push(t), protectedAreas: [], supplyChest: null, combat: {fit: () => true}};
+  await JOBS.light(r, {t: {}, cancelled: false, type: 'light', args: {x1: -262, y1: 58, z1: -250, x2: -254, y2: 72, z2: -242, zone: 'Wheat field'}});
+  assert.deepStrictEqual(goals, ['GoalNearXZ'], 'one leg, then the box is loaded: no further legs, no last leg');
+  assert.ok(infos.some((m) => /^lit Wheat field: 0 torches/.test(m)), infos.join('|'));
+  console.log('light: far zone walk ends once loaded ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
 (async () => { // a spot the server refused a torch on is skipped for 24 h, not tried on every keeper round (2026-11-11)
   const {JOBS} = require('../bots');
   const {Vec3} = require('vec3');
