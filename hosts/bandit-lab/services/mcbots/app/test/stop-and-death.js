@@ -687,3 +687,35 @@ const {BotRunner} = require('../bots');
   assert.deepStrictEqual(keptOf(g)[0].args, {x: 5, y: 60, z: 5});
   console.log('kept jobs ok');
 }
+(async () => { // the carry-out leaves food in the base chest: junk() keeps food in the bag, so carried-out bread never reached the
+  // hall and stuck in the depositing bot's bag (audit ECON-3, bots.js half)
+  const {JOBS} = require('../bots');
+  const layout = require('../storage-layout');
+  const {Vec3} = require('vec3');
+  const BASE = {x: -271, y: 66, z: -214}, key = `${BASE.x},${BASE.y},${BASE.z}`;
+  const hallKeys = new Set([key, ...layout.SLOTS.map((c) => layout.keyOf(c))]);
+  const stock = {bread: 640, dirt: 64}, items = [{name: 'oak_log', count: 10, type: 1, metadata: null}];
+  const bot = {
+    game: {dimension: 'minecraft:overworld'}, entity: {position: new Vec3(BASE.x + 2, 66, BASE.z)}, food: 20, health: 20,
+    registry: {foodsByName: {bread: {}}, blocksByName: {}}, slots: {},
+    inventory: {slots: new Proxy({}, {get: () => ({})}), items: () => items.filter((i) => i.count > 0), emptySlotCount: () => 30},
+    getEquipmentDestSlot: () => 1, tossStack: async (it) => { it.count = 0; },
+    pathfinder: {searchRadius: 100, setGoal() {}, stop() {}, goto: async (g) => { bot.entity.position = new Vec3(g.x, g.y, g.z); }},
+    blockAt: (p) => (hallKeys.has(`${p.x},${p.y},${p.z}`) ? {name: 'chest', position: new Vec3(p.x, p.y, p.z), boundingBox: 'block', getProperties: () => ({})} : p.y < 64 ? {name: 'stone', boundingBox: 'block', position: p} : {name: 'air', boundingBox: 'empty', position: p}),
+    openContainer: async (b) => (`${b.position.x},${b.position.y},${b.position.z}` !== key ? {containerItems: () => [], deposit: async (type, meta, count) => { items.find((i) => i.type === type).count -= count; }, withdraw: async () => {}, close() {}} : {
+      containerItems: () => Object.entries(stock).flatMap(([name, n]) => Array.from({length: Math.ceil(n / 64)}, () => ({name, count: 64, type: name, metadata: null}))),
+      deposit: async (type, meta, count) => { const it = items.find((i) => i.type === type); stock[it.name] = (stock[it.name] || 0) + count; it.count -= count; },
+      withdraw: async (type, meta, count) => { stock[type] -= count; items.push({name: type, count, type: `w-${type}`, metadata: null}); },
+      close() {},
+    }),
+  };
+  const isFood = (n) => n === 'bread';
+  const index = new Map([...layout.chestsFor(layout.categoryOf('bread', isFood)), ...layout.chestsFor(layout.categoryOf('dirt', isFood))].map((c) => [layout.keyOf(c), {items: {}, free: 5}]));
+  const r = {bot, name: 'bot1', prefs: {}, protectedAreas: [], supplyChest: BASE, world: {chests: index, hostilesNear: () => [], noteStock() {}}, combat: {busy: false, epoch: 0},
+    emit() {}, getSettings: () => ({torches: false}), gearTriedAt: Date.now(), pickaxeTriedAt: Date.now()};
+  await JOBS.deposit(r, {type: 'deposit', args: {...BASE}, t: {}, cancelled: false});
+  const bread = items.filter((i) => i.name === 'bread').reduce((n, i) => n + i.count, 0);
+  assert.strictEqual(bread, 0, 'no bread carried out of the base chest');
+  assert.ok(stock.dirt < 64, 'room items are still carried to the hall');
+  console.log('deposit: carry-out leaves food ok');
+})().catch((e) => { console.error(e); process.exitCode = 1; });

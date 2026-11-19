@@ -4169,8 +4169,9 @@ const JOBS = {
       let carried = 0;
       const held = {};
       for (const it of chest.containerItems()) held[it.name] = (held[it.name] || 0) + it.count;
+      // Never food: junk() keeps it in the bag, so carried-out bread never reached the hall and stuck there (audit ECON-3).
       for (const it of chest.containerItems()) {
-        if (carried >= 9 || (storage.storeFor(it.name, isFood) !== 'room' && !storage.overCap(it.name, held, -it.count)) || !hallRoom(it.name)) continue;
+        if (carried >= 9 || isFood(it.name) || (storage.storeFor(it.name, isFood) !== 'room' && !storage.overCap(it.name, held, -it.count)) || !hallRoom(it.name)) continue;
         guard(job);
         try { await chest.withdraw(it.type, it.metadata, it.count); carried++; held[it.name] -= it.count; } catch { break; } // inventory full
       }
