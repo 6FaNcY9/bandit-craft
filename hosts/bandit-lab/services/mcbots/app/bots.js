@@ -16,7 +16,8 @@ const {HourCounter} = require('./counters');
 const farsearch = require('./farsearch');
 const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
 const {zoneNamed, inZone, rockBoxes, inRock} = require('./places');
-const {STALL} = require('./rescue'); // a walk that failed for want of a way (no path, deadline, stall)
+const {STALL, NO_PATH} = require('./rescue'); // a walk that failed for want of a way (no path, think timeout, deadline, stall)
+const LEAVES = /_leaves$/;
 const buildJob = require('./build');
 const huntJob = require('./hunt');
 const gravesJob = require('./graves');
@@ -1638,8 +1639,10 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
   const sky = new Map();
   const surface = (sx, sz) => {
     const k = `${sx},${sz}`;
-    if (!sky.has(k)) sky.set(k, surfaceAt(r.bot, sx, sz));
-    return sky.get(k);
+    if (sky.has(k)) return sky.get(k);
+    const s = surfaceAt(r.bot, sx, sz);
+    if (s !== null) sky.set(k, s); // an unloaded column may load while the bot walks
+    return s;
   };
   const open = (n) => {
     const s = surface(Math.floor(n.x), Math.floor(n.z));
@@ -1654,35 +1657,39 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     };
     return g;
   };
+  // Only the overworld has a sky: the nether's surface is its bedrock roof, no leg there could end open.
+  const skyOn = /overworld$/.test(r.bot?.game?.dimension);
   let locked = null, sidesteps = 0;
+  // The lock only narrows the job's own limits: its dig rule AND leaves, its box kept (a level or seal job digs nothing at all).
   const lock = () => {
-    if (locked) return;
-    locked = {digOnly: r.digOnly, digBox: r.digBox};
-    r.digOnly = /_leaves$/;
-    r.digBox = null;
+    if (locked || !skyOn) return;
+    const prev = r.digOnly;
+    locked = {digOnly: prev, digBox: r.digBox};
+    r.digOnly = prev ? {test: (n) => prev.test(n) && LEAVES.test(n)} : LEAVES;
   };
   // The leg point LEG blocks towards the target, turned by `a` round the bot.
   const leg = (a) => {
     const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
     const dx = ((x - p.x) * LEG) / d, dz = ((z - p.z) * LEG) / d;
     const lx = p.x + dx * Math.cos(a) - dz * Math.sin(a), lz = p.z + dx * Math.sin(a) + dz * Math.cos(a);
-    return goLeg(r, job, lx, y, lz, 4, {...opts, goal: skyward(banded(new goals.GoalNearXZ(lx, lz, 4))), hopOk: locked ? open : null, doing: opts.doing || `walking to ${at({x, y, z})}`});
+    return goLeg(r, job, lx, y, lz, 4, {...opts, goal: skyOn ? skyward(banded(new goals.GoalNearXZ(lx, lz, 4))) : banded(new goals.GoalNearXZ(lx, lz, 4)), hopOk: locked ? open : null, doing: opts.doing || `walking to ${at({x, y, z})}`});
   };
   try {
     for (let i = 0; i < 20 && (!opts.goal || opts.xz) && r.bot?.entity; i++) {
       if (opts.until?.()) return; // a walk that only has to bring something into view (light) ends between legs
       const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
       if (d <= LEG + 16) break;
-      if (open(p)) lock();
+      if (skyOn && open({x: p.x, y: Math.ceil(p.y - 1e-3), z: p.z})) lock(); // ceil: on farmland or a slab the feet stand at y .94 or .5
       try {
         await leg(0);
       } catch (e) {
         // No way on: turn 60 degrees either way, twice per walk at most, always locked; then the first error as it was.
         guard(job);
-        if (!STALL.test(e.message)) throw e;
+        if (!skyOn || !(STALL.test(e.message) || NO_PATH.test(e.message))) throw e;
         let on = false;
         for (const a of [Math.PI / 3, -Math.PI / 3]) {
           if (sidesteps >= 2) break;
+          if (opts.until?.()) return;
           sidesteps++;
           lock();
           try {
