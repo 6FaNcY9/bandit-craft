@@ -83,8 +83,8 @@ module.exports = async () => {
 
     // the job: wet field, seeds in the pocket, a hoe; it harvests, tills, plants, crafts bread and deposits
     const small = {x1: 0, z1: 0, x2: 3, z2: 3};
-    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null, noWay = () => false, care = null}) => {
-      const events = [], infos = [], calls = {deposit: [], craft: [], dig: []};
+    const fake = ({inv = [], world, stopAfterSleeps = 2, chestFail = false, getWater = null, noWay = () => false, care = null, craftTable = () => true}) => {
+      const events = [], infos = [], calls = {deposit: [], craft: [], dig: [], seq: []};
       const it = (name, count) => ({name, count, type: name.length});
       const give = (name, n) => { const e = inv.find((i) => i.name === name) || (inv.push(it(name, 0)), inv.at(-1)); e.count += n; };
       const bot = {
@@ -101,7 +101,7 @@ module.exports = async () => {
       const job = {type: 'wheatfarm', args: small, t: {}, cancelled: false};
       let sleeps = 0;
       const wfm = W.makeWheatFarm({
-        goNear: async (r, j, x, y, z) => { if (noWay(x, z)) throw new Error(`could not reach ${x} ${y} ${z}: No path to the goal!`); bot.entity.position = new Vec3(x, y, z); },
+        goNear: async (r, j, x, y, z) => { if (noWay(x, z)) throw new Error(`could not reach ${x} ${y} ${z}: No path to the goal!`); calls.seq.push(`walk ${x},${z}`); bot.entity.position = new Vec3(x, y, z); },
         guard: (j) => { if (j.cancelled) throw new Cancelled('stopped'); },
         sleep: async () => { if (++sleeps > stopAfterSleeps) job.cancelled = true; },
         waitCalm: async () => {}, at: (c) => `${c.x} ${c.y} ${c.z}`,
@@ -113,8 +113,8 @@ module.exports = async () => {
           if (b.name === 'wheat') { give('wheat', 1); give('wheat_seeds', 1); }
           return true;
         },
-        crafting: {count: (b, n) => inv.filter((i) => i.name === n).reduce((a, i) => a + i.count, 0), ensureItem: async (r, j, name, want) => { calls.craft.push(`${name} ${want}`); if (chestFail) throw new Error('no logs'); if (name === 'bread') { give('wheat', -3 * (want - inv.filter((i) => i.name === 'bread').reduce((a, i) => a + i.count, 0))); give('bread', want); } else give(name, 1); }},
-        craftTable: () => true, base: {x: -9, y: 65, z: -9},
+        crafting: {count: (b, n) => inv.filter((i) => i.name === n).reduce((a, i) => a + i.count, 0), ensureItem: async (r, j, name, want) => { calls.craft.push(`${name} ${want}`); calls.seq.push(`craft ${name}`); if (chestFail) throw new Error('no logs'); if (name === 'bread') { give('wheat', -3 * (want - inv.filter((i) => i.name === 'bread').reduce((a, i) => a + i.count, 0))); give('bread', want); } else give(name, 1); }},
+        craftTable, base: {x: -9, y: 65, z: -9},
         deposit: async (r, j, what, keep) => {
           calls.deposit.push(keep ? `${what} keep ${JSON.stringify(keep)}` : what);
           for (const i of inv) if (i.name === what) i.count = 0;
@@ -180,6 +180,12 @@ module.exports = async () => {
     await assert.rejects(f.run(), Cancelled);
     assert.strictEqual(f.events.filter((e) => e.startsWith('till')).length, 0);
     assert.match(f.job.t.doing, /no hoe/);
+    // ECON-6: no table near the field: the hoe is crafted at the base table (as the bread), never with a table placed on the field
+    f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'wheat_seeds', count: 3, type: 2}], craftTable: () => false});
+    f.r.bot.entity.position = new Vec3(1.5, 65, 1.5);
+    await assert.rejects(f.run(), Cancelled);
+    const hoe = f.calls.seq.findIndex((s) => /_hoe$/.test(s));
+    assert.ok(hoe > 0 && f.calls.seq[hoe - 1] === 'walk -9,-9', `the hoe after a walk to the base: ${f.calls.seq.slice(0, hoe + 1)}`);
     f = fake({world: flat({'-1,64,1': 'water'}), inv: [{name: 'wooden_hoe', count: 1, type: 1}]});
     f.r.bot.equip = async (item) => { f.r.bot.heldItem = item; f.job.cancelled = true; };
     await assert.rejects(f.run(), Cancelled);

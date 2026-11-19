@@ -392,6 +392,8 @@ function makeWheatFarm({goNear, guard, sleep, digAt, waitCalm, deposit, crafting
       }
       if (work.needHoe && !skipped('hoe')) {
         try {
+          // at the base table like the bread: station() would place a table of its own on a field cell
+          if (!craftTable(r)) await goNear(r, job, base.x, base.y, base.z, 3, {doing: 'walking to the base to craft a hoe'});
           await crafting.ensureItem(r, job, crafting.count(bot, 'cobblestone') >= 2 ? 'stone_hoe' : 'wooden_hoe', 1);
           acted = true;
         } catch (e) {
