@@ -234,7 +234,9 @@ class Keeper {
       }
       const plan = PLANS[item] || getPlan(item);
       const n = Math.min(missing, MAX_JOB);
-      const jobs = plan(n, this.chest, stock.items);
+      // Storage first: the hall's 44980 cobblestone stood unused while bot1 and bot19 found no free stone within 64 (2026-11-19).
+      const store = this.storeWith(item);
+      const jobs = store ? [['withdraw', {item, count: Math.min(n, store.count), x: store.x, y: store.y, z: store.z}], ['deposit', {...this.chest, only: item}]] : plan(n, this.chest, stock.items);
       if (!Array.isArray(jobs)) {
         this.notes.set(item, jobs.blocked);
         continue;
@@ -256,6 +258,14 @@ class Keeper {
     }
     if (this.armoury) this.tickArmoury(t, stock, busy, free);
     this.planLighting(snaps, t, busy);
+  }
+
+  // The indexed storage chest (world.chests) holding the most of `item`, never the supply chest (or its double half) or the armoury.
+  // shortcut: counts by the keeper's KINDS (coal includes charcoal, the withdraw takes coal only); age of the index is not checked.
+  storeWith(item) {
+    const near = (a, b) => !!b && a.y === b.y && Math.abs(a.x - b.x) + Math.abs(a.z - b.z) <= 1;
+    return [...(this.world.chests || new Map())].map(([key, c]) => { const [x, y, z] = key.split(',').map(Number); return {x, y, z, count: have(c.items, item)}; })
+      .filter((c) => c.count > 0 && !near(c, this.chest) && !near(c, this.armoury)).sort((a, b) => b.count - a.count)[0] || null;
   }
 
   // The armoury's own numbers only: stockAt falls back to the last untagged count, which would be the base chest's.
