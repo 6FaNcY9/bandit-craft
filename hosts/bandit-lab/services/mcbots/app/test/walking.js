@@ -246,7 +246,11 @@ const assert = require('node:assert');
     assert.ok(cost(mv, 'oak_planks') >= 100, `${type || 'no job'}: and planks`);
     assert.strictEqual(cost(mv, 'stone'), 0, `${type || 'no job'}: stone is still dug`);
   }
-  for (const type of ['build', 'schematic', 'produce']) assert.strictEqual(cost(safeMovements(bot, [], {current: {type}}), 'stone_bricks'), 0, `${type}: build.js vetoes by its plan`);
+  // produce only gathers and build vetoes only its own box: their walks keep this veto (bot21's "mine dirt" step of a
+  // produce job dug 37 blocks out of the castle tower, main server 2026-11-19). schematic vetoes by its plan (build.js
+  // vetoBreak: off the site only natural ground) and may dig out through its own walls.
+  for (const type of ['build', 'produce']) assert.ok(cost(safeMovements(bot, [], {current: {type}}), 'stone_bricks') >= 100, `${type}: its walks leave stone_bricks standing`);
+  assert.strictEqual(cost(safeMovements(bot, [], {current: {type: 'schematic'}}), 'stone_bricks'), 0, 'schematic: build.js vetoes by its plan');
   // Walled in by built blocks only: the walk ends with its own reason (bot-chef shows it), no endless retry.
   let calls = 0;
   const r = {current: {type: 'mine'}, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []};

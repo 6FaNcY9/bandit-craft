@@ -1229,9 +1229,11 @@ function safeMovements(bot, areas, runner = null) {
   const veto = (blk) => (inside(blk) ? 100 : 0);
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   // Walks leave built blocks standing: mine, chop, get, grave and combat walks tunnelled castle and base walls (audit
-  // 2026-11-19). The last one refused is kept so a walk that fails for it says so (goLeg).
+  // 2026-11-19). The last one refused is kept so a walk that fails for it says so (goLeg). Only schematic is spared: its
+  // plan veto (build.js vetoBreak) keeps it off built blocks off the site. produce has none, and its "mine dirt" step dug
+  // 37 blocks out of the castle tower (main server 2026-11-19).
   const built = (blk) => {
-    if (BUILDING.has(runner?.current?.type) || !BUILT.test(blk.name)) return 0;
+    if (runner?.current?.type === 'schematic' || !BUILT.test(blk.name)) return 0;
     if (runner) runner.keptBuilt = blk;
     return 100;
   };
