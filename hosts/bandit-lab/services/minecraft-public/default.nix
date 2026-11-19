@@ -228,6 +228,8 @@ in {
       wants = ["minecraft-server-paper.service"];
       startLimitIntervalSec = lib.mkForce 0;
       serviceConfig.RestartSec = "10s";
+      serviceConfig.NoNewPrivileges = true; # nix-minecraft sets none; nothing here needs setuid
     };
+    minecraft-server-paper.serviceConfig.NoNewPrivileges = true;
   };
 }
