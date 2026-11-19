@@ -77,6 +77,16 @@ const assert = require('node:assert');
   await t.c.tick();
   assert.strictEqual(t.c.mode, null, 'past the 20 blocks it walks off to: back to work');
 
+  // Retreating, a creeper or zombie that walks up is dealt with, not left to hit its back for 30 s (audit 2026-11-19 SURVIVAL-4).
+  for (const [name, x, kind] of [['creeper', 4, 'creeper'], ['zombie', 3, 'kite']]) {
+    t = mk([mob(1, 'skeleton', 14), mob(2, name, x)], {health: 6});
+    const duels = [];
+    t.c.duel = async (e, {all = false} = {}) => { duels.push(`${all ? 'kite' : 'creeper'} ${e.name}`); };
+    Object.assign(t.c, {mode: 'retreat', since: Date.now(), target: t.c.r.bot.entities[1]});
+    await t.c.tick();
+    assert.deepStrictEqual(duels, [`${kind} ${name}`], `retreating, a ${name} at ${x}: ${t.logs}`);
+  }
+
   // No cowardice: a healthy bot with a sword still fights a zombie at its work site, and does not run from one far off.
   t = mk([mob(1, 'zombie', 3)]);
   let fought = 0;

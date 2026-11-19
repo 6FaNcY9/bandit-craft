@@ -333,8 +333,11 @@ class Combat {
     if (this.mode === 'retreat') {
       // Over once past the 20 blocks it walks off to (takeover below), not at the 16 where it starts: ending there, it
       // turned back to its job and retreated again every second, a zombie at its heels (MisaBot, 2026-11-15).
-      if ((bot.health >= Math.min(20, s.retreatHealth + 4) && forecast.fight) || dist > 20) this.release();
-      else if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
+      if ((bot.health >= Math.min(20, s.retreatHealth + 4) && forecast.fight) || dist > 20) return this.release();
+      // One that closes in meanwhile is kited, not left to hit its back for up to 30 s (audit 2026-11-19 SURVIVAL-4).
+      const closing = threats.find((e) => (e.name === 'creeper' ? mobLocation(e).position.distanceTo(me) < 6 : !RANGED.test(e.name) && mobLocation(e).position.distanceTo(me) < MELEE_KEEP));
+      if (closing) return this.duel(closing, {all: closing.name !== 'creeper'});
+      if (!r.inventoryBusy && !bot.currentWindow) await this.eat();
       return;
     }
     // In a night shelter (bots.js nightShelter) a bot only hits what reaches it: no walk out to hunt or flee.
