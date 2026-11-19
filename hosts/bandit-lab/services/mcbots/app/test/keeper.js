@@ -55,17 +55,37 @@ const {WorldModel} = require('../world');
   assert.deepStrictEqual(stoneBot.sent, [['mine', {block: 'stone', count: 64}], ['deposit', {...chest, only: 'cobblestone'}]]);
   // 2026-11-19: cobblestone 28/128 while the hall held 44980: a haul from the storage chest, not a mine (no free stone
   // within 64). The supply chest's own index entry (and its double half) is no source. Storage without it: mine as before.
-  for (const [stored, plan] of [[44980, [['withdraw', {item: 'cobblestone', count: 64, x: -270, y: 58, z: -219}], ['deposit', {...chest, only: 'cobblestone'}]]], [0, [['mine', {block: 'stone', count: 64}], ['deposit', {...chest, only: 'cobblestone'}]]]]) {
-    let t2 = Date.now();
-    const solo = fake('bot19'), w2 = new WorldModel({now: () => t2});
-    w2.noteChest('-270,58,-219', {cobblestone: stored, dirt: 5});
-    w2.noteChest(`${chest.x - 1},${chest.y},${chest.z}`, {cobblestone: 900});
-    const k2 = new Keeper({runners: new Map([[solo.name, solo]]), world: w2, chest, quotas: [['cobblestone', 128]], now: () => t2});
-    k2.setEnabled(true);
-    t2 += IDLE_MS; k2.tick();
-    w2.noteStock('bot19', {cobblestone: 28}, 20, chest);
-    solo.idle = true; solo.sent.length = 0; t2 += 6000; k2.tick(); t2 += IDLE_MS; k2.tick();
-    assert.deepStrictEqual(solo.sent, plan, `storage holds ${stored}`);
+  {
+    const supply = {x: -271, y: 66, z: -214};
+    const mine = [['mine', {block: 'stone', count: 64}], ['deposit', {...supply, only: 'cobblestone'}]];
+    const haul = (x, y, z, count = 64) => [['withdraw', {item: 'cobblestone', count, x, y, z}], ['deposit', {...supply, only: 'cobblestone'}]];
+    // chests: [[key, count]]; returns the bot, keeper, world and clock to go on with
+    const run = (chests) => {
+      const c = {t: Date.now()};
+      const solo = fake('bot19'), w2 = new WorldModel({now: () => c.t});
+      for (const [key, n] of chests) w2.noteChest(key, {cobblestone: n, dirt: 5});
+      w2.noteChest(`${supply.x - 1},${supply.y},${supply.z}`, {cobblestone: 900});
+      const k2 = new Keeper({runners: new Map([[solo.name, solo]]), world: w2, chest: supply, quotas: [['cobblestone', 128]], now: () => c.t});
+      k2.setEnabled(true);
+      c.t += IDLE_MS; k2.tick();
+      w2.noteStock('bot19', {cobblestone: 28}, 20, supply);
+      solo.idle = true; solo.sent.length = 0; c.t += 6000; k2.tick(); c.t += IDLE_MS; k2.tick();
+      return {solo, k2, w2, c};
+    };
+    assert.deepStrictEqual(run([['-270,58,-219', 44980]]).solo.sent, haul(-270, 58, -219), 'the hall holds it: haul');
+    assert.deepStrictEqual(run([['-270,58,-219', 0]]).solo.sent, mine, 'storage has none: mine as before');
+    // Only within 64 of the supply chest, the nearest first: the iron farm's 1672 lie ~110 off (no dark/fit guard on that walk).
+    assert.deepStrictEqual(run([['-160,64,-214', 1672], ['-262,58,-219', 30], ['-270,58,-230', 200]]).solo.sent, haul(-262, 58, -219, 30), 'nearest chest in range');
+    assert.deepStrictEqual(run([['-160,64,-214', 1672]]).solo.sent, mine, 'a far chest alone is no source');
+    // A chest the haul did not raise the stock from (walled in, gone, a ghost entry) is passed over for 30 min: mine instead.
+    {
+      const {solo, k2, w2, c} = run([['-270,58,-219', 44980]]);
+      assert.deepStrictEqual(solo.sent, haul(-270, 58, -219));
+      k2.tick(); // seen busy
+      solo.idle = true; c.t += 1000; w2.noteStock('bot19', {cobblestone: 28}, 20, supply); k2.tick(); // done, no rise: cooldown
+      solo.sent.length = 0; c.t += COOLDOWN_MS + IDLE_MS; w2.noteStock('bot19', {cobblestone: 28}, 20, supply); k2.tick();
+      assert.deepStrictEqual(solo.sent, mine, 'the failed chest is skipped: the old plan runs');
+    }
   }
   // 2026-10-20: a quota item without a PLANS entry is fetched by the acquire planner (get) and shelved; the get counts
   // what the bot already carries (total: a delivery; bot19 made 128 more tiles while carrying 212, 2026-11-18)

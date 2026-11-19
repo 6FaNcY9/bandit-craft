@@ -20,6 +20,8 @@ const COOLDOWN_MS = 10 * 60 * 1000; // after a chain that did not raise the stoc
 const ASSIGN_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_WANT = 4096;
 const MAX_JOB = 64; // items per chain: short chains, fresh numbers in between
+const STORE_RANGE = 64; // a storage chest farther from the supply chest is no haul source
+const BAD_STORE_MS = 30 * 60 * 1000; // a chest a haul got nothing from is skipped this long
 // A chain only once a quarter of the target is missing: "cobblestone 56/128, fetching 64" then sent a bot out of the base
 // for the last 8 (2026-11-18). A target of 4 or less still refills each piece.
 const worthATrip = (q) => q.missing > 0 && 4 * q.missing >= q.want;
@@ -140,6 +142,7 @@ class Keeper {
     this.idleSince = new Map();
     this.lighting = new Map();
     this.lightWork = new Map();
+    this.badStore = new Map(); // storage chest key -> until: a haul from it did not raise the stock
   }
 
   say(text) {
@@ -252,7 +255,7 @@ class Keeper {
       }
       const chain = this.site && WORKSITE.has(jobs[0][0]) ? [['goto', {...this.site}], ...jobs] : jobs;
       this.assign(r, chain, () => {
-        this.work.set(item, {bot: r.name, n, at: t, before: have(stock.items, item), seen: false});
+        this.work.set(item, {bot: r.name, n, at: t, before: have(stock.items, item), seen: false, store: store?.key});
         busy.add(r.name);
       }, `${r.name}: ${item} ${have(stock.items, item)}/${want}, fetching ${n} (${jobs[0][0]} ...)`);
     }
@@ -260,12 +263,15 @@ class Keeper {
     this.planLighting(snaps, t, busy);
   }
 
-  // The indexed storage chest (world.chests) holding the most of `item`, never the supply chest (or its double half) or the armoury.
-  // shortcut: counts by the keeper's KINDS (coal includes charcoal, the withdraw takes coal only); age of the index is not checked.
+  // The nearest indexed storage chest (world.chests) within STORE_RANGE of the supply chest holding `item`, never the supply chest
+  // (or its double half) or the armoury: the iron farm's chest ~110 off is a walk with no dark/fit guard (withdraw's `far` has one).
+  // shortcut: one chest and at most MAX_JOB per trip; the index's age is not checked (a failed haul skips the chest, finish()).
   storeWith(item) {
     const near = (a, b) => !!b && a.y === b.y && Math.abs(a.x - b.x) + Math.abs(a.z - b.z) <= 1;
-    return [...(this.world.chests || new Map())].map(([key, c]) => { const [x, y, z] = key.split(',').map(Number); return {x, y, z, count: have(c.items, item)}; })
-      .filter((c) => c.count > 0 && !near(c, this.chest) && !near(c, this.armoury)).sort((a, b) => b.count - a.count)[0] || null;
+    const dist = (c) => Math.hypot(c.x - this.chest.x, c.z - this.chest.z), t = this.now();
+    return [...(this.world.chests || new Map())].map(([key, c]) => { const [x, y, z] = key.split(',').map(Number); return {key, x, y, z, count: have(c.items, item)}; })
+      .filter((c) => c.count > 0 && dist(c) <= STORE_RANGE && !near(c, this.chest) && !near(c, this.armoury) && (this.badStore.get(c.key) || 0) <= t)
+      .sort((a, b) => dist(a) - dist(b))[0] || null;
   }
 
   // The armoury's own numbers only: stockAt falls back to the last untagged count, which would be the base chest's.
@@ -365,6 +371,7 @@ class Keeper {
       const after = st && st.t > w.at ? have(st.items, name) : null;
       if (after !== null && after <= w.before) {
         this.cooldown.set(item, t + COOLDOWN_MS);
+        if (w.store) this.badStore.set(w.store, t + BAD_STORE_MS);
         this.say(`${w.bot} is done with ${item}, but the chest did not get more (${w.before} -> ${after}); trying something else for ${COOLDOWN_MS / 60000} min`);
       } else this.say(`${w.bot} is done with ${item}${after !== null ? ` (${w.before} -> ${after} in the chest)` : ''}`);
     }
