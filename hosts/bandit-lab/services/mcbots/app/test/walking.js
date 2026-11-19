@@ -369,7 +369,7 @@ const assert = require('node:assert');
   };
   const roof = (name, gap = () => false) => (x, y) => (y === 70 && Math.abs(x) > 2 && !gap(x) ? {name, boundingBox: 'block'} : undefined);
   const node = (g, y) => ({x: Math.floor(g.x), y, z: Math.floor(g.z)});
-  const xzGoals = (goals) => goals.filter((g) => g.constructor.name === 'GoalNearXZ');
+  const xzGoals = (goals) => [...new Map(goals.filter((g) => g.constructor.name === 'GoalNearXZ').map((g) => [`${g.x},${g.z}`, g])).values()]; // one per leg point (goLeg tries each a few times)
 
   // 1. a roofed cell at the leg point is no end, the cell on top of the roof is
   let {goals, digs, r} = await walk({over: roof('stone')});

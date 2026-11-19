@@ -16,6 +16,7 @@ const {HourCounter} = require('./counters');
 const farsearch = require('./farsearch');
 const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
 const {zoneNamed, inZone, rockBoxes, inRock} = require('./places');
+const {STALL} = require('./rescue'); // a walk that failed for want of a way (no path, deadline, stall)
 const buildJob = require('./build');
 const huntJob = require('./hunt');
 const gravesJob = require('./graves');
@@ -1505,6 +1506,17 @@ function groundUnder(bot, x, y, z) {
   }
   return y;
 }
+// A column's surface for the walks' sky lock: its highest solid cell, leaves and logs not counted (a crown is open sky),
+// water neither (the lake bed is). null: the column is not loaded. Below the world floor: nothing solid in it.
+function surfaceAt(bot, x, z) {
+  const lo = bot.game?.minY ?? -64;
+  for (let y = lo + (bot.game?.height ?? 384) - 1; y >= lo; y--) {
+    const b = bot.blockAt(new Vec3(x, y, z), false);
+    if (!b) return null;
+    if (b.boundingBox === 'block' && !/_(leaves|log)$/.test(b.name)) return y;
+  }
+  return lo - 1;
+}
 
 // Sunk in a hole under a lake the walks only try to dig up, which water forbids: bot2 and bot3 sat at -201 56 -133 for hours,
 // every farm "unsafe: water next to it", with nothing but water over them (sandbox 2026-11-04).
@@ -1617,12 +1629,75 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     g.heuristic = (n) => h(n) + 2 * Math.max(0, low - n.y);
     return g;
   };
-  for (let i = 0; i < 20 && (!opts.goal || opts.xz) && r.bot?.entity; i++) {
-    if (opts.until?.()) return; // a walk that only has to bring something into view (light) ends between legs
+  // Sky lock: bot20 on `goto -374 74 75` dug a tunnel through a hill at y 65, a stair down to 53 and walked into a cave at y 48
+  // under a surface of 109 (main server 2026-11-19). A transit leg ends under open sky; once a leg of this walk started under
+  // open sky, every later transit leg and sidestep digs only leaves (it got here without digging, so the way on needs none).
+  // shortcut: a full path (or the partial one walked while the search runs, sky-ranked) may cross an open cave mid-leg if it
+  // ends under sky; the last leg (up to LEG + 16) can still tunnel. Upgrade when a cave walk shows up in a trace.
+  // shortcut: nightShelter still digs its 3-deep hole under open sky on a locked leg (night safety; rock zones refuse it).
+  const sky = new Map();
+  const surface = (sx, sz) => {
+    const k = `${sx},${sz}`;
+    if (!sky.has(k)) sky.set(k, surfaceAt(r.bot, sx, sz));
+    return sky.get(k);
+  };
+  const open = (n) => {
+    const s = surface(Math.floor(n.x), Math.floor(n.z));
+    return s !== null && Math.floor(n.y) > s;
+  };
+  const skyward = (g) => {
+    const end = g.isEnd.bind(g), h = g.heuristic.bind(g);
+    g.isEnd = (n) => open(n) && end(n);
+    g.heuristic = (n) => {
+      const s = surface(Math.floor(n.x), Math.floor(n.z));
+      return h(n) + (s === null ? 0 : 2 * Math.max(0, s + 1 - n.y));
+    };
+    return g;
+  };
+  let locked = null, sidesteps = 0;
+  const lock = () => {
+    if (locked) return;
+    locked = {digOnly: r.digOnly, digBox: r.digBox};
+    r.digOnly = /_leaves$/;
+    r.digBox = null;
+  };
+  // The leg point LEG blocks towards the target, turned by `a` round the bot.
+  const leg = (a) => {
     const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
-    if (d <= LEG + 16) break;
-    const lx = p.x + ((x - p.x) * LEG) / d, lz = p.z + ((z - p.z) * LEG) / d;
-    await goLeg(r, job, lx, y, lz, 4, {...opts, goal: banded(new goals.GoalNearXZ(lx, lz, 4)), doing: opts.doing || `walking to ${at({x, y, z})}`});
+    const dx = ((x - p.x) * LEG) / d, dz = ((z - p.z) * LEG) / d;
+    const lx = p.x + dx * Math.cos(a) - dz * Math.sin(a), lz = p.z + dx * Math.sin(a) + dz * Math.cos(a);
+    return goLeg(r, job, lx, y, lz, 4, {...opts, goal: skyward(banded(new goals.GoalNearXZ(lx, lz, 4))), hopOk: locked ? open : null, doing: opts.doing || `walking to ${at({x, y, z})}`});
+  };
+  try {
+    for (let i = 0; i < 20 && (!opts.goal || opts.xz) && r.bot?.entity; i++) {
+      if (opts.until?.()) return; // a walk that only has to bring something into view (light) ends between legs
+      const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
+      if (d <= LEG + 16) break;
+      if (open(p)) lock();
+      try {
+        await leg(0);
+      } catch (e) {
+        // No way on: turn 60 degrees either way, twice per walk at most, always locked; then the first error as it was.
+        guard(job);
+        if (!STALL.test(e.message)) throw e;
+        let on = false;
+        for (const a of [Math.PI / 3, -Math.PI / 3]) {
+          if (sidesteps >= 2) break;
+          sidesteps++;
+          lock();
+          try {
+            await leg(a);
+            on = true;
+            break;
+          } catch {
+            guard(job);
+          }
+        }
+        if (!on) throw e;
+      }
+    }
+  } finally {
+    if (locked) Object.assign(r, locked);
   }
   if (opts.xz) return goLeg(r, job, x, y, z, dist, {...opts, goal: banded(new goals.GoalNearXZ(x, z, dist))});
   try {
@@ -1710,7 +1785,7 @@ function noPathAge(map, key, now = Date.now()) {
   return t !== undefined && now - t < NOPATH_MS ? now - t : null;
 }
 const WIDER = [250, 600]; // search budgets tried after a "No path" at the usual 80
-async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null, again = false, stop = null} = {}) {
+async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing = null, again = false, stop = null, hopOk = null} = {}) {
   guard(job);
   const known = r.bot?.entity ? chunkKey(x, y, z, r.bot.entity.position.floored()) : null;
   const age = again || !known ? null : noPathAge(r.noPath, known);
@@ -1792,7 +1867,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
           r.digBox = null;
           r.emit?.('info', `no way out within the dig limits: digging out once (from ${at(r.bot.entity.position.floored())})`);
           tries--;
-        } else if (!timedOut && e.best && hops < 2 && r.bot.entity && Math.hypot(r.bot.entity.position.x - x, r.bot.entity.position.y - y, r.bot.entity.position.z - z) - Math.hypot(e.best.x - x, e.best.y - y, e.best.z - z) >= 5) {
+        } else if (!timedOut && e.best && hops < 2 && (!hopOk || hopOk(e.best)) && r.bot.entity && Math.hypot(r.bot.entity.position.x - x, r.bot.entity.position.y - y, r.bot.entity.position.z - z) - Math.hypot(e.best.x - x, e.best.y - y, e.best.z - z) >= 5) {
           // "No path" still leaves the node nearest the goal: walk there and plan again from the new spot, twice at most
           // (a long way that needed a hop of its own failed whole; the hop never counts as arrival, 2026-10-20).
           hops++;

@@ -64,4 +64,4 @@ class Rescue {
   }
 }
 
-module.exports = {Rescue, STUCK_MS};
+module.exports = {Rescue, STUCK_MS, STALL};
