@@ -133,7 +133,8 @@ const player = (a) => {
 // The running and queued jobs of a runner that a restart should bring back; a mine/chop keeps only what is left of its count.
 // From the first long job on, the whole rest of the chain goes too (a plan chain's withdraw, craft and place
 // steps queued behind an excavate), or the tail would be lost and the objective close without it (Codex R6-5).
-const tailFrom = (jobs) => { const i = jobs.findIndex((j) => KEEP.has(j.type)); return i < 0 ? [] : jobs.slice(i); };
+// A grave waiting in front of the resumed job goes too, or a deploy after a death leaves the loot (BOTS-1-4).
+const tailFrom = (jobs) => { const i = jobs.findIndex((j) => KEEP.has(j.type) || j.type === 'grave'); return i < 0 ? [] : jobs.slice(i); };
 // A job ends (status set) before its tidy-up walks (clearStray, unpillar): it is no longer kept or resumed (BOTS-1-3).
 const ENDED = new Set(['done', 'failed', 'stopped']);
 const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j && !j.cancelled && !ENDED.has(j.status))).map((j) => {

@@ -675,5 +675,10 @@ const {BotRunner} = require('../bots');
     f.enqueue('come', {player: 'vino'}, {first: true});
     assert.ok(!f.queue.some((j) => j.type === 'mine'), `an order first does not resume a ${status} job`);
   }
+  // a grave waiting in front of the resumed job is kept too: a deploy after a death does not leave the loot (BOTS-1-4)
+  const g = mk();
+  g.queue = [{id: 3, type: 'rearm', args: {x: 0, y: 64, z: 0}, status: 'queued'}, {id: 4, type: 'grave', args: {x: 5, y: 60, z: 5}, status: 'queued'}, {id: 5, type: 'treefarm', args: {}, status: 'queued'}];
+  assert.deepStrictEqual(keptOf(g).map((j) => j.type), ['grave', 'treefarm']);
+  assert.deepStrictEqual(keptOf(g)[0].args, {x: 5, y: 60, z: 5});
   console.log('kept jobs ok');
 }
