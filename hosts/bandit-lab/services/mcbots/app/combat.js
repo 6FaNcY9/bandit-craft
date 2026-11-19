@@ -413,6 +413,8 @@ class Combat {
           else if (now - came.get(c.e.id) > 8000) this.ignore.set(c.e.id, now + IGNORE_MS);
         }
         if (!near.length || near[0].d > 10) break;
+        // Low on air with its head under: tick() surfaces it; kiting on, it sank and drowned (audit 2026-11-19 SURVIVAL-2).
+        if (isWet(bot.blockAt?.(bot.entity.position.offset(0, 1.62, 0))) && (bot.ownAir ?? bot.oxygenLevel ?? 20) <= AIR_LOW) break;
         const {e, d, at} = near[0];
         this.target = e;
         // Away from all of them: their middle, the near ones weighing most.

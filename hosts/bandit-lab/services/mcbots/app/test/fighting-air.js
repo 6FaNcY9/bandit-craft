@@ -206,3 +206,22 @@ const assert = require('node:assert');
   c.r.current = {type: 'mine'};
   assert.strictEqual(c.settings().defend, false);
 }
+
+(async () => { // kiting a drowned under water: the duel lets go once air runs low, and the next tick surfaces (audit 2026-11-19 SURVIVAL-2)
+  const {Combat} = require('../combat');
+  const {Vec3} = require('vec3');
+  const drowned = {id: 1, name: 'drowned', type: 'hostile', position: new Vec3(3, 55, 0), height: 1.8};
+  let ticks = 0;
+  const bot = {health: 6, food: 20, ownAir: 10, oxygenLevel: 20, entity: {position: new Vec3(0.5, 55, 0.5)}, entities: {1: drowned}, game: {dimension: 'overworld'},
+    registry: {blocksByName: {}}, blockAt: () => ({name: 'water', boundingBox: 'empty'}), findBlock: () => null, lookAt: async () => {}, setControlState() {}, attack() {},
+    waitForTicks: async () => { if (++ticks > 5) drowned.isValid = false; }, heldItem: {name: 'iron_sword', type: 1},
+    inventory: {items: () => [{name: 'iron_sword', type: 1}], slots: {}}, getEquipmentDestSlot: () => 5, pathfinder: {setGoal() {}}};
+  const c = new Combat({bot, online: true, name: 'bot1', world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
+  c.stop();
+  let surfaced = 0;
+  c.surface = () => { surfaced++; };
+  await c.duel(drowned, {all: true});
+  assert.ok(ticks <= 1, `the duel ends within a tick with air 10 under water, not after ${ticks}`);
+  await c.tick();
+  assert.strictEqual(surfaced, 1, 'and the next tick surfaces');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
