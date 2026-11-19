@@ -4485,7 +4485,10 @@ const JOBS = {
     const Vec3 = require('vec3').Vec3;
     const dim = normDim(bot.game?.dimension);
     const total = (x2 - x1 + 1) * (y2 - y1 + 1) * (z2 - z1 + 1);
-    let left = 0, dug = 0, noTool = 0;
+    let left = 0, dug = 0, toolErr = null;
+    // Block names no tool in the bag could harvest in this call: one replacePickaxe (crafting, a walk to every gear
+    // chest) per kind of block, not one per block (review 2026-11-19).
+    const noTool = new Set();
     job.t.total = total;
     for (let y = y2; y >= y1; y--) {
       for (const [x, z] of layerOrder(x1, z1, x2, z2, job.args.corner ?? -1)) {
@@ -4498,6 +4501,7 @@ const JOBS = {
           if (all ? skipAll.test(b.name) || buildJob.CONTAINER.test(b.name) : b.boundingBox === 'empty' || !NATURAL.test(b.name)) continue;
           const k = `${dim}:${x},${y},${z}`;
           if (job.unreachable?.has(k)) { left++; continue; } // no way there in an earlier pass of this layer
+          if (noTool.has(b.name)) { left++; job.unreachable?.add(k); continue; }
           await hubBack(r, job); // a lost hub is no "held by another bot": a shaft would skip its layers (bots-3-2); a deploy restart is waited out (W2)
           if (r.world && !(await r.world.claim(r.name, k))) {
             left++;
@@ -4506,7 +4510,7 @@ const JOBS = {
           try {
             await upkeep(r, job, [b.type]);
             job.t.doing = `digging out the room at ${x1} ${y1} ${z1}`;
-            if (await digAt(r, job, pos, (n) => n === b.name)) { dug++; noTool = 0; }
+            if (await digAt(r, job, pos, (n) => n === b.name)) dug++;
             else left++;
           } catch (e) {
             // One block nobody can reach or dig safely is left, as the mine job does; it ended the whole
@@ -4515,8 +4519,13 @@ const JOBS = {
             // A block that needs a better pickaxe (or a spawner) is left too, not the end of a shaft with 70 layers to go (bots-3-3).
             const tool = /^no pickaxe for |^needs a tool|refusing to dig/.test(e.message);
             if (!tool && !/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
-            // shortcut: 5 blocks in a row (no dug block between) that need a better pickaxe end the whole shaft or part; upgrade to a per-block-type skip if bots give up shafts in ore-rich layers
-            if (/^no pickaxe for |^needs a tool/.test(e.message) && ++noTool > 4) throw e; // no fitting pickaxe at all: end with its reason, not a "blocked shaft" after a replacePickaxe per block (W1); spawners do not count
+            if (/^no pickaxe for |^needs a tool/.test(e.message)) { // spawners do not count
+              // No pickaxe at all: the job ends with that reason at once, not as a "blocked shaft" (W1). A pickaxe
+              // too weak for this block leaves every block of that kind and digs the rest (an obsidian frame in a clear).
+              if (!bot.inventory.items().some((i) => /_pickaxe$/.test(i.name))) throw e;
+              noTool.add(b.name);
+              toolErr ||= e;
+            }
             left++;
             if (tool || /No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
             r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);
@@ -4529,6 +4538,7 @@ const JOBS = {
         }
       }
     }
+    if (toolErr && !dug) throw toolErr; // nothing dug for want of a tool: its reason, not "blocked ... water, a cave" (W1)
     if (left) throw new Error(`${left} blocks of the room were not dug (held by another bot, unloaded, unreachable or unsafe)`);
     job.noop = !dug; // nothing natural left to dig: the event says "already complete"
   },
