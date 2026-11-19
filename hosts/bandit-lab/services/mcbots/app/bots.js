@@ -70,7 +70,7 @@ const BACKOFF_CAP = 300000;
 const RESUME_WINDOW_MS = 1800000; // saved jobs wait this long after a hub start for a bot to log in: Paper can be back minutes later, and a login retry is up to BACKOFF_CAP away
 // Kept on deposit: what a bot needs to craft a replacement tool or light a mine.
 // Natural ground an excavation may remove; never placed blocks (cobblestone is a wall).
-const {NATURAL, DIRS, BORDER_K} = require('./road');
+const {NATURAL, DIRS, BORDER_K, kindOf} = require('./road');
 // The walks of a job end's tidy-up (clearStray, unpillar) dig natural ground and leaves only. Not NATURAL itself:
 // goNear lifts that limit to climb out of a hole.
 const TIDY_DIG = new RegExp(`${NATURAL.source}|^[a-z_]*leaves$`);
@@ -2933,6 +2933,28 @@ function descentStart(home, me, anchor) {
   if (anchor && !near(anchor)) return false;
   return near(me) ? null : {x: home.x, y: home.y, z: home.z};
 }
+// Where an ore dig-down begins (same answers as descentStart): the nearest column within DESCENT_NEAR whose cells and the
+// four round it, from 3 over the feet to 16 under them, are air or natural ground (road kindOf: no build, chest, redstone)
+// and lie outside protected areas; none there: descentStart. At the depot (Y 113) the stair began at the bot's feet and
+// cut through the sorter's floor and redstone (audit bots-2-2). Under the base toBand walks out of the circle itself.
+const DESCENT_NEAR = 24;
+function oreDescent(blockAt, areas, home, me, anchor) {
+  if (underBase(home, me)) return null;
+  const x0 = Math.floor(me.x), y0 = Math.floor(me.y), z0 = Math.floor(me.z);
+  const plain = (x, z) => !insideAreas(areas || [], x, z) && [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => {
+    for (let y = y0 + 3; y >= y0 - 16; y--) {
+      const b = blockAt(new Vec3(x + dx, y, z + dz));
+      if (!b || !['air', 'natural', 'falling'].includes(kindOf(b.name))) return false; // not loaded: not known to be plain
+    }
+    return true;
+  });
+  const cells = [];
+  for (let dx = -DESCENT_NEAR; dx <= DESCENT_NEAR; dx += 2) for (let dz = -DESCENT_NEAR; dz <= DESCENT_NEAR; dz += 2) if (Math.hypot(dx, dz) <= DESCENT_NEAR) cells.push([dx, dz]);
+  cells.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
+  const c = cells.find(([dx, dz]) => plain(x0 + dx, z0 + dz));
+  if (!c) return descentStart(home, me, anchor);
+  return c[0] || c[1] ? {x: x0 + c[0], y: y0, z: z0 + c[1], near: true} : null;
+}
 // Where a dig-down after a detour (a rearm, a deposit) goes instead: back to the block it dug last (job.t.area), when
 // that lies in the band (as the dig-down tests it) and near. The old stairs are there: bot19 walked to the base, dug a
 // new stair and far-searched 134 blocks, 500 in all, with its dug spot 77 blocks away (2026-11-18). Farther than one far
@@ -3057,8 +3079,9 @@ async function collect(r, job, matching, count, what) {
     let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood ? treeLog(bot, p, canopy) : !underBase(r.supplyChest, p) && dry(p)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore or deep rock, nothing inside the band near enough, and the bot is not in the band: go there first.
-    const start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : null;
-    if (band && start !== false && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
+    let start = null;
+    if (band && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)
+      && (start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : oreDescent((p) => bot.blockAt(p), r.protectedAreas, r.supplyChest, me, anchorOf(job))) !== false) {
       descents++; // twice at most, then mine what is in reach
       const back = digSpotBack(job.t.area, band, me);
       if (back && dry(back)) { // not back down into the water a bot drowned in
@@ -3070,7 +3093,8 @@ async function collect(r, job, matching, count, what) {
           r.emit('info', `no way back to ${at(back)}, digging down instead: ${e.message.slice(0, 80)}`);
         }
       }
-      if (start) await goNear(r, job, start.x, start.y, start.z, 4, {xz: true, doing: `walking to the base to dig down for ${what} (never under a build)`});
+      if (start?.near) await goNear(r, job, start.x, start.y, start.z, 1, {xz: true, doing: `stepping to natural ground at ${start.x} ${start.z} to dig down for ${what} (never through a build)`});
+      else if (start) await goNear(r, job, start.x, start.y, start.z, 4, {xz: true, doing: `walking to the base to dig down for ${what} (never under a build)`});
       await toBand(r, job, band, what);
       continue;
     }

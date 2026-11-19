@@ -149,3 +149,29 @@ first.then(async () => {
   assert.ok(hop >= 0 && walks.length >= 2, `the far search only after the spot: ${infos.join('|')}`);
   assert.deepStrictEqual(world.digSpots('deepslate'), [], 'nothing free there: marked');
 }).catch((e) => { console.error(e); process.exitCode = 1; });
+
+// Ore away from the base never digs down through a build: at the sorter's depot (Y 113, redstone under its floor, 228
+// blocks from the base) an iron dig-down began at the bot's feet (bots-2-2). Natural ground near: it steps there and digs
+// down; built all round: it walks to the base first.
+for (const depot of [6, 40]) first.then(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots');
+  const home = {x: -271, y: 66, z: -214}, me = {x: -308, z: 11};
+  const built = (x, z) => Math.abs(x - me.x) <= depot && Math.abs(z - me.z) <= depot;
+  const pos = new Vec3(-308, 113, 11), walks = [];
+  const job = {id: 5, type: 'mine', args: {block: 'iron_ore', count: 4}, t: {upkeep: true}, collected: 0, progress: ''};
+  const name = (p) => (p.y >= 113 ? 'air' : !built(p.x, p.z) ? 'stone' : p.y === 112 ? 'smooth_stone' : p.y === 111 ? 'redstone_wire' : 'stone');
+  const bot = {entity: {position: pos}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null,
+    blockAt: (p) => ({name: name(p), position: p}), game: {dimension: 'overworld'}, on() {}, once() {}, removeListener() {},
+    pathfinder: {searchRadius: 100, stop() {}, setGoal() {}, goto: async (g) => {
+      walks.push([g.constructor.name, Math.floor(pos.x), Math.floor(pos.z)]);
+      if (g.constructor.name === 'GoalY' || walks.length > 12) job.cancelled = true; // the first leg down (or lost): stop the job
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+    }}};
+  const r = {name: 'bot7', emit() {}, log() {}, bot, supplyChest: home, woodTriedAt: Date.now(), protectedAreas: [], world: null, skip: new Map(), acquireFailed: new Map(), conflict() {}, combat: {busy: false, hostilesNear: () => [], fit: () => true}, moves: null};
+  await assert.rejects(JOBS.mine(r, job), /stopped/);
+  const down = walks.find(([n]) => n === 'GoalY');
+  assert.ok(down && !built(down[1], down[2]), `no dig-down from the depot: ${JSON.stringify(walks)}`);
+  if (depot === 6) assert.ok(Math.hypot(down[1] - me.x, down[2] - me.z) <= 24, `natural ground near: dug down there, no walk home: ${JSON.stringify(walks)}`);
+  else assert.ok(Math.hypot(down[1] - home.x, down[2] - home.z) < 80, `built all round: dug down beside the base: ${JSON.stringify(walks)}`);
+}).catch((e) => { console.error(e); process.exitCode = 1; });
