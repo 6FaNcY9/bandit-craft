@@ -65,6 +65,33 @@ function weaponScore(name) {
   return (m[2] === 'sword' ? 100 : 50) + tier;
 }
 
+// The nearest air a bot under water can swim to: a flood fill through water and the plants in it (kelp, seagrass; never
+// lava or fire) from its feet and head, at most AIR_STEPS steps, never more than 2 below its feet; an air cell at or above
+// its feet with water or air under it, for the feet (the nearest air from its feet up was a cave under the pool floor,
+// sandbox 2026-10-17). Only air it reaches counts: the nearest by distance was the sky over a lake, through the dirt roof
+// the lake lies on (bot1 drowned twice at -162 53 -176, 2026-11-19), or a dry tunnel behind a wall, which also kept it from
+// digging its roof (audit 2026-11-19 SURVIVAL-3). AIR_CELLS bounds the search in a big flooded cave.
+const AIR_STEPS = 12, AIR_CELLS = 3000;
+const SIDES = [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]];
+function swimAir(bot, at) {
+  const swim = (b) => isWet(b) && b.boundingBox === 'empty', air = (b) => /^(cave_)?air$/.test(b?.name || '');
+  const queue = [[at, 0], [at.offset(0, 1, 0), 0]], seen = new Set(queue.map(([p]) => `${p.x},${p.y},${p.z}`));
+  for (let i = 0; i < queue.length; i++) {
+    const [p, d] = queue[i], b = bot.blockAt(p);
+    if (air(b)) {
+      const under = bot.blockAt(p.offset(0, -1, 0));
+      if (i >= 2 && p.y >= at.y && (swim(under) || air(under))) return p;
+      continue;
+    }
+    if (!swim(b) || d >= AIR_STEPS) continue;
+    for (const [dx, dy, dz] of SIDES) {
+      const q = p.offset(dx, dy, dz), k = `${q.x},${q.y},${q.z}`;
+      if (q.y >= at.y - 2 && !seen.has(k) && seen.size < AIR_CELLS) { seen.add(k); queue.push([q, d + 1]); }
+    }
+  }
+  return null;
+}
+
 // Left alone (NO_FIGHT) until one of its kind hits the bot: then those within 6 blocks are fought or kept away from
 // like any mob. Six endermen killed bot19 and seven bot1, provoked by a look while the bots never struck back (main
 // server 2026-10-20). hits: the runner's [{t, by}].
@@ -184,22 +211,16 @@ class Combat {
     // and bot50 hung at y 60 in a pool with no air left, sandbox 2026-10-17). Under a roof: the nearest air it reaches.
     const at = bot.entity.position.floored();
     this.straightUp = false;
-    let roof = null, roofY = null;
+    let roof = null;
     for (let dy = 1; dy <= 24; dy++) {
       const b = bot.blockAt(at.offset(0, dy, 0));
       if (/^(cave_)?air$/.test(b?.name || '')) { this.straightUp = true; break; }
-      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) { roof = b; roofY = at.y + dy; break; }
+      if (!b || (b.name !== 'water' && b.boundingBox !== 'empty')) { roof = b; break; }
     }
-    const ids = ['air', 'cave_air'].map((n) => bot.registry.blocksByName[n]?.id).filter((i) => i !== undefined);
-    // From its feet block up: the nearest air was a cave under the pool floor (sandbox 2026-10-17). Under a roof, air in its
-    // own pocket (up to the roof) first: the nearest air was the sky over a lake, through the dirt roof the lake lies on,
-    // and bot1 drowned twice at -162 53 -176 with air 2 blocks beside it at its feet height (2026-11-19).
-    const feet = Math.floor(bot.entity.position.y);
-    const find = (top) => bot.findBlock({matching: ids, maxDistance: 12, useExtraInfo: (b) => { const under = bot.blockAt(b.position.offset(0, -1, 0)); return b.position.y >= feet && b.position.y <= top && !!under && (under.name === 'water' || under.boundingBox === 'empty'); }});
-    const spot = this.straightUp ? null : (roof && find(roofY)) || find(Infinity);
+    const spot = this.straightUp ? null : swimAir(bot, at);
     // Air within about 2 blocks: it swims there itself. The pathfinder never made the one block to -221 47 -211, and
     // bot1 drowned beside it (main server 2026-10-19).
-    const near = !!spot && spot.position.offset(0.5, 0.5, 0.5).distanceTo(bot.entity.position.offset(0, 1.62, 0)) <= 2.5;
+    const near = !!spot && spot.offset(0.5, 0.5, 0.5).distanceTo(bot.entity.position.offset(0, 1.62, 0)) <= 2.5;
     // No air at all: it digs out the roof over its head, and the hole is the air. Not in a protected area, not a block
     // that holds items, and not under water or lava.
     const dig = !this.straightUp && !spot && !!roof && bot.canDigBlock(roof) && !CONTAINER.test(roof.name)
@@ -211,10 +232,10 @@ class Combat {
     this.busy = true;
     const epoch = ++this.epoch;
     const p = (v) => `${v.x} ${v.y} ${v.z}`;
-    this.r.log(this.r.name, `air ${bot.ownAir ?? bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${p(spot.position)}${near ? ', swimming' : ''}` : dig ? `through the ${roof.name} at ${p(roof.position)}` : 'with no air in sight'}`);
-    bot.pathfinder.setGoal(spot && !near ? new goals.GoalBlock(spot.position.x, spot.position.y - 1, spot.position.z) : null, !!spot && !near);
+    this.r.log(this.r.name, `air ${bot.ownAir ?? bot.oxygenLevel}: surfacing ${this.straightUp ? 'straight up' : spot ? `to ${p(spot)}${near ? ', swimming' : ''}` : dig ? `through the ${roof.name} at ${p(roof.position)}` : 'with no air in sight'}`);
+    bot.pathfinder.setGoal(spot && !near ? new goals.GoalBlock(spot.x, spot.y - 1, spot.z) : null, !!spot && !near);
     bot.setControlState('jump', !dig); // a bot on the ground digs 5 times faster than a floating one
-    if (near) this.steer(spot.position.offset(0.5, 0, 0.5));
+    if (near) this.steer(spot.offset(0.5, 0, 0.5));
     if (dig) this.digUp(roof, epoch).catch((e) => this.r.log(this.r.name, `air: could not dig the ${roof.name}: ${e.message}`));
   }
 

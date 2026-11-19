@@ -169,6 +169,15 @@ module.exports = async () => {
       assert.deepStrictEqual(G.archivedDrownings(path.join(dir, 'none'), now), [], 'no archive: none');
       fs.unlinkSync(file); fs.rmdirSync(dir);
     }
+    { // the hub's 200 newest events are in the archive too: a death there counts once, not as "two deaths there"
+      // (no graves round offered a fresh grave since b8dd376, audit 2026-11-19 SURVIVAL-1)
+      const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graves-')), file = path.join(dir, 'events.jsonl');
+      const died = ev('bot1', 'death', 'died at -300 64 -100: was slain by Zombie', 300000);
+      fs.writeFileSync(file, JSON.stringify({server_session: 'x', event: died}) + '\n');
+      assert.deepStrictEqual(G.openGraves([died], 'bot1', {now, archiveDir: dir, chest: {x: -271, y: 66, z: -214}}), [{x: -300, y: 64, z: -100}]);
+      fs.unlinkSync(file); fs.rmdirSync(dir);
+    }
 
     // graveCandidates: nearest first within 3 blocks; never players, items, orbs, invalid or far entities
     const ent = (id, name, x, y, z, extra = {}) => ({id, name, type: 'other', position: new Vec3(x, y, z), ...extra});

@@ -25,10 +25,15 @@ function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [
       try { rows.push(...fs.readFileSync(path.join(archiveDir, name), 'utf8').split('\n').filter(Boolean).map((s) => JSON.parse(s).event).filter(Boolean)); } catch {}
     }
   }
-  const deaths = new Map(), fetched = [], all = [];
+  const deaths = new Map(), fetched = [], all = [], once = new Set();
   for (const e of rows) {
     const t = typeof e.t === 'number' ? e.t : Date.parse(e.t);
     if (e.bot !== bot || !Number.isFinite(t) || t < now - 24 * 60 * 60 * 1000 || t > now) continue;
+    // The hub's newest events are in the archive too: each counts once, else every death was "two deaths there" and no
+    // graves round offered a fresh grave (audit 2026-11-19 SURVIVAL-1). Not by id: the hub's ids start again on a restart.
+    const id = `${t}|${e.kind}|${e.text}`;
+    if (once.has(id)) continue;
+    once.add(id);
     const m = e.kind === 'death' && DEATH.exec(e.text);
     const f = (e.kind === 'done' || e.kind === 'info') && FETCHED.exec(e.text);
     if (m) { deaths.set(m.slice(1).map(Number).join(' '), {x: +m[1], y: +m[2], z: +m[3], t}); all.push({x: +m[1], z: +m[3], t}); }

@@ -64,11 +64,12 @@ const assert = require('node:assert');
   const {Combat} = require('../combat');
   const {Vec3} = require('vec3');
   const controls = {}, goals = [];
-  let roof = true; // a stone roof at y 57 over the bot: it needs the pathfinder to the air at 2 60 0
-  const water = (p) => (roof && p.y === 57 && p.x === 0 ? {name: 'stone', boundingBox: 'block'} : p.y < 60 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
+  let roof = true; // a stone roof at y 57 over the bot (x up to 1): it needs the pathfinder to the air at 2 60 0
+  const water = (p) => (roof && p.y === 57 && p.x <= 1 ? {name: 'stone', boundingBox: 'block'}
+    : p.x === 1 && p.y === 50 && p.z === 0 ? {name: 'air', boundingBox: 'empty'} // a cave under the pool floor
+      : p.y < 60 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
   const bot = {health: 20, food: 20, ownAir: 6, oxygenLevel: 20, entity: {position: new Vec3(0.5, 55, 0.5)}, entities: {}, game: {dimension: 'overworld'},
-    registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt: water, setControlState: (k, v) => { controls[k] = v; },
-    findBlock: ({useExtraInfo}) => [new Vec3(1, 50, 0), new Vec3(2, 60, 0), new Vec3(3, 61, 0)].map((p) => ({position: p})).find(useExtraInfo) ?? null,
+    registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt: water, setControlState: (k, v) => { controls[k] = v; }, findBlock: () => null,
     pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
   const c = new Combat({bot, online: true, name: 'bot1', world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
   c.stop();
@@ -96,20 +97,20 @@ const assert = require('node:assert');
   const {Combat} = require('../combat');
   const {Vec3} = require('vec3');
   const controls = {}, goals = [], ticks = [], dug = [];
-  let air = [new Vec3(1, 57, 0)];
-  const blockAt = (p) => (p.y === 57 && p.x === 0 ? {name: 'stone', boundingBox: 'block', position: p} : p.y < 58 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
+  let sealed = false; // a stone roof line at x 0, y 57 with the air at y 58 beside it; sealed: all of y 57 is stone
+  const blockAt = (p) => (p.y === 57 && (sealed || p.x === 0) ? {name: 'stone', boundingBox: 'block', position: p} : p.y < 58 ? {name: 'water', boundingBox: 'empty'} : {name: 'air', boundingBox: 'empty'});
   const bot = {health: 20, food: 20, ownAir: 6, oxygenLevel: 20, entity: {position: new Vec3(0.5, 55, 0.5), onGround: true}, entities: {}, game: {dimension: 'overworld'},
     registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt, setControlState: (k, v) => { controls[k] = v; },
-    findBlock: ({useExtraInfo}) => air.map((p) => ({position: p})).find(useExtraInfo) ?? null, lookAt: async () => {},
+    findBlock: () => null, lookAt: async () => {},
     on: (e, f) => ticks.push(f), removeListener: (e, f) => ticks.splice(ticks.indexOf(f), 1), canDigBlock: () => true, dig: async (b) => dug.push(b.name),
     pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
   const c = new Combat({bot, online: true, name: 'bot1', protectedAreas: [], world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
   c.stop();
   await c.tick();
-  assert.deepStrictEqual([c.mode, goals.at(-1), ticks.length, controls.forward, controls.jump], ['air', null, 1, true, true], 'air 1.3 away: swims, no pathfinder');
+  assert.deepStrictEqual([c.mode, goals.at(-1), ticks.length, controls.forward, controls.jump], ['air', null, 1, true, true], 'air 2.1 away: swims, no pathfinder');
   c.release();
   assert.deepStrictEqual([ticks.length, controls.forward], [0, false], 'steering ends with the mode');
-  air = [];
+  sealed = true;
   await c.tick();
   await new Promise((res) => setImmediate(res));
   assert.deepStrictEqual([c.mode, dug, controls.jump, c.straightUp], ['air', ['stone'], true, true], 'no air: the roof is dug, then up');
@@ -120,18 +121,19 @@ const assert = require('node:assert');
   const {Combat} = require('../combat');
   const {Vec3} = require('vec3');
   const controls = {}, goals = [], ticks = [], dug = [];
-  // floor y 52 with water columns at x -164 and -166, pocket water y 53-54, dirt roof y 55, the lake y 56-62, air from y 63
+  // floor y 52 with water columns at x -164 and -166, pocket water y 53-54 with the air cells in `pocket`, dirt roof y 55,
+  // the lake y 56-62, air from y 63
+  let pocket = [new Vec3(-164, 53, -176)];
   const blockAt = (p) => {
     const y = Math.floor(p.y);
-    if (y >= 63) return {name: 'air', boundingBox: 'empty', position: p};
+    if (y >= 63 || pocket.some((a) => a.equals(p))) return {name: 'air', boundingBox: 'empty', position: p};
     if (y === 55) return {name: 'dirt', boundingBox: 'block', position: p};
     if (y >= 53 || (y === 52 && [-164, -166].includes(Math.floor(p.x)))) return {name: 'water', boundingBox: 'empty', position: p};
     return {name: 'andesite', boundingBox: 'block', position: p};
   };
-  let air = [new Vec3(-162, 63, -176), new Vec3(-164, 53, -176)]; // the fake findBlock gives them in this order
   const bot = {health: 20, food: 20, ownAir: 12, oxygenLevel: 20, entity: {position: new Vec3(-161.5, 53, -175.5), onGround: true}, entities: {}, game: {dimension: 'overworld'},
     registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt, setControlState: (k, v) => { controls[k] = v; },
-    findBlock: ({useExtraInfo}) => air.map((p) => ({position: p})).find(useExtraInfo) ?? null, lookAt: async () => {},
+    findBlock: () => null, lookAt: async () => {},
     on: (e, f) => ticks.push(f), removeListener: (e, f) => ticks.splice(ticks.indexOf(f), 1), canDigBlock: () => true, dig: async (b) => dug.push(b.name),
     pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
   const c = new Combat({bot, online: true, name: 'bot1', protectedAreas: [], world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
@@ -140,14 +142,48 @@ const assert = require('node:assert');
   await c.tick();
   assert.deepStrictEqual([c.mode, goals.at(-1), ticks.length, controls.forward, controls.jump], ['air', null, 1, true, true], 'the air beside it at its feet height: swims there');
   c.release();
-  air = [new Vec3(-162, 63, -176), new Vec3(-166, 53, -176)];
+  pocket = [new Vec3(-166, 53, -176)];
   await c.tick();
   assert.deepStrictEqual([c.mode, goal()], ['air', [-166, 52, -176]], 'farther along the pocket: the pathfinder, feet in the water under it');
   c.release();
-  air = [new Vec3(-162, 63, -176)];
+  pocket = [];
+  const set = goals.length;
   await c.tick();
   await new Promise((res) => setImmediate(res));
-  assert.deepStrictEqual([c.mode, goal(), dug], ['air', [-162, 62, -176], []], 'no air in the pocket: the old search, and no digging into the lake');
+  assert.deepStrictEqual([c.mode, goals.slice(set), dug], ['air', [null], []], 'no air it can reach: no walk to the sky over the lake, no digging into the lake');
+})();
+
+(async () => { // air behind a wall is no way out: a dry tunnel beside the flooded one, then the roof is dug (audit
+  // 2026-11-19 SURVIVAL-3: it swam into the wall, and every 20 s the search chose the same air again)
+  const {Combat} = require('../combat');
+  const {Vec3} = require('vec3');
+  const controls = {}, goals = [], ticks = [], dug = [];
+  // flooded tunnel x 0, y 30-31; the stone wall x 1 (lava: a wall of lava); the dry tunnel x 2, y 30-31; stone all around,
+  // the roof y 32
+  let lava = false;
+  const blockAt = (p) => {
+    const x = Math.floor(p.x), y = Math.floor(p.y);
+    if ((x === 0 || x === 2) && (y === 30 || y === 31)) return x === 0 ? {name: 'water', boundingBox: 'empty', position: p} : {name: 'air', boundingBox: 'empty', position: p};
+    if (lava && x === 1 && (y === 30 || y === 31)) return {name: 'lava', boundingBox: 'empty', position: p};
+    return {name: 'stone', boundingBox: 'block', position: p};
+  };
+  const bot = {health: 20, food: 20, ownAir: 12, oxygenLevel: 20, entity: {position: new Vec3(0.5, 30, 0.5), onGround: true}, entities: {}, game: {dimension: 'overworld'},
+    registry: {blocksByName: {air: {id: 0}, cave_air: {id: 1}}}, blockAt, setControlState: (k, v) => { controls[k] = v; },
+    // as mineflayer's findBlock: the nearest air by distance, through the wall
+    findBlock: ({useExtraInfo}) => [new Vec3(2, 31, 0)].map((p) => ({position: p})).find(useExtraInfo ?? (() => true)) ?? null, lookAt: async () => {},
+    on: (e, f) => ticks.push(f), removeListener: (e, f) => ticks.splice(ticks.indexOf(f), 1), canDigBlock: () => true, dig: async (b) => dug.push(b.name),
+    pathfinder: {setGoal: (g) => goals.push(g)}, inventory: {items: () => [], slots: {}}, getEquipmentDestSlot: () => 5};
+  const c = new Combat({bot, online: true, name: 'bot1', protectedAreas: [], world: {noteMob() {}}, log() {}, getSettings: () => ({defend: true, retreatHealth: 8, fightRange: 8})});
+  c.stop();
+  await c.tick();
+  await new Promise((res) => setImmediate(res));
+  assert.deepStrictEqual([c.mode, ticks.length, goals.at(-1), dug], ['air', 0, null, ['stone']], 'no swim into the wall: it digs the roof');
+  c.release();
+  dug.length = 0;
+  lava = true;
+  await c.tick();
+  await new Promise((res) => setImmediate(res));
+  assert.deepStrictEqual([c.mode, ticks.length, goals.at(-1), dug], ['air', 0, null, ['stone']], 'nor through lava to the air behind it');
 })();
 
 { // an enderman is left alone until one hits: then those near are threats (2026-10-20)
