@@ -54,6 +54,20 @@ module.exports = async () => {
     off.r.bot.dig = async (b) => { firstAt ??= off.r.bot.entity.position.clone(); return digOff(b); };
     await nightShelter(off.r, job);
     assert.deepStrictEqual([off.placed, firstAt && [firstAt.x, firstAt.z]], [[90], [0.5, 0.5]], 'off the cell centre: centred, then the hole');
+    // no step to the centre into a block in the feet or head cell (a slab, a fence post): no hole, as before (K6 review)
+    for (const dy of [0, 1]) {
+      const part = mk(), blockAt = part.r.bot.blockAt;
+      part.r.bot.entity.position = new Vec3(0.8, 91, 0.3);
+      part.r.bot.blockAt = (p) => (p.y === 91 + dy ? {name: 'oak_fence', boundingBox: 'block', position: p, skyLight: 15, getProperties: () => ({})} : blockAt(p));
+      await nightShelter(part.r, job);
+      assert.deepStrictEqual([part.dug.size, part.placed, part.r.bot.entity.position.x], [0, [], 0.8], `a block at dy ${dy}: no step, no hole`);
+    }
+    // the step did not take (the server kept it at the wall): no hole from the wall edge
+    const kept = mk(), pos = new Vec3(0.8, 91, 0.3);
+    for (const k of ['x', 'z']) Object.defineProperty(pos, k, {get: () => (k === 'x' ? 0.8 : 0.3), set() {}});
+    kept.r.bot.entity.position = pos;
+    await nightShelter(kept.r, job);
+    assert.deepStrictEqual([kept.dug.size, kept.placed], [0, []], 'the step did not take: no hole');
     // a builder shelters only while unfit (bot2 without armour at the iron farm, 2026-10-17)
     const fitB = mk(), bare = mk();
     fitB.r.combat = {fit: () => true};
