@@ -124,6 +124,20 @@ module.exports = async () => {
     assert.deepStrictEqual(f.calls.engage, []);
     assert.deepStrictEqual(f.calls.craft, ['shears'], 'one try at crafting them per 5 minutes');
     assert.match(f.job.t.doing, /no shears/);
+    // ECON-1: shears from the chest first, then 2 ingots, only then a craft (ensureItem never fetches ingots itself)
+    f = fake({mobs: herd('sheep', 2), stopAfterSleeps: 25, withdraw: async (rr, j, item, count) => { f.calls.withdraw.push(`${item} ${count}`); f.inv.push({name: item, count, type: 1}); }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.withdraw.filter((c) => !c.startsWith('wheat')), ['shears 1']);
+    assert.deepStrictEqual(f.calls.craft, [], 'shears from the chest: no craft');
+    assert.strictEqual(f.calls.engage.length, 2, 'sheared with them');
+    f = fake({mobs: herd('sheep', 2), stopAfterSleeps: 25, withdraw: async (rr, j, item, count) => {
+      f.calls.withdraw.push(`${item} ${count}`);
+      if (item !== 'iron_ingot') throw new Error(`no ${item} in the chest`);
+      f.inv.push({name: item, count, type: 1});
+    }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.withdraw.filter((c) => !c.startsWith('wheat')), ['shears 1', 'iron_ingot 2']);
+    assert.deepStrictEqual(f.calls.craft, ['shears'], 'crafted from the fetched ingots');
 
     // (d) gates: after a crossing every open border gate is closed, the one the bot opened and the one open at the start; a failed close goes on
     const gates = () => world({'2,65,0': gate(false), '4,65,2': gate(true)});

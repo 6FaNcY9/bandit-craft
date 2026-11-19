@@ -149,8 +149,12 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
         for (const item of lacks.filter((i) => !skipped(i))) {
           later(item);
           try {
-            if (item === 'shears') await crafting.ensureItem(r, job, 'shears', 1);
-            else await withdraw(r, job, item, 16);
+            if (item === 'shears') {
+              // ensureItem never fetches ingots (they have recipes): take shears, else 2 ingots, from the chest first
+              await withdraw(r, job, 'shears', 1).catch(() => withdraw(r, job, 'iron_ingot', 2)).catch(() => {});
+              guard(job);
+              if (!held(bot, 'shears')) await crafting.ensureItem(r, job, 'shears', 1);
+            } else await withdraw(r, job, item, 16);
             fetched = true;
           } catch (e) {
             guard(job);
