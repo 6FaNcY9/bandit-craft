@@ -234,10 +234,12 @@ module.exports = async () => {
     assert.strictEqual(again.noop, true, 'a second dig of the same room had nothing to do');
     assert.deepStrictEqual([...blocks.values()].sort(), ['chest', 'cobblestone'], 'placed blocks stay');
     await assert.rejects(JOBS.excavate({...r, protectedAreas: [[-5, -5, 5, 5]]}, {...job, t: {}}), /protected/);
-    { // a lost hub is no "held by another bot": the room fails, nothing is dug and a shaft skips no layers (bots-3-2)
+    { // a lost hub is no "held by another bot": the room waits, nothing is dug and a shaft skips no layers (bots-3-2)
       for (const [k, v] of [['0,60,0', 'stone'], ['0,59,0', 'dirt']]) blocks.set(k, v);
       order.length = 0;
-      await assert.rejects(JOBS.excavate({...r, world: {unreachable: true, hostilesNear: () => [], claim: async () => false, release() {}}}, {...job, t: {}}), /hub unreachable/);
+      const gone = {...job, t: {}};
+      setTimeout(() => { gone.cancelled = true; }, 1500);
+      await assert.rejects(JOBS.excavate({...r, world: {unreachable: true, hostilesNear: () => [], claim: async () => false, release() {}}}, gone), /stopped/);
       assert.deepStrictEqual(order, [], 'no dig without the hub');
       blocks.delete('0,60,0'); blocks.delete('0,59,0');
     }

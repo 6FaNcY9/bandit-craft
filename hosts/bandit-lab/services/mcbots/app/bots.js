@@ -4486,7 +4486,7 @@ const JOBS = {
           if (all ? skipAll.test(b.name) || buildJob.CONTAINER.test(b.name) : b.boundingBox === 'empty' || !NATURAL.test(b.name)) continue;
           const k = `${dim}:${x},${y},${z}`;
           if (job.unreachable?.has(k)) { left++; continue; } // no way there in an earlier pass of this layer
-          if (r.world?.unreachable) throw new Error(HUB_DOWN); // a lost hub is no "held by another bot": a shaft would skip its layers (bots-3-2)
+          await hubBack(r, job); // a lost hub is no "held by another bot": a shaft would skip its layers (bots-3-2); a deploy restart is waited out (W2)
           if (r.world && !(await r.world.claim(r.name, k))) {
             left++;
             continue;

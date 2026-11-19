@@ -198,3 +198,31 @@ first.then(async () => {
   await run;
   assert.doesNotMatch(failed?.message || '', /hub unreachable/);
 }).catch((e) => { console.error(e); process.exitCode = 1; });
+
+// The same restart under a running shaft: excavate waits for the hub too instead of ending the shaft (W2 of bots-2-5).
+first.then(async () => {
+  const assert = require('node:assert/strict'), {Vec3} = require('vec3');
+  const {JOBS} = require('../bots');
+  const blocks = new Map([['0,60,0', 'stone']]), order = [];
+  const bot = {
+    blockAt: (p) => (blocks.get(`${p.x},${p.y},${p.z}`) ? {name: blocks.get(`${p.x},${p.y},${p.z}`), type: 1, position: p, boundingBox: 'block', getProperties: () => ({})} : {name: 'air', type: 0, position: p, boundingBox: 'empty'}),
+    entity: {position: new Vec3(0, 61, 2), onGround: true}, game: {dimension: 'overworld'}, entities: {}, food: 20, registry: {blocks: {}, foodsByName: {}},
+    inventory: {items: () => [{type: 2, name: 'stone_pickaxe'}], emptySlotCount: () => 30, slots: []}, getEquipmentDestSlot: () => 5,
+    pathfinder: {goto: async () => {}, stop() {}, setGoal() {}}, tool: {equipForBlock: async () => {}},
+    dig: async (b) => { order.push(`${b.name}@${b.position.y}`); blocks.delete(`${b.position.x},${b.position.y},${b.position.z}`); },
+    stopDigging() {},
+  };
+  const world = {unreachable: true, hostilesNear: () => [], claim: async () => true, release() {}};
+  const r = {bot, world, emit() {}, protectedAreas: [], supplyChest: null, combat: null};
+  const job = {t: {}, cancelled: false, type: 'excavate', args: {x1: 0, y1: 60, z1: 0, x2: 0, y2: 60, z2: 0}};
+  let failed = null;
+  const run = JOBS.excavate(r, job).catch((e) => { failed = e; });
+  await new Promise((res) => setTimeout(res, 3000));
+  assert.equal(failed, null, `still running with the link down: ${failed?.message}`);
+  assert.match(job.t.doing, /waiting for the hub/);
+  assert.deepEqual(order, [], 'no dig without the hub');
+  world.unreachable = false;
+  await run;
+  assert.equal(failed, null, `the room is dug once the link is up: ${failed?.message}`);
+  assert.deepEqual(order, ['stone@60']);
+}).catch((e) => { console.error(e); process.exitCode = 1; });
