@@ -98,6 +98,19 @@ module.exports = async () => {
     assert.deepStrictEqual([...d.dug], [90], 'only the lid came out');
     assert.deepStrictEqual(d.placed, [], 'no new hole, no new lid');
     assert.strictEqual(d.r.shelterAt, null);
+    // An unfit bot's grave waits for SAFE_TRIP (1000), not the end of spawning (23000): the night's mobs are still out at
+    // dawn (bot19, 2026-11-19). It waits in the open, so combat must keep fleeing and kiting: no `sheltered`.
+    for (const time of [14000, 23100, 200]) {
+      const g = mk({time});
+      g.r.combat = {fit: () => false};
+      let seen = 'never asked';
+      const gj = {type: 'grave', t: {}, get cancelled() { seen = !!g.r.sheltered; return true; }};
+      await assert.rejects(nightShelter(g.r, gj), /stopped/, `the grave still waits at ${time}`);
+      assert.strictEqual(seen, false, `not sheltered while waiting in the open at ${time}`);
+    }
+    const day = mk({time: 1000});
+    day.r.combat = {fit: () => false};
+    await nightShelter(day.r, {type: 'grave', t: {}, get cancelled() { return true; }});
   }
   { // digAt rechecks the block after every walk and equip: a Stop or a swapped block means no dig
     const {digAt, Cancelled} = require('../../bots');

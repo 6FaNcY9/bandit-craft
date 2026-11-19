@@ -1309,6 +1309,8 @@ function inShelter(r) {
   return !!s && !!p && Math.floor(p.x) === s.x && Math.floor(p.z) === s.z && Math.floor(p.y) === s.y - 2;
 }
 const isNight = (bot) => Number.isFinite(bot.time?.timeOfDay) && bot.time.timeOfDay >= NIGHT[0] && bot.time.timeOfDay < NIGHT[1];
+// Night plus dawn until SAFE_TRIP: what an unfit bot waits out. Undead burn from about 23460, creepers and spiders never.
+const dark = (bot) => Number.isFinite(bot.time?.timeOfDay) && (bot.time.timeOfDay >= NIGHT[0] || bot.time.timeOfDay < SAFE_TRIP[0]);
 // Builders shelter only while unfit (no weapon, under 2 armour pieces or hurt): bot2 built on through the night
 // without armour and died six times in six minutes at the iron farm (main server 2026-10-17); with gear they build on.
 const UNFIT_NIGHT_JOBS = new Set(['schematic', 'produce']);
@@ -1342,23 +1344,21 @@ function gearMissing(bot) {
 
 async function nightShelter(r, job) {
   const {bot} = r;
-  if (r.sheltered || !bot?.entity || !isNight(bot)) return;
+  if (r.sheltered || !bot?.entity || !dark(bot)) return;
   // An unfit bot fetches its grave by day (AxGraves keeps one 24 h): bot2, unarmed, went for its graves through the
   // night and died at each (main server 2026-10-17). It waits where it is, at the base after a respawn.
   if ((job.type === 'grave' || job.type === 'graves') && r.combat && !r.combat.fit()) {
     r.emit('info', 'night: waiting for the morning before fetching the grave');
-    r.sheltered = true;
-    try {
-      while (isNight(bot)) {
-        guard(job);
-        job.t.doing = 'night: waiting for the morning to fetch the grave';
-        await sleep(5000);
-      }
-    } finally {
-      r.sheltered = false;
+    // Not `sheltered`: it waits in the open, combat must still flee, kite and duel creepers.
+    while (dark(bot)) {
+      guard(job);
+      job.t.doing = 'night: waiting for the morning to fetch the grave';
+      await sleep(5000);
     }
     return;
   }
+  // No new hole at dawn; a bot already in tonight's hole waits on until SAFE_TRIP.
+  if (!isNight(bot) && !inShelter(r)) return;
   // Every job shelters only while unfit: with iron armour and swords the crew still sat in holes all night chopping and
   // mining (main server 2026-10-19); a fit bot works on and the numbers (odds.js) decide each fight. No combat: as before.
   if (!NIGHT_JOBS.has(job.type) && !UNFIT_NIGHT_JOBS.has(job.type)) return;
@@ -1410,7 +1410,7 @@ async function nightShelter(r, job) {
       r.shelterAt = lidAt;
     }
     const top = r.shelterAt;
-    while (isNight(bot)) {
+    while (dark(bot)) {
       guard(job);
       job.t.doing = 'night: waiting in a shelter until morning';
       await sleep(5000);
@@ -3112,11 +3112,11 @@ async function collect(r, job, matching, count, what) {
       }
       // Nothing free in view and nowhere left to explore: travel on in one direction (not shifts: they keep their leash).
       if (!anchor && !job.args?.near && !job.noFar && (job.t.farHops || 0) < farsearch.FAR_TOTAL && (!far || far.hops < farsearch.FAR_HOPS)) {
-        if (isNight(bot) && r.combat && !r.combat.fit()) { // an unfit bot does not set out in the dark: shelter, then look again
+        if (dark(bot) && r.combat && !r.combat.fit()) { // an unfit bot does not set out in the dark: shelter, then look again
           await waitSafe(r, job, me.x, me.z, me.y);
           // No hole (protected ground, nothing for a lid): wait on the clock. A bare `continue` spun without yielding,
           // the worker's keepalive starved and MisaBot and EM_Trader timed out for hours (2026-11-07).
-          while (isNight(bot) && !r.combat.fit()) {
+          while (dark(bot) && !r.combat.fit()) {
             guard(job);
             job.t.doing = 'night: waiting for the morning before searching farther';
             await sleep(5000);
@@ -4216,7 +4216,7 @@ const JOBS = {
     // far: after the hall, any indexed chest holding the item near the supply chest (ensureGear's iron); a dead end there only skips the chest.
     const list = [{x, y, z}, ...rooms];
     // Only by day or fit: up to 200 blocks into the dark to the iron farm would be a new night trap for an unarmed bot (review 2026-10-19).
-    if (job.args.far && (!isNight(bot) || r.combat?.fit?.())) for (const c of layout.farChests({match, chests: r.world?.chests || new Map(), near: {x, z}, from: bot.entity.position})) if (!list.some((o) => layout.keyOf(o) === layout.keyOf(c))) list.push(c);
+    if (job.args.far && (!dark(bot) || r.combat?.fit?.())) for (const c of layout.farChests({match, chests: r.world?.chests || new Map(), near: {x, z}, from: bot.entity.position})) if (!list.some((o) => layout.keyOf(o) === layout.keyOf(c))) list.push(c);
     let taken = 0, skipped = 0;
     // A full inventory takes nothing (mineflayer throws): bot1 looped on that for hours (lab 2026-11-06). Toss junk first; if it is
     // still full, say so once and clearly instead of walking to every chest.

@@ -85,11 +85,12 @@ first.then(async () => {
 
 // Night, unfit, on protected ground (no shelter hole allowed): the far search waits for the morning on the clock. A bare
 // `continue` looped without ever yielding, the worker's keepalive starved and MisaBot and EM_Trader timed out (2026-11-07).
-first.then(async () => {
+// At dawn (23100) too: the morning is SAFE_TRIP's 1000, the night's mobs are still out before it (bots-2-6).
+for (const time of [18000, 23100]) first.then(async () => {
   const assert = require('node:assert/strict'), {Vec3} = require('vec3');
   const {JOBS} = require('../bots');
   const bot = {entity: {position: new Vec3(10, 64, 20)}, registry: require('minecraft-data')('26.1'), inventory: {items: () => []}, findBlock: () => null, findBlocks: () => [], world: {getColumn: () => null}, nearestEntity: () => null,
-    blockAt: () => null, game: {dimension: 'overworld'}, time: {timeOfDay: 18000}, on() {}, once() {},
+    blockAt: () => null, game: {dimension: 'overworld'}, time: {timeOfDay: time}, on() {}, once() {},
     pathfinder: {searchRadius: 100, stop() {}, setGoal() {}, goto: async () => { throw new Error('not expected: a walk at night'); }}};
   const r = {name: 'MisaBot', emit() {}, log() {}, bot, protectedAreas: [[-80, -144, 80, 80]], world: {hostilesNear: () => []}, skip: new Map(), acquireFailed: new Map(), conflict() {}, combat: {busy: false, fit: () => false}, moves: null};
   const job = {id: 2, type: 'mine', args: {block: 'crimson_stem', count: 1}, t: {upkeep: true}, collected: 0, progress: '', noFar: false};
