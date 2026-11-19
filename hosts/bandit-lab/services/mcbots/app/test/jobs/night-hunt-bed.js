@@ -38,6 +38,18 @@ module.exports = async () => {
     const c = mk();
     await nightShelter(c.r, {...job, type: 'goto'});
     assert.strictEqual(c.dug.size, 0, 'an owner\'s walk is not paused');
+    // A bot more than 0.2 off the cell centre rests on the wall and does not fall: no lid over the open hole (BOTS-1-2).
+    const stuck = mk(), said = [];
+    stuck.r.emit = (k, m) => said.push(m);
+    const dig = stuck.r.bot.dig;
+    stuck.r.bot.dig = async (b) => { const p = stuck.r.bot.entity.position; await dig(b); stuck.r.bot.entity.position = p; };
+    await nightShelter(stuck.r, job);
+    assert.deepStrictEqual([stuck.placed, stuck.r.shelterAt ?? null, !!stuck.r.sheltered], [[], null, false], 'no lid when the bot did not drop');
+    assert.ok(said.some((m) => /night shelter given up: did not drop/.test(m)), said.join(' | '));
+    const off = mk();
+    off.r.bot.entity.position = new Vec3(0.8, 91, 0.5);
+    await nightShelter(off.r, job);
+    assert.strictEqual(off.dug.size, 0, 'off the cell centre: no hole');
     // a builder shelters only while unfit (bot2 without armour at the iron farm, 2026-10-17)
     const fitB = mk(), bare = mk();
     fitB.r.combat = {fit: () => true};

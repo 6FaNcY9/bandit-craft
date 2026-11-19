@@ -1385,6 +1385,8 @@ async function nightShelter(r, job) {
     // died three times in one night without a shelter, main server 2026-10-15).
     if (!bot.inventory.items().some((i) => PILLAR_BLOCKS.includes(i.name)) && !/^(dirt|grass_block|podzol)$/.test(at(-1)?.name || '')) return;
     if (![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
+    // More than 0.2 off the centre the 0.6-wide bot rests on the wall and does not fall (pathfinder reaches a node within 0.35).
+    if (Math.abs(bot.entity.position.x - feet.x - 0.5) > 0.2 || Math.abs(bot.entity.position.z - feet.z - 0.5) > 0.2) return;
   }
   r.sheltered = true; // combat: no hunting out of the hole
   try {
@@ -1398,6 +1400,7 @@ async function nightShelter(r, job) {
         await bot.dig(b);
         for (let i = 0; i < 20 && bot.entity.position.y > feet.y + dy + 0.1; i++) await sleep(100); // drop into it
       }
+      if (bot.entity.position.y > feet.y - 2.9) throw new Error('did not drop into the shelter'); // a lid would leave it on top, "sheltered"
       const lidAt = feet.offset(0, -1, 0), wall = bot.blockAt(lidAt.offset(1, 0, 0));
       const lidItem = () => bot.inventory.items().find((i) => PILLAR_BLOCKS.includes(i.name));
       for (let i = 0; i < 20 && !lidItem(); i++) await sleep(100); // the dug dirt drops into the hole
