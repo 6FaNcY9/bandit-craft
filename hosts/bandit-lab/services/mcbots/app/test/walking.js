@@ -308,3 +308,33 @@ const assert = require('node:assert');
   assert.notStrictEqual(await first('oak_leaves'), 'GoalY', 'under leaves the bot walks, it does not climb straight up');
   assert.strictEqual(await first('stone'), 'GoalY', 'under rock it still climbs first');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+(async () => { // goNear: a surface walk base -268 66 -213 -> spruce forest -374 74 75 sank bot1 to Y -19 in 2 min, leg by leg (main server
+  // 2026-11-19): a y-less leg goal ranked a node 80 levels down like one on the surface. A floor under start and target stops that.
+  const {goNear} = require('../bots');
+  const {Vec3} = require('vec3');
+  const {goals: G} = require('mineflayer-pathfinder');
+  const first = async (x, y, z, opts) => {
+    const goals = [], pos = new Vec3(-268, 66, -213);
+    const pf = {searchRadius: 80, stop() {}, setGoal() {}, goto: async (g) => {
+      goals.push(g);
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+    }};
+    const bot = {entity: {position: pos}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+      blockAt: () => ({name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+    await goNear({bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []}, {type: 'goto', t: {}, cancelled: false}, x, y, z, 2, opts);
+    return goals[0];
+  };
+  const g = await first(-374, 74, 75);
+  const at = (y) => ({x: g.x, y, z: g.z});
+  assert.strictEqual(g.isEnd(at(30)), false, 'a leg may not end deep under start and target');
+  assert.strictEqual(g.isEnd(at(60)), true, 'a leg ends near the surface');
+  assert.ok(g.heuristic(at(30)) > g.heuristic(at(60)), 'a deep node ranks worse');
+  assert.strictEqual(g.isEnd(at(55)), true, 'the base level stays a legal leg end');
+  const deep = await first(-374, 24, 75);
+  assert.strictEqual(deep.isEnd({x: deep.x, y: 14, z: deep.z}), true, 'a deep target keeps deep legs');
+  const xz = await first(-228, 66, -213, {xz: true});
+  assert.strictEqual(xz.isEnd({x: xz.x, y: 46, z: xz.z}), false, 'the xz last leg has the floor too');
+  const own = new G.GoalY(40);
+  assert.strictEqual(await first(-268, 40, -213, {goal: own}), own, 'a dig-down goal is untouched');
+})().catch((e) => { console.error(e); process.exitCode = 1; });

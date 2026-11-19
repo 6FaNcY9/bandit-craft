@@ -1482,6 +1482,11 @@ async function waitSafe(r, job, x, z, y = null) {
 // Long walks (respawn at world spawn -> work site, ~225 blocks) go in legs of
 // LEG blocks: one 90 s deadline and one path search cannot cover that far.
 const LEG = 48;
+// A y-less leg goal ranks a node 80 levels down like a surface one: a partial search walked bot1 from Y 66 to Y -19 in
+// 2 min (main server 2026-11-19). A leg ends no deeper than LEG_SINK under start, target and SEA (the base floor at
+// 55-58 stays legal, a valley between two high points is never forbidden).
+const LEG_SINK = 12;
+const SEA = 63;
 const CLIMB_BUDGET = 1500; // search cost for 16 levels of stairs dug by hand (some 70 a level)
 const HAND_LEVEL = 40; // the search's estimate for one level up without a pickaxe (below its true ~70: still finds the stairs)
 // The ground a chest stands over: a chest out of a creeper's blast, 5 blocks up in the air (the iron farm's material
@@ -1597,14 +1602,22 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
     }
   };
   if (!opts.xz) await climb(covered);
+  // shortcut: a full path found in time may still dip under the floor mid-leg; only its end and ranking are held.
+  const low = r.bot?.entity ? Math.min(Math.floor(r.bot.entity.position.y), Math.floor(y), SEA) - LEG_SINK : -Infinity;
+  const banded = (g) => {
+    const end = g.isEnd.bind(g), h = g.heuristic.bind(g);
+    g.isEnd = (n) => n.y >= low && end(n);
+    g.heuristic = (n) => h(n) + 2 * Math.max(0, low - n.y);
+    return g;
+  };
   for (let i = 0; i < 20 && (!opts.goal || opts.xz) && r.bot?.entity; i++) {
     if (opts.until?.()) return; // a walk that only has to bring something into view (light) ends between legs
     const p = r.bot.entity.position, d = Math.hypot(x - p.x, z - p.z);
     if (d <= LEG + 16) break;
     const lx = p.x + ((x - p.x) * LEG) / d, lz = p.z + ((z - p.z) * LEG) / d;
-    await goLeg(r, job, lx, y, lz, 4, {...opts, goal: new goals.GoalNearXZ(lx, lz, 4), doing: opts.doing || `walking to ${at({x, y, z})}`});
+    await goLeg(r, job, lx, y, lz, 4, {...opts, goal: banded(new goals.GoalNearXZ(lx, lz, 4)), doing: opts.doing || `walking to ${at({x, y, z})}`});
   }
-  if (opts.xz) return goLeg(r, job, x, y, z, dist, {...opts, goal: new goals.GoalNearXZ(x, z, dist)});
+  if (opts.xz) return goLeg(r, job, x, y, z, dist, {...opts, goal: banded(new goals.GoalNearXZ(x, z, dist))});
   try {
     return await goLeg(r, job, x, y, z, dist, opts);
   } catch (e) {
