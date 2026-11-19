@@ -13,6 +13,12 @@ const {BotRunner} = require('../bots');
   r.kickOver();
   assert.strictEqual(r.lastError, 'mine: no free stone within 96 blocks');
 }
+// ---- a resumed building job walks to its site under its own plan veto, not back with an unvetoed walk (audit 2026-11-19) ----
+{
+  const {walksBack} = require('../bots');
+  for (const type of ['build', 'schematic', 'produce']) assert.strictEqual(walksBack({type}, {x: 1, y: 2, z: 3}), false, type);
+  assert.strictEqual(walksBack({type: 'mine'}, {x: 1, y: 2, z: 3}), true);
+}
 // ---- a death or disconnect keeps the job; the user's stop does not ----
 (async () => {
   const mk = () => new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});

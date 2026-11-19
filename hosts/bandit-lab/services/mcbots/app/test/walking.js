@@ -215,3 +215,36 @@ const assert = require('node:assert');
   assert.strictEqual(await follow, 'no path to Misa');
   assert.strictEqual(two.mv.maxDropDown, 3, 'same level: no wider drop');
 })();
+
+(async () => { // walks dig no built blocks (audit 2026-11-19: mine, chop, get, grave and combat walks tunnelled castle and base walls);
+  // building jobs keep their own plan veto (build.js), and a walk refused only by them fails with a reason of its own
+  const {safeMovements, goNear} = require('../bots');
+  const {Vec3} = require('vec3');
+  const EventEmitter = require('node:events');
+  const registry = require('minecraft-data')('26.1');
+  const bot = Object.assign(new EventEmitter(), {registry, entity: {position: new Vec3(0, 64, 0)}, pathfinder: {}, blockAt: () => null});
+  const blk = (name) => ({type: registry.blocksByName[name].id, name, position: new Vec3(1, 64, 0), boundingBox: 'block'});
+  const cost = (mv, name) => mv.exclusionAreasBreak.reduce((a, f) => a + f(blk(name)), 0);
+  for (const type of ['mine', 'chop', 'shift', 'get', 'goto', 'rearm', 'withdraw', 'deposit', 'graves', undefined]) {
+    const r = {current: type && {type}, digOnly: null, digBox: null};
+    const mv = safeMovements(bot, [], r);
+    assert.ok(cost(mv, 'stone_bricks') >= 100, `${type || 'no job (combat)'}: a walk leaves stone_bricks standing`);
+    assert.ok(cost(mv, 'oak_planks') >= 100, `${type || 'no job'}: and planks`);
+    assert.strictEqual(cost(mv, 'stone'), 0, `${type || 'no job'}: stone is still dug`);
+  }
+  for (const type of ['build', 'schematic', 'produce']) assert.strictEqual(cost(safeMovements(bot, [], {current: {type}}), 'stone_bricks'), 0, `${type}: build.js vetoes by its plan`);
+  // Walled in by built blocks only: the walk ends with its own reason (bot-chef shows it), no endless retry.
+  let calls = 0;
+  const r = {current: {type: 'mine'}, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []};
+  const mv = safeMovements(bot, [], r);
+  const pf = {searchRadius: 80, stop() {}, setGoal() {}, goto: async () => { calls++; mv.exclusionBreak(blk('stone_bricks')); throw new Error('No path to the goal!'); }};
+  r.bot = {entity: {position: new Vec3(0, 64, 0)}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+    blockAt: () => ({name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+  const out = await goNear(r, {type: 'mine', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => 'ok', (e) => e.message);
+  assert.match(out, /^could not reach 3 64 3: No path.*only through built blocks \(kept stone_bricks at 1 64 0\)/);
+  assert.ok(calls <= 6, `the walk ends (${calls} searches)`);
+  assert.match(await goNear(r, {type: 'mine', t: {}, cancelled: false}, 3, 64, 3, 2).then(() => 'ok', (e) => e.message), /cached/, 'and is not searched again at once');
+  calls = 0;
+  pf.goto = async () => { calls++; throw new Error('No path to the goal!'); }; // no built block refused: the usual reason
+  assert.match(await goNear(r, {type: 'mine', t: {}, cancelled: false}, 9, 64, 9, 2).then(() => 'ok', (e) => e.message), /^could not reach 9 64 9: No path to the goal!$/);
+})();

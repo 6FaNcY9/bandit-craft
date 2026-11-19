@@ -207,7 +207,8 @@ module.exports = async () => {
     delete bot.game;
     mv.getBlock = () => ({liquid: false, canFall: false});
     const blk = (n) => ({type: md.blocksByName[n].id, name: n, position: new Vec3(0, 60, 0)});
-    for (const n of ['cobblestone', 'oak_planks', 'torch']) assert.ok(mv.safeToBreak(blk(n)), `${n}: free outside an excavation`);
+    for (const n of ['cobblestone', 'torch']) assert.ok(mv.safeToBreak(blk(n)), `${n}: free outside an excavation`);
+    assert.ok(!mv.safeToBreak(blk('oak_planks')), 'a built block is not, outside a building job (audit 2026-11-19)');
     guardDigs(runner, bot);
     const dig = (y) => bot.dig({name: world[y], position: new Vec3(0, y, 0)}, true);
     await dig(60);

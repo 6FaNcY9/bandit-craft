@@ -148,7 +148,9 @@ const near = (a) => {
 };
 const BUILT_RE = /^(torch|wall_torch|soul_torch|lantern|soul_lantern|light|spawner|chest|trapped_chest|barrel|crafting_table|furnace|blast_furnace|smoker|ladder|scaffolding|glass|glass_pane|stone_bricks|.*_bed|.*_door|.*_trapdoor|.*_sign|.*_slab|.*_stairs|.*_fence|.*_fence_gate|.*rail|lever|.*_button|.*_pressure_plate|hopper|bell)$/;
 // The walk back to a resumed job's area; a pen job walks in itself under its own rules (no digging, no pillars, gates shut).
-const walksBack = (job, at) => at.x !== undefined && job.type !== 'animalfarm';
+// Building jobs walk under their own plan veto (build.js), which a walk back before the job starts would not have.
+const BUILDING = new Set(['build', 'schematic', 'produce']);
+const walksBack = (job, at) => at.x !== undefined && job.type !== 'animalfarm' && !BUILDING.has(job.type);
 const AREA_JOBS = new Set(['shaft', 'excavate', 'clear', 'rim', 'treefarm', 'wheatfarm', 'cropfarm', 'animalfarm']); // one run covers the area
 const ENCHANTABLE = /^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|sword|hoe)$|^bow$|^fishing_rod$|^(leather|iron|golden|diamond|netherite)_(helmet|chestplate|leggings|boots)$/;
 const VALIDATE = {
@@ -1223,7 +1225,14 @@ function safeMovements(bot, areas, runner = null) {
   const inside = (blk) => insideAreas(areas, blk.position.x, blk.position.z, blk.position.y);
   const veto = (blk) => (inside(blk) ? 100 : 0);
   const held = (blk) => (runner?.reserved?.(blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
-  mv.exclusionAreasBreak = [veto, held, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
+  // Walks leave built blocks standing: mine, chop, get, grave and combat walks tunnelled castle and base walls (audit
+  // 2026-11-19). The last one refused is kept so a walk that fails for it says so (goLeg).
+  const built = (blk) => {
+    if (BUILDING.has(runner?.current?.type) || !BUILT.test(blk.name)) return 0;
+    if (runner) runner.keptBuilt = blk;
+    return 100;
+  };
+  mv.exclusionAreasBreak = [veto, held, built, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
   const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
   mv.exclusionAreasPlace = [veto, lid];
@@ -1703,6 +1712,7 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         if (!brave) await waitSafe(r, job, x, z, y);
         if (job.t) job.t.doing = label; // a night's wait wrote over it
         arm();
+        r.keptBuilt = null;
         await r.bot.pathfinder.goto(goal || new goals.GoalNear(x, y, z, dist)); // settledGoto on a live bot
         r.noPath?.delete(known);
         return;
@@ -1711,7 +1721,8 @@ async function goLeg(r, job, x, y, z, dist, {brave = false, goal = null, doing =
         if (stopped) throw new Error(stopped);
         // The deadline clears the goal, so its error reads "The goal was changed": name the deadline instead (bot1's
         // 90 s in a sand-roofed cave looked like a fight in the archive, 2026-10-15).
-        const why = stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : e.message;
+        const kept = !timedOut && /No path/.test(e.message) && r.keptBuilt?.position;
+        const why = stalled ? `no progress for ${STILL_MS / 1000} s` : timedOut ? `no way there within ${GOTO_TIMEOUT_MS / 1000} s` : kept ? `${e.message} - only through built blocks (kept ${r.keptBuilt.name} at ${at(kept)})` : e.message;
         if (!timedOut && /No path/.test(e.message) && !countedNoPath) { countedNoPath = true; r.moves?.noPath.add(); } // once per walk, not per retry
         const fail = () => new Error(`could not reach ${Math.round(x)} ${Math.round(y)} ${Math.round(z)}: ${why}`);
         // A fight takes the pathfinder over ("The goal was changed", 67 failed walks in 4 days): wait it
