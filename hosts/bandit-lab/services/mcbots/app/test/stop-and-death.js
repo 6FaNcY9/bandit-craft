@@ -653,3 +653,27 @@ const {BotRunner} = require('../bots');
   }
   console.log('death spots ok');
 }
+// ---- kept jobs: noFar survives a restart (HUB-2), a finished job in its tidy-up walks is not kept or resumed (BOTS-1-3) ----
+{
+  const {keptOf} = require('../bots');
+  const mk = () => new BotRunner('bot2', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  const r = mk();
+  r.current = {id: 1, type: 'chop', args: {count: 12}, noFar: true, status: 'running', t: {}};
+  r.queue = [{id: 2, type: 'mine', args: {block: 'stone', count: 8}, status: 'queued'}];
+  assert.deepStrictEqual(keptOf(r), [{type: 'chop', args: {count: 12}, noFar: true}, {type: 'mine', args: {block: 'stone', count: 8}}], 'noFar kept, absent otherwise');
+  const dead = {entity: {position: {x: 5, y: 60, z: 5}}, game: {dimension: 'minecraft:overworld'}};
+  for (const status of ['done', 'failed']) {
+    const d = mk();
+    d.current = {id: 1, type: 'mine', args: {block: 'stone', count: 8}, collected: 8, status, t: {}};
+    assert.deepStrictEqual(keptOf(d), [], `a ${status} job is not kept`);
+    d.onDeath(dead);
+    assert.ok(!d.queue.some((j) => j.type === 'mine'), `a death does not resume a ${status} job`);
+    const f = mk();
+    f.online = true;
+    f.pump = () => {};
+    f.current = {id: 1, type: 'mine', args: {block: 'stone', count: 8}, status, t: {}};
+    f.enqueue('come', {player: 'vino'}, {first: true});
+    assert.ok(!f.queue.some((j) => j.type === 'mine'), `an order first does not resume a ${status} job`);
+  }
+  console.log('kept jobs ok');
+}

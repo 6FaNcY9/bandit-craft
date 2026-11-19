@@ -134,10 +134,12 @@ const player = (a) => {
 // From the first long job on, the whole rest of the chain goes too (a plan chain's withdraw, craft and place
 // steps queued behind an excavate), or the tail would be lost and the objective close without it (Codex R6-5).
 const tailFrom = (jobs) => { const i = jobs.findIndex((j) => KEEP.has(j.type)); return i < 0 ? [] : jobs.slice(i); };
-const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j && !j.cancelled)).map((j) => {
+// A job ends (status set) before its tidy-up walks (clearStray, unpillar): it is no longer kept or resumed (BOTS-1-3).
+const ENDED = new Set(['done', 'failed', 'stopped']);
+const keptOf = (r) => tailFrom([r.current, ...(r.queue || [])].filter((j) => j && !j.cancelled && !ENDED.has(j.status))).map((j) => {
   const args = {...j.args};
   if (args.count && j.collected) args.count = Math.max(1, args.count - j.collected);
-  return {type: j.type, args};
+  return {type: j.type, args, ...(j.noFar ? {noFar: true} : {})}; // the keeper's near-only jobs stay near after a restart (HUB-2)
 });
 
 // Normalise and validate job arguments (throws on bad input).
@@ -837,7 +839,7 @@ class BotRunner {
       this.shelterAt = null;
       if (spawnedAt) this.emit('disconnect', `left the game (${why})`); // failed connection attempts are not news
       this.combat.stop();
-      const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
+      const was = this.current && !this.current.cancelled && !ENDED.has(this.current.status) ? this.current : null; // a job the user stopped stays stopped
       this.cancel();
       this.resumeLater(was, 'disconnected');
       this.bot = null;
@@ -895,7 +897,7 @@ class BotRunner {
     if (AREA_JOBS.has(type) && ((same(this.current) && !this.current.cancelled) || this.queue.some(same))) return;
     if (this.queue.length >= MAX_QUEUE) throw new Error('Warteschlange voll');
     if (first) {
-      const was = this.current && !this.current.cancelled ? this.current : null;
+      const was = this.current && !this.current.cancelled && !ENDED.has(this.current.status) ? this.current : null;
       this.cancel();
       this.resumeLater(was, type);
       this.queue.unshift(job);
@@ -942,7 +944,7 @@ class BotRunner {
     const earlier = gravesJob.recentDeaths(this.deathSpots, now);
     const near = gravesJob.deathsNear(earlier, p, now);
     this.deathSpots = p ? [...earlier, {x: Math.floor(p.x), z: Math.floor(p.z), t: now}] : earlier;
-    const was = this.current && !this.current.cancelled ? this.current : null; // a job the user stopped stays stopped
+    const was = this.current && !this.current.cancelled && !ENDED.has(this.current.status) ? this.current : null; // a job the user stopped stays stopped
     this.cancel();
     // A second death at the same place: no grave trip and no resumed job walk back there (bot1, 40 deaths at a monument, 2026-11-09).
     if (near) this.emit('alert', `left the grave at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}, ${near + 1} deaths there within 24 h${was ? `; ${was.type} not resumed` : ''}`);
