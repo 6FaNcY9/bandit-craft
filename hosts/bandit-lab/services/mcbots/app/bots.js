@@ -1528,10 +1528,14 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
   // the chest at Y 63) gets no path in one search, so the
   // bot climbs first, 16 levels per walk, digging its own stairs (bot1, bot2 and bot3 were
   // stranded underground with "No path" on the lab, 2026-10-10).
-  // Only under a roof: out in the open a hill is ordinary walking, and climbing first would build pillars.
+  // Only under a roof: out in the open a hill is ordinary walking, and climbing first would build pillars. A tree's
+  // crown is open sky: bot2 under oak leaves at -311 75 -163 climbed "to Y 90" in place for 8 min (main server 2026-11-19).
   const covered = () => {
     const p = r.bot.entity.position.floored();
-    for (let dy = 2; dy <= Math.min(20, y - p.y); dy++) if (r.bot.blockAt(p.offset(0, dy, 0))?.boundingBox === 'block') return true;
+    for (let dy = 2; dy <= Math.min(20, y - p.y); dy++) {
+      const b = r.bot.blockAt(p.offset(0, dy, 0));
+      if (b?.boundingBox === 'block' && !b.name.endsWith('_leaves')) return true;
+    }
     return false;
   };
   // A stone block dug by hand costs the search some 23 against 3 with a pickaxe: the search budget (searchRadius

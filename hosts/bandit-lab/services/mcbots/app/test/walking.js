@@ -266,3 +266,22 @@ const assert = require('node:assert');
   pf.goto = async () => { calls++; throw new Error('No path to the goal!'); }; // no built block refused: the usual reason
   assert.match(await goNear(r, {type: 'mine', t: {}, cancelled: false}, 9, 64, 9, 2).then(() => 'ok', (e) => e.message), /^could not reach 9 64 9: No path to the goal!$/);
 })();
+
+(async () => { // goNear: a tree's crown is no roof: bot2 on a tuff mound at -311 75 -163 under oak leaves 4 up climbed "to Y 90" straight up
+  // towards the castle chest at -302 111 6, "no progress for 30 s" every minute for 8 min (main server 2026-11-19). Rock overhead still climbs.
+  const {goNear} = require('../bots');
+  const {Vec3} = require('vec3');
+  const first = async (roof) => {
+    const goals = [], pos = new Vec3(-311, 75, -163);
+    const pf = {searchRadius: 80, stop() {}, setGoal() {}, goto: async (g) => {
+      goals.push(g.constructor.name);
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+    }};
+    const bot = {entity: {position: pos}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+      blockAt: (p) => (p.y === 79 ? {name: roof, boundingBox: 'block'} : {name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+    await goNear({bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []}, {type: 'goto', t: {}, cancelled: false}, -302, 111, 6, 2);
+    return goals[0];
+  };
+  assert.notStrictEqual(await first('oak_leaves'), 'GoalY', 'under leaves the bot walks, it does not climb straight up');
+  assert.strictEqual(await first('stone'), 'GoalY', 'under rock it still climbs first');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
