@@ -312,12 +312,12 @@ const uploadPage = fs.readFileSync(path.join(__dirname, 'public', 'upload.html')
 const {BotUi, allowedBots, stopTargets, markersOf, placeBots} = require('./botui');
 // The in-game submit: the viewer's bots only, on ground() they may use.
 // stored: an order given back as it was first accepted (joins.js leave), so it keeps its rights, not the actor's.
-function submitFor(viewer, {bots, type, args, replace, stored}) {
+function submitFor(viewer, {bots, type, args, replace, first, stored}) {
   // "Abbauen (Bereich)" is confined to ground that names the bot (misa.js) unless the owner himself orders it:
   // he could not dig a marked box with any bot, and not with MisaBot outside her ground (2026-11-15).
   if (type === 'clear' && !stored) args = misa.clearArgs(args, cfg.viewerBots[viewer] === '*');
   for (const b of allowedBots(cfg.viewerBots, viewer, bots)) ground(viewer, b, type, args);
-  const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace});
+  const out = submitJob({bots: allowedBots(cfg.viewerBots, viewer, bots), type, args, replace, first});
   for (const b of bots) ingame?.expect(b, viewer); // the "fertig" line when it ends
   return out;
 }
