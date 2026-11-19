@@ -4473,7 +4473,7 @@ const JOBS = {
     const Vec3 = require('vec3').Vec3;
     const dim = normDim(bot.game?.dimension);
     const total = (x2 - x1 + 1) * (y2 - y1 + 1) * (z2 - z1 + 1);
-    let left = 0, dug = 0;
+    let left = 0, dug = 0, noTool = 0;
     job.t.total = total;
     for (let y = y2; y >= y1; y--) {
       for (const [x, z] of layerOrder(x1, z1, x2, z2, job.args.corner ?? -1)) {
@@ -4503,6 +4503,7 @@ const JOBS = {
             // A block that needs a better pickaxe (or a spawner) is left too, not the end of a shaft with 70 layers to go (bots-3-3).
             const tool = /^no pickaxe for |^needs a tool|refusing to dig/.test(e.message);
             if (!tool && !/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
+            if (tool && ++noTool > 4) throw e; // no fitting pickaxe at all: end with its reason, not a "blocked shaft" after a replacePickaxe per block (W1)
             left++;
             if (tool || /No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
             r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);

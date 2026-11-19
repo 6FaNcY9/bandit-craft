@@ -272,6 +272,18 @@ module.exports = async () => {
       assert.deepStrictEqual([...seen], ['overworld:0,59,0'], 'later passes do not try it again');
       blocks.delete('0,59,0');
     }
+    { // no fitting pickaxe at all: a few tries, then the job ends naming the tool, not "blocked ... water, a cave" (W1)
+      blocks.clear();
+      for (let x = 0; x <= 1; x++) for (let y = 58; y <= 60; y++) blocks.set(`${x},${y},0`, 'dirt');
+      order.length = 0;
+      let tries = 0;
+      const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); if (b.name === 'dirt') tries++; return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      const seen = new Set();
+      await assert.rejects(JOBS.excavate({...r, bot: hard}, Object.assign({...job, t: {}}, {unreachable: seen})), (e) => /needs a tool|no pickaxe for/.test(e.message) && !/were not dug/.test(e.message));
+      assert.strictEqual(seen.size, 4, 'four blocks left, the fifth ends the job');
+      assert.deepStrictEqual(order, [], 'nothing dug');
+      blocks.clear();
+    }
   }
   { // shaft: 1-high excavate layers top-down, one stair step per layer spiralling along the walls
     const {JOBS, VALIDATE, stairRing} = require('../../bots');
