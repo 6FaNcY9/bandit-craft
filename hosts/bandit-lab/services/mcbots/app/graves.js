@@ -14,14 +14,14 @@ const NOT_GRAVE = new Set(['item', 'experience_orb', 'arrow', 'trident', 'fallin
 const DEATH = /^died at (-?\d+) (-?\d+) (-?\d+):/;
 // A grave job's end, or a grave taken inside a graves run ("grave at X Y Z: N items back").
 const FETCHED = /^(?:finished: grave(?: at)?|grave at) (-?\d+) (-?\d+) (-?\d+)(?: \(|: \d+ items back)/;
+const DROWNED = /^died at (-?\d+) (-?\d+) (-?\d+): drowned\b/;
+// The event archive's files written to in the last 24 h: a rotated archive of an older day holds no open grave.
+const archiveNames = (dir, now) => { try { return fs.readdirSync(dir).filter((n) => /^events\.jsonl(?:\.\d{1,13})?$/.test(n) && fs.statSync(path.join(dir, n)).mtimeMs >= now - 24 * 60 * 60 * 1000); } catch { return []; } };
 
 function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [], drowned = [], from} = {}) {
   const rows = [...events];
   if (archiveDir) {
-    let names = [];
-    // Only files written to in the window: a rotated archive of an older day holds no open grave.
-    try { names = fs.readdirSync(archiveDir).filter((n) => /^events\.jsonl(?:\.\d{1,13})?$/.test(n) && fs.statSync(path.join(archiveDir, n)).mtimeMs >= now - 24 * 60 * 60 * 1000); } catch {}
-    for (const name of names) {
+    for (const name of archiveNames(archiveDir, now)) {
       try { rows.push(...fs.readFileSync(path.join(archiveDir, name), 'utf8').split('\n').filter(Boolean).map((s) => JSON.parse(s).event).filter(Boolean)); } catch {}
     }
   }
@@ -42,6 +42,24 @@ function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [
   return [...deaths.entries()].filter(([, s]) => !taken(s) && deathsNear(all, s, now) < 2 && !deathsNear(drowned, s, now) && s.y >= -64 && s.y <= 320 &&
     (!chest || Math.hypot(s.x - chest.x, s.z - chest.z) <= FAR) && !insideAreas(areas, s.x, s.z))
     .map(([, s]) => s).sort((a, b) => Math.hypot(a.x-p.x,a.y-p.y,a.z-p.z) - Math.hypot(b.x-p.x,b.y-p.y,b.z-p.z)).slice(0, 40).map(({x,y,z}) => ({x,y,z}));
+}
+
+// Every bot's drownings of the last 24 h in the event archive, oldest first: server.js shares them again on a start (a
+// deploy, a crash), so no bot goes back into that water (bots.js awayFromDrownings). A broken line costs only itself.
+function archivedDrownings(archiveDir, now = Date.now()) {
+  const out = [];
+  for (const name of archiveNames(archiveDir, now)) {
+    let text = '';
+    try { text = fs.readFileSync(path.join(archiveDir, name), 'utf8'); } catch { continue; }
+    for (const s of text.split('\n')) {
+      if (!s.includes('drowned')) continue; // ~50 MB a file: parse only the lines that may be one
+      let e = null;
+      try { e = JSON.parse(s).event; } catch { continue; }
+      const m = e?.kind === 'death' && DROWNED.exec(String(e.text)), t = typeof e?.t === 'number' ? e.t : Date.parse(e?.t);
+      if (m && t <= now && now - t < DEATH_WINDOW_MS) out.push({x: +m[1], y: +m[2], z: +m[3], t});
+    }
+  }
+  return out.sort((a, b) => a.t - b.t);
 }
 
 // Entities that may be the grave (an armor stand with a head, a display entity, ...), nearest first.
@@ -172,4 +190,4 @@ function makeGraves({goNear, guard, sleep, deposit}) {
   return {grave, graves};
 }
 
-module.exports = {click, REACH, graveCandidates, graveAfterDeath, repeatDeath, deathsNear, deathAvoid, recentDeaths, openGraves, armourPicks, makeGraves};
+module.exports = {click, REACH, graveCandidates, graveAfterDeath, repeatDeath, deathsNear, deathAvoid, recentDeaths, openGraves, archivedDrownings, armourPicks, makeGraves};

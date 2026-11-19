@@ -489,6 +489,19 @@ const assert = require('node:assert');
     client.world.learn('kill:sheep', {ok: false}); client.world.learn('kill:sheep', {ok: false});
     client.world.flush();
     await until(() => world.learned('kill:sheep')?.blocked === true, 'both outcomes of one interval reached the hub');
+    { // a new worker gets the drownings of the last 24 h even past the 300 newest records (bots.js awayFromDrownings)
+      const now = Date.now();
+      world.noteExperience('drown:-162,53,-176', {ok: 0, fail: 1, streak: 1, secs: 0, units: 0, lastFail: now - 3600000, t: now - 3600000});
+      world.noteExperience('drown:-10,60,-10', {ok: 0, fail: 1, streak: 1, secs: 0, units: 0, lastFail: now - 25 * 3600000, t: now - 25 * 3600000});
+      for (let i = 0; i < 300; i++) world.noteExperience(`dig:stone:${i},40,0`, {ok: 1, fail: 0, streak: 0, secs: 1, units: 1, lastFail: 0, t: now});
+      const sent = [];
+      const fresh = {hello: true, ws: {readyState: 1, send: (s) => sent.push(JSON.parse(s))}, bots: new Set()};
+      hub.conns.add(fresh);
+      hub.broadcastWorld();
+      hub.conns.delete(fresh);
+      const keys = sent[0].experience.map(([k]) => k);
+      assert.deepStrictEqual([keys.length, keys.includes('drown:-162,53,-176'), keys.includes('drown:-10,60,-10')], [301, true, false], 'the 300 newest and the drowning an hour ago, not one of yesterday');
+    }
     hub.observe({bots: new Set(['bot6'])}, {needs: [
       {bot: 'bot6', item: 'stone', count: 0, to: {x: 1, y: 2, z: 3}, why: 'bad count'},
       {bot: 'bot6', item: 'stone', count: 1, to: {x: 1, y: 2, z: 3}, why: 'bad\ntext'},

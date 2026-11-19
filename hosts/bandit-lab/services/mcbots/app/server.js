@@ -47,6 +47,9 @@ const rescuers = []; // filled below, once the supply chest is known (rescue.js)
 // Every event and, every 30 s, every bot's state go to STATE_DIR/archive for later evaluation and training
 // (archive.js); the 200-entry ring alone lost the night's deaths. SESSION tells server runs apart (dataset.js).
 const ARCHIVE = process.env.STATE_DIR ? path.join(process.env.STATE_DIR, 'archive') : null;
+// The drownings from before this start (a deploy, a crash), shared again: no bot mines in that water or fetches a grave
+// from it (bots.js awayFromDrownings, which learns the new ones).
+if (ARCHIVE) for (const d of gravesLib.archivedDrownings(ARCHIVE)) world.noteExperience(`drown:${d.x},${d.y},${d.z}`, {ok: 0, fail: 1, streak: 1, secs: 0, units: 0, lastFail: d.t, t: d.t});
 const SESSION = Date.now().toString(36);
 // The owner's orders (dashboard): the job each bot was last given, {type, args}. A failure starts the job again
 // later (orderloop.orderOutcome). Kept across restarts.

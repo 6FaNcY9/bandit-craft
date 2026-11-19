@@ -3041,7 +3041,7 @@ async function collect(r, job, matching, count, what) {
     if (band && start !== false && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)) {
       descents++; // twice at most, then mine what is in reach
       const back = digSpotBack(job.t.area, band, me);
-      if (back) {
+      if (back && dry(back)) { // not back down into the water a bot drowned in
         try {
           await goNear(r, job, back.x, back.y, back.z, 3, {doing: `walking back down to where it dug ${what} at ${at(back)}`});
           continue;

@@ -546,7 +546,9 @@ class Hub {
       const chests = [...(this.world.chests || [])].filter(([, v]) => v.t > (c.chestsAt ?? -Infinity)).map(([key, v]) => ({key, items: v.items, free: v.free, age: (now - v.t) / 1000}));
       c.chestsAt = now;
       // The planner's experience the same way: all of it once, then what changed (acquire.js costs, world.learn).
-      const experience = [...(this.world.experience || [])].filter(([, v]) => v.t > (c.experienceAt ?? -Infinity)).sort((a, b) => b[1].t - a[1].t).slice(0, 300);
+      const fresh = [...(this.world.experience || [])].filter(([, v]) => v.t > (c.experienceAt ?? -Infinity)).sort((a, b) => b[1].t - a[1].t);
+      // The drownings of the last 24 h even past the 300 newest: without them a new worker sends its bots back into that water (bots.js awayFromDrownings).
+      const experience = [...fresh.slice(0, 300), ...fresh.slice(300).filter(([k, v]) => k.startsWith('drown:') && now - v.t < 24 * 3600000)];
       c.experienceAt = now;
       c.ws.send(JSON.stringify({...shared, ...(chests.length ? {chests} : {}), ...(experience.length ? {experience} : {})}));
     }

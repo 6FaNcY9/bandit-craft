@@ -152,6 +152,23 @@ module.exports = async () => {
     // nor where a bot drowned lately (the hub passes world.drownSpots): the grave lies in the water that drowned it
     assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -161 53 -176: drowned', 500000), ev('bot1', 'death', 'died at -300 64 -100: shot', 10000)],
       'bot1', {now, chest: {x: -271, y: 66, z: -214}, drowned: [{x: -162, y: 53, z: -176, t: now - 500000}]}), [{x: -300, y: 64, z: -100}]);
+    { // a hub start (a deploy, a crash) takes the drownings of the last 24 h from the event archive again (server.js)
+      const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'drown-')), file = path.join(dir, 'events.jsonl');
+      const line = (text, ago, kind = 'death') => JSON.stringify({server_session: 'x', event: {bot: 'bot1', kind, text, t: now - ago}});
+      fs.writeFileSync(file, [
+        line('died at -170 50 -160: drowned whilst trying to escape Zombie', 600000),
+        line('died at -161 53 -176: drowned', 3600000),
+        line('died at -300 64 -100: was slain by Drowned', 500000),
+        line('died at -200 64 -100: was shot by Skeleton (hits: drowned 2)', 400000),
+        line('died at -10 60 -10: drowned', 25 * 3600000),
+        line('died at -20 60 -20: drowned', 300000, 'info'),
+        '{"broken drowned',
+      ].join('\n') + '\n');
+      assert.deepStrictEqual(G.archivedDrownings(dir, now).map(({x, y, z}) => [x, y, z]), [[-161, 53, -176], [-170, 50, -160]], 'oldest first, only real drownings of the last 24 h');
+      assert.deepStrictEqual(G.archivedDrownings(path.join(dir, 'none'), now), [], 'no archive: none');
+      fs.unlinkSync(file); fs.rmdirSync(dir);
+    }
 
     // graveCandidates: nearest first within 3 blocks; never players, items, orbs, invalid or far entities
     const ent = (id, name, x, y, z, extra = {}) => ({id, name, type: 'other', position: new Vec3(x, y, z), ...extra});
