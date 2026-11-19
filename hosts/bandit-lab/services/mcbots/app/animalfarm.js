@@ -57,7 +57,8 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
     const inside = () => { const p = bot.entity.position.floored(); return p.x >= box.x1 && p.x <= box.x2 && p.z >= box.z1 && p.z <= box.z2; };
     // Close every border gate that stands open now, read fresh (a pen unloaded at the start, a gate opened by a resume walk
     // or left open by the owner: the animals must not get out); a failed close is left, the job goes on.
-    async function shut() {
+    async function shut(again = true) {
+      let walked = false;
       for (const g of borderGates(look, {...box, y: y0})) {
         const b = look(g.x, g.y, g.z);
         if (!b || !/_fence_gate$/.test(b.name) || !isOpen(b)) continue;
@@ -65,12 +66,14 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
           if (bot.entity.position.distanceTo(new Vec3(g.x + 0.5, g.y, g.z + 0.5)) > 4) {
             if (job.cancelled) continue;
             await goNear(r, job, g.x, g.y, g.z, 3, {doing: `walking to the gate at ${at(g)} to close it`});
+            walked = true;
           }
           await bot.activateBlock(look(g.x, g.y, g.z));
         } catch (e) {
           r.emit('info', `animalfarm: could not close the gate at ${at(g)} (${String(e.message).slice(0, 60)})`);
         }
       }
+      if (walked && again) await shut(false); // that walk may have opened a gate checked before
     }
     // Every walk or chase that ends on the other side of the box edge closes the gates behind it.
     const crossing = async (fn) => { const was = inside(); try { return await fn(); } finally { if (inside() !== was) await shut(); } };
@@ -105,6 +108,7 @@ function makeAnimalFarm({goNear, guard, sleep, waitCalm, deposit, withdraw, craf
       for (;;) {
         guard(job);
         await waitCalm(r, job);
+        await shut(); // hand-in and fetch walks pass the gate outside `crossing`: never idle with it open
         for (const [k, t] of skip) if (t <= Date.now()) skip.delete(k); // the job runs for days: no stale item ids
         const active = Object.keys(KINDS).filter((k) => !KINDS[k].outputs.some((item) => enough(r, item) > 0));
         if (!active.length) {

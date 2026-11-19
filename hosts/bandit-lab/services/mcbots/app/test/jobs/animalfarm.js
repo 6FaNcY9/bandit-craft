@@ -144,7 +144,7 @@ module.exports = async () => {
     f = fake({mobs: herd('cow', 2), inv: [['wheat', 16]], blocks: (w = gates()), start: new Vec3(2.5, 65, -3.5)});
     f.bot.entities[1].position = new Vec3(2.5, 65, 3.5);
     await assert.rejects(f.run(), Cancelled);
-    assert.deepStrictEqual(f.calls.gate, ['2,0', '4,2']);
+    assert.deepStrictEqual([...f.calls.gate].sort(), ['2,0', '4,2'], 'each closed once (the order follows the walk)');
     assert.strictEqual(w.blockAt(2, 65, 0).getProperties().open, false);
     assert.strictEqual(w.blockAt(4, 65, 2).getProperties().open, false, 'open at the start: closed too, the animals must not get out');
     // a pen not loaded at the start: its gates are still closed after the crossing
@@ -197,6 +197,17 @@ module.exports = async () => {
     await assert.rejects(f.run(), Cancelled);
     assert.deepStrictEqual(tried, ['beef'], 'once, then left for 5 minutes');
     assert.match(f.job.t.doing, /bag full, the hand-in failed/);
+    // ECON-2: a hand-in walk out through the gate (the pathfinder opens it) leaves no gate open for the next idle
+    w = gates();
+    f = fake({inv: [['beef', 64]], blocks: w, deposit: async (rr, j, item) => {
+      f.calls.deposit.push(item);
+      w.cell.set('2,65,0', gate(true));
+      f.bot.entity.position = new Vec3(-2.5, 65, -2.5);
+      for (const i of f.inv) if (i.name === item) i.count = 0;
+    }});
+    await assert.rejects(f.run(), Cancelled);
+    assert.deepStrictEqual(f.calls.deposit, ['beef']);
+    assert.strictEqual(w.blockAt(2, 65, 0).getProperties().open, false, 'gate shut after the hand-in');
 
     // (g) while it runs it digs nothing and places no pillar; afterwards the runner's flags are back
     f = fake({mobs: herd('cow', 9)});
