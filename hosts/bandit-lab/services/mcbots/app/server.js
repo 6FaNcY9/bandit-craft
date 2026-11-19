@@ -933,7 +933,10 @@ server.on('upgrade', (req, socket, head) => {
     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
     return socket.destroy();
   }
-  wss.handleUpgrade(req, socket, head, (ws) => ws.send(JSON.stringify(state())));
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    ws.on('error', () => {}); // a rejected frame (bad UTF-8, unmasked) emits 'error'; unhandled it would end the hub
+    ws.send(JSON.stringify(state()));
+  });
 });
 function broadcast() {
   if (!wss.clients.size) return;

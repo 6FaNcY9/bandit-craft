@@ -231,6 +231,15 @@ const {BotRunner} = require('../bots');
     assert.strictEqual((await tileUrl('/api/tile/world/1/x9/z9.png')).status, 404, 'missing tile');
     for (const bad of ['/api/tile/evil/1/x0/z0.png', '/api/tile/world/7/x0/z0.png', '/api/tile/world/1/x0/z0.png%2F..%2F..%2Fsettings.json']) assert.strictEqual((await tileUrl(bad)).status, 404, bad);
     assert.ok(asked.filter((u) => u.includes('/tiles/')).every((u) => /^\/maps\/world\/tiles\/1\/x-?\d+\/z-?\d+\.png$/.test(u)), asked.join());
+    // a dashboard socket sending a frame the receiver rejects (bad UTF-8) must not take the hub down: ws emits 'error' on it
+    await new Promise((res, rej) => {
+      const sock = require('node:net').connect(port, '127.0.0.1', () => sock.write(`GET /ws HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nOrigin: http://127.0.0.1:${port}\r\ntailscale-user-login: a@github\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`));
+      sock.once('data', () => { sock.write(Buffer.from([0x81, 0x82, 0, 0, 0, 0, 0xff, 0xfe])); setTimeout(res, 300); });
+      sock.on('error', () => {});
+      sock.setTimeout(3000, () => rej(new Error('no ws upgrade')));
+    });
+    assert.strictEqual(child.exitCode, null, 'hub survived a bad frame on the dashboard /ws');
+    assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/state`, {headers: {'tailscale-user-login': 'a@github'}})).status, 200);
     bm.close();
     wk.close();
     const gone = await poll(async () => (await state()).find((b) => b.name === 'bot5' && !b.connected), 'bot5 offline');
