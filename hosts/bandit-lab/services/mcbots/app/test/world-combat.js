@@ -659,3 +659,9 @@ require('../crafting');
   const zp = (z) => new AABB(-4.8, 58, z - 0.3, -4.2, 59.8, z + 0.3);
   assert.ok(zwall.computeOffsetZ(zp(-3.5), -1) > -0.2 && zwall.computeOffsetZ(zp(-3.5), -1) < -0.2 + 2 * GAP);
 }
+{ // SURVIVAL-11: a death on the way of a graves round queues no grave at the deadly spot (as for a single grave job)
+  const {graveAfterDeath} = require('../graves');
+  const dead = {pos: {x: 100, y: 64, z: -51}, dim: 'overworld', chest: {x: 100, y: 64, z: -50}, areas: [], queued: [], deaths: [], now: 0};
+  assert.ok(graveAfterDeath({...dead, jobType: 'chop'}));
+  assert.strictEqual(graveAfterDeath({...dead, jobType: 'graves'}), null);
+}

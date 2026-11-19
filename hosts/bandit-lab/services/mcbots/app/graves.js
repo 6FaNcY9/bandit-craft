@@ -78,7 +78,7 @@ function graveCandidates(entities, {x, y, z}) {
 
 // Where to look for the grave after a death, or null when the bot should not go: not its own overworld
 // death position, too far from the base chest, in a protected area, a grave job already queued for it, or
-// the death happened on the way to a grave (a deadly spot would otherwise be visited again and again).
+// the death happened on the way to a grave or in a graves round (a deadly spot would otherwise be visited again and again).
 const ROAD_GRAVE_FAR = 512;
 // Death spots, per bot and in memory: bot1 died ~40 times at an ocean monument, each grave trip and resumed chop walking
 // back there (2026-11-09). A death within 32 blocks of one in the last 24 h is a repeat; far searches avoid 64-block boxes.
@@ -88,7 +88,7 @@ const deathsNear = (deaths, pos, now) => (pos ? recentDeaths(deaths, now).filter
 const repeatDeath = (deaths, pos, now) => deathsNear(deaths, pos, now) > 0;
 const deathAvoid = (deaths, now) => recentDeaths(deaths, now).map((d) => [d.x - DEATH_BOX, d.z - DEATH_BOX, d.x + DEATH_BOX, d.z + DEATH_BOX]);
 function graveAfterDeath({pos, dim, chest, areas, jobType, queued, deaths = [], now = Date.now()}) {
-  if (!pos || !chest || jobType === 'grave' || normDim(dim) !== 'overworld' || repeatDeath(deaths, pos, now)) return null;
+  if (!pos || !chest || jobType === 'grave' || jobType === 'graves' || normDim(dim) !== 'overworld' || repeatDeath(deaths, pos, now)) return null;
   const [x, y, z] = [pos.x, pos.y, pos.z].map(Math.floor);
   // bot2 walked 1139 m over land to a grave at Y 0 it could not reach, then stood above the road and the job failed (sandbox 2026-11-04).
   if (jobType === 'highway' && Math.hypot(x - chest.x, z - chest.z) > ROAD_GRAVE_FAR) return null;
