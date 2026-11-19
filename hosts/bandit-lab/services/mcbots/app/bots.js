@@ -4503,7 +4503,8 @@ const JOBS = {
             // A block that needs a better pickaxe (or a spawner) is left too, not the end of a shaft with 70 layers to go (bots-3-3).
             const tool = /^no pickaxe for |^needs a tool|refusing to dig/.test(e.message);
             if (!tool && !/^unsafe: |could not reach|Digging aborted/.test(e.message)) throw e;
-            if (tool && ++noTool > 4) throw e; // no fitting pickaxe at all: end with its reason, not a "blocked shaft" after a replacePickaxe per block (W1)
+            // shortcut: 5 blocks in one layer that need a better pickaxe end the whole shaft or part; upgrade to a per-block-type skip if bots give up shafts in ore-rich layers
+            if (/^no pickaxe for |^needs a tool/.test(e.message) && ++noTool > 4) throw e; // no fitting pickaxe at all: end with its reason, not a "blocked shaft" after a replacePickaxe per block (W1); spawners do not count
             left++;
             if (tool || /No path|Took to long/.test(e.message)) job.unreachable?.add(k); // a fight's "goal was changed" is tried again
             r.emit('info', `left a ${b.name} block at ${at(pos)}: ${e.message.slice(0, 80)}`);

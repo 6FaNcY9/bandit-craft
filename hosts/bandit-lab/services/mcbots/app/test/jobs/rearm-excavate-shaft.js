@@ -284,6 +284,14 @@ module.exports = async () => {
       assert.deepStrictEqual(order, [], 'nothing dug');
       blocks.clear();
     }
+    { // spawners are no missing pickaxe: clear leaves all of them and still digs the layer below (W1 review)
+      for (let x = 0; x <= 1; x++) for (let y = 59; y <= 60; y++) blocks.set(`${x},${y},0`, 'spawner');
+      blocks.set('0,58,0', 'spawner'); blocks.set('1,58,0', 'stone');
+      order.length = 0;
+      await assert.rejects(JOBS.excavate(r, {...job, t: {}, args: {...job.args, all: true}}), /5 blocks of the room were not dug/);
+      assert.deepStrictEqual(order, ['stone@58'], 'the stone under five spawners is dug');
+      blocks.clear();
+    }
   }
   { // shaft: 1-high excavate layers top-down, one stair step per layer spiralling along the walls
     const {JOBS, VALIDATE, stairRing} = require('../../bots');
