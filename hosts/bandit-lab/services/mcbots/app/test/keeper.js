@@ -264,7 +264,7 @@ const {WorldModel} = require('../world');
   for (const [item] of ARMOURY_STOCK) for (const [type, a] of armouryPlan(item, 2, base, arm, plenty)) assert.ok(V[type](a), `${item}: ${type}`);
   let t = 1e6;
   const w = new WorldModel({now: () => t});
-  const fake = (name) => ({name, sent: [], idle: true, online: true, day: true, snapshot() { return {online: this.online, dead: false, job: this.idle ? null : {label: 'x'}, queue: [], isDay: this.day}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }});
+  const fake = (name) => ({name, sent: [], idle: true, online: true, day: true, safe: true, snapshot() { return {online: this.online, dead: false, job: this.idle ? null : {label: 'x'}, queue: [], isDay: this.day, safeTrip: this.safe}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }});
   const bots = [fake('bot1'), fake('bot2'), fake('bot3')];
   const k = new Keeper({runners: new Map(bots.map((b) => [b.name, b])), world: w, chest: base, quotas: [['logs', 64]], now: () => t});
   k.setEnabled(true);
@@ -275,10 +275,14 @@ const {WorldModel} = require('../world');
   assert.ok(bots.every((b) => !b.sent.length), 'no armoury: nothing to do');
   k.armoury = arm;
   // by night nobody walks to the armoury: bot1 died to skeletons on a night count trip (2026-11-18 22:17)
-  for (const b of bots) b.day = false;
+  for (const b of bots) { b.day = false; b.safe = false; }
   k.tick();
   assert.ok(bots.every((b) => !b.sent.length), 'no armoury trip at night');
+  // ... nor at dawn: bot19, sent the moment day began, died twice to the night's mobs on the way (2026-11-19 02:49)
   for (const b of bots) b.day = true;
+  k.tick();
+  assert.ok(bots.every((b) => !b.sent.length), 'no armoury trip at dawn');
+  for (const b of bots) b.safe = true;
   k.tick();
   assert.deepStrictEqual(bots.filter((b) => b.sent.length).map((b) => b.sent), [[['stock', arm]]], 'counted first');
   const counter = bots.find((b) => b.sent.length);

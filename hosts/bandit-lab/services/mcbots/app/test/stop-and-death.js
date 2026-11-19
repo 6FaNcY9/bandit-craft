@@ -83,6 +83,16 @@ const {BotRunner} = require('../bots');
   assert.strictEqual(r.inShelter(), false);
   assert.strictEqual(r.snapshot().sheltered, false, 'agents may order it again');
 }
+// The keeper's trips out wait for the safe part of the day: bot19, sent at daybreak, died twice to the night's mobs (2026-11-19).
+{
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
+  r.bot = {entity: {position: {x: 0, y: 64, z: 0}}, time: {timeOfDay: 5000}, game: {}, inventory: {items: () => [], emptySlotCount: () => 36, slots: []}};
+  assert.strictEqual(r.snapshot().safeTrip, null, 'offline: unknown');
+  r.online = true;
+  assert.deepStrictEqual([0, 999, 1000, 8999, 9000, 15000].map((t) => { r.bot.time.timeOfDay = t; return r.snapshot().safeTrip; }), [false, false, true, true, false, false]);
+  r.bot.time = {};
+  assert.strictEqual(r.snapshot().safeTrip, null, 'no time yet: unknown');
+}
 // An order that goes first does not destroy the rearm or grave job it interrupts: that one runs ahead of it.
 {
   const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: null, onEvent: () => {}});
@@ -598,6 +608,27 @@ const {BotRunner} = require('../bots');
     c.supplyChest = BASE;
     c.onDeath(deadBot(-310, -20));
     assert.deepStrictEqual([c.queue[0].type, c.queue[0].args], ['rearm', {...BASE, nearest: true}], 'no armoury: the supply chest');
+  }
+  { // the mobs that killed it still there: no grave trip back into them (bot19, blown up on its grave trip at dawn, 2026-11-19 02:51)
+    const {WorldModel} = require('../world');
+    const w = new WorldModel();
+    const mob = (id, name, dx) => w.noteMob('bot9', {id, name, position: {x: -300 + dx, y: 61, z: -530}}, 'overworld');
+    const died = (name) => {
+      const q = new BotRunner(name, {host: 'x', port: 1, log: () => {}, world: w, onEvent: () => {}});
+      const said = [];
+      const emit = q.emit.bind(q);
+      q.emit = (k, t) => { if (k === 'alert') said.push(t); emit(k, t); };
+      q.supplyChest = chest;
+      q.current = {id: 1, type: 'chop', args: {count: 12}, status: 'running', t: {}};
+      q.onDeath(deadBot(-300, -530));
+      return {types: q.queue.map((j) => j.type), said};
+    };
+    mob(1, 'zombie', 3); mob(2, 'skeleton', -6); mob(3, 'enderman', 2); mob(4, 'zombie', 40);
+    assert.deepStrictEqual(died('bot6').types, ['rearm', 'grave', 'chop'], 'two it can fight (not the enderman, not one 40 blocks off): it fetches the grave');
+    mob(5, 'creeper', 9);
+    const {types, said} = died('bot7');
+    assert.deepStrictEqual(types, ['rearm', 'chop'], 'three: no grave trip, the job goes on');
+    assert.deepStrictEqual(said, ['left the grave at -300 60 -530: 3 mobs there']);
   }
   console.log('death spots ok');
 }

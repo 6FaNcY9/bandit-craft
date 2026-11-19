@@ -61,6 +61,7 @@ function cleanSnapshot(s) {
     pos: vec(s.pos),
     dimension: optStr(s.dimension, 32),
     isDay: typeof s.isDay === 'boolean' ? s.isDay : null,
+    safeTrip: typeof s.safeTrip === 'boolean' ? s.safeTrip : null, // the keeper sends remote bots out by this too
     fit: bool(s.fit),
     combat: optStr(s.combat, 32),
     sheltered: bool(s.sheltered), // in its night shelter

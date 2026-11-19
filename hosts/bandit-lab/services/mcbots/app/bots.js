@@ -949,7 +949,11 @@ class BotRunner {
     const gp = gearPoint(this);
     if (gp) this.queue.unshift({id: ++this.jobSeq, type: 'rearm', args: {...gp, nearest: true}, status: 'queued'});
     // ... and then fetch the loot from the grave AxGraves made, before the interrupted job goes on.
-    const spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue, deaths: earlier, now});
+    let spot = gravesJob.graveAfterDeath({pos: p, dim: bot.game?.dimension, chest: this.supplyChest, areas: this.protectedAreas, jobType: this.current?.type, queued: this.queue, deaths: earlier, now});
+    // Not back into the mobs that killed it while three or more are still there (a fit bot handles one or two): bot19 walked back
+    // at dawn and a creeper got it too (2026-11-19 02:51).
+    const mobs = spot ? (this.world?.hostilesNear(p.x, p.z, normDim(bot.game?.dimension), 16, p.y) || []).filter((m) => !NO_FIGHT.has(m.type)).length : 0;
+    if (mobs >= 3) { this.emit('alert', `left the grave at ${spot.x} ${spot.y} ${spot.z}: ${mobs} mobs there`); spot = null; }
     // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
     if (spot && process.env.GRAVES === 'none') this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'tidy', args: {x: spot.x, y: spot.y, z: spot.z, radius: 8}, status: 'queued'});
     else if (spot) this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'grave', args: spot, status: 'queued'});
@@ -1100,6 +1104,7 @@ class BotRunner {
       pos: this.online && b.entity ? ['x', 'y', 'z'].map((k) => Math.round(b.entity.position[k])) : null,
       dimension: this.online ? normDim(b.game?.dimension) : null,
       isDay: this.online ? b.time?.isDay ?? (Number.isFinite(b.time?.timeOfDay) && b.time.timeOfDay >= 0 && b.time.timeOfDay < 12000) : null,
+      safeTrip: this.online && Number.isFinite(b.time?.timeOfDay) ? b.time.timeOfDay >= SAFE_TRIP[0] && b.time.timeOfDay < SAFE_TRIP[1] : null, // the keeper's trips out
       fit: this.online ? !!this.combat?.fit?.() : false, // the keeper sends only a fit bot to a spawner
       combat: this.combat.mode || null,
       sheltered: this.inShelter() && !!b && isNight(b), // in its night shelter (nightShelter)
@@ -1291,6 +1296,9 @@ async function waitCalm(r, job, until = Infinity) {
 // Underground nothing changes; owner orders, projects and guards are not paused; no digging in protected areas.
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (odds.js)
+// The keeper's trips out of the base (armoury, lighting): not at daybreak, while the night's mobs are still out (bot19 died twice on
+// an armoury trip sent the moment day began, 2026-11-19), and early enough that a 3000-tick trip is back before dusk (13000).
+const SAFE_TRIP = [1000, 9000];
 const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'cropfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 // Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.

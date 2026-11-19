@@ -263,8 +263,9 @@ class Keeper {
 
   // 3. the armoury, after the supply chest's quotas, sharing their bots (MAX_BOTS), cooldowns and finish().
   tickArmoury(t, baseStock, busy, free) {
-    // By day only, as planLighting: bot1 died to skeletons on a night armoury count at -296 63 -58 (2026-11-18 22:17).
-    const dayFree = () => free((s) => s.isDay === true);
+    // In the safe part of the day only (safeTrip), as planLighting: bot1 died to skeletons on a night armoury count at -296 63 -58
+    // (2026-11-18 22:17), bot19 twice on one sent the moment day began (2026-11-19 02:49).
+    const dayFree = () => free((s) => s.safeTrip === true);
     const stock = this.armouryStock();
     this.armouryNotes.clear();
     if (!stock || t - stock.t > STOCK_MAX_AGE_MS) {
@@ -289,9 +290,9 @@ class Keeper {
   }
 
   planLighting(snaps, t, busy) {
-    const idleDay = [...snaps.values()].some((s) => this.idle(s) && s.isDay === true);
+    const idleDay = [...snaps.values()].some((s) => this.idle(s) && s.safeTrip === true);
     if (!idleDay) return;
-    const dayFree = (ok = () => true) => [...this.runners.values()].find((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && snaps.get(r.name)?.isDay === true && ok(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS);
+    const dayFree = (ok = () => true) => [...this.runners.values()].find((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && snaps.get(r.name)?.safeTrip === true && ok(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS);
     const placeList = typeof this.places === 'function' ? this.places()?.list : this.places?.list;
     const zones = (placeList || []).filter((p) => p.dim === 'overworld' && p.box && ['base', 'wheat', 'storage', 'treefarm'].includes(p.kind));
     for (const p of zones) {

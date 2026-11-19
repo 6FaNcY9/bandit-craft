@@ -182,6 +182,7 @@ const {BotRunner} = require('../bots');
   assert.deepStrictEqual(cleanSnapshot(null).queueIds, []);
   // a worker bot's night shelter reaches the hub, or the agents order it out of its hole (bot2/bot3, 2026-10-15)
   assert.deepStrictEqual([cleanSnapshot({sheltered: true}).sheltered, cleanSnapshot({sheltered: 'yes'}).sheltered], [true, false]);
+  assert.deepStrictEqual([cleanSnapshot({safeTrip: true}).safeTrip, cleanSnapshot({safeTrip: 'yes'}).safeTrip, cleanSnapshot({}).safeTrip], [true, null, null], 'the keeper sends a worker bot out by it');
   // the worker's unreachable-chest marks reach the hub (idle shifts check them through chestAway)
   assert.deepStrictEqual([cleanSnapshot({awayChests: ['3,64,0', 7]}).awayChests, cleanSnapshot({}).awayChests], [['3,64,0', ''], []]);
   assert.deepStrictEqual([cleanSnapshot({gettingFood: true}).gettingFood, cleanSnapshot({}).gettingFood], [true, false], 'a worker bot fetching food is left alone too');
