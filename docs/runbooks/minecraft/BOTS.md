@@ -443,7 +443,8 @@ job finishes, or the owner stops or replaces it, it is kept (also while it waits
 does not end it: once a minute an order whose bot is online and idle starts again, 5 min after a failure (20 min
 after `gave up ... (died 4 times)`) and right after a restart, event `the owner's <type> order goes on` (one exploded project chest had ended two orders, and the agents
 then sent bot1 out at night 806 times in 17 h: 17 deaths, 2026-10-17). The open order per bot (type and args)
-is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it.
+is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it. A body with `"remember": false` (botchef's
+one-off orders) runs the job once and leaves the standing order as it was.
 The same failure again (numbers masked) doubles the wait each time, 5, 10, 20, 40, then 60 min at most, for orders
 and projects alike; the third one in a row is an `alert` event (`its <type> order failed 3 times the same way ...`).
 A new order, a finish or a project's end starts the count over (`orderloop.failStreak`; EM_Trader's full inventory and

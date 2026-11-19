@@ -881,8 +881,8 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url.pathname === '/api/job') {
     try {
-      const {bots, type, args, replace} = await readJson(req);
-      const {saveErr, unreached, keeperOff} = submitJob({bots, type, args, replace});
+      const {bots, type, args, replace, remember} = await readJson(req);
+      const {saveErr, unreached, keeperOff} = submitJob({bots, type, args, replace, remember: remember !== false}); // only an explicit false is a one-off
       if (saveErr) return json(500, {error: `stopped, but the stopped state could not be saved (${saveErr}): saved jobs may come back after a restart`, unreached});
       return json(200, {ok: true, keeperOff, unreached});
     } catch (e) {
