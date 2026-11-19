@@ -340,3 +340,22 @@ const {WorldModel} = require('../world');
   k.tick();
   assert.deepStrictEqual(bots.map((b) => b.sent.map(([type, a]) => a.only || a.item || type)), [['chop', 'logs'], []], '8 cobblestone and 8 bread short: no trip; 24 logs short: one');
 }
+{ // SURVIVAL-7: count, tidy and quota chains wait for the day when the only idle bot is unfit; a fit one still goes at night
+  const {Keeper, IDLE_MS} = require('../keeper');
+  let t = 1e6;
+  const base = {x: -271, y: 66, z: -214};
+  const fake = (name, fit) => ({name, sent: [], idle: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'x'}, queue: [], safeTrip: false, fit, freeSlots: 30}; }, enqueue(type) { this.sent.push(type); this.idle = false; }});
+  const run = (fit, stock, free = 1) => {
+    const w = new WorldModel({now: () => t}), b = fake('bot1', fit);
+    const k = new Keeper({runners: new Map([[b.name, b]]), world: w, chest: base, quotas: [['logs', 64]], now: () => t});
+    k.setEnabled(true);
+    if (stock) w.noteStock('bot1', stock, free, base);
+    k.tick(); t += IDLE_MS; k.tick();
+    return b.sent;
+  };
+  assert.deepStrictEqual(run(false, null), [], 'no count');
+  assert.deepStrictEqual(run(false, {oak_log: 0}), [], 'no tidy, no quota');
+  assert.deepStrictEqual(run(true, null), ['stock'], 'a fit bot counts at night');
+  assert.deepStrictEqual(run(true, {oak_log: 0}), ['deposit'], 'and tidies the full chest');
+  assert.deepStrictEqual(run(true, {oak_log: 0}, 20), ['chop', 'deposit'], 'and chops');
+}

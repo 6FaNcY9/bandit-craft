@@ -200,7 +200,10 @@ class Keeper {
     const busy = new Set([...this.work.values()].map((w) => w.bot).concat(this.counting ? [this.counting.bot] : []));
     // The idle bot nearest to the chest: the first in the list sent bot20 from the castle before bot21 beside the base (2026-11-18).
     const away = (s) => (s?.pos && (!s.dimension || s.dimension.endsWith('overworld')) ? Math.hypot(s.pos[0] - this.chest.x, s.pos[2] - this.chest.z) : Infinity);
-    const free = (ok = () => true) => [...this.runners.values()].filter((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && ok(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS)
+    // Out at night only when fit: an unarmoured bot sent to count at night is how bot1 died on the armoury count (2026-11-18).
+    // A snapshot without the field (time not known yet) goes as before.
+    const trip = (s) => s?.safeTrip !== false || !!s?.fit;
+    const free = (ok = () => true) => [...this.runners.values()].filter((r) => !busy.has(r.name) && this.idle(snaps.get(r.name)) && trip(snaps.get(r.name)) && ok(snaps.get(r.name)) && t - (this.idleSince.get(r.name) ?? t) >= IDLE_MS)
       .sort((a, b) => (away(snaps.get(a.name)) - away(snaps.get(b.name))) || 0)[0];
 
     // 1. numbers missing or old: have a bot read the chest
@@ -216,7 +219,7 @@ class Keeper {
     // 1b. A full chest takes nothing in: an idle bot with room carries surplus to the hall (a deposit at the base chest takes 9
     // stacks along). 1443 cobblestone left 1 slot, and bot19's deposits failed "chest full?" (main server 2026-11-11).
     if (stock.free !== null && stock.free !== undefined && stock.free <= FULL_SLOTS && (this.tidyAt || 0) <= t && busy.size < MAX_BOTS) {
-      const r = [...this.runners.values()].find((x) => !busy.has(x.name) && this.idle(snaps.get(x.name)) && t - (this.idleSince.get(x.name) ?? t) >= IDLE_MS && (snaps.get(x.name).freeSlots ?? 0) >= TIDY_ROOM);
+      const r = [...this.runners.values()].find((x) => !busy.has(x.name) && this.idle(snaps.get(x.name)) && trip(snaps.get(x.name)) && t - (this.idleSince.get(x.name) ?? t) >= IDLE_MS && (snaps.get(x.name).freeSlots ?? 0) >= TIDY_ROOM);
       if (r) this.assign(r, [['deposit', {...this.chest}]], () => { this.tidyAt = t + COOLDOWN_MS; busy.add(r.name); }, `${r.name}: the supply chest is full (${stock.free} free slots), carrying surplus to the hall`);
     }
     // 2. the quota that is shortest relative to its want and has nobody on it (the order of the list breaks a tie).
