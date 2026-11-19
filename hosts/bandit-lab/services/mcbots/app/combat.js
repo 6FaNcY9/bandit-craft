@@ -42,7 +42,7 @@ const CREEPER_REACH = 5.5; // a creeper is struck from here; the server takes 6 
 const CREEPER_SWELL = 16; // metadata index of a creeper's fuse state: 1 while it hisses
 const DUEL_MAX_MS = 60000;
 const MELEE_KEEP = 4; // a kiting bot backs off from a zombie or spider closer than this
-const RANGED = /^(skeleton|stray|bogged|pillager|witch)$/; // shoot from afar: kiting them back gains nothing
+const RANGED = /^(skeleton|stray|bogged|parched|pillager|witch|guardian|blaze|evoker)$/; // shoot from afar: kiting them back gains nothing
 const EAT_CLEAR = 8; // eating takes 1.6 s; a zombie covers about 4 blocks in that time
 // A mode that has not resolved by then ends, and its mob is left alone for IGNORE_MS (it still gets hit
 // at arm's length): a mob behind a wall kept bot1 hunting and bot3 retreating for hours while their

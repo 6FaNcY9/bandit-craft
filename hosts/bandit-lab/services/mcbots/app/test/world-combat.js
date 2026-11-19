@@ -107,7 +107,7 @@ assert.equal(O.odds({health: 20, weapon: O.weapon('fist'), armour: O.armour([]),
   assert.equal(four.fight, false);
   assert.ok(four.loss > 10, `loss ${four.loss}`);
 }
-// An archer hurts from the start, a zombie only once it walked up; unknown and creeper threats are not counted.
+// An archer hurts from the start, a zombie only once it walked up; creeper threats are not counted.
 const shot = O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'skeleton', dist: 15}]});
 const walked = O.odds({health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([]), threats: [{name: 'zombie', dist: 15}]});
 assert.ok(shot.loss > walked.loss, `${shot.loss} ${walked.loss}`);
@@ -664,4 +664,9 @@ require('../crafting');
   const dead = {pos: {x: 100, y: 64, z: -51}, dim: 'overworld', chest: {x: 100, y: 64, z: -50}, areas: [], queued: [], deaths: [], now: 0};
   assert.ok(graveAfterDeath({...dead, jobType: 'chop'}));
   assert.strictEqual(graveAfterDeath({...dead, jobType: 'graves'}), null);
+}
+{ // SURVIVAL-9: hostiles missing from the odds table weighed nothing, so a fit bot hunted guardians at the monument
+  const bare = {health: 20, weapon: O.weapon('iron_sword'), armour: O.armour([])};
+  for (const name of ['guardian', 'parched', 'vex', 'ravager', 'evoker', 'wither_skeleton', 'blaze', 'zoglin']) assert.ok(O.odds({...bare, threats: [{name, dist: 6}]}).loss > 0, name);
+  assert.ok(O.odds({...bare, threats: [{name: 'ravager', dist: 6}]}).loss > O.odds({...bare, threats: [{name: 'zombie', dist: 6}]}).loss);
 }

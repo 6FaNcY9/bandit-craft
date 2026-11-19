@@ -9,6 +9,9 @@ const MOBS = Object.freeze({
   // and bot19 fought four (main server 2026-10-20).
   enderman: {health: 40, dmg: 7, every: 1}, piglin: {health: 16, dmg: 5, every: 1}, zombified_piglin: {health: 20, dmg: 5, every: 1},
   silverfish: {health: 8, dmg: 1, every: 1}, endermite: {health: 8, dmg: 2, every: 1}, phantom: {health: 20, dmg: 2, every: 2}, slime: {health: 16, dmg: 4, every: 1}, magma_cube: {health: 16, dmg: 4, every: 1},
+  // Normal-difficulty values from the wiki, not checked in game; each was missing and weighed nothing (SURVIVAL-9).
+  parched: {health: 20, dmg: 3, every: 2, ranged: true}, guardian: {health: 30, dmg: 6, every: 3, ranged: true}, blaze: {health: 20, dmg: 5, every: 2, ranged: true},
+  evoker: {health: 24, dmg: 6, every: 3, ranged: true}, vex: {health: 14, dmg: 9, every: 1}, ravager: {health: 100, dmg: 12, every: 2}, wither_skeleton: {health: 20, dmg: 8, every: 1},
 });
 const KEEP = 6;
 // Half the hits a mob could land: with these the verdicts matched the sandbox arena (iron sword; 3 zombies cost 13
@@ -34,7 +37,8 @@ function taken(dmg, {points, toughness}) { return dmg * (1 - Math.min(20, Math.m
 // dies, a share of its possible hits: the bot strikes from 5 blocks and its knockback keeps a zombie off (sandbox arena
 // 2026-10-18, MELEE_HITS and RANGED_HITS fitted there).
 function odds({health, weapon: w, armour: a, threats}) {
-  const ordered = threats.map((t) => ({...t, mob: MOBS[t.name]})).filter((t) => t.mob).sort((x, y) => x.dist - y.dist);
+  // a hostile not in MOBS weighs as a zombie, not as nothing; a creeper is backed off from, not fought
+  const ordered = threats.filter((t) => t.name !== 'creeper').map((t) => ({...t, mob: MOBS[t.name] ?? MOBS.zombie})).sort((x, y) => x.dist - y.dist);
   if (!ordered.length) return {secs: 0, loss: 0, fight: true};
   const dps = w.dmg * w.speed;
   let time = 0, loss = 0;
