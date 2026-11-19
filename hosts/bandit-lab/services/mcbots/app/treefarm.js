@@ -241,6 +241,18 @@ function makeTreeFarm({goNear, guard, sleep, digAt, waitCalm, deposit, withdraw,
       if (bot.inventory.emptySlotCount() < 4) {
         job.progress = `depositing (${cut} logs so far)`;
         await deposit(r, job);
+        // each tree drops 2-4 saplings and replanting uses 1: keep a stack (the farm's kind first), toss the rest (DROPPABLE),
+        // the plain deposit below would fill the farm chest with them and every later log hand-in fails
+        if (bot.inventory.emptySlotCount() < 4) {
+          let keep = 64;
+          const saps = bot.inventory.items().filter((i) => /_sapling$/.test(i.name)).sort((a, b) => (b.name === box.sapling) - (a.name === box.sapling));
+          for (const i of saps) {
+            const n = i.count - Math.min(i.count, keep);
+            keep -= i.count - n;
+            if (n) await bot.toss(i.type, null, n);
+            guard(job);
+          }
+        }
         // logs only can leave the bot full (sticks, tools, seeds): one plain deposit before giving up
         if (bot.inventory.emptySlotCount() < 4) await deposit(r, job, null);
         if (bot.inventory.emptySlotCount() < 4) throw new Error('inventory still full after depositing (chest full?)');

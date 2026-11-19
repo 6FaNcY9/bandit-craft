@@ -78,6 +78,7 @@ module.exports = async () => {
         equip: async (item) => { bot.heldItem = item; },
         placeBlock: async (ref) => { const held = bot.heldItem; held.count--; world.put(ref.position.x, ref.position.y + 1, ref.position.z, held.name); events.push(`plant ${held.name} ${ref.position.x},${ref.position.z}`); },
         activateBlock: async () => { events.push('bonemeal'); },
+        toss: async (type, meta, n) => { for (const i of inv) if (i.type === type && n > 0) { const k = Math.min(i.count, n); i.count -= k; n -= k; } },
       };
       const job = {type: 'treefarm', args, t: {}, cancelled: false};
       let sleeps = 0;
@@ -229,5 +230,13 @@ module.exports = async () => {
     f.r.bot.inventory.emptySlotCount = () => 3;
     await assert.rejects(f.run(), /inventory still full after depositing/);
     assert.deepStrictEqual(onlys, ['logs', null]);
+    // ECON-4: a bag full of saplings: 64 kept, the rest tossed, never filed into the farm chest by the plain deposit
+    const saps = (i) => i.filter((s) => /_sapling$/.test(s.name)).reduce((a, s) => a + s.count, 0);
+    const dep = [];
+    f = fake({world: flat(), inv: Array.from({length: 34}, () => ({name: 'oak_sapling', count: 64, type: 1})), deposit: async (r2, j, only = 'logs') => { dep.push(`${only} ${saps(f.inv)}`); }});
+    f.r.bot.inventory.emptySlotCount = () => 36 - f.inv.filter((i) => i.count > 0).length;
+    await assert.rejects(f.run(), Cancelled);
+    assert.ok(!dep.some((d) => /^null/.test(d) && Number(d.split(' ')[1]) > 64), `plain deposits: ${dep}`);
+    assert.ok(saps(f.inv) <= 64, `saplings left: ${saps(f.inv)}`);
   }
 };
