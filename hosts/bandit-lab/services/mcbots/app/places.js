@@ -52,6 +52,9 @@ const zoneNamed = (name) => active?.list.find((p) => p.box && p.name === name)?.
 const protectedBoxes = (list) => list.filter((p) => p.kind === 'protected' && p.box && p.dim === 'overworld').map(({box: b}) => [b.x1, b.z1, b.x2, b.z2, b.y1, b.y2]);
 // The active list's rock zones, same shape (on a worker the hub's zones: hubclient.js).
 const rockBoxes = () => (active?.list || []).filter((p) => p.kind === 'rock' && p.box && p.dim === 'overworld').map(({box: b}) => [b.x1, b.z1, b.x2, b.z2, b.y1, b.y2]);
+// Natural rock of a rock zone: no walk, night hole or crafting niche breaks it; soil, grass and leaves stay free.
+const ROCK_NAMES = /^(stone|deepslate|andesite|diorite|granite|tuff|calcite|dripstone_block|smooth_basalt|[a-z_]*_ore)$/;
+const inRock = (name, x, y, z) => ROCK_NAMES.test(name || '') && inZone('rock', x, y, z);
 
 class Places {
   constructor(dir) {
@@ -111,4 +114,4 @@ class Places {
   }
 }
 
-module.exports = {Places, KINDS, clean, use, inZone, zoneBox, zoneNamed, protectedBoxes, rockBoxes};
+module.exports = {Places, KINDS, clean, use, inZone, zoneBox, zoneNamed, protectedBoxes, rockBoxes, inRock};

@@ -27,8 +27,9 @@ module.exports = async () => {
   assert.match(await mineIn([new Vec3(6, 60, 5)]), /^no free stone within 64 blocks .*seen 1, 0 outside base and protected areas/, 'no stone from the castle rock');
   assert.match(await mineIn([new Vec3(6, 75, 5)]), /seen 1, 1 outside base and protected areas, 1 within leash 64, 1 blocked/, 'above the zone it is free (the zone keeps its height)');
 
-  // Walks dig no natural rock in the zone either (bot1's walk to the spruce wood dug down to Y -4 under the castle's
-  // west edge, 2026-11-19); soil, grass and leaves stay free, so a walk over the hill still finds its way.
+  // Walks dig no natural rock in the zone either, so none tunnels through the castle rock; soil, grass and leaves stay
+  // free, so a walk over the hill still finds its way. (bot1's dig-down to Y -4 lay below the zone and beside it: the
+  // walk legs' height limit covers that.)
   const {safeMovements} = require('../../bots');
   const walker = Object.assign(new (require('node:events'))(), {registry, entity: {position: new Vec3(0, 64, 0)}, pathfinder: {}, blockAt: () => null});
   const cost = (r, name, x, y, z) => safeMovements(walker, [], r).exclusionAreasBreak.reduce((a, f) => a + f({type: registry.blocksByName[name].id, name, position: new Vec3(x, y, z), boundingBox: 'block'}), 0);
@@ -39,4 +40,33 @@ module.exports = async () => {
     assert.strictEqual(cost(r, 'stone', 5, 75, 5), 0, `${who}: stone above the zone is still dug`);
     assert.strictEqual(cost(r, 'stone', 20, 60, 5), 0, `${who}: stone beside the zone is still dug`);
   }
+
+  // Nor a night hole (three down) or a crafting niche beside a walled-in bot in its rock; in soil both still go.
+  const {nightShelter} = require('../../bots');
+  const hole = (ground) => {
+    const dug = new Set();
+    const solid = (p) => p.y <= 60 && !(p.x === 5 && p.z === 5 && dug.has(p.y));
+    const bot = {time: {timeOfDay: 14000}, entity: {position: new Vec3(5.5, 61, 5.5)}, inventory: {items: () => [{name: 'dirt'}]},
+      blockAt: (p) => (solid(p) ? {name: ground, boundingBox: 'block', position: p, skyLight: 0, getProperties: () => ({})} : {name: 'air', boundingBox: 'empty', position: p, skyLight: 15, getProperties: () => ({})}),
+      dig: async (b) => { dug.add(b.position.y); bot.entity.position = new Vec3(5.5, b.position.y, 5.5); },
+      equip: async () => {}, placeBlock: async () => { bot.time.timeOfDay = 1000; }};
+    return nightShelter({bot, protectedAreas: [], emit() {}}, {type: 'chop', t: {}, cancelled: false}).then(() => dug.size);
+  };
+  assert.strictEqual(await hole('stone'), 0, 'no night hole in the castle rock');
+  assert.ok(await hole('dirt') > 0, 'a night hole in its soil');
+  const {placeNear} = require('../../crafting');
+  const niche = (wall) => {
+    const dug = new Set(), placed = new Set(), key = (p) => `${p.x},${p.y},${p.z}`;
+    const bot = {entity: {position: new Vec3(5.5, 61, 5.5)}, inventory: {items: () => [{name: 'crafting_table', count: 1}]},
+      blockAt: (p) => {
+        if (placed.has(key(p))) return {name: 'crafting_table', boundingBox: 'block', position: p};
+        const solid = !(p.x === 5 && p.z === 5 && p.y >= 61) && !dug.has(key(p)) && p.y <= 62;
+        return solid ? {name: p.y <= 60 ? 'stone' : wall, boundingBox: 'block', position: p} : {name: 'air', boundingBox: 'empty', position: p};
+      },
+      dig: async (b) => { dug.add(key(b.position)); }, equip: async () => {},
+      placeBlock: async (ref, face) => { placed.add(key(ref.position.plus(face))); }};
+    return placeNear(bot, 'crafting_table', []).then((b) => `placed at ${b.position.y}`, (e) => e.message);
+  };
+  assert.strictEqual(await niche('stone'), 'no free spot next to the bot to place crafting_table', 'no niche in the castle rock');
+  assert.strictEqual(await niche('dirt'), 'placed at 61', 'a niche in its soil');
 };

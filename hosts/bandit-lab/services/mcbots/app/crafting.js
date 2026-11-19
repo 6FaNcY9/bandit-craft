@@ -6,6 +6,7 @@
 // (goNear/guard/sleep) so walking keeps the movement and protection rules.
 const {Vec3} = require('vec3');
 const {insideAreas} = require('./world');
+const {inRock} = require('./places');
 
 const MAX_DEPTH = 4;
 const FUELS = ['coal', 'charcoal', 'coal_block', 'oak_planks', 'spruce_planks', 'birch_planks', 'jungle_planks',
@@ -110,11 +111,11 @@ async function placeNear(bot, itemName, areas = [], check = () => {}) {
   }
   if (refused) throw refused;
   // Walled in (back up its own stair shaft beside the project chest, sandbox 2026-10-13): a niche dug
-  // beside its feet, which keeps the stairs free.
+  // beside its feet, which keeps the stairs free. Not into a rock zone's rock (the castle rock, owner 2026-11-19).
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const ground = bot.blockAt(me.offset(dx, -1, dz));
     const spot = bot.blockAt(me.offset(dx, 0, dz));
-    if (ground?.boundingBox === 'block' && ROCK.test(spot?.name || '') && allowed(spot)) {
+    if (ground?.boundingBox === 'block' && ROCK.test(spot?.name || '') && allowed(spot) && !inRock(spot.name, spot.position.x, spot.position.y, spot.position.z)) {
       check();
       await bot.tool?.equipForBlock(spot, {}).catch(() => {});
       await bot.dig(spot, true);

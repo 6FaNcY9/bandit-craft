@@ -15,7 +15,7 @@ const {BotTrace, SAMPLE_MS, round} = require('./debug');
 const {HourCounter} = require('./counters');
 const farsearch = require('./farsearch');
 const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
-const {zoneNamed, inZone, rockBoxes} = require('./places');
+const {zoneNamed, inZone, rockBoxes, inRock} = require('./places');
 const buildJob = require('./build');
 const huntJob = require('./hunt');
 const gravesJob = require('./graves');
@@ -76,7 +76,6 @@ const {NATURAL, DIRS, BORDER_K, kindOf} = require('./road');
 const TIDY_DIG = new RegExp(`${NATURAL.source}|^[a-z_]*leaves$`);
 // Built blocks: a dig of one is reported (guardDigs), so the step that dug a finished wall shows in the events.
 const BUILT = /^polished_|(bricks|_planks|_stairs|_slab|_bars|_tiles|_wall|_fence|_pane|glass|lantern|campfire|beacon)$/;
-const ROCK_NAMES = /^(stone|deepslate|andesite|diorite|granite|tuff|calcite|dripstone_block|smooth_basalt|[a-z_]*_ore)$/; // natural rock (walk veto in rock zones)
 const roadJob = require('./roadjob');
 const {makeRide} = require('./cartride');
 const KEEP_RE = /^(stick|[a-z_]+_planks|coal|charcoal|torch|crafting_table|furnace)$/;
@@ -1239,9 +1238,10 @@ function safeMovements(bot, areas, runner = null) {
     if (runner) runner.keptBuilt = blk;
     return 100;
   };
-  // Nor natural rock in a rock zone (the castle rock, owner 2026-11-19), for every walk: bot1's walk to the spruce wood
-  // dug down to Y -4 under the castle's west edge. Soil, grass and leaves stay free; a build clears its cells with digAt.
-  const rock = (blk) => (ROCK_NAMES.test(blk.name) && inZone('rock', blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
+  // Nor natural rock in a rock zone (the castle rock, owner 2026-11-19), for every walk, so no walk tunnels through it.
+  // Soil, grass and leaves stay free; a build clears its own cells with digAt. Not bot1's dig-down to Y -4 (below the
+  // zone floor y 48, beside it): that is the walk legs' height limit.
+  const rock = (blk) => (inRock(blk.name, blk.position.x, blk.position.y, blk.position.z) ? 100 : 0);
   mv.exclusionAreasBreak = [veto, held, built, rock, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
   const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
@@ -1412,7 +1412,8 @@ async function nightShelter(r, job) {
     // Nothing for a lid: dirt or grass on top gives one when dug (after a death the inventory is empty, and bot1
     // died three times in one night without a shelter, main server 2026-10-15).
     if (!bot.inventory.items().some((i) => PILLAR_BLOCKS.includes(i.name)) && !/^(dirt|grass_block|podzol)$/.test(at(-1)?.name || '')) return;
-    if (![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0))) || at(-4)?.boundingBox !== 'block') return;
+    // No hole in a rock zone's rock (the castle rock, owner 2026-11-19): soil there still takes one.
+    if (![-1, -2, -3].every((dy) => SHELTER_GROUND.test(at(dy)?.name || '') && walled(dy) && !unsafeDig(bot, feet.offset(0, dy, 0)) && !inRock(at(dy)?.name, feet.x, feet.y + dy, feet.z)) || at(-4)?.boundingBox !== 'block') return;
     // More than 0.2 off the centre the 0.6-wide bot rests on the wall and does not fall (pathfinder reaches a node within 0.35).
     // So it steps to the centre first, as unwedge does, only when its feet and head cells are free (the move stays inside).
     if (Math.abs(bot.entity.position.x - feet.x - 0.5) > 0.2 || Math.abs(bot.entity.position.z - feet.z - 0.5) > 0.2) {
