@@ -342,3 +342,81 @@ const assert = require('node:assert');
   const own = new G.GoalY(40);
   assert.strictEqual(await first(-268, 40, -213, {goal: own}), own, 'a dig-down goal is untouched');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+(async () => { // goNear "sky lock" (K14): bot20 on `goto -374 74 75` dug a tunnel through a hill at y 65, a stair down to 53 and walked into a cave at
+  // y 48 under a surface of 109 (main server 2026-11-19). A transit leg ends under open sky; a walk that once stood under open sky digs only leaves.
+  const {goNear} = require('../bots');
+  const {Vec3} = require('vec3');
+  // Stone up to y 64 everywhere; `over(x, y, z)` replaces a block (null: column not loaded).
+  const walk = async ({over = () => undefined, x = 300, opts, fail = () => null, start = new Vec3(0, 66, 0)} = {}) => {
+    const goals = [], digs = [], pos = start.clone();
+    const r = {emit() {}, protectedAreas: [], world: {hostilesNear: () => []}, combat: {fit: () => false}, digOnly: /^dirt$/, digBox: {box: 1}};
+    const pf = {searchRadius: 600, stop() {}, setGoal() {}, goto: async (g) => {
+      goals.push(g);
+      digs.push([r.digOnly, r.digBox]);
+      const err = fail(g);
+      if (err) throw err;
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+    }};
+    r.bot = {entity: {position: pos}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []}, pathfinder: pf,
+      blockAt: (p) => {
+        const o = over(p.x, p.y, p.z);
+        if (o !== undefined) return o;
+        return p.y <= 64 ? {name: 'stone', boundingBox: 'block'} : {name: 'air', boundingBox: 'empty'};
+      }};
+    const out = await goNear(r, {type: 'goto', t: {}, cancelled: false}, x, 66, 0, 2, opts).then(() => 'ok', (e) => e.message);
+    return {goals, digs, out, r};
+  };
+  const roof = (name, gap = () => false) => (x, y) => (y === 70 && Math.abs(x) > 2 && !gap(x) ? {name, boundingBox: 'block'} : undefined);
+  const node = (g, y) => ({x: Math.floor(g.x), y, z: Math.floor(g.z)});
+  const xzGoals = (goals) => goals.filter((g) => g.constructor.name === 'GoalNearXZ');
+
+  // 1. a roofed cell at the leg point is no end, the cell on top of the roof is
+  let {goals, digs, r} = await walk({over: roof('stone')});
+  let g = goals[0];
+  assert.strictEqual(g.isEnd(node(g, 66)), false, 'a leg does not end under rock');
+  assert.strictEqual(g.isEnd(node(g, 71)), true, 'a leg ends on top of the rock');
+  assert.strictEqual(g.heuristic(node(g, 66)) - g.heuristic(node(g, 71)), 10, 'a covered node ranks 2 worse per level under the surface');
+  // 4. started open: only leaves are dug, on every later transit leg too (sticky), and the old limits are back after the legs
+  assert.ok(digs.length >= 3);
+  for (const [only, box] of digs.slice(0, -1)) assert.deepStrictEqual([String(only), box], ['/_leaves$/', null], 'a transit leg after open sky digs only leaves');
+  assert.deepStrictEqual([String(digs.at(-1)[0]), digs.at(-1)[1]], ['/^dirt$/', {box: 1}], 'the last leg digs as before');
+  assert.deepStrictEqual([String(r.digOnly), r.digBox], ['/^dirt$/', {box: 1}], 'the old dig limits are back');
+  // 2. leaves and logs overhead are open sky, water over a lake bed too
+  for (const name of ['oak_leaves', 'spruce_log']) {
+    g = (await walk({over: roof(name)})).goals[0];
+    assert.strictEqual(g.isEnd(node(g, 66)), true, `${name} overhead is open sky`);
+  }
+  g = (await walk({over: (x, y) => (Math.abs(x) > 2 && y >= 60 && y <= 64 ? {name: 'water', boundingBox: 'empty'} : undefined)})).goals[0];
+  assert.strictEqual(g.isEnd(node(g, 66)), true, 'the lake bed is the surface');
+  // 3. an unloaded column: no end, no penalty, no throw
+  g = (await walk({over: (x) => (Math.abs(x) > 2 ? null : undefined)})).goals[0];
+  assert.strictEqual(g.isEnd(node(g, 66)), false, 'an unloaded column is not open');
+  assert.strictEqual(g.isEnd(node(g, 200)), false, 'an unloaded column is not open');
+  assert.strictEqual(g.heuristic(node(g, 66)), g.heuristic(node(g, 200)), 'an unloaded column adds nothing to the heuristic');
+  // 5. started under a roof: digs as today, but still ends open
+  ({goals, digs} = await walk({over: (x, y) => (y === 70 ? {name: 'stone', boundingBox: 'block'} : undefined)}));
+  assert.ok(digs.every(([only, box]) => String(only) === '/^dirt$/' && box?.box === 1), 'a walk never under open sky digs as today');
+  assert.strictEqual(goals[0].isEnd(node(goals[0], 66)), false, 'its legs still end open');
+  // 4b. a leg that throws: the old limits are back too
+  ({r} = await walk({over: roof('stone'), fail: (gl) => (gl.constructor.name === 'GoalNearXZ' ? new Error('boom') : null)}));
+  assert.deepStrictEqual([String(r.digOnly), r.digBox], ['/^dirt$/', {box: 1}], 'the old dig limits are back after a throw');
+  // 6. "No path" on a transit leg: +60 and -60 degrees round the bot, then the first error unchanged
+  const out6 = await walk({over: roof('stone'), fail: (gl) => (gl.constructor.name === 'GoalNearXZ' ? new Error('No path to the goal!') : null)});
+  const legs = xzGoals(out6.goals);
+  assert.strictEqual(legs.length, 3, 'two sidesteps, no more');
+  assert.ok(legs[1].z > 20 && legs[2].z < -20, 'the sidesteps turn either way');
+  assert.strictEqual(out6.out, 'could not reach 48 66 0: No path to the goal!', 'the first error comes out unchanged');
+  assert.ok(out6.digs.every(([only]) => String(only) === '/_leaves$/'), 'the sidesteps are locked too');
+  // 6b. a walk of 64 blocks or less builds no sky goal
+  g = (await walk({x: 60, over: roof('stone'), opts: {xz: true}})).goals[0];
+  assert.strictEqual(g.isEnd({x: 60, y: 66, z: 0}), true, 'a short walk may end under a roof');
+  // 7. a locked leg hops to the nearest node only when it lies under open sky
+  const hop = async (gap) => {
+    let n = 0;
+    const res = await walk({over: roof('stone', gap), fail: (gl) => (gl.constructor.name === 'GoalNearXZ' && ++n === 1 ? Object.assign(new Error('No path to the goal!'), {best: {x: 20, y: 66, z: 0}}) : null)});
+    return res.goals.filter((gl) => gl.constructor.name === 'GoalBlock').length;
+  };
+  assert.strictEqual(await hop(() => false), 0, 'no hop into a covered cell');
+  assert.strictEqual(await hop((x) => x >= 18 && x <= 22), 1, 'a hop under open sky as today');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
