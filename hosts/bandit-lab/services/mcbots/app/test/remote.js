@@ -100,8 +100,9 @@ const {handle} = require('../remote');
     const {spawn} = require('node:child_process');
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
     const port = await new Promise((res) => { const s = require('node:net').createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-hub-'));
     const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'remote-hub-')), DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', REMOTE_TOKEN: token, MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
+      env: {PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || '', BOT_NAMES: 'bot1,bot2', STATE_DIR: stateDir, DASHBOARD_PORT: String(port), DASHBOARD_HOST: '127.0.0.1', ALLOWED_TS_LOGINS: 'a@github', REMOTE_TOKEN: token, MC_HOST: '127.0.0.1', MC_PORT: '1', BOT_PASSWORD_SEED: 'test'},
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     try {
@@ -122,6 +123,15 @@ const {handle} = require('../remote');
       assert.equal((await call('GET', '/api/remote/fleet', {'tailscale-user-login': 'a@github'}))[0], 403, 'the dashboard login is not the token');
       for (const p of ['/api/state', '/api/debug', '/api/remote/../state']) assert.equal((await call('GET', p, T))[0], 403, `the token does not open ${p}`);
       assert.equal((await call('POST', '/api/job', {...T, 'content-type': 'application/json'}, {bots: 'all', type: 'stop'}))[0], 403, 'nor the job route');
+      // HUB-1: a project's Pause/Beenden also ends the owner order, or the minute sweep starts it again; a non-project order stays
+      const L = {'tailscale-user-login': 'a@github', 'content-type': 'application/json'};
+      const orders = () => JSON.parse(fs.readFileSync(path.join(stateDir, 'owner-orders.json'), 'utf8'));
+      assert.equal((await call('POST', '/api/job', L, {bots: ['bot1'], type: 'shaft', args: {x1: 0, z1: 0, x2: 2, z2: 2}}))[0], 200);
+      assert.equal((await call('POST', '/api/job', L, {bots: ['bot2'], type: 'chop', args: {count: 12}}))[0], 200);
+      assert.deepEqual(Object.keys(orders()), ['bot1', 'bot2']);
+      assert.deepEqual(await call('POST', '/api/project', L, {bot: 'bot1', action: 'pause'}), [200, {ok: true}]);
+      assert.deepEqual(await call('POST', '/api/project', L, {bot: 'bot2', action: 'stop'}), [200, {ok: true}]);
+      assert.deepEqual(Object.keys(orders()), ['bot2'], 'the paused shaft is no standing order any more');
     } finally {
       child.kill('SIGKILL');
     }

@@ -865,6 +865,7 @@ const server = http.createServer(async (req, res) => {
           s.queue.forEach((label, i) => PROJECTS.has(label.split(' ')[0]) && r.enqueue('remove', {id: s.queueIds[i]}));
           if (toResume[bot]) toResume[bot] = toResume[bot].filter((j) => !PROJECTS.has(j.type));
         }
+        if (PROJECTS.has(ownerOrders.get(bot)?.type)) { ownerOrders.delete(bot); saveOrders(); } // else the minute sweep starts it again; a non-project order stays
         if (action === 'stop') projects.forget(bot);
         else projects.pause(bot);
         const saveErr = saveJobs(true);

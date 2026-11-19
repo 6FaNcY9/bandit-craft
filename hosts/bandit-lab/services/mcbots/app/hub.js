@@ -229,7 +229,7 @@ class RemoteRunner {
 
   enqueue(type, args = {}, {replace = false, first = false, noFar = false} = {}) {
     if (!this.conn) throw new Error(`${this.name} is offline (its worker is not connected)`);
-    if (type === 'stop' || (replace === true && type !== 'setchest')) this.kept = []; // the next status frame is up to a second away
+    if (type === 'stop' || (replace === true && type !== 'setchest')) { this.kept = []; this.resume = null; } // the next status frame is up to a second away; a pending worker-restart resume must not undo it
     let clean = {};
     if (type === 'remove') clean = {id: int(Number(args?.id))};
     else if (type !== 'stop') {

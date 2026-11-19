@@ -328,6 +328,18 @@ const assert = require('node:assert');
       await until(() => r20.kept.length === 0, 'window over: adopt the worker list');
       assert.strictEqual(jobs(c).length, 0);
       hub.now = realNow;
+      // HUB-6: a Stop while the bot logs in after a worker restart cancels the pending resume too
+      status(c, {online: true, job: {type: 'mine', label: 'mine stone 5'}, kept: keep});
+      await until(() => r20.kept.length === 1 && r20.snap.job, 'job running again');
+      c.ws.close();
+      await until(() => !r20.snapshot().connected, 'worker gone 2');
+      c = await hello();
+      status(c, {online: false, kept: []});
+      await sleep(150);
+      r20.enqueue('stop');
+      status(c, {online: true, kept: []});
+      await sleep(150);
+      assert.deepStrictEqual(jobs(c).map((m) => m.type), ['stop'], 'the stopped jobs do not come back at login');
       c.ws.close();
       await until(() => !r20.snapshot().connected, 'bot20 offline');
     }
