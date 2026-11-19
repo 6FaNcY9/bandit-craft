@@ -124,6 +124,7 @@ const assert = require('node:assert');
     assert.match(String(outcome), /no way there within 90 s/);
     // The deadline firing during a fight leaves combat's goal alone (retreat, air): halt's setGoal(null) killed it (audit bots-2-4).
     outcome = null; r.noPath = null;
+    bot.entity.position = new Vec3(0, 64, 0); // back near the target: from x 80 the walk is a transit leg, which sidesteps after its deadline (K14)
     let cleared = 0;
     const setGoal = bot.pathfinder.setGoal;
     bot.pathfinder.setGoal = (g) => { if (g === null) cleared++; setGoal(g); };
