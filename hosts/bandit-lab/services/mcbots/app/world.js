@@ -57,8 +57,9 @@ function stairRing(x1, z1, x2, z2) {
 }
 
 const EXPERIENCE_MAX = 2000;
-const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-?\d+,-?\d+:[a-z_]{1,48}|reach:[a-z_]{1,24}:-?\d+,-?\d+,-?\d+|dig:[a-z_]{1,48}:-?\d+,-?\d+,-?\d+)$/;
+const EXPERIENCE_KEY = /^(?:(?:craft|smelt|mine|kill):[a-z_]{1,48}|chest:-?\d+,-?\d+,-?\d+:[a-z_]{1,48}|reach:[a-z_]{1,24}:-?\d+,-?\d+,-?\d+|dig:[a-z_]{1,48}:-?\d+,-?\d+,-?\d+|drown:-?\d+,-?\d+,-?\d+)$/;
 const DIG_KEY = /^dig:([a-z_]+):(-?\d+),(-?\d+),(-?\d+)$/;
+const DROWN_KEY = /^drown:(-?\d+),(-?\d+),(-?\d+)$/;
 // A block no walk reaches waits longer each time, 5 min doubling up to 2 h: a coal ore in a cave at -208 44 -169 cost
 // three bots 90 s every 5 min all night (main server 2026-10-20). The wait is shared (experience key reach:), kept 4 h.
 const backoff = (n) => Math.min(7200000, 300000 * 2 ** (n - 1));
@@ -150,6 +151,16 @@ class WorldModel {
     for (const [k, r] of this.experience) {
       const m = DIG_KEY.exec(k);
       if (m && m[1] === block && r.ok > 0 && !r.streak) out.push({x: Number(m[2]), y: Number(m[3]), z: Number(m[4])});
+    }
+    return out;
+  }
+
+  // Where a bot drowned (drown:x,y,z, learned by bots.js onDeath), with when: bots.js awayFromDrownings keeps 24 h of them.
+  drownSpots() {
+    const out = [];
+    for (const [k, r] of this.experience) {
+      const m = DROWN_KEY.exec(k);
+      if (m) out.push({x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), t: r.t});
     }
     return out;
   }

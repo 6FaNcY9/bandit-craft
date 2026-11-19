@@ -149,6 +149,9 @@ module.exports = async () => {
       ev('bot1', 'death', 'died at -300 64 -100: shot', 10000)], 'bot1', {now, chest: {x: -271, y: 66, z: -214}}), [{x: -300, y: 64, z: -100}]);
     assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at 5 64 5: drowned', 9000), ev('bot1', 'death', 'died at 5 64 5: drowned', 1000)],
       'bot1', {now, chest: {x: 0, y: 64, z: 0}}), [], 'the same spot twice counts as two deaths');
+    // nor where a bot drowned lately (the hub passes world.drownSpots): the grave lies in the water that drowned it
+    assert.deepStrictEqual(G.openGraves([ev('bot1', 'death', 'died at -161 53 -176: drowned', 500000), ev('bot1', 'death', 'died at -300 64 -100: shot', 10000)],
+      'bot1', {now, chest: {x: -271, y: 66, z: -214}, drowned: [{x: -162, y: 53, z: -176, t: now - 500000}]}), [{x: -300, y: 64, z: -100}]);
 
     // graveCandidates: nearest first within 3 blocks; never players, items, orbs, invalid or far entities
     const ent = (id, name, x, y, z, extra = {}) => ({id, name, type: 'other', position: new Vec3(x, y, z), ...extra});

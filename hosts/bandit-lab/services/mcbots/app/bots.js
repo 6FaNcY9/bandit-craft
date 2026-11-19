@@ -934,6 +934,7 @@ class BotRunner {
     const pulls = this.trace.recentCorrections();
     const fall = `${p && top - p.y > 3 ? `, highest y ${Math.floor(top)} in 10 s` : ''}${pulls ? `, ${pulls} pullbacks` : ''}`;
     this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${fall}${hitsNote(this.hits, doing)}`);
+    if (p && /drown/.test(why)) noteDrowning(this, p);
     this.hits = [];
     const now = Date.now();
     const earlier = gravesJob.recentDeaths(this.deathSpots, now);
@@ -954,6 +955,7 @@ class BotRunner {
     // at dawn and a creeper got it too (2026-11-19 02:51).
     const mobs = spot ? (this.world?.hostilesNear(p.x, p.z, normDim(bot.game?.dimension), 16, p.y) || []).filter((m) => !NO_FIGHT.has(m.type)).length : 0;
     if (mobs >= 3) { this.emit('alert', `left the grave at ${spot.x} ${spot.y} ${spot.z}: ${mobs} mobs there`); spot = null; }
+    if (spot && !awayFromDrownings(this.world, now)(spot)) { this.emit('alert', `left the grave at ${spot.x} ${spot.y} ${spot.z}: a bot drowned there`); spot = null; }
     // GRAVES=none (the sandbox has no AxGraves): the loot lies on the ground there, so pick it up instead.
     if (spot && process.env.GRAVES === 'none') this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'tidy', args: {x: spot.x, y: spot.y, z: spot.z, radius: 8}, status: 'queued'});
     else if (spot) this.queue.splice(1, 0, {id: ++this.jobSeq, type: 'grave', args: spot, status: 'queued'});
@@ -1030,7 +1032,7 @@ class BotRunner {
       if (job.resume) {
         const at = job.resume;
         job.resume = null;
-        if (walksBack(job, at)) {
+        if (walksBack(job, at) && awayFromDrownings(this.world)(at)) { // not back into the water a bot drowned in
           try {
             await goNear(this, job, at.x, at.y, at.z, 6, {doing: 'returning to the job area'});
           } catch (e) {
@@ -2937,6 +2939,13 @@ function dropDigSpot(r, job) {
   try { r.world?.learn?.(job.t.digSpot, {ok: false}); } catch {}
   job.t.digSpot = null;
 }
+// A drowning, shared with every bot like a dug spot: for 24 h no bot takes rock or ore, walks back or fetches a grave within
+// 32 blocks of it (graves.js deathsNear). bot1 drowned twice in a flooded tunnel under a lake east of the base, and the
+// keeper's next coal and iron jobs sent bot1 and bot19 back there, where the nearest ore was (2026-11-19).
+function noteDrowning(r, pos) {
+  try { r.world?.learn?.(`drown:${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}`, {ok: false}); } catch {} // no hub: nothing shared
+}
+const awayFromDrownings = (world, now = Date.now()) => { const spots = world?.drownSpots?.() || []; return (p) => !gravesJob.deathsNear(spots, p, now); };
 const EXPLORE_STEP = 32;
 // T04 (2026-10-20): one search toward the TOPK nearest free blocks instead of a walk to one that may be sealed in
 // (535 "could not reach" a day); only for a first block farther than TOPK_NEAR, so close work stays a single short walk.
@@ -3024,7 +3033,8 @@ async function collect(r, job, matching, count, what) {
     // failed with "no free dirt" (bot1 and bot2, 2026-10-19). Digging a target is direct (not pathfinder), hence here.
     const seen = bot.findBlocks({matching: ids, maxDistance: range, count: 1024});
     const canopy = new Map(); // one look per tree top
-    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood ? treeLog(bot, p, canopy) : !underBase(r.supplyChest, p)))
+    const dry = awayFromDrownings(r.world);
+    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood ? treeLog(bot, p, canopy) : !underBase(r.supplyChest, p) && dry(p)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore or deep rock, nothing inside the band near enough, and the bot is not in the band: go there first.
     const start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : null;
@@ -3114,7 +3124,7 @@ async function collect(r, job, matching, count, what) {
           continue;
         }
         // Deep rock, down in the band: first a spot any bot dug it at lately, walked to as a hop is (along the band).
-        const spot = deep && outside(band, me.y) <= 4 ? deepSpot(r.world?.digSpots?.(names[0]) || [], band, me) : null;
+        const spot = deep && outside(band, me.y) <= 4 ? deepSpot((r.world?.digSpots?.(names[0]) || []).filter(awayFromDrownings(r.world)), band, me) : null;
         if (spot) {
           job.t.digSpot = `dig:${names[0]}:${spot.x},${spot.y},${spot.z}`;
           try {
@@ -4713,4 +4723,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, deepSpot, noteDigSpot, dropDigSpot, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, deepSpot, noteDigSpot, dropDigSpot, noteDrowning, awayFromDrownings, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};

@@ -15,7 +15,7 @@ const DEATH = /^died at (-?\d+) (-?\d+) (-?\d+):/;
 // A grave job's end, or a grave taken inside a graves run ("grave at X Y Z: N items back").
 const FETCHED = /^(?:finished: grave(?: at)?|grave at) (-?\d+) (-?\d+) (-?\d+)(?: \(|: \d+ items back)/;
 
-function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [], from} = {}) {
+function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [], drowned = [], from} = {}) {
   const rows = [...events];
   if (archiveDir) {
     let names = [];
@@ -37,9 +37,9 @@ function openGraves(events, bot, {archiveDir, now = Date.now(), chest, areas = [
   // A death says "died at" rounded, its grave job floors the spot: a fetch within 2 blocks after the death took it.
   const taken = (s) => fetched.some((f) => f.t >= s.t && Math.hypot(f.x - s.x, f.y - s.y, f.z - s.z) <= 2);
   const p = from || chest || {x: 0, y: 64, z: 0};
-  // Not where it died twice (graveAfterDeath's repeat rule): bot1 drowned twice in a flooded tunnel under a lake, and a
-  // graves round sent it back there a third time (2026-11-19).
-  return [...deaths.entries()].filter(([, s]) => !taken(s) && deathsNear(all, s, now) < 2 && s.y >= -64 && s.y <= 320 &&
+  // Not where it died twice (graveAfterDeath's repeat rule), nor where a bot drowned (world.drownSpots): bot1 drowned twice
+  // in a flooded tunnel under a lake, and a graves round sent it back there a third time (2026-11-19).
+  return [...deaths.entries()].filter(([, s]) => !taken(s) && deathsNear(all, s, now) < 2 && !deathsNear(drowned, s, now) && s.y >= -64 && s.y <= 320 &&
     (!chest || Math.hypot(s.x - chest.x, s.z - chest.z) <= FAR) && !insideAreas(areas, s.x, s.z))
     .map(([, s]) => s).sort((a, b) => Math.hypot(a.x-p.x,a.y-p.y,a.z-p.z) - Math.hypot(b.x-p.x,b.y-p.y,b.z-p.z)).slice(0, 40).map(({x,y,z}) => ({x,y,z}));
 }

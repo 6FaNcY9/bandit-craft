@@ -230,7 +230,7 @@ function submitJob({bots, type, args, replace, remember = true}) {
   for (const r of targets) {
     try {
       const pos = r.snapshot().pos;
-      const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
+      const perBotArgs = type === 'graves' ? {spots: gravesLib.openGraves(events.since(0), r.name, {archiveDir: ARCHIVE, chest: cfg.supplyChest, areas: cfg.protectedAreas, drowned: world.drownSpots(), from: pos && {x: pos[0], y: pos[1], z: pos[2]}})} : jobArgs;
       if (type === 'graves' && !perBotArgs.spots.length) { events.add(r.name, 'info', 'graves: none open in the last 24 h'); skipped.push(r.name); continue; }
       // Graves go ahead of the running job, which goes on afterwards; the owner's standing order stays.
       r.enqueue(type, perBotArgs, {replace: replace === true && type !== 'setchest', ...(type === 'graves' ? {first: true} : {})});

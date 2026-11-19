@@ -247,6 +247,20 @@
     assert.deepStrictEqual(r.world.digSpots('deepslate'), [{x: -267, y: 3, z: -67}], 'nothing free there: left out');
     assert.equal(job.t.digSpot, null);
     dropDigSpot({world: null}, {t: {}}); // nothing walked to, no world: nothing to do
+    // A drowning is shared like a dug spot: for 24 h no bot takes rock or ore, walks back or fetches a grave within 32 blocks
+    // of it (bot1 drowned twice in a flooded tunnel under a lake east of the base; the keeper's next coal and iron jobs sent
+    // bot1 and bot19 back there, where the nearest ore was, 2026-11-19).
+    const {noteDrowning, awayFromDrownings} = require('../bots');
+    const w = new WorldModel(), t0 = Date.now();
+    noteDrowning({world: w}, {x: -161.5, y: 53, z: -175.5});
+    assert.deepStrictEqual(w.drownSpots().map(({x, y, z}) => [x, y, z]), [[-162, 53, -176]]);
+    const dry = awayFromDrownings(w);
+    assert.deepStrictEqual([dry({x: -158, y: 52, z: -169}), dry({x: -184, y: 45, z: -161}), dry({x: -224, y: 41, z: -175})], [false, false, true], 'within 32 blocks no, 62 away yes');
+    assert.equal(awayFromDrownings(w, t0 + 25 * 3600000)({x: -158, y: 52, z: -169}), true, 'after 24 h the rock there is open again');
+    assert.equal(awayFromDrownings(null)({x: 0, y: 0, z: 0}), true, 'no world: nothing known');
+    const remote = new WorldModel(); // a worker gets it from the hub
+    remote.noteExperience('drown:-162,53,-176', {ok: 0, fail: 1, streak: 1, secs: 0, units: 0, lastFail: t0, t: t0});
+    assert.equal(awayFromDrownings(remote)({x: -158, y: 52, z: -169}), false);
   }
   const {shiftLeash} = require('../bots');
   // T04: the walk aims at the nearest free blocks, never at skipped ones, and at most k of them

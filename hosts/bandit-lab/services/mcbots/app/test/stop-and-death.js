@@ -630,5 +630,20 @@ const {BotRunner} = require('../bots');
     assert.deepStrictEqual(types, ['rearm', 'chop'], 'three: no grave trip, the job goes on');
     assert.deepStrictEqual(said, ['left the grave at -300 60 -530: 3 mobs there']);
   }
+  { // drowned: every bot learns the spot, and no grave trip back into that water (bot1 drowned twice under a lake, 2026-11-19)
+    const {WorldModel} = require('../world');
+    const w = new WorldModel();
+    const q = new BotRunner('bot8', {host: 'x', port: 1, log: () => {}, world: w, onEvent: () => {}});
+    const said = [];
+    const emit = q.emit.bind(q);
+    q.emit = (k, t) => { if (k === 'alert') said.push(t); emit(k, t); };
+    q.supplyChest = chest;
+    q.current = {id: 1, type: 'mine', args: {block: 'coal_ore', count: 8}, status: 'running', t: {}};
+    q.deathCause = {cause: 'drowned', t: Date.now()};
+    q.onDeath(deadBot(-300, -530));
+    assert.deepStrictEqual(q.queue.map((j) => j.type), ['rearm', 'mine'], 'no grave trip; the job goes on');
+    assert.deepStrictEqual(said, ['left the grave at -300 60 -530: a bot drowned there']);
+    assert.deepStrictEqual(w.drownSpots().map(({x, y, z}) => [x, y, z]), [[-300, 60, -530]], 'shared with every bot');
+  }
   console.log('death spots ok');
 }
