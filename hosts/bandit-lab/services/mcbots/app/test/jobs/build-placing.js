@@ -55,6 +55,10 @@ module.exports = async () => {
         const open = (x, y, z) => (x === 0 && z >= -1 && z <= 1) || x >= 2;
         assert.deepStrictEqual(B.breakOut({x: 0, y: 5, z: 0}, open, {x: 20, z: 0}), [{x: 1, y: 6, z: 0}, {x: 1, y: 5, z: 0}], 'through the wall towards the site');
         assert.strictEqual(B.breakOut({x: 0, y: 5, z: 0}, () => false, {x: 20, z: 0}), null, 'solid all round: no way within 3');
+        // BUILD-2: open ground beside one wall is not walled in, and only the build's own cells may be dug (audit 2026-11-19).
+        assert.strictEqual(B.breakOut({x: 0, y: 5, z: 0}, (x) => x !== 1, {x: 20, z: 0}), null, 'one side shut, three open: it walks round');
+        assert.strictEqual(B.breakOut({x: 0, y: 5, z: 0}, open, {x: 20, z: 0}, () => false), null, 'walled in, but the wall is not the build: it stays');
+        assert.deepStrictEqual(B.breakOut({x: 0, y: 5, z: 0}, open, {x: 20, z: 0}, (c) => c.x === 1), [{x: 1, y: 6, z: 0}, {x: 1, y: 5, z: 0}], 'the west wall is foreign, the east one ours');
       }
       {
         // A chest that stays shut is tried once more from next to it, then passed over: it ended a whole produce job (sandbox 2026-11-05).

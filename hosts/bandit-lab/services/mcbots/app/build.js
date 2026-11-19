@@ -381,16 +381,28 @@ function roomKeep(items, open, uses, short, support) {
 }
 // The cells to dig for a bot walled in by its own build: head first, through the thinnest wall, towards the site when walls tie.
 // bot50 stood in the apse's light slot as the wall rose, and all that was left was "could not reach" (sandbox 2026-11-04).
-function breakOut(feet, open, towards, max = 3) {
+// Only when walled in (the free cells round the feet end within max), and only through cells `may` allows: a bot in
+// open ground beside a wall or a chest dug through it after 5 failed walks (audit BUILD-2, 2026-11-19).
+function breakOut(feet, open, towards, may = () => true, max = 3) {
   const free = (x, z) => open(x, feet.y, z) && open(x, feet.y + 1, z);
+  const seen = new Set([`${feet.x},${feet.z}`]), todo = [[feet.x, feet.z]];
+  while (todo.length) {
+    const [x, z] = todo.pop();
+    if (Math.max(Math.abs(x - feet.x), Math.abs(z - feet.z)) > max) return null; // a way round
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = `${x + dx},${z + dz}`;
+      if (!seen.has(k) && free(x + dx, z + dz)) { seen.add(k); todo.push([x + dx, z + dz]); }
+    }
+  }
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(([a, b], [c, d]) => (c * (towards.x - feet.x) + d * (towards.z - feet.z)) - (a * (towards.x - feet.x) + b * (towards.z - feet.z)));
   let best = null;
   for (const [dx, dz] of dirs) {
     if (free(feet.x + dx, feet.z + dz)) continue; // along the slot, no way out
     for (let d = 2; d <= max && (!best || d - 1 < best.length / 2); d++) {
       if (!free(feet.x + dx * d, feet.z + dz * d)) continue;
-      best = [];
-      for (let i = 1; i < d; i++) best.push({x: feet.x + dx * i, y: feet.y + 1, z: feet.z + dz * i}, {x: feet.x + dx * i, y: feet.y, z: feet.z + dz * i});
+      const way = [];
+      for (let i = 1; i < d; i++) way.push({x: feet.x + dx * i, y: feet.y + 1, z: feet.z + dz * i}, {x: feet.x + dx * i, y: feet.y, z: feet.z + dz * i});
+      if (way.every(may)) best = way;
       break;
     }
   }
@@ -1447,12 +1459,14 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           sameSpot = spot === lastSpot ? sameSpot + 1 : 0;
           lastSpot = spot;
           if (sameSpot >= 4) {
-            const way = breakOut(feet, (x, y, z) => free(stateAt(x, y, z)?.name ?? 'stone'), {x: (lo.x + hi.x) / 2, z: (lo.z + hi.z) / 2});
+            const nameAt = (c) => stateAt(c.x, c.y, c.z)?.name ?? 'stone';
+            const way = breakOut(feet, (x, y, z) => free(nameAt({x, y, z})), {x: (lo.x + hi.x) / 2, z: (lo.z + hi.z) / 2},
+              (c) => free(nameAt(c)) || (inSite(c) && plan.cells.has(keyOf(c)) && !CONTAINER.test(nameAt(c)) && !ATTACHED.test(nameAt(c))));
             if (way) {
               r.emit('info', `walled in at ${feet.x} ${feet.y} ${feet.z}: breaking out through ${way.length} blocks, they go back later`);
               for (const c of way) {
                 await digAt(r, job, v(c), null, {pickup: false}).catch((d) => { guard(job); if (!/could not reach|unsafe|aborted|needs a tool/.test(d.message)) throw d; });
-                placed.delete(ckey(c));
+                placed.delete(keyOf(c));
                 skip.set(keyOf(c), Date.now() + 120000); // or it puts the wall straight back, still inside
               }
               sameSpot = 0;
