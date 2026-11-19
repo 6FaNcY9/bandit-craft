@@ -6,7 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // Zone kinds carry a box (the owner's "markers where you can make zones"); the others are points.
-const ZONE_KINDS = ['storage', 'shaft', 'treefarm', 'wheat', 'pen', 'field', 'base', 'protected'];
+// 'rock': natural rock no bot mines (the castle rock, owner 2026-11-19); unlike 'protected' the bots still build there.
+const ZONE_KINDS = ['storage', 'shaft', 'treefarm', 'wheat', 'pen', 'field', 'base', 'protected', 'rock'];
 // 'armoury': the castle's gear point (spec 2026-11-15-castle-armoury); every gear and food trip goes there.
 const KINDS = ['supply', 'site', 'home', 'afk', 'chest', 'armoury', ...ZONE_KINDS];
 const MAX_SIDE = 64; // a zone is at most 64 blocks wide
@@ -49,6 +50,8 @@ const inZone = (kind, x, y, z) => !!active?.list.some((p) => p.kind === kind && 
 const zoneNamed = (name) => active?.list.find((p) => p.box && p.name === name)?.box || null;
 // Zone boxes the build/dig jobs must keep out of, as protectedAreas entries [x1, z1, x2, z2, y1, y2] (the pathfinder checks y, everything else the column).
 const protectedBoxes = (list) => list.filter((p) => p.kind === 'protected' && p.box && p.dim === 'overworld').map(({box: b}) => [b.x1, b.z1, b.x2, b.z2, b.y1, b.y2]);
+// The active list's rock zones, same shape (on a worker the hub's zones: hubclient.js).
+const rockBoxes = () => (active?.list || []).filter((p) => p.kind === 'rock' && p.box && p.dim === 'overworld').map(({box: b}) => [b.x1, b.z1, b.x2, b.z2, b.y1, b.y2]);
 
 class Places {
   constructor(dir) {
@@ -108,4 +111,4 @@ class Places {
   }
 }
 
-module.exports = {Places, KINDS, clean, use, inZone, zoneBox, zoneNamed, protectedBoxes};
+module.exports = {Places, KINDS, clean, use, inZone, zoneBox, zoneNamed, protectedBoxes, rockBoxes};

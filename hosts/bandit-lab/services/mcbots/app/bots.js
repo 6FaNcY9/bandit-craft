@@ -15,7 +15,7 @@ const {BotTrace, SAMPLE_MS, round} = require('./debug');
 const {HourCounter} = require('./counters');
 const farsearch = require('./farsearch');
 const {backoff, normDim, deadlineMs, insideAreas, shouldFight, stairRing, NO_FIGHT} = require('./world');
-const {zoneNamed, inZone} = require('./places');
+const {zoneNamed, inZone, rockBoxes} = require('./places');
 const buildJob = require('./build');
 const huntJob = require('./hunt');
 const gravesJob = require('./graves');
@@ -3089,12 +3089,13 @@ async function collect(r, job, matching, count, what) {
     const seen = bot.findBlocks({matching: ids, maxDistance: range, count: 1024});
     const canopy = new Map(); // one look per tree top
     const dry = awayFromDrownings(r.world);
-    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood ? treeLog(bot, p, canopy) : !underBase(r.supplyChest, p) && dry(p)))
+    const rock = rockBoxes(); // the castle rock is not mined (owner 2026-11-19); its trees are still chopped
+    let found = seen.filter((p) => !insideAreas(r.protectedAreas, p.x, p.z) && (wood ? treeLog(bot, p, canopy) : !underBase(r.supplyChest, p) && dry(p) && !insideAreas(rock, p.x, p.z, p.y)))
       .sort((a, b) => cost(a) - cost(b)).slice(0, 64);
     // Ore or deep rock, nothing inside the band near enough, and the bot is not in the band: go there first.
     let start = null;
     if (band && descents < 2 && outside(band, me.y) > 4 && !found.some((p) => !outside(band, p.y) && p.distanceTo(me) <= 48)
-      && (start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : oreDescent((p) => bot.blockAt(p), r.protectedAreas, r.supplyChest, me, anchorOf(job))) !== false) {
+      && (start = deep ? descentStart(r.supplyChest, me, anchorOf(job)) : oreDescent((p) => bot.blockAt(p), [...r.protectedAreas, ...rock], r.supplyChest, me, anchorOf(job))) !== false) {
       descents++; // twice at most, then mine what is in reach
       const back = digSpotBack(job.t.area, band, me);
       if (back && dry(back)) { // not back down into the water a bot drowned in
