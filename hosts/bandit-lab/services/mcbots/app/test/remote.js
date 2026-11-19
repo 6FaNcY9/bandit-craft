@@ -122,6 +122,10 @@ const {handle} = require('../remote');
       wk.send(JSON.stringify({t: 'status', bots: [{name: 'bot5', online: true}]}));
       for (let i = 0; i < 100 && msgs.filter((m) => m.t === 'job').length < 2; i++) await new Promise((r) => setTimeout(r, 50));
       assert.deepEqual(msgs.filter((m) => m.t === 'job').map((m) => [m.type, m.noFar]), [['chop', true], ['mine', undefined]], 'resumed with noFar');
+      // HUB-4, worker bot: its status frame already holds the queue onDeath refilled, so the third death's hold stops it
+      wk.send(JSON.stringify({t: 'status', bots: [{name: 'bot5', online: true, dead: true, queue: ['rearm', 'grave', 'mine stone 5']}], events: [1, 2, 3].map((i) => ({bot: 'bot5', kind: 'death', text: `died at ${i * 100} 64 0`}))}));
+      for (let i = 0; i < 100 && !msgs.some((m) => m.t === 'job' && m.type === 'stop'); i++) await new Promise((r) => setTimeout(r, 50));
+      assert.ok(msgs.some((m) => m.t === 'job' && m.type === 'stop'), 'the death hold stops a worker bot');
       const [code, fleet] = await call('GET', '/api/remote/fleet', T);
       assert.equal(code, 200);
       assert.deepEqual(fleet.bots.map((b) => b.name), ['bot1', 'bot2', 'bot5']);

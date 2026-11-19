@@ -265,5 +265,18 @@
     assert.throws(() => loadConfig({...env, OWNER_UUIDS: 'bad'}), /OWNER_UUIDS/);
     assert.deepEqual(loadWorkerConfig({...env, HUB_URL: 'ws://localhost/worker', HUB_TOKEN: 'test', MC_HOST: 'localhost'}, ['bot1']).ownerUuids, [uuid]);
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  // HUB-4, in-process bot: the death event comes before onDeath queues re-arm, grave and the resumed job, so the hub's
+  // death-loop hold (server.js orderEnded) must look at the queue later, as it does here, or nothing is stopped
+  {
+    const bot = Object.assign(new EventEmitter(), {entity: {position: {x: 10, y: 64, z: 10}}, game: {dimension: 'overworld'}});
+    let seen = null;
+    const hold = () => { seen = r.snapshot().queue.length; if (seen) r.enqueue('stop'); };
+    const r = new BotRunner('bot1', {log: () => {}, supplyChest: {x: 0, y: 64, z: 0}, onEvent: (b, k) => { if (k === 'death') setImmediate(hold); }});
+    r.bot = bot;
+    r.current = {id: 1, type: 'mine', args: {block: 'stone', count: 9}, status: 'running'};
+    r.onDeath(bot);
+    await new Promise((res) => setImmediate(res));
+    assert.deepEqual([seen, r.queue.map((j) => j.type)], [3, []], 'the hold sees and stops re-arm, grave and the resumed job');
+  }
   console.log('owner: in-game orders ok');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

@@ -87,14 +87,16 @@ const orderEnded = (e) => {
     const d = orderloop.deathLoop(deathTimes.get(e.bot) || [], e.t);
     deathTimes.set(e.bot, d.times);
     if (d.hold) {
-      const r = runners.get(e.bot), queued = r?.snapshot().queue?.length || 0;
       // A hold, not an end: the order or project starts again after DEATH_HOLD_MS (a paused project never did, bots slept).
       orderRetryAt.set(e.bot, e.t + orderloop.DEATH_HOLD_MS);
-      if (queued) {
-        r.enqueue('stop');
-        delete toResume[e.bot];
-      }
-      events.add('base', 'alert', orderloop.deathLoopAlert(e.bot, order || (p && !p.paused ? p : null), queued));
+      setImmediate(() => { // an in-process bot's onDeath queues re-arm, grave and the resumed job only after this event
+        const r = runners.get(e.bot), queued = r?.snapshot().queue?.length || 0;
+        if (queued) {
+          r.enqueue('stop');
+          delete toResume[e.bot];
+        }
+        events.add('base', 'alert', orderloop.deathLoopAlert(e.bot, order || (p && !p.paused ? p : null), queued));
+      });
     }
   }
 };
