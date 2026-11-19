@@ -70,6 +70,15 @@ const assert = require('node:assert');
   for (let i = 0; i < 12; i++, t += 60000) m.watch([snap('bot6', [8, 64, 0], i % 4 ? 'night: waiting in a shelter' : 'walking to place stone at 8 64 2')]);
   await settle();
   assert.strictEqual(sent.length, 1, 'a bot that works in place is not stuck');
+  // a stuck bot whose order the hub retries after 5 and 10 min: job-less between the tries, each failure a stall (SURVIVAL-10)
+  online.push('bot7');
+  for (let i = 0; i <= 15; i++, t += 60000) {
+    if (i === 0 || i === 5 || i === 15) m.event({bot: 'bot7', kind: 'fail', text: 'failed: mine - could not reach -300 40 -20: no progress for 20 s'});
+    m.watch([{...snap('bot7', [-310, 40, -20], i % 2 ? 'idle' : 'climbing to Y 41 towards -300 40 -20'), job: i % 2 ? null : {type: 'mine'}}]);
+  }
+  await settle();
+  assert.strictEqual(sent.length, 2, 'rescued within 15 min');
+  assert.match(sent[1], /tp bot7 /);
 })();
 
 (async () => { // litematic: packed states cross longs; signed sizes locate the min corner

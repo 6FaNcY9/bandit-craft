@@ -28,7 +28,7 @@ function aliveStep({me, players, owners = [], now, state}) {
 // Target cell for a sidestep: solid floor, free feet and head, nothing harmful or trigger-happy (the TNT dupers run on pressure plates).
 const HARM = /fire|pressure_plate|tripwire|cactus|magma|campfire|sweet_berry|cobweb|powder_snow/;
 const safeCell = (floor, feet, head) => floor?.boundingBox === 'block' && feet?.boundingBox === 'empty' && head?.boundingBox === 'empty'
-  && ![floor, feet, head].some((b) => /^(water|lava)$/.test(b.name) || HARM.test(b.name));
+  && !wet(feet) && !wet(head) && ![floor, feet, head].some((b) => /^(water|lava)$/.test(b.name) || HARM.test(b.name)); // kelp and seagrass are empty, not dry
 
 // Water a bot breathes in: also an ocean floor's seagrass and kelp, a bubble column and a waterlogged block.
 const wet = (b) => /^(water|bubble_column|kelp|kelp_plant|seagrass|tall_seagrass)$/.test(b?.name || '') || b?.getProperties?.().waterlogged === true;

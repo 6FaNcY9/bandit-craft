@@ -29,6 +29,7 @@ assert.equal(safeCell(B('water', 'empty'), air, air), false);
 assert.equal(safeCell(stone, B('stone_pressure_plate', 'empty'), air), false);
 assert.equal(safeCell(B('magma_block', 'block'), air, air), false);
 assert.equal(safeCell(stone, air, null), false);
+assert.equal(safeCell(B('sand', 'block'), B('kelp_plant', 'empty'), B('kelp_plant', 'empty')), false, 'a kelp bed is no shore');
 { // shore: the dry floor next to the water, never the sea floor
   const {shore} = require('../alive'), {Vec3} = require('vec3');
   const water = B('water', 'empty'), at = (v) => (v.y >= 63 ? air : v.x >= 3 && v.y <= 63 ? (v.y === 63 ? air : stone) : v.y <= 59 ? stone : water);

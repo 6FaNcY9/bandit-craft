@@ -25,7 +25,8 @@ class Rescue {
 
   event(e) {
     if (STALL.test(e.text)) this.tried.set(e.bot, this.now()); // any kind: jobs that retry report it as info
-    if (e.kind === 'done' || (e.kind === 'fail' && !NO_PATH.test(e.text))) return this.fails.delete(e.bot);
+    // a stalled walk counts as no path: the hub retries a failed order after 5, 10, 20 min, job-less in between, so watch() never saw 8 min
+    if (e.kind === 'done' || (e.kind === 'fail' && !NO_PATH.test(e.text) && !STALL.test(e.text))) return this.fails.delete(e.bot);
     if (e.kind !== 'fail') return;
     const n = (this.fails.get(e.bot) || 0) + 1;
     this.fails.set(e.bot, n);
