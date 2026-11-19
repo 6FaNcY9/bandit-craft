@@ -1137,12 +1137,14 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         // 2a. A placed chest still to fill comes first, over several trips when the bot cannot carry it all
         // (27 shears take 27 slots); nothing goes on top of it meanwhile (it would keep the chest shut).
         const lids = new Set();
+        const fillLack = new Set(); // fill items in no chest: waited for and asked for like build blocks (BUILD-5)
         let pending = null;
         for (const t of plan.targets) {
           if (!t.items || !fillsNow(t) || filled.has(keyOf(t))) continue;
           const h = stateAt(t.x, t.y, t.z);
           if (!h || !placing.matches(t, h)) continue;
           lids.add(`${t.x},${t.y + 1},${t.z}`);
+          for (const it of t.items) if ((lacking.get(it.name) || 0) > Date.now()) fillLack.add(it.name);
           if (!pending && !skip.has(keyOf(t)) && (!plan.later.has(keyOf(t)) || idle)) pending = t;
         }
         if (pending) {
@@ -1180,7 +1182,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           lacking.delete(item); // handed over or brought by the crew: not missing
           r.world?.dropNeed?.(r.name, item);
         }
-        const waiting = new Set();
+        const waiting = new Set(fillLack);
         // Layer by layer: only the lowest open layer and the two above it, with supports for them before
         // anything higher, so the crew grows up with the build (it built a dropper tower to y 17 first and
         // then searched minutes for a way up from the chests, sandbox 2026-10-13).
@@ -1368,7 +1370,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             if (destination) {
               const held = count();
               for (const item of waiting) {
-                const remaining = plan.targets.filter((t) => t.p.item === item && !placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?' })).reduce((n, t) => n + (t.p.again ? 2 : 1), 0);
+                const remaining = plan.targets.filter((t) => t.p.item === item && !placing.matches(t, stateAt(t.x, t.y, t.z) || {name: '?' })).reduce((n, t) => n + (t.p.again ? 2 : 1), 0)
+                  + plan.targets.filter((t) => t.items && !filled.has(keyOf(t))).flatMap((t) => t.items).filter((it) => it.name === item).reduce((n, it) => n + it.count, 0);
                 const wanted = Math.min(256, Math.max(1, remaining - (held[item] || 0)));
                 try { r.world.postNeed(r.name, item, wanted, destination, why.slice(0, 160)); } catch {}
               }

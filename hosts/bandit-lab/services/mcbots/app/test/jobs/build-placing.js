@@ -429,4 +429,50 @@ module.exports = async () => {
     fs.rmSync(dir, {recursive: true, force: true});
     assert.deepStrictEqual(res.dirt, [], `after a restart the pillar still comes out (end: ${res.end}, doing: ${res.doing})`);
   }
+  { // BUILD-5: a chest whose fill item is in no chest waits for it and asks for it; the block on its lid was left as
+    // "1 cells left that this bot cannot place or reach" and the job failed after 300 s (audit 2026-11-19)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const int = (value) => ({type: 'int', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    const chestProps = {facing: 'north', type: 'single', waterlogged: 'false'};
+    palette[4] = {Name: str('minecraft:chest'), Properties: {type: 'compound', value: Object.fromEntries(Object.entries(chestProps).map(([k, v]) => [k, str(v)]))}};
+    palette[5] = {Name: str('minecraft:cobblestone')};
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, int(value)]))});
+    const packed = 4n | (5n << 5n); // the chest, cobblestone on its lid
+    const longs = [[Number(BigInt.asIntN(32, packed >> 32n)), Number(BigInt.asIntN(32, packed))]];
+    const shears = {type: 'compound', value: {Slot: {type: 'byte', value: 0}, id: str('minecraft:shears'), Count: {type: 'byte', value: 1}}};
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 1, y: 2, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: longs},
+      TileEntities: {type: 'list', value: {type: 'compound', value: [{x: int(0), y: int(0), z: int(0), Items: {type: 'list', value: {type: 'compound', value: [shears.value]}}}]}}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-fill-'));
+    fs.writeFileSync(path.join(dir, 'fill.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('fill')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const store = {x: 5, y: 64, z: 5};
+    const job = {t: {}, cancelled: false, args: {file: 'fill.litematic', origin: {x: 0, y: 100, z: 0}, chests: [store]}};
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const isChest = (p) => (p.x === 0 && p.y === 100 && p.z === 0) || (p.x === store.x && p.y === store.y && p.z === store.z);
+    const bot = {game: {dimension: 'overworld'}, on() {}, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, equip: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(0.5, 101, 3.5), yaw: 0, pitch: 0},
+      inventory: {items: () => [{name: 'cobblestone', count: 64, type: 2}, {name: 'dirt', count: 64, type: 3}, {name: 'glass', count: 64, type: 4}], emptySlotCount: () => 33},
+      openContainer: async () => ({containerItems: () => [], deposit: noop, withdraw: noop, close() {}}),
+      registry: {itemsByName: {chest: item(1), cobblestone: item(2), dirt: item(3), glass: item(4), shears: {id: 5, stackSize: 1}}, blocksByName: {}},
+      pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+      blockAt: (p) => (isChest(p) ? {name: 'chest', position: p, getProperties: () => chestProps, boundingBox: 'block', shapes: []}
+        : {name: p.y <= 63 ? 'stone' : 'air', position: p, getProperties: () => ({}), boundingBox: p.y <= 63 ? 'block' : 'empty', shapes: []})};
+    const needs = [];
+    const world = {claim: async () => true, release() {}, postNeed: (b, it, n) => needs.push(`${n} ${it}`), openNeeds: () => [], dropNeed() {}};
+    const schematic = require('../../build').makeSchematic({goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt: async () => false, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir});
+    const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}, world}, job).catch((e) => e);
+    await new Promise((res) => setTimeout(res, 400));
+    const doing = job.t.doing;
+    job.cancelled = true;
+    await Promise.race([run, new Promise((res) => setTimeout(res, 3000))]);
+    fs.rmSync(dir, {recursive: true, force: true});
+    assert.match(String(doing), /^waiting for material: .*shears/, `it waits for the shears to fill the chest (doing: ${doing})`);
+    assert.ok(needs.includes('1 shears'), `and asks for them (needs: ${needs})`);
+  }
 };
