@@ -506,10 +506,13 @@ module.exports = async () => {
     const goNear = async (_r, _j, x, y, z) => { if (x === store.x && z === store.z) throw new Error(`could not reach ${x} ${y} ${z}: no path`); };
     const schematic = require('../../build').makeSchematic({goNear, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
       sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt: async () => false, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir,
-      help: async () => { helps++; return false; }});
+      help: async () => { helps++; return false; }, waitMs: 100});
     const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}, world}, job).catch((e) => e);
     await new Promise((res) => setTimeout(res, 400));
     const doing = job.t.doing;
+    // the chest stays out of reach past the progress deadline: the build waits for the next try, it does not end
+    const state = await Promise.race([run, new Promise((res) => setImmediate(() => res('running')))]);
+    assert.strictEqual(state?.message || state, 'running', 'a chest out of reach is waited for');
     job.cancelled = true;
     await Promise.race([run, new Promise((res) => setTimeout(res, 3000))]);
     fs.rmSync(dir, {recursive: true, force: true});

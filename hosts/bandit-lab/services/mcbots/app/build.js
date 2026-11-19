@@ -1390,7 +1390,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             const did = await help(r, job).catch((e) => { guard(job); r.emit?.('info', `helping production: ${e.message.slice(0, 80)}`); return false; });
             if (did) { lastProgress = Date.now(); continue; }
           }
-          if (waiting.size) lastProgress = Date.now(); else stalled(why);
+          // A chest out of reach is waited for like missing material: one failed walk ended the build (review 2026-11-19).
+          if (waiting.size || [...far.values()].some((until) => until > Date.now())) lastProgress = Date.now(); else stalled(why);
           await sleep(1000);
           continue;
         }
