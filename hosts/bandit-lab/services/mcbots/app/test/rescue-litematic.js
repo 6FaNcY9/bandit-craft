@@ -79,6 +79,12 @@ const assert = require('node:assert');
   await settle();
   assert.strictEqual(sent.length, 2, 'rescued within 15 min');
   assert.match(sent[1], /tp bot7 /);
+  // a walk that ran out of time is a stall too: bot1 73 blocks under the castle's west edge failed "no way there within 90 s"
+  // twice, which reset the count instead of adding to it (main server 2026-11-19)
+  online.push('bot8');
+  for (const [x, y, z] of [[-374, 74, 75], [-342, 11, 25], [-342, 11, 25]]) m.event({bot: 'bot8', kind: 'fail', text: `failed: goto - could not reach ${x} ${y} ${z}: no way there within 90 s`});
+  await settle();
+  assert.match(sent[2] || '', /tp bot8 /, 'three timed-out walks in a row: rescued');
 })();
 
 (async () => { // litematic: packed states cross longs; signed sizes locate the min corner

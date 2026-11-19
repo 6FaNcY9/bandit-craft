@@ -15,7 +15,8 @@ const MOVING = /^(climbing|walking|tunnelling)/; // what a bot that gets nowhere
 const QUIET_MS = 3 * 60000; // a failed walk counts as trying this long: producers retry every minute or two
 // A walk that got nowhere (bots.js: "could not reach X Y Z: <why>"), in whatever line reports it: bot2 in a hole showed
 // its climb and the producer's texts in turn, so no 8 min of climbing ever added up (main server 2026-11-14).
-const STALL = /could not reach -?\d+ -?\d+ -?\d+: (no progress for \d+ s|[Nn]o path)/;
+// A walk that ran out of time counts too: bot1 deep under the castle failed "no way there within 90 s" twice, each a reset (2026-11-19).
+const STALL = /could not reach -?\d+ -?\d+ -?\d+: (no progress for \d+ s|[Nn]o path|no way there within \d+ s)/;
 
 class Rescue {
   // call(commands[]) -> replies (RCON); target() -> {x, y, z} where a rescued bot lands; label names the server.
