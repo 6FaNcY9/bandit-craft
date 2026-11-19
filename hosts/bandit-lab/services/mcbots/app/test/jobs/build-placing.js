@@ -475,4 +475,44 @@ module.exports = async () => {
     assert.match(String(doing), /^waiting for material: .*shears/, `it waits for the shears to fill the chest (doing: ${doing})`);
     assert.ok(needs.includes('1 shears'), `and asks for them (needs: ${needs})`);
   }
+  { // BUILD-6: a material chest with no way to it is not "in no chest": no need is posted and nothing produced for
+    // what lies in it, it is tried again later (audit 2026-11-19)
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    palette[5] = {Name: str('minecraft:cobblestone')};
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 1, y: 1, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: [[0, 5]]}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-farchest-'));
+    fs.writeFileSync(path.join(dir, 'stone.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('stone')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const store = {x: 20, y: 64, z: 20};
+    const job = {t: {}, cancelled: false, args: {file: 'stone.litematic', origin: {x: 0, y: 64, z: 0}, chests: [store]}};
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const bot = {game: {dimension: 'far-chest-test'}, on() {}, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, equip: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(0.5, 64, 3.5), yaw: 0, pitch: 0},
+      inventory: {items: () => [], emptySlotCount: () => 36}, _genericPlace: noop,
+      openContainer: async () => ({containerItems: () => [{name: 'cobblestone', count: 64, type: 2}, {name: 'dirt', count: 64, type: 3}], withdraw: noop, deposit: noop, close() {}}),
+      registry: {itemsByName: {cobblestone: item(2), dirt: item(3), glass: item(4)}, blocksByName: {}},
+      pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+      blockAt: (p) => (p.x === store.x && p.y === store.y && p.z === store.z ? {name: 'chest', position: p, getProperties: () => ({}), boundingBox: 'block', shapes: []}
+        : {name: p.y <= 63 ? 'stone' : 'air', position: p, getProperties: () => ({}), boundingBox: p.y <= 63 ? 'block' : 'empty', shapes: []})};
+    const needs = [];
+    let helps = 0;
+    const world = {claim: async () => true, release() {}, postNeed: (b, it, n) => needs.push(`${n} ${it}`), openNeeds: () => [], dropNeed() {}};
+    const goNear = async (_r, _j, x, y, z) => { if (x === store.x && z === store.z) throw new Error(`could not reach ${x} ${y} ${z}: no path`); };
+    const schematic = require('../../build').makeSchematic({goNear, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt: async () => false, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir,
+      help: async () => { helps++; return false; }});
+    const run = schematic({bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}, world}, job).catch((e) => e);
+    await new Promise((res) => setTimeout(res, 400));
+    const doing = job.t.doing;
+    job.cancelled = true;
+    await Promise.race([run, new Promise((res) => setTimeout(res, 3000))]);
+    fs.rmSync(dir, {recursive: true, force: true});
+    assert.deepStrictEqual([needs, helps], [[], 0], `no need posted and no production for what lies in the chest out of reach (doing: ${doing})`);
+  }
 };

@@ -715,6 +715,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
     const tries = new Map(); // key -> repairs done
     const asIs = new Set(); // rails over a hopper in another shape: not dug (the drop would go into the machine)
     const lacking = new Map(); // item -> until: not in any chest, looked again after 5 min
+    const far = new Map(); // item -> until: its chest had no way to it, tried again after 1 min; not missing, not asked for (BUILD-6)
+    const away = (item) => (lacking.get(item) || 0) > Date.now() || (far.get(item) || 0) > Date.now();
     const stuck = new Map(); // key -> what is in the way that the bot may not dig
     const {pillars, markPillar} = plan; // cells holding a support pillar
     const tempFor = new Map(); // a support in a cell of the schematic (a hopper loop) -> the cell that needed it
@@ -766,7 +768,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
             noPath++;
             r.emit?.('info', `${e.message.slice(0, 100)}: building on with what it has`);
             await unstick();
-            return;
+            return false;
           }
           throw e;
         }
@@ -869,8 +871,8 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
       if ((count()[SCAFFOLD] || 0) < 32) need.set(SCAFFOLD, Math.max(need.get(SCAFFOLD) || 0, 64)); // to climb and to prop
       if (hoppers && (count()[GLASS] || 0) < 16) need.set(GLASS, Math.max(need.get(GLASS) || 0, 64)); // to climb over hoppers
       for (const [item, n] of need) {
-        await take(item, n, (left) => `taking ${left} ${item} for the build`);
-        if (!count()[item]) lacking.set(item, Date.now() + 300000);
+        const reached = (await take(item, n, (left) => `taking ${left} ${item} for the build`)) !== false;
+        if (!count()[item]) (reached ? lacking : far).set(item, Date.now() + (reached ? 300000 : 60000));
       }
     }
 
@@ -1180,6 +1182,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         const carried = count();
         for (const item of Object.keys(carried)) {
           lacking.delete(item); // handed over or brought by the crew: not missing
+          far.delete(item);
           r.world?.dropNeed?.(r.name, item);
         }
         const waiting = new Set(fillLack);
@@ -1188,7 +1191,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         // then searched minutes for a way up from the chests, sandbox 2026-10-13).
         let low = Infinity;
         for (const t of plan.targets) {
-          if (t.y >= low || t.late || skip.has(keyOf(t)) || stuck.has(keyOf(t)) || (lacking.get(t.p.item) || 0) > Date.now()) continue;
+          if (t.y >= low || t.late || skip.has(keyOf(t)) || stuck.has(keyOf(t)) || away(t.p.item)) continue;
           const h = stateAt(t.x, t.y, t.z);
           if (h && !placing.matches(t, h, {final})) low = t.y;
         }
@@ -1209,6 +1212,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
           if (occupied.has(k)) { held++; continue; } // someone stands there
           if (t.late && held) continue; // power last: not while an ordinary cell is only held by another bot
           if ((lacking.get(t.p.item) || 0) > Date.now()) { waiting.add(t.p.item); continue; }
+          if ((far.get(t.p.item) || 0) > Date.now()) { held++; continue; } // in a chest out of reach: tried again in a minute
           const w = t.p.ways.find((w) => solid(stateAt(t.x + w.against[0], t.y + w.against[1], t.z + w.against[2])?.name));
           // The lowest layer first, in it a cell whose block the bot carries, the nearest (less walking and
           // fetching, and a crew spreads out).
@@ -1251,7 +1255,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
                 const cw = ct.p.ways.find((u) => solid(stateAt(c.x + u.against[0], c.y + u.against[1], c.z + u.against[2])?.name));
                 // In no chest: picked again at once it spun the loop at full CPU with nothing placed (sorter builders, 2026-11-11).
                 if ((lacking.get(ct.p.item) || 0) > Date.now()) waiting.add(ct.p.item);
-                else if (cw && (!best || best.height > 0)) best = {real: {t: ct, w: cw}, height: 0};
+                else if (cw && !away(ct.p.item) && (!best || best.height > 0)) best = {real: {t: ct, w: cw}, height: 0};
                 continue;
               }
               if (ct && ATTACHED.test(t.name)) continue;
@@ -1269,7 +1273,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         next ??= pillarFor(false) || above || pillarFor(false, false) || late || pillarFor(true, false);
         if (next?.t.pillar && !count()[next.t.p.item]) {
           await restock(next.t.p.item);
-          if (!count()[next.t.p.item]) { waiting.add(next.t.p.item); next = null; }
+          if (!count()[next.t.p.item]) { if ((far.get(next.t.p.item) || 0) <= Date.now()) waiting.add(next.t.p.item); next = null; }
         }
         // Out of dirt and glass the walks here cannot climb (see scafoldingBlocks): dirt is waited for and made like
         // the build's material, or the bot hangs below the walls until "no progress".
