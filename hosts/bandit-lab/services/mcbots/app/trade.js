@@ -1,5 +1,6 @@
 'use strict';
 const {Vec3} = require('vec3');
+const {nearBlock} = require('./crafting');
 // Trading hall (owner 2026-10-24): sell sticks to every villager on both floors of the hall that buys them (the
 // fletchers) and put the emeralds into a chest. The sticks come from the owner's stick chests in the hall (logs the
 // bot happens to carry are crafted into sticks too); with every chest empty it waits for a refill and never walks
@@ -82,7 +83,7 @@ function nextStickChest(from, empty, now, chests = STICK_CHESTS) {
   return best;
 }
 
-function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit}) {
+function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit, table = (bot) => !!nearBlock(bot, 'crafting_table')}) {
   async function trade(r, job) {
     const {bot} = r;
     // Who buys no sticks at all (never) and who is sold out (until). On the bot: a fight calls the job again and the next
@@ -118,7 +119,8 @@ function makeTrade({goNear, guard, sleep, count, ensureItem, withdraw, deposit})
     // Emerald blocks go into the chest (owner 2026-11-03); a rest under nine emeralds waits for the next round. Loose
     // emeralds are stored only when no block could be crafted (no crafting table in reach of the chest).
     const bank = async (rest = false) => {
-      if (count(bot, 'emerald') >= 9) {
+      // only at a table in reach: without one, ensureItem builds one from supply-chest logs (the 270-block walk)
+      if (count(bot, 'emerald') >= 9 && table(bot)) {
         job.t.doing = 'crafting emerald blocks';
         try { await ensureItem(r, job, 'emerald_block', count(bot, 'emerald_block') + Math.floor(count(bot, 'emerald') / 9)); } catch (e) { guard(job); r.emit('info', `trade: no emerald blocks: ${e.message.slice(0, 80)}`); }
       }

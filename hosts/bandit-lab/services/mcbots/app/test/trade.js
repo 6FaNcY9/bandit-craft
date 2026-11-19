@@ -55,6 +55,7 @@ async function run(chestSticks, start = {}, chestsWithSticks = 1) {
   };
   const calls = [];
   const {trade} = makeTrade({
+    table: () => true,
     goNear: async (r, j, x, y, z) => { walks.push(`walk ${x} ${y} ${z}`); }, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
     sleep: async () => { job.cancelled = true; }, // the first wait: the owner presses Stop
     count: (b, name) => inv[name] || 0,
@@ -111,7 +112,7 @@ async function run(chestSticks, start = {}, chestsWithSticks = 1) {
   assert.deepStrictEqual([tries, pauses], [3, 60]);
   // ---- chat trades with a stop condition: handel sticks [time|target] ----
   // One fletcher paying `pay` emeralds for each stick; chests maps "x,y,z" to the sticks in it.
-  const rig = ({args = {}, inv = {}, chests = {}, pay = 1, uses = 100, job: more = {}, prefs, slots = 30, ensure, sleep, supply} = {}) => {
+  const rig = ({args = {}, inv = {}, chests = {}, pay = 1, uses = 100, job: more = {}, prefs, slots = 30, ensure, sleep, supply, table = true} = {}) => {
     const stock = {...inv}, calls = [], pauses = [], tradeCalls = [], opened = [];
     const fletcher = {...v(1, -28.5, 63, -110), uuid: 'f'};
     const trades = [offer({inputItem1: {name: 'stick', count: 1}, realPrice: 1, outputItem: {name: 'emerald', count: pay}, maximumNbTradeUses: uses})];
@@ -124,6 +125,7 @@ async function run(chestSticks, start = {}, chestsWithSticks = 1) {
     };
     const {trade} = makeTrade({
       goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+      table: () => table,
       sleep: sleep || (async () => { pauses.push(1); job.cancelled = true; }),
       count: (b, name) => stock[name] || 0,
       ensureItem: ensure || (async (r, j, name, want) => {
@@ -153,6 +155,10 @@ async function run(chestSticks, start = {}, chestsWithSticks = 1) {
   assert.deepStrictEqual(k.tradeCalls, [3], 'no overshoot: the 100 sticks would have paid 100 emeralds');
   assert.deepStrictEqual([k.stock.stick, k.stock.emerald], [97, 0]);
   assert.deepStrictEqual(k.calls, ['deposit emerald -25'], 'the 3 loose emeralds go to the chest at the end');
+  // ECON-5: no crafting table near: no emerald blocks (a table built from supply-chest logs is the 270-block walk), loose emeralds stored
+  k = rig({args: {item: 'stick', target: 3}, inv: {stick: 100, emerald: 18}, table: false});
+  await k.run();
+  assert.deepStrictEqual([k.calls, k.stock.emerald_block], [['deposit emerald -25'], undefined]);
   // An offer paying 2 per trade: 3 are needed, so 2 trades (4 emeralds) is the least that reaches it.
   k = rig({args: {item: 'stick', target: 3}, inv: {stick: 100}, pay: 2});
   await k.run(); assert.deepStrictEqual([k.tradeCalls, k.job.progress], [[2], 'Smaragde: 4']);
