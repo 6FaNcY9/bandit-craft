@@ -771,6 +771,7 @@ class BotRunner {
       this.online = true;
       this.kickOver();
       const mv = safeMovements(bot, this.protectedAreas, this);
+      this.planVeto = false; // a schematic hung on the old connection: these movements have no vetoBreak of its
       bot.pathfinder.setMovements(mv);
       // Armour handed over in game (dropped at the bot's feet) goes on at once: only a digging job's upkeep wore it, and
       // MisaBot carried hers around (2026-11-01).

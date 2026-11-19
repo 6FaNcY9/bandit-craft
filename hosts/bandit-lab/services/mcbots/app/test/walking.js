@@ -267,6 +267,29 @@ const assert = require('node:assert');
   assert.match(await goNear(r, {type: 'mine', t: {}, cancelled: false}, 9, 64, 9, 2).then(() => 'ok', (e) => e.message), /^could not reach 9 64 9: No path to the goal!$/);
 })();
 
+{ // a schematic left hanging on a dead connection keeps planVeto up: the next connection's movements have no vetoBreak,
+  // so the built veto is back there (final review 2026-11-19)
+  const mineflayer = require('mineflayer'), {BotRunner} = require('../bots');
+  const EventEmitter = require('node:events');
+  const {Vec3} = require('vec3');
+  const registry = require('minecraft-data')('26.1');
+  const bot = Object.assign(new EventEmitter(), {_client: new EventEmitter(), registry, entity: {position: new Vec3(0, 64, 0)}, blockAt: () => null,
+    loadPlugin() {}, dig: async () => {}, equip: async () => {}, placeBlock: async () => {}});
+  let mv = null;
+  const createBot = mineflayer.createBot;
+  mineflayer.createBot = () => bot;
+  const r = new BotRunner('bot1', {host: 'x', port: 1, log: () => {}, world: {noteChange() {}, forgetMob() {}}});
+  try { r.connect(); } finally { mineflayer.createBot = createBot; }
+  bot.pathfinder = {setMovements: (m) => (mv = m)};
+  bot.collectBlock = {};
+  r.planVeto = true;
+  try {
+    bot.emit('spawn');
+  } finally { r.combat.stop(); }
+  const blk = {type: registry.blocksByName.stone_bricks.id, name: 'stone_bricks', position: new Vec3(1, 64, 0), boundingBox: 'block'};
+  assert.ok(mv.exclusionAreasBreak.reduce((a, f) => a + f(blk), 0) >= 100, 'a fresh connection leaves stone_bricks standing');
+}
+
 (async () => { // goNear: a tree's crown is no roof: bot2 on a tuff mound at -311 75 -163 under oak leaves 4 up climbed "to Y 90" straight up
   // towards the castle chest at -302 111 6, "no progress for 30 s" every minute for 8 min (main server 2026-11-19). Rock overhead still climbs.
   const {goNear} = require('../bots');
