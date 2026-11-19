@@ -272,24 +272,46 @@ module.exports = async () => {
       assert.deepStrictEqual([...seen], ['overworld:0,59,0'], 'later passes do not try it again');
       blocks.delete('0,59,0');
     }
-    { // no fitting pickaxe at all: a few tries, then the job ends naming the tool, not "blocked ... water, a cave" (W1)
+    { // nothing can be dug for want of a tool: the job ends naming the tool, not "blocked ... water, a cave" (W1)
       blocks.clear();
       for (let x = 0; x <= 1; x++) for (let y = 58; y <= 60; y++) blocks.set(`${x},${y},0`, 'dirt');
       order.length = 0;
-      let tries = 0;
-      const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); if (b.name === 'dirt') tries++; return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      let digs = 0;
+      const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      const tried = {...r, bot: hard, emit: (kind, text) => { if (/^left a dirt block/.test(text)) digs++; }};
       const seen = new Set();
-      await assert.rejects(JOBS.excavate({...r, bot: hard}, Object.assign({...job, t: {}}, {unreachable: seen})), (e) => /needs a tool|no pickaxe for/.test(e.message) && !/were not dug/.test(e.message));
-      assert.strictEqual(seen.size, 4, 'four blocks left, the fifth ends the job');
+      await assert.rejects(JOBS.excavate(tried, Object.assign({...job, t: {}}, {unreachable: seen})), (e) => /needs a tool|no pickaxe for/.test(e.message) && !/were not dug/.test(e.message));
+      assert.strictEqual(seen.size, 6, 'every block of that kind is left');
+      assert.strictEqual(digs, 1, 'one try for the kind of block, not one per block (review 2026-11-19)');
       assert.deepStrictEqual(order, [], 'nothing dug');
       blocks.clear();
     }
-    { // ... in a row only: six such blocks between dug ones (an obsidian frame in a clear) are left and the rest is dug (final review 2026-11-19)
+    { // a pickaxe too weak for one kind of block (an obsidian frame in a clear): those are left, the rest is dug
       for (let y = 55; y <= 60; y++) { blocks.set(`0,${y},0`, 'dirt'); blocks.set(`1,${y},0`, 'stone'); }
       order.length = 0;
+      let digs = 0;
       const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
-      await assert.rejects(JOBS.excavate({...r, bot: hard}, {...job, t: {}, unreachable: new Set(), args: {...job.args, y1: 55}}), /6 blocks of the room were not dug/);
+      const tried = {...r, bot: hard, emit: (kind, text) => { if (/^left a dirt block/.test(text)) digs++; }};
+      await assert.rejects(JOBS.excavate(tried, {...job, t: {}, unreachable: new Set(), args: {...job.args, y1: 55}}), /6 blocks of the room were not dug/);
       assert.strictEqual(order.length, 6, 'every stone dug');
+      assert.strictEqual(digs, 1, 'one try, however many dug blocks lie between');
+      blocks.clear();
+    }
+    { // ... also when the frame stands free: five such blocks with only air between and the ground under them
+      for (let y = 56; y <= 60; y++) blocks.set(`0,${y},0`, 'dirt');
+      blocks.set('0,55,0', 'stone'); blocks.set('1,55,0', 'stone');
+      order.length = 0;
+      const hard = {...bot, registry: {...bot.registry, items: {}}, blockAt: (p) => { const b = bot.blockAt(p); return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      await assert.rejects(JOBS.excavate({...r, bot: hard}, {...job, t: {}, unreachable: new Set(), args: {...job.args, y1: 55}}), /5 blocks of the room were not dug/);
+      assert.deepStrictEqual(order, ['stone@55', 'stone@55'], 'the ground under the frame is dug');
+      blocks.clear();
+    }
+    { // no pickaxe at all, hand-diggable blocks between: the first block that needs one ends the job with the tool named
+      for (let y = 58; y <= 60; y++) { blocks.set(`0,${y},0`, 'stone'); blocks.set(`1,${y},0`, 'dirt'); }
+      order.length = 0;
+      const bare = {...bot, registry: {...bot.registry, items: {}}, inventory: {...bot.inventory, items: () => []}, blockAt: (p) => { const b = bot.blockAt(p); return b.name === 'dirt' ? {...b, harvestTools: {999: true}} : b; }};
+      await assert.rejects(JOBS.excavate({...r, bot: bare, pickaxeTriedAt: Date.now()}, {...job, t: {}, unreachable: new Set()}), /Error: needs a tool that can harvest dirt/);
+      assert.deepStrictEqual(order, ['stone@60'], 'ended at the first one');
       blocks.clear();
     }
     { // spawners are no missing pickaxe: clear leaves all of them and still digs the layer below (W1 review)
