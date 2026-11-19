@@ -444,7 +444,9 @@ does not end it: once a minute an order whose bot is online and idle starts agai
 after `gave up ... (died 4 times)`) and right after a restart, event `the owner's <type> order goes on` (one exploded project chest had ended two orders, and the agents
 then sent bot1 out at night 806 times in 17 h: 17 deaths, 2026-10-17). The open order per bot (type and args)
 is kept in `STATE_DIR/owner-orders.json`; a dashboard Stop clears it. A body with `"remember": false` (botchef's
-one-off orders) runs the job once and leaves the standing order as it was.
+one-off orders) runs the job once and leaves the standing order and the project as they were; with `"replace": true`
+it replaces the running job, which its standing order or project starts again afterwards. A hub restart can still
+resume a one-off from `jobs.json`.
 The same failure again (numbers masked) doubles the wait each time, 5, 10, 20, 40, then 60 min at most, for orders
 and projects alike; the third one in a row is an `alert` event (`its <type> order failed 3 times the same way ...`).
 A new order, a finish or a project's end starts the count over (`orderloop.failStreak`; EM_Trader's full inventory and
@@ -453,7 +455,7 @@ bot19 in a hole each failed every 6-7 min for days, 2026-11-11).
 - **Projects** (`POST /api/project {bot, action: pause|resume|stop}`): one row per bot with a
   shaft/excavate/level/seal/rim/treefarm/homebed/build/grave job running, queued or remembered, with progress.
   The server remembers each bot's last project and its validated arguments in `STATE_DIR/projects.json`
-  (any `/api/job` notes it; a stop marks it paused). Pause keeps it, Resume queues
+  (any `/api/job` without `"remember": false` notes it; a stop marks it paused). Pause keeps it, Resume queues
   the *last project given to that bot* again, Stop forgets it. Pausing a *running* project is a bot stop, so that bot's queue
   goes too; a merely queued project is removed alone.
 - **Quick actions** in every bot card: Stop, Home (`goto` the supply chest), Come to me (the "your player

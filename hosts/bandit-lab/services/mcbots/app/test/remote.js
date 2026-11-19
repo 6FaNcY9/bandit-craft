@@ -146,6 +146,10 @@ const {handle} = require('../remote');
       // botchef job replaced the bot's guard post as its standing order (main server 2026-11-19)
       assert.equal((await call('POST', '/api/job', L, {bots: ['bot2'], type: 'chop', args: {count: 3}, remember: false}))[0], 200);
       assert.deepEqual(orders().bot2.args, {count: 12}, 'a remember:false job is no standing order');
+      // ...nor does one that replaces the running job pause the bot's project: its order starts the shaft again, and a
+      // paused row would outlive the finished shaft (forget skips a paused project) and offer a Resume of done work
+      assert.equal((await call('POST', '/api/job', L, {bots: ['bot1'], type: 'chop', args: {count: 3}, remember: false, replace: true}))[0], 200);
+      assert.deepEqual([(await call('GET', '/api/state', L))[1].projects.bot1?.paused, orders().bot1.type], [false, 'shaft'], 'the shaft project and order go on after the one-off');
       assert.deepEqual(await call('POST', '/api/project', L, {bot: 'bot1', action: 'pause'}), [200, {ok: true}]);
       assert.deepEqual(await call('POST', '/api/project', L, {bot: 'bot2', action: 'stop'}), [200, {ok: true}]);
       assert.deepEqual(Object.keys(orders()), ['bot2'], 'the paused shaft is no standing order any more');

@@ -243,7 +243,7 @@ function submitJob({bots, type, args, replace, first, remember = true}) {
       if (remember) { orderFails.delete(r.name); type === 'stop' ? idleHeld.add(r.name) : idleHeld.delete(r.name); if (type !== 'stop') idleStopAll = false; }
       if (stopping) {
         delete toResume[r.name]; // its saved jobs must not come back after a restart or reconnect
-        projects.pause(r.name);
+        if (remember || type === 'stop') projects.pause(r.name); // a one-off leaves the project to its standing order
       }
       if (remember && PROJECTS.has(type)) projects.note(r.name, type, VALIDATE[type](args || {}));
     } catch (e) {
