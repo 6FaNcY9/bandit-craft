@@ -508,7 +508,8 @@ class BotRunner {
 
   // The scaffold records as a file (read back into stray by the constructor), written only when they changed.
   saveScaffold() {
-    const text = JSON.stringify([...this.pillars.values(), ...this.stray.values()]);
+    // `pillar` lets the hub tell a worker bot's own pillar cells from its stray ones (/api/scaffold, K22); restore ignores it.
+    const text = JSON.stringify([...[...this.pillars.values()].map((c) => ({...c, pillar: true})), ...this.stray.values()]);
     if (!this.scaffoldFile || text === this.scaffoldSaved) return;
     const fs = require('node:fs');
     try {

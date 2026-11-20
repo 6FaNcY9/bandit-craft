@@ -166,6 +166,12 @@ const {BotRunner} = require('../bots');
   r.pillars.set('1,64,1', {}).set('1,65,1', {});
   r.stray.set('9,70,9', {});
   assert.strictEqual(r.snapshot().scaffold, 3);
+  // K22: the saved file tells pillar cells from stray ones, so the hub can serve a worker bot's (/api/scaffold)
+  r.scaffoldFile = require('node:path').join(require('node:os').tmpdir(), `scaffold-k22-${process.pid}.json`);
+  r.saveScaffold();
+  assert.deepStrictEqual(JSON.parse(require('node:fs').readFileSync(r.scaffoldFile, 'utf8')).map((c) => !!c.pillar), [true, true, false]);
+  require('node:fs').rmSync(r.scaffoldFile, {force: true});
+  r.scaffoldFile = null;
   r.pillars.clear(); r.stray.clear();
   r.dead = true;
   assert.strictEqual(r.activity(), 'dead - respawning');

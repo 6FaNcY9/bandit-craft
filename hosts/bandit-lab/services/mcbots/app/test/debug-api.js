@@ -189,6 +189,12 @@ const {BotRunner} = require('../bots');
     const poll = async (f, what) => { for (let i = 0; i < 100; i++) { const v = await f(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw new Error(`timed out: ${what}`); };
     const b5 = await poll(async () => (await state()).find((b) => b.name === 'bot5' && b.online), 'bot5 listed online');
     assert.deepStrictEqual([b5.host, b5.remote, b5.connected], ['laptop', true, true]);
+    // K22: the recorded scaffold cells, behind the login; a worker bot's from the file its worker saves into the shared folder
+    require('node:fs').writeFileSync(`${planDir}/.scaffold-bot5.json`, JSON.stringify([{x: 1, y: 64, z: 2, name: 'dirt', pillar: true}, {x: 3, y: 65, z: 4, name: 'cobblestone', tries: 2}, {x: 5, y: 66, z: 6, name: 'dirt'}, {x: 'bad', y: 1, z: 1, name: 'dirt'}, null]));
+    assert.strictEqual((await fetch(`http://127.0.0.1:${port}/api/scaffold`)).status, 403, 'scaffold sits behind the login');
+    const sc = await (await fetch(`http://127.0.0.1:${port}/api/scaffold`, {headers: {'tailscale-user-login': 'a@github'}})).json();
+    assert.deepStrictEqual(sc.bot5, {pillars: [[1, 64, 2, 'dirt']], stray: [[3, 65, 4, 'cobblestone', 2], [5, 66, 6, 'dirt', 0]]});
+    assert.deepStrictEqual(sc.bot1, {pillars: [], stray: []}, 'a local bot: its own maps');
     assert.strictEqual((await post({bots: 'all', type: 'stop'})).status, 200);
     await poll(() => got.find((m) => m.t === 'job' && m.type === 'stop'), 'stop reached the worker');
     assert.strictEqual((await post({bots: ['bot5'], type: 'goto', args: {x: 1, y: 2, z: 3}})).status, 200);

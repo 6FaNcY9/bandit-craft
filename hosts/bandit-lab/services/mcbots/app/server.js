@@ -481,6 +481,15 @@ const sameOrigin = (req) => {
   }
 };
 const loopDelay = loopDelayMeter();
+// The recorded scaffold cells per bot, for a removal plan (K22): a local bot's own maps; a worker bot's from the file its
+// worker saves into the shared schematics folder every 10 s when they changed (bots.js saveScaffold), so up to 10 s old.
+const scaffoldCells = () => Object.fromEntries([...runners.values()].map((r) => {
+  let cells = [];
+  if (r.pillars) cells = [...[...r.pillars.values()].map((c) => ({...c, pillar: true})), ...r.stray.values()];
+  else try { cells = JSON.parse(fs.readFileSync(path.join(SCHEMATIC_DIR, `.scaffold-${r.name}.json`), 'utf8')); } catch {} // none saved yet
+  const ok = (Array.isArray(cells) ? cells : []).filter((c) => c && [c.x, c.y, c.z].every(Number.isInteger) && /^[a-z_]{1,48}$/.test(c.name)); // a worker's file is checked as restore does
+  return [r.name, {pillars: ok.filter((c) => c.pillar === true).map((c) => [c.x, c.y, c.z, c.name]), stray: ok.filter((c) => c.pillar !== true).map((c) => [c.x, c.y, c.z, c.name, Number.isInteger(c.tries) ? c.tries : 0])}];
+}));
 const state = () => ({now: Date.now(), lastEventId: events.lastId, worldSeq: worldModel?.seq() || 0, keeper: keeper?.state() || null, bots: [...runners.values()].map((r) => ({...r.snapshot(), settings: settings.get(r.name)})), world: world.snapshot(), protectedAreas: cfg.protectedAreas, supplyChest, places: places.list, projects: projects.view(), chest: supplyStock() && {warnings: chestWarnings(supplyStock().items, supplyStock().free)}});
 
 // A schematic upload: the raw .litematic, at most 4 MB.
@@ -593,6 +602,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/') return send(200, 'text/html; charset=utf-8', page);
   if (req.method === 'GET' && url.pathname === '/mehr') return send(200, 'text/html; charset=utf-8', legacy, LEGACY_CSP);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(200, state());
+  if (req.method === 'GET' && url.pathname === '/api/scaffold') return json(200, scaffoldCells());
   if (req.method === 'GET' && url.pathname === '/api/schematics') return json(200, await listSchematics());
   // One schematic's blocks for the dashboard's Plan view (read only): {size: [x,y,z], palette: [name], blocks: [[x,y,z,paletteIndex]]}, no air.
   if (req.method === 'GET' && url.pathname === '/api/schematic/blocks') {

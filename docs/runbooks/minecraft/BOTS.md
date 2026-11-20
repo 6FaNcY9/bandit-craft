@@ -513,6 +513,8 @@ lastError{message,agoS}}]}`. It sits behind the same login check as the rest of
 the dashboard. Positions are sampled every 500 ms (rounded to 0.01) and kept for
 30 s. The bot cards also show "pulled back N x in 30 s" when it is not zero.
 
+`GET /api/scaffold` (same login) returns per bot `{pillars: [[x,y,z,block]], stray: [[x,y,z,block,tries]]}`, the scaffold cells it still has to dig back (the snapshot's `scaffold` counts them); a worker bot's come from its `.scaffold-<name>.json` in the schematics folder, up to 10 s old.
+
 ### Discord: `/api/remote/` (2026-11-11)
 
 The Discord admin bot (`services/discord-admin`, the owner's `/bots status | stopp | weiter` in `#bot-kommando`) has
