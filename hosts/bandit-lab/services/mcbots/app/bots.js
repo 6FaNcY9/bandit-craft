@@ -1334,8 +1334,10 @@ async function waitCalm(r, job, until = Infinity) {
 // Three deep, not two: on flat ground the old feet cell has no side block to put the lid against.
 const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (odds.js)
 // The keeper's trips out of the base (armoury, lighting): not at daybreak, while the night's mobs are still out (bot19 died twice on
-// an armoury trip sent the moment day began, 2026-11-19), and early enough that a 3000-tick trip is back before dusk (13000).
-const SAFE_TRIP = [1000, 9000];
+// an armoury trip sent the moment day began, 2026-11-19), and early enough that the round trip is back before dusk (13000):
+// an armoury count is 85-103 s out and about 100 s home, a delivery adds the withdraw at the base, 4000 to 5000 ticks in all;
+// one started at 8999 came home after 13000 and would dig a night shelter on the way (main server 2026-11-20).
+const SAFE_TRIP = [1000, 8000];
 const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'cropfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
 // Standing in tonight's shelter hole. A shelterAt left behind by a Stop, a death or a reconnect says nothing once the bot is elsewhere.
@@ -4496,7 +4498,8 @@ const JOBS = {
     const foodCount = () => bot.inventory.items().filter((i) => isFood(i.name)).reduce((n, i) => n + i.count, 0);
     const opened = new Set();
     // At the armoury the bot hands back what it carries twice (gear.js handBack); a guest keeps its own (spec 2026-11-15).
-    const atGear = !!r.gearChest && !r.gearRange && ['x', 'y', 'z'].every((k) => at[k] === r.gearChest[k]);
+    const atArmoury = !!r.gearChest && ['x', 'y', 'z'].every((k) => at[k] === r.gearChest[k]);
+    const atGear = atArmoury && !r.gearRange;
     let handed = 0;
     for (const pos of spots) {
       guard(job);
@@ -4549,6 +4552,8 @@ const JOBS = {
           }
           guard(job);
         }
+        // The keeper counts the armoury only every 2 hours (K20): a taken set shows now. Its own chest only (either half), a guest's too.
+        if (atArmoury && pos.distanceTo(new Vec3(r.gearChest.x, r.gearChest.y, r.gearChest.z)) <= 1.01) noteStock(r, job, box, r.gearChest);
       } finally {
         box.close();
       }

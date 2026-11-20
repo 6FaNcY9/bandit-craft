@@ -100,7 +100,7 @@ const {BotRunner} = require('../bots');
   r.bot = {entity: {position: {x: 0, y: 64, z: 0}}, time: {timeOfDay: 5000}, game: {}, inventory: {items: () => [], emptySlotCount: () => 36, slots: []}};
   assert.strictEqual(r.snapshot().safeTrip, null, 'offline: unknown');
   r.online = true;
-  assert.deepStrictEqual([0, 999, 1000, 8999, 9000, 15000].map((t) => { r.bot.time.timeOfDay = t; return r.snapshot().safeTrip; }), [false, false, true, true, false, false]);
+  assert.deepStrictEqual([0, 999, 1000, 7999, 8000, 15000].map((t) => { r.bot.time.timeOfDay = t; return r.snapshot().safeTrip; }), [false, false, true, true, false, false]);
   r.bot.time = {};
   assert.strictEqual(r.snapshot().safeTrip, null, 'no time yet: unknown');
 }

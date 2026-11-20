@@ -58,7 +58,7 @@ module.exports = async () => {
     };
     const run = (b, job = {t: {}, cancelled: false}, extra = {}) => {
       const infos = [];
-      const r = {bot: b.bot, world: {hostilesNear: () => []}, emit: (k, m) => infos.push(m), protectedAreas: [], supplyChest: null, ...extra};
+      const r = {bot: b.bot, world: {hostilesNear: () => [], noteStock() {}}, emit: (k, m) => infos.push(m), protectedAreas: [], supplyChest: null, ...extra};
       return {go: () => JOBS.rearm(r, Object.assign(job, {args: {x: 0, y: 64, z: 0}})), job, infos};
     };
     // 1. full inventory with a pickaxe and carried armour: the spare pickaxe cannot be taken, the armour is worn
@@ -203,9 +203,25 @@ module.exports = async () => {
     b = botOf(chest, {inv: [it('iron_sword')]});
     const woodGoals = [];
     b.bot.pathfinder.goto = async (g) => { woodGoals.push(g); };
-    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => []}, emit: () => {}, protectedAreas: [], supplyChest: {x: 500, y: 64, z: 500}, gearChest: {x: 0, y: 64, z: 0}}, {t: {}, cancelled: false, args: {x: 0, y: 64, z: 0}});
+    await JOBS.rearm({bot: b.bot, world: {hostilesNear: () => [], noteStock() {}}, emit: () => {}, protectedAreas: [], supplyChest: {x: 500, y: 64, z: 500}, gearChest: {x: 0, y: 64, z: 0}}, {t: {}, cancelled: false, args: {x: 0, y: 64, z: 0}});
     assert.ok(woodGoals.every((g) => Math.hypot(g.x, g.z) < 10), JSON.stringify(woodGoals.at(-1)));
     assert.strictEqual(chest.items.length, 0, 'not the armoury: nothing handed back');
+    // 13. a re-arm at the armoury reports what its chest holds after the taking: the keeper counts it only every 2 hours (K20)
+    const notes = [];
+    const world = {hostilesNear: () => [], noteStock: (bot, items, free, pos) => notes.push([pos, items])};
+    const rearmAt = async (at, extra) => {
+      chest = chestOf([it('iron_helmet', 2), it('bread', 40)]);
+      b = botOf(chest);
+      b.bot.findBlocks = () => [new Vec3(0, 64, 0), new Vec3(3, 64, 0)]; // the armoury chest and a barrel beside it
+      notes.length = 0;
+      await JOBS.rearm({bot: b.bot, world, emit: () => {}, protectedAreas: [], supplyChest: null, ...extra}, {t: {}, cancelled: false, args: at});
+      return notes.filter(([pos]) => pos.x === 0 && pos.y === 64 && pos.z === 0);
+    };
+    assert.deepStrictEqual(await rearmAt(GEAR, {gearChest: GEAR}), [[GEAR, {iron_helmet: 1, bread: 8}]], 'the armoury reported once, with what is left');
+    assert.strictEqual(notes.length, 1, 'the container beside it reports nothing');
+    assert.strictEqual((await rearmAt(GEAR, {gearChest: GEAR, gearRange: 250})).length, 1, 'a guest taking from the armoury reports it too');
+    assert.deepStrictEqual(await rearmAt(GEAR, {gearChest: {x: 500, y: 64, z: 500}}), [], 'a re-arm at the supply chest reports nothing');
+    assert.deepStrictEqual(await rearmAt(GEAR, {gearChest: null}), [], 'nor without an armoury');
   }
   { // excavate: digs natural ground top-down, leaves placed blocks and protected areas alone
     const {JOBS, VALIDATE} = require('../../bots');
