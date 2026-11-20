@@ -88,6 +88,39 @@ const assert = require('node:assert');
     assert.deepStrictEqual(P.due(s, {blockAt: at, open}).map((c) => `${c.x},${c.y},${c.z}`), ['5,70,5'], 'only the floating stray block is due, the roofed one stays');
   }
 }
+(async () => { // job-end tidy (K15): no trek back to a far pillar, no floating stub, at most 2 failed digs per pass. bot2 climbed
+  // its own 40-high pillar again after a remove plan and died from up there (main server 2026-11-19)
+  const {unpillar, clearStray} = require('../bots');
+  const {Vec3} = require('vec3');
+  const P = require('../pillars');
+  // Every recorded cell is dirt that needs a tool the bot lacks: each dig attempt fails at once, with a message.
+  const runner = (cells, into = 'pillars') => {
+    const world = new Set(cells.map(([x, y, z]) => P.key(x, y, z)));
+    const msgs = [], r = {pillars: new Map(), stray: new Map(), protectedAreas: [], emit: (k, m) => msgs.push(m),
+      bot: {entity: {position: new Vec3(0.5, 64, 0.5)}, inventory: {items: () => []}, registry: {items: {}},
+        blockAt: (p) => (world.has(P.key(p.x, p.y, p.z)) ? {name: 'dirt', boundingBox: 'block', harvestTools: {999: true}} : {name: 'air', boundingBox: 'empty'})}};
+    for (const [x, y, z] of cells) P.record(r[into], x, y, z, 'dirt');
+    return {r, msgs};
+  };
+  const job = {type: 'build', cancelled: false, t: {}};
+  let {r, msgs} = runner([[100, 64, 0]]);
+  await unpillar(r, job);
+  assert.deepStrictEqual([msgs.length, [...r.pillars.keys()]], [0, ['100,64,0']], 'a pillar 100 away is not walked back to and stays recorded');
+  ({r, msgs} = runner([[10, 64, 0]]));
+  await unpillar(r, job);
+  assert.ok(/^pillar at 10 64 0 left standing/.test(msgs[0]), 'a pillar 10 away is dug');
+  ({r, msgs} = runner([[20, 64, 0], [20, 65, 0], [20, 66, 0]]));
+  await unpillar(r, job);
+  assert.deepStrictEqual(msgs.length, 1, 'only the top cell is tried');
+  assert.deepStrictEqual([...r.pillars.keys()].sort(), ['20,64,0', '20,65,0'], 'the cells under a failed top stay recorded');
+  assert.strictEqual(r.stray.get('20,66,0').tries, 1, 'the failed top is kept for a later job end');
+  ({r, msgs} = runner([[5, 64, 0], [6, 65, 3], [7, 66, 6]]));
+  await unpillar(r, job);
+  assert.deepStrictEqual([msgs.length, [...r.pillars.keys()]], [2, ['5,64,0']], 'the pass stops after 2 failed digs, the rest stays recorded');
+  ({r, msgs} = runner([[5, 64, 0], [6, 65, 3], [7, 66, 6]], 'stray'));
+  await clearStray(r, job);
+  assert.deepStrictEqual([...r.stray.values()].map((c) => c.tries || 0).sort(), [0, 1, 1], 'clearStray too stops after 2 failed digs');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
 { // server admin (admin.js): RCON packets, validation, restart, no agent access (2026-10-10)
   const AD = require('../admin');
   const net = require('node:net');

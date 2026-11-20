@@ -178,6 +178,21 @@ const assert = require('node:assert');
   assert.ok(mv.exclusionBreak(ghost) >= 100, 'nor digging it');
 })();
 
+{ // job-end tidy: no block placed while it runs (K15): bot2 climbed its own 40-high pillar again after a remove plan, the
+  // next job bridged from y 94 and it fell to its death (main server 2026-11-19)
+  const {safeMovements} = require('../bots');
+  const {Vec3} = require('vec3');
+  const EventEmitter = require('node:events');
+  const registry = require('minecraft-data')('26.1');
+  const bot = Object.assign(new EventEmitter(), {registry, entity: {position: new Vec3(0, 64, 0)}, pathfinder: {}, blockAt: () => ({name: 'air', boundingBox: 'empty'})});
+  const r = {noPlace: false};
+  const mv = safeMovements(bot, [], r);
+  const cell = {name: 'air', position: new Vec3(1, 64, 0)};
+  assert.strictEqual(mv.exclusionPlace(cell), 0, 'a walk may place a block');
+  r.noPlace = true;
+  assert.ok(mv.exclusionPlace(cell) >= 100, 'the tidy walk places none');
+}
+
 (async () => { // parkour: no jump over a deep gap, a shallow gap is still jumped (five falls at the tower, 2026-11-17)
   const {safeMovements} = require('../bots');
   const {Movements} = require('mineflayer-pathfinder');

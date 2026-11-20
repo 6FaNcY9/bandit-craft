@@ -1074,6 +1074,8 @@ class BotRunner {
     // With the leftovers remembered across restarts (pillars.js restore) these walks head for old dirt round a tower
     // and could tunnel its finished walls on the way (main server 2026-11-18): natural ground only, the rest waits.
     this.digOnly = TIDY_DIG;
+    // Nor does it place a block: bot2's unpillar climbed its own 40-high pillar again and the next job started up there (K15, 2026-11-19).
+    this.noPlace = true;
     // A few of the floating leftovers an earlier death or failed dig left within reach, so the world tidies as the bots
     // work; first, so a pillar this job end fails to dig waits for a later one instead of a second try from the same spot.
     if (!job.cancelled && this.online) await clearStray(this, job).catch(() => {});
@@ -1087,6 +1089,7 @@ class BotRunner {
     else { const why = this.lastError.replace(/^\w+: /, ''); this.emit('fail', `${/of a far search heading|and no walkable heading$/.test(why) ? 'gave up' : 'failed'}: ${jobLabel(job)} - ${why}`, job.id, `${chatLabel(job)}: ${owner.germanReason(why)}`); }
     this.current = null;
     this.digOnly = null;
+    this.noPlace = false;
     this.digBox = null;
     const spare = this.online && !this.dead && this.prefs?.chest ? ownSpare(this) : [];
     if (shouldEmpty(job, this.queue, this.prefs, spare.length)) {
@@ -1247,7 +1250,7 @@ function safeMovements(bot, areas, runner = null) {
   mv.exclusionAreasBreak = [veto, held, built, rock, (blk) => (runner?.digOnly && !runner.digOnly.test(blk.name) ? 100 : 0), (blk) => (outsideBox(runner?.digBox, blk.position) ? 100 : 0)];
   // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
   const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
-  mv.exclusionAreasPlace = [veto, lid];
+  mv.exclusionAreasPlace = [veto, lid, () => (runner?.noPlace ? 100 : 0)];
   // An unloaded cell is the library's stand-in without a position: it threw here and took the hub down (2026-11-07). Never there.
   for (const k of ['exclusionAreasBreak', 'exclusionAreasPlace']) mv[k] = mv[k].map((f) => (blk) => (blk?.position ? f(blk) : 100));
   const spawner = bot.registry.blocksByName.spawner?.id;
@@ -2249,14 +2252,21 @@ async function digAt(r, job, pos, expect = null, {pickup = true, stay = false} =
 async function unpillar(r, job, target = null) {
   if (!r.pillars?.size) return;
   const feet = PILLAR_JOBS.has(job.type) ? null : r.bot.entity?.position; // a chop climbs down by digging; any other job stands where it arrived
-  const within = job.type === 'goto' ? 5 : null; // a walk ends where it was sent: no trip back into the pit it climbed out of (the cells stay recorded)
-  const cells = pillars.due(r.pillars, {blockAt: (x, y, z) => r.bot.blockAt(new Vec3(x, y, z)), protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), target, feet, within});
+  // A walk ends where it was sent: no trip back into the pit it climbed out of (the cells stay recorded).
+  const within = job.type === 'goto' ? 5 : PILLAR_JOBS.has(job.type) ? null : UNPILLAR_REACH;
+  const blockAt = (x, y, z) => r.bot.blockAt(new Vec3(x, y, z));
+  const cells = pillars.due(r.pillars, {blockAt, protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), target, feet, within});
+  let failed = 0;
   for (const c of cells) {
     guard(job);
+    if (failed >= TIDY_FAILS) return;
+    // A failed top cell left the same block on this one: digging it would leave a floating stub (K15, 2026-11-19).
+    if (blockAt(c.x, c.y + 1, c.z)?.name === c.name) continue;
     r.pillars.delete(pillars.key(c.x, c.y, c.z));
     try {
       await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);
     } catch (e) {
+      failed++;
       pillars.retry(r.stray, c, job.cancelled ? 0 : 1); // tried again at a later job end near it (clearStray)
       guard(job);
       r.emit('info', `pillar at ${c.x} ${c.y} ${c.z} left standing: ${e.message.slice(0, 60)}`);
@@ -2264,6 +2274,10 @@ async function unpillar(r, job, target = null) {
   }
 }
 
+// A job's own pillar this far off waits: bot2 walked back to a 40-high one after a remove plan, failed on its top cells
+// ("Took to long to decide path") and was left up at y 94 (K15, main server 2026-11-19).
+const UNPILLAR_REACH = 32;
+const TIDY_FAILS = 2; // failed digs per job-end pass; the rest waits for a later job end (K15)
 const STRAY_REACH = 40; // blocks from the bot: a dead life's leftover scaffold is dug when a later job ends this close, never a trek across the world
 const STRAY_PER_JOB = 16; // at most this many per job end, so a finish stays quick; a tall column comes down top-down over the next few finishes
 
@@ -2276,12 +2290,15 @@ async function clearStray(r, job) {
   const blockAt = (x, y, z) => r.bot.blockAt(new Vec3(x, y, z));
   const open = (x, y, z) => pillars.openAbove(blockAt, x, y, z);
   const cells = pillars.due(r.stray, {blockAt, protectedAt: (x, z, y) => insideAreas(r.protectedAreas, x, z, y), feet, within: STRAY_REACH, open}).slice(0, STRAY_PER_JOB);
+  let failed = 0;
   for (const c of cells) {
     guard(job);
+    if (failed >= TIDY_FAILS) return;
     r.stray.delete(pillars.key(c.x, c.y, c.z));
     try {
       await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);
     } catch (e) {
+      failed++;
       pillars.retry(r.stray, c, job.cancelled ? 0 : 1);
       guard(job); // a stop is not a failure; the rest waits for a later job end
     }
@@ -4907,4 +4924,4 @@ const JOBS = {
 JOBS.enchant = enchantLib.makeEnchant({nearBlock: craftingLib.nearBlock, goNear, guard, count: crafting.count,
   getMore: (r, job, item, n) => JOBS.get(r, child(job, {type: 'get', args: {item, count: n}}))});
 
-module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, deepSpot, noteDigSpot, dropDigSpot, noteDrowning, awayFromDrownings, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, treeLog, partnerOf, depositList, chestAway};
+module.exports = {gearPoint, gearOwned, gearSources, MAX_QUEUE, walksBack, beyondKeep, descentStart, digSpotBack, deepSpot, noteDigSpot, dropDigSpot, noteDrowning, awayFromDrownings, DEEP_BAND, RESUME_WINDOW_MS, BACKOFF_CAP, shouldEmpty, produceStep, acquireWorld, indexChest, upkeep, wearArmour, chase, makeBlockNear, presentTypes, nearestOutside, topTargets, noPathAge, chunkKey, shiftLeash, anchorOf, backoff, care, hitsNote, waitSafe, supportStock, addSupports, projectPlaced, projectChests, projectOwner, dropDown, shaftSteps, ironIngots, storedBread, unarm, pathTool, ensureTool, toolsToMake, underBase, outOfBase, wetColumn, descentColumn, shaftWet, toBand, helpOnce, projectMaterials, nightShelter, SCHEMATIC_DIR, goNear, settledGoto, useSettledGoto, tailFrom, lightUp, lightCandidates, spawnerTorchSpot, shaftTorchDue, rimTorchDue, explore, layerOrder, stairRing, BotRunner, NAME_RE, VALIDATE, ENCHANTABLE, KEEP, keptOf, JOBS, unsafeDig, sealFluids, Cancelled, needsWood, digAt, openChest, guardDigs, safeMovements, tossJunk, NATURAL, TIDY_DIG, unpillar, clearStray, treeLog, partnerOf, depositList, chestAway};
