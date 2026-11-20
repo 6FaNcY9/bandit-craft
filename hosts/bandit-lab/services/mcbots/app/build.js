@@ -1080,7 +1080,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         // in the schematic or hold another block there. Anything else is the owner's: reported, never dug.
         // Each bot takes the cell of the top layer nearest to it, so a crew spreads out (in scan order all
         // three queued for the same block and cleared 2-3 a minute, sandbox 2026-10-13).
-        let clear = null;
+        let clear = null, paused = null;
         stuck.clear();
         const me = bot.entity.position;
         // Under the site only pillars come out, and a pillar reaches down to SCAFFOLD_MAX below its cell (BUILD-4).
@@ -1092,7 +1092,7 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               // Next to the site and under it only the build's own supports come out, at the end.
               if ((!inSite({x, z}) || y < lo.y) && !(allPlaced && pillars.has(k))) continue;
               const h = stateAt(x, y, z);
-              if (!h || free(h.name) || skip.has(k) || (plan.leave.has(k) && !allPlaced && !idle)) continue;
+              if (!h || free(h.name) || (plan.leave.has(k) && !allPlaced && !idle)) continue;
               const t = plan.byKey.get(k);
               if (job.args.tight && !t && !plan.air.has(k)) continue;
               if (t ? h.name === t.name || (t.anySolid && placing.matches(t, h)) : plan.cells.has(k)) continue; // the right block (its state is the build's job; rock for an anySolid wall), a piston head
@@ -1103,6 +1103,9 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
               if (!t && (h.name === SCAFFOLD || h.name === GLASS || (job.args.tight && /torch$/.test(h.name))) && !allPlaced) continue; // a support, a climb or a work light in an air cell, out at the end
               if (!clearable(k, h.name)) { stuck.set(k, h.name); continue; }
               if (h.name !== GLASS && landsInHopper(x, y, z, false)) { stuck.set(k, `${h.name} over a hopper`); continue; }
+              // Only paused (no answer, another bot's claim): the end waits for it. p3-54 and p3-57 "finished" with one
+              // such cell left (K18, main server 2026-11-19). An unreached support (Infinity) does not hold it back.
+              if (skip.has(k)) { if (skip.get(k) !== Infinity) paused = k; continue; }
               // A cell with a free side first: an inner cell shows only its top, which the walk cannot reach
               // from below and ran into its timeout for every block. The rest opens up from the edges.
               const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => free(stateAt(x + dx, y, z + dz)?.name ?? 'stone'));
@@ -1319,6 +1322,12 @@ function makeSchematic({goNear, guard, sleep, goals, digAt, deposit, natural, di
         if (open === pushed && fillsLeft) { // the rest skipped for a moment: material, another bot, a failed try
           job.t.doing = 'waiting to fill the last containers';
           lastProgress = Date.now();
+          await sleep(1000);
+          continue;
+        }
+        if (!open && paused) {
+          job.t.doing = `waiting for the cell to clear at ${paused}`;
+          stalled(`cell to clear at ${paused} still paused`);
           await sleep(1000);
           continue;
         }

@@ -416,6 +416,45 @@ module.exports = async () => {
     fs.rmSync(dir, {recursive: true, force: true});
     assert.deepStrictEqual(dug.sort(), ['crafting_table', 'wall_torch'], `own work blocks in planned cells come out; a chest and an air cell's torch stay (dug: ${dug})`);
   }
+  { // K18: a tight remove-only plan does not end while its last cell to clear is only paused: p3-54 and p3-57 "finished"
+    // with one cell left (main server 2026-11-19 20:12 and 20:35). Paused here by a claim another bot holds (5 s).
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
+    const {Vec3} = require('vec3');
+    const str = (value) => ({type: 'string', value});
+    const palette = Array.from({length: 32}, () => ({Name: str('minecraft:stone')}));
+    for (const [i, name] of ['air', 'cave_air', 'void_air', 'structure_void'].entries()) palette[i].Name.value = `minecraft:${name}`;
+    const xyz = (p) => ({type: 'compound', value: Object.fromEntries(Object.entries(p).map(([k, value]) => [k, {type: 'int', value}]))});
+    const region = {type: 'compound', value: {Position: xyz({x: 0, y: 0, z: 0}), Size: xyz({x: 1, y: 1, z: 1}),
+      BlockStatePalette: {type: 'list', value: {type: 'compound', value: palette}}, BlockStates: {type: 'longArray', value: [[0, 0]]}}};
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcbots-paused-'));
+    fs.writeFileSync(path.join(dir, 'gone.litematic'), gzipSync(nbt.writeUncompressed({type: 'compound', name: '',
+      value: {Metadata: {type: 'compound', value: {Name: str('gone')}}, Regions: {type: 'compound', value: {r: region}}}})));
+    const item = (id) => ({id, stackSize: 64});
+    const noop = async () => {};
+    const removeOnly = async (claims, waitMs) => {
+      const world = new Map([['0,64,0', 'dirt']]);
+      const at = (p) => world.get(`${p.x},${p.y},${p.z}`) ?? (p.y <= 63 ? 'stone' : 'air');
+      const on = {};
+      const job = {t: {}, cancelled: false, args: {file: 'gone.litematic', origin: {x: 0, y: 64, z: 0}, chests: [], tight: true}};
+      const bot = {game: {dimension: 'overworld'}, on(e, f) { on[e] = f; }, removeListener() {}, setControlState() {}, look: noop, waitForTicks: noop, equip: noop, tossStack: noop, activateBlock: noop, entities: {}, entity: {position: new Vec3(2.5, 64, 0.5), yaw: 0, pitch: 0},
+        inventory: {items: () => [], emptySlotCount: () => 36},
+        registry: {itemsByName: {stone: item(1), dirt: item(3), glass: item(4)}, blocksByName: {}},
+        pathfinder: {searchRadius: 100, movements: {exclusionAreasBreak: [], exclusionAreasPlace: [], scafoldingBlocks: [], blocksToAvoid: new Set()}},
+        blockAt: (p) => ({name: at(p), position: p, getProperties: () => ({}), boundingBox: at(p) === 'air' ? 'empty' : 'block', shapes: []})};
+      const digAt = async (rr, jj, p) => { world.delete(`${p.x},${p.y},${p.z}`); on.blockUpdate?.(null, {position: p}); return true; };
+      const schematic = require('../../build').makeSchematic({goNear: async () => {}, guard: (j) => { if (j.cancelled) throw new Error('stopped'); },
+        sleep: (ms) => new Promise((res) => setTimeout(res, Math.min(ms, 5))), goals: {GoalNear: class {}}, digAt, deposit: async () => {}, natural: /^(grass_block|dirt)$/, dir, waitMs});
+      const r = {bot, name: 'b', protectedAreas: [], emit() {}, conflict() {}, world: {claim: async () => claims() , release() {}}};
+      const end = await Promise.race([schematic(r, job).then(() => 'finished', (e) => e.message), new Promise((res) => setTimeout(() => res('hung'), 9000))]);
+      job.cancelled = true;
+      return {end, left: world.has('0,64,0')};
+    };
+    let n = 0;
+    assert.deepStrictEqual(await removeOnly(() => ++n > 1, 5 * 60000), {end: 'finished', left: false}, 'the paused cell is waited for and dug before the end');
+    const never = await removeOnly(() => false, 300);
+    assert.ok(never.left && /no progress .*0,64,0/.test(never.end), `a cell that never comes out fails the job, naming it (${never.end})`);
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
   { // BUILD-4: a floating cell's dirt pillar comes out all the way down, also below the cell under the site (audit 2026-11-19)
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), nbt = require('prismarine-nbt'), {gzipSync} = require('node:zlib');
     const {Vec3} = require('vec3');
