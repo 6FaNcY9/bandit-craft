@@ -16,6 +16,10 @@ const fs = require('node:fs');
 const MAX_BOTS = 2; // bots the keeper may use at once
 const IDLE_MS = 10000; // a bot must be idle this long before it is taken
 const STOCK_MAX_AGE_MS = 15 * 60 * 1000;
+// The armoury, 300 blocks from the base, is counted far less often: at 15 min (under a day of 20) a bot walked 600 blocks a
+// day only to count it, and bot19 was left idle on the castle hill through a night (K20, main server 2026-11-20). A delivery's
+// deposit there re-reads the chest anyway.
+const ARMOURY_STOCK_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const COOLDOWN_MS = 10 * 60 * 1000; // after a chain that did not raise the stock
 const ASSIGN_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_WANT = 4096;
@@ -287,9 +291,11 @@ class Keeper {
     const dayFree = () => free((s) => s.safeTrip === true);
     const stock = this.armouryStock();
     this.armouryNotes.clear();
-    if (!stock || t - stock.t > STOCK_MAX_AGE_MS) {
+    // Every armoury chain ends with the walk home: after it the bot stood idle on the castle hill until a base count fetched it (K20).
+    const home = ['goto', {x: this.chest.x, z: this.chest.z}];
+    if (!stock || t - stock.t > ARMOURY_STOCK_MAX_AGE_MS) {
       const r = !this.countingArmoury && busy.size < MAX_BOTS && dayFree();
-      if (r) this.assign(r, [['stock', {...this.armoury}]], () => { this.countingArmoury = {bot: r.name, at: t}; busy.add(r.name); }, `${r.name}: counting what is in the armoury`);
+      if (r) this.assign(r, [['stock', {...this.armoury}], home], () => { this.countingArmoury = {bot: r.name, at: t}; busy.add(r.name); }, `${r.name}: counting what is in the armoury`);
       return;
     }
     const short = ARMOURY_STOCK.map(([item, want]) => ({item, want, missing: want - have(stock.items, item)}))
@@ -301,7 +307,7 @@ class Keeper {
       if (!Array.isArray(jobs)) { this.armouryNotes.set(item, jobs.blocked); continue; }
       const r = busy.size < MAX_BOTS && dayFree();
       if (!r) { this.armouryNotes.set(item, 'waiting for a free bot'); continue; }
-      this.assign(r, jobs, () => {
+      this.assign(r, [...jobs, home], () => {
         this.work.set(key, {bot: r.name, n, at: t, before: have(stock.items, item), seen: false});
         busy.add(r.name);
       }, `${r.name}: armoury ${item} ${have(stock.items, item)}/${want}, bringing ${n} from the base chest`);
@@ -415,4 +421,4 @@ function parseQuotas(text) {
   return out;
 }
 
-module.exports = {Keeper, parseQuotas, PLANS, ARMOURY_STOCK, armouryPlan, have, idle, IDLE_MS, COOLDOWN_MS, STOCK_MAX_AGE_MS};
+module.exports = {Keeper, parseQuotas, PLANS, ARMOURY_STOCK, armouryPlan, have, idle, IDLE_MS, COOLDOWN_MS, STOCK_MAX_AGE_MS, ARMOURY_STOCK_MAX_AGE_MS};

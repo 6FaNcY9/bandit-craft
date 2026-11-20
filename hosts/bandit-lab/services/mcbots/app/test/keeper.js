@@ -318,7 +318,7 @@ const {WorldModel} = require('../world');
   assert.ok(bots.every((b) => !b.sent.length), 'no armoury trip at dawn');
   for (const b of bots) b.safe = true;
   k.tick();
-  assert.deepStrictEqual(bots.filter((b) => b.sent.length).map((b) => b.sent), [[['stock', arm]]], 'counted first');
+  assert.deepStrictEqual(bots.filter((b) => b.sent.length).map((b) => b.sent), [[['stock', arm], ['goto', {x: base.x, z: base.z}]]], 'counted first, then home (K20)');
   const counter = bots.find((b) => b.sent.length);
   w.noteStock(counter.name, {}, 54, arm);
   counter.idle = true;
@@ -327,7 +327,8 @@ const {WorldModel} = require('../world');
   k.tick();
   const sent = bots.map((b) => b.sent).filter((s) => s.length);
   assert.strictEqual(sent.length, 2, 'two bots at most');
-  assert.deepStrictEqual(sent[0], [['withdraw', {item: 'iron_ingot', count: 64, ...base}], ['deposit', {...arm, only: 'iron_ingot'}]]);
+  assert.deepStrictEqual(sent[0], [['withdraw', {item: 'iron_ingot', count: 64, ...base}], ['deposit', {...arm, only: 'iron_ingot'}], ['goto', {x: base.x, z: base.z}]], 'a delivery ends at home (K20)');
+  for (const [type, a] of sent[0]) assert.ok(V[type](a), `${type} is a valid job`);
   assert.strictEqual(k.state().armoury.find((q) => q.item === 'iron_ingot').have, 0);
   // the main quotas first: logs short in the base chest take a bot before the armoury
   const b2 = [fake('bot4'), fake('bot5')];
@@ -341,6 +342,23 @@ const {WorldModel} = require('../world');
   k2.tick();
   assert.ok(b2.some((b) => b.sent[0]?.[0] === 'chop'), 'logs first');
   assert.strictEqual(b2.filter((b) => b.sent.length).length, 2);
+}
+{ // K20: the armoury is counted every 2 hours, not every 15 min: bot19 was sent 300 blocks out to count it every day and
+  // left idle on the castle hill through a night (main server 2026-11-20 02:08-03:28 UTC); the base chest keeps 15 min
+  const {Keeper, IDLE_MS, ARMOURY_STOCK, STOCK_MAX_AGE_MS, ARMOURY_STOCK_MAX_AGE_MS} = require('../keeper');
+  assert.strictEqual(ARMOURY_STOCK_MAX_AGE_MS, 2 * 60 * 60 * 1000);
+  let t = 1e6;
+  const base = {x: -271, y: 66, z: -214}, arm = {x: -322, y: 105, z: -26}, w = new WorldModel({now: () => t});
+  const fake = (name) => ({name, sent: [], idle: true, snapshot() { return {online: true, dead: false, job: this.idle ? null : {label: 'x'}, queue: [], isDay: true, safeTrip: true}; }, enqueue(type, args) { this.sent.push([type, args]); this.idle = false; }});
+  const bot = fake('bot19');
+  const k = new Keeper({runners: new Map([[bot.name, bot]]), world: w, chest: base, quotas: [['logs', 64]], now: () => t});
+  k.setEnabled(true);
+  k.armoury = arm;
+  const full = Object.fromEntries(ARMOURY_STOCK.map(([item, want]) => [item === 'logs' ? 'oak_log' : item, want]));
+  const again = (dt) => { t += dt; w.noteStock('bot1', {oak_log: 64}, 10, base); bot.sent = []; bot.idle = true; k.tick(); t += IDLE_MS; k.tick(); return bot.sent.map(([type]) => type); };
+  w.noteStock('bot19', full, 10, arm);
+  assert.deepStrictEqual(again(STOCK_MAX_AGE_MS + 60000), [], 'an armoury count 16 min old is no reason for a trip');
+  assert.deepStrictEqual(again(ARMOURY_STOCK_MAX_AGE_MS), ['stock', 'goto'], 'after 2 hours it is counted again');
 }
 { // the idle bot nearest to the chest takes the chain, not the first in the list (bot20 at the castle came before bot21
   // beside the base, 2026-11-18); another dimension or no position goes last, as before among equals
