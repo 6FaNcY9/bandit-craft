@@ -325,6 +325,26 @@ const assert = require('node:assert');
   assert.strictEqual(await first('stone'), 'GoalY', 'under rock it still climbs first');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
 
+(async () => { // goNear: a built ceiling is no rock (K16): bot21 in the outpost tower's ground floor under the stair floor at y 77
+  // climbed the ladder "to Y 80" for 5 min, "no progress for 300 s" (main server 2026-11-19 21:08 and 21:28). Rock over a room still climbs.
+  const {goNear} = require('../bots');
+  const {Vec3} = require('vec3');
+  const first = async (over) => {
+    const goals = [], pos = new Vec3(-303, 75, -264);
+    const pf = {searchRadius: 80, stop() {}, setGoal() {}, goto: async (g) => {
+      goals.push(g.constructor.name);
+      for (const k of ['x', 'y', 'z']) if (Number.isFinite(g[k])) pos[k] = g[k];
+    }};
+    const bot = {entity: {position: pos}, time: {timeOfDay: 1000}, game: {dimension: 'overworld'}, inventory: {items: () => []},
+      blockAt: (p) => (over[p.y] ? {name: over[p.y], boundingBox: 'block'} : {name: 'air', boundingBox: 'empty'}), pathfinder: pf};
+    await goNear({bot, world: {hostilesNear: () => []}, combat: {fit: () => false}, emit() {}, protectedAreas: []}, {type: 'goto', t: {}, cancelled: false}, -310, 90, -264, 2);
+    return goals[0];
+  };
+  assert.notStrictEqual(await first({77: 'spruce_planks'}), 'GoalY', 'under a built floor with sky above the bot walks, it does not climb');
+  assert.strictEqual(await first({77: 'stone'}), 'GoalY', 'under rock it still climbs first');
+  assert.strictEqual(await first({77: 'spruce_planks', 82: 'stone'}), 'GoalY', 'a built room under rock still climbs');
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+
 (async () => { // goNear: a surface walk base -268 66 -213 -> spruce forest -374 74 75 sank bot1 to Y -19 in 2 min, leg by leg (main server
   // 2026-11-19): a y-less leg goal ranked a node 80 levels down like one on the surface. A floor under start and target stops that.
   const {goNear} = require('../bots');

@@ -1557,11 +1557,12 @@ async function goNear(r, job, x, y, z, dist, opts = {}) {
   // stranded underground with "No path" on the lab, 2026-10-10).
   // Only under a roof: out in the open a hill is ordinary walking, and climbing first would build pillars. A tree's
   // crown is open sky: bot2 under oak leaves at -311 75 -163 climbed "to Y 90" in place for 8 min (main server 2026-11-19).
+  // Nor is a built ceiling: bot21 climbed the outpost tower's ladder for 5 min from under its stair floor (K16, 2026-11-19).
   const covered = () => {
     const p = r.bot.entity.position.floored();
     for (let dy = 2; dy <= Math.min(20, y - p.y); dy++) {
       const b = r.bot.blockAt(p.offset(0, dy, 0));
-      if (b?.boundingBox === 'block' && !b.name.endsWith('_leaves')) return true;
+      if (b?.boundingBox === 'block' && !b.name.endsWith('_leaves') && !BUILT.test(b.name)) return true;
     }
     return false;
   };
