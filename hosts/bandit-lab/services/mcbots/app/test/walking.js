@@ -343,6 +343,10 @@ const assert = require('node:assert');
   assert.notStrictEqual(await first({77: 'spruce_planks'}), 'GoalY', 'under a built floor with sky above the bot walks, it does not climb');
   assert.strictEqual(await first({77: 'stone'}), 'GoalY', 'under rock it still climbs first');
   assert.strictEqual(await first({77: 'spruce_planks', 82: 'stone'}), 'GoalY', 'a built room under rock still climbs');
+  // Only natural rock counts: the outpost's ladder and cobblestone walls, and a lone cobblestone block over open ground
+  // (the walkway at x -291 y 77), are not BUILT and still sent a bot below them up (review 2026-11-20).
+  assert.notStrictEqual(await first({77: 'cobblestone'}), 'GoalY', 'under a cobblestone block with sky above the bot walks');
+  assert.notStrictEqual(await first({77: 'ladder'}), 'GoalY', 'under a ladder the bot walks');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
 
 (async () => { // goNear: a surface walk base -268 66 -213 -> spruce forest -374 74 75 sank bot1 to Y -19 in 2 min, leg by leg (main server
