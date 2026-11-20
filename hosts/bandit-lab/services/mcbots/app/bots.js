@@ -430,6 +430,7 @@ class BotRunner {
     this.onEvent = onEvent; // (bot, kind, text) -> dashboard event log
     this.dead = false;
     this.hits = []; // {t, by}: who hurt this bot lately, for the death line
+    this.angry = new Set(); // ids of the mobs that hurt it: a neutral one (enderman) is a threat from then on (combat.js provoked)
     this.deathSpots = []; // {x, z, t} of its deaths in the last 24 h (graves.js repeatDeath, deathAvoid)
     this.acquireFailed = new Map(); // acquire.js method key -> until: the "get" job leaves that way out meanwhile
     this.skip = new Map(); // block key -> time until which collect() leaves it alone
@@ -755,6 +756,7 @@ class BotRunner {
       const now = Date.now();
       const c = bot.controlState || {}, how = [c.sprint && 'sprint', c.jump && 'jump', bot.entity.onGround ? 'ground' : 'air'].filter(Boolean).join('+');
       this.hits = [...this.hits.filter((h) => now - h.t < HITS_MS), {t: now, by: by?.username || by?.name || 'no mob', y: Math.floor(bot.entity.position.y), how}];
+      if (by && by.type !== 'player' && by.id !== undefined) this.angry.add(by.id);
     });
     bot.loadPlugin(collectBlock);
     require('./crafting').fixCraftTiming(bot);
@@ -945,6 +947,7 @@ class BotRunner {
     this.emit('death', `died${p ? ` at ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}` : ''}${why}${fall}${hitsNote(this.hits, doing)}`);
     if (p && /drown/.test(why)) noteDrowning(this, p);
     this.hits = [];
+    this.angry.clear();
     const now = Date.now();
     const earlier = gravesJob.recentDeaths(this.deathSpots, now);
     const near = gravesJob.deathsNear(earlier, p, now);

@@ -94,9 +94,10 @@ function swimAir(bot, at) {
 
 // Left alone (NO_FIGHT) until one of its kind hits the bot: then those within 6 blocks are fought or kept away from
 // like any mob. Six endermen killed bot19 and seven bot1, provoked by a look while the bots never struck back (main
-// server 2026-10-20). hits: the runner's [{t, by}].
-const provoked = (e, hits = [], me, now) => /^(enderman|zombified_piglin|piglin)$/.test(e.name) && mobLocation(e).position.distanceTo(me) <= 6 &&
-  hits.some((h) => h.by === e.name && now - h.t < 10000);
+// server 2026-10-20). hits: the runner's [{t, by}]. angry: the ids of those that hit it, threats from then on wherever they
+// are: bot20 lost an enderman between its hits and died to it (K23, main server 2026-11-20).
+const provoked = (e, hits = [], me, now, angry = null) => /^(enderman|zombified_piglin|piglin)$/.test(e.name) && (!!angry?.has(e.id) ||
+  (mobLocation(e).position.distanceTo(me) <= 6 && hits.some((h) => h.by === e.name && now - h.t < 10000)));
 
 class Combat {
   constructor(runner) {
@@ -135,6 +136,11 @@ class Combat {
     const me = this.r.bot.entity?.position;
     const threats = me ? mobs.filter((e) => e.name !== 'creeper').map((e) => ({name: e.name, dist: mobLocation(e).position.distanceTo(me)})) : [];
     return odds({health: this.r.bot.health, ...this.gear(), threats: threats.length || !night ? threats : NIGHT});
+  }
+
+  // A hostile the bot fights or keeps away from: any but the neutrals, and those once they hit it (provoked).
+  threat(e, now = Date.now()) {
+    return shouldFight(e) || provoked(e, this.r.hits, this.r.bot.entity.position, now, this.r.angry);
   }
 
   // Whether this mob counts against the bot now: a wall stops its hits and shots, so one behind a wall does not, unless it
@@ -315,7 +321,7 @@ class Combat {
     const s = this.settings();
     const now = Date.now();
     for (const [id, until] of this.ignore) if (until < now) this.ignore.delete(id);
-    const threats = seen.filter((e) => shouldFight(e) || provoked(e, r.hits, me, now)).sort((a, b) => mobLocation(a).position.distanceTo(me) - mobLocation(b).position.distanceTo(me));
+    const threats = seen.filter((e) => this.threat(e, now)).sort((a, b) => mobLocation(a).position.distanceTo(me) - mobLocation(b).position.distanceTo(me));
     const close = threats[0], closeDist = close ? mobLocation(close).position.distanceTo(me) : Infinity;
     const near = threats.find((e) => !this.ignore.has(e.id));
     const dist = near ? mobLocation(near).position.distanceTo(me) : Infinity;
@@ -409,7 +415,8 @@ class Combat {
     // Each hit knocks a creeper back past 6 blocks, and it takes some 5 s to kill one: the duel goes on while they come.
     // One that stays out of reach for 8 s (behind a wall, say) is left alone, unless it comes close again.
     const came = new Map(); // creeper id -> when it was last within reach (or first seen)
-    const creepers = () => around((e) => (all ? shouldFight(e) : e.name === 'creeper')).filter((c) => c.d < 6 || !this.ignore.has(c.e.id));
+    // A provoked enderman too: the kite took shouldFight only, and a hurt bot struck and fled from none (K23, 2026-11-20).
+    const creepers = () => around((e) => (all ? this.threat(e) : e.name === 'creeper')).filter((c) => c.d < 6 || !this.ignore.has(c.e.id));
     const keep = (e) => (e.name === 'creeper' ? CREEPER_KEEP : MELEE_KEEP), reach = (e) => (e.name === 'creeper' ? CREEPER_REACH : STRIKE_REACH);
     try {
       await this.armUp();
@@ -440,7 +447,7 @@ class Combat {
         if (back) bot.lookAt(me.offset(-ax / len, 1.62, -az / len), true).catch(() => {}); // facing them, back is away
         bot.setControlState('back', back);
         // The nearest creeper in reach, else another hostile in reach (a zombie walking up meanwhile).
-        const hit = d <= reach(e) ? {e, at} : around((x) => x.name !== 'creeper' && shouldFight(x)).find((x) => x.d <= STRIKE_REACH);
+        const hit = d <= reach(e) ? {e, at} : around((x) => x.name !== 'creeper' && this.threat(x)).find((x) => x.d <= STRIKE_REACH);
         if (hit && Date.now() - this.lastAttack >= cooldown) {
           if (!back) bot.lookAt(hit.at.offset(0, hit.e.height * 0.8, 0), true).catch(() => {});
           this.lastAttack = this.lastFight = Date.now();

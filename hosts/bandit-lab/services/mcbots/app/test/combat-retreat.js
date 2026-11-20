@@ -106,4 +106,28 @@ const assert = require('node:assert');
   t.c.r.hits = [{by: 'zombie', t: Date.now()}];
   await t.c.tick();
   assert.strictEqual(fought, 1, 'one that just hit the bot through a gap is fought');
+
+  // K23: bot20 in full iron died to an enderman by day, 7 hits and none back (main server 2026-11-20 05:09 CET): hurt, the
+  // bot kites (duel), and the kite counted only shouldFight mobs, so it struck nothing and stepped nowhere.
+  const ender = (x) => ({id: 1, name: 'enderman', type: 'hostile', position: new Vec3(x, 64, 0), height: 2.9});
+  t = mk([ender(2)], {health: 7});
+  delete t.c.duel; // the real kite
+  t.c.lastAttack = 0;
+  const struck = [];
+  Object.assign(t.c.r.bot, {setControlState() {}, lookAt: async () => {}, waitForTicks: async () => {}, deactivateItem() {}, attack: (e) => { struck.push(e.name); e.isValid = false; }});
+  t.c.r.hits = [{t: Date.now(), by: 'enderman', id: 1}];
+  t.c.r.angry = new Set([1]);
+  await t.c.tick();
+  assert.deepStrictEqual(struck, ['enderman'], `a hurt bot strikes the enderman that hit it: ${t.logs}`);
+  // ... and that one stays a threat after the 10 s of a hit: here 20 s ago and 5 blocks off it is still fought
+  t = mk([ender(5)]);
+  t.c.r.hits = [{t: Date.now() - 20000, by: 'enderman', id: 1}];
+  t.c.r.angry = new Set([1]);
+  await t.c.tick();
+  assert.ok(t.logs.some((l) => /^odds: 1 enderman -> /.test(l)), `the enderman that hit it is still weighed: ${t.logs}`);
+  // a calm one (another id, no hit) is left alone
+  t = mk([ender(2)]);
+  t.c.r.angry = new Set([99]);
+  await t.c.tick();
+  assert.deepStrictEqual(t.logs, [], 'a calm enderman is not fought');
 })().catch((e) => { console.error(e); process.exitCode = 1; });
