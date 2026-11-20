@@ -1336,7 +1336,7 @@ const NIGHT = [13000, 23000]; // timeOfDay in which hostile mobs spawn outside (
 // The keeper's trips out of the base (armoury, lighting): not at daybreak, while the night's mobs are still out (bot19 died twice on
 // an armoury trip sent the moment day began, 2026-11-19), and early enough that the round trip is back before dusk (13000):
 // an armoury count is 85-103 s out and about 100 s home, a delivery adds the withdraw at the base, 4000 to 5000 ticks in all;
-// one started at 8999 came home after 13000 and would dig a night shelter on the way (main server 2026-11-20).
+// one started at 8999 walks its last minute home after 13000, in the dark (main server 2026-11-20).
 const SAFE_TRIP = [1000, 8000];
 const NIGHT_JOBS = new Set(['chop', 'shift', 'treefarm', 'wheatfarm', 'cropfarm', 'hunt', 'mine', 'excavate', 'part', 'level', 'rim', 'tidy', 'get', 'highway']);
 const SHELTER_GROUND = /^(dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mud|clay|stone|andesite|diorite|granite|tuff|calcite|deepslate)$/; // nothing that falls
