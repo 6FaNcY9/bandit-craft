@@ -97,6 +97,8 @@ module.exports = async () => {
       assert.deepStrictEqual(names(B.surplusRock([s('andesite', 64), s('torch', 64), s('andesite', 3)], new Set(), rock)), ['andesite 64', 'andesite 3'], 'rock the build does not use goes, the torches stay');
       assert.deepStrictEqual(names(B.surplusRock([s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 64), s('cobblestone', 10)], new Set(['cobblestone']), rock)), ['cobblestone 64', 'cobblestone 10'], 'four stacks of what it uses stay, more than a restock takes');
       assert.deepStrictEqual(names(B.surplusRock([s('dirt', 64), s('dirt', 20)], new Set(), rock)), ['dirt 20'], 'one stack of dirt stays to climb');
+      // bot21 held dirt x11 before dirt x64: the stack-wise keep took 11 and threw the 64 away (K17, 2026-11-19 20:29).
+      assert.deepStrictEqual(names(B.surplusRock([s('dirt', 20), s('dirt', 64)], new Set(), rock)), ['dirt 20'], 'the big stack of dirt stays, whatever the order');
     }
     assert.deepStrictEqual(B.finishOf(false, ['1,2,3']), {noop: false}, 'some work done, a cell left: done, the cell reported');
     assert.match(B.finishOf(true, ['1,68,3', '2,68,3']).error, /no way to any of the 2 cells to clear: 1,68,3 2,68,3/, 'nothing reached: a failure (2026-10-20)');

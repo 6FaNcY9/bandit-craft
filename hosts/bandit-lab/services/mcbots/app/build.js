@@ -414,7 +414,8 @@ const USED_KEEP = 256;
 const DUG = /^(cobblestone|cobbled_deepslate|flint)$/;
 function surplusRock(items, uses, natural) {
   const kept = {}, out = [];
-  for (const it of items) {
+  // Largest stacks first: dirt x11 before dirt x64 kept the 11 and threw the 64 away (K17, 2026-11-19).
+  for (const it of [...items].sort((a, c) => c.count - a.count)) {
     if (!natural.test(it.name) && !DUG.test(it.name)) continue;
     const keep = it.name === SCAFFOLD ? SCAFFOLD_KEEP : uses.has(it.name) ? USED_KEEP : 0;
     if ((kept[it.name] || 0) + it.count <= keep) kept[it.name] = (kept[it.name] || 0) + it.count;
