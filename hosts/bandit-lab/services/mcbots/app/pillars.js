@@ -17,13 +17,10 @@ const record = (cells, x, y, z, name, tries = 0) => {
 };
 
 // A dig of cell c failed: keep it for a later job end, given up after the third failure (2026-11-17: 179 failed digs at
-// the castle had been forgotten at once). `add` 0 keeps it as it was (a Stop is no failed try).
+// the castle had been forgotten at once). `add` 0 keeps it as it was (a Stop is no failed try). Given up, it stays
+// recorded at the cap, untried (due): the block still stands, and the owner plans its removal from the record (K24).
 const MAX_TRIES = 3;
-const retry = (cells, c, add = 1) => {
-  const tries = (c.tries || 0) + add;
-  if (tries < MAX_TRIES) record(cells, c.x, c.y, c.z, c.name, tries);
-  else cells.delete(key(c.x, c.y, c.z));
-};
+const retry = (cells, c, add = 1) => record(cells, c.x, c.y, c.z, c.name, Math.min(MAX_TRIES, (c.tries || 0) + add));
 
 // Cells read back from the saved file (bots.js saveScaffold) after a restart; anything else in it is skipped.
 function restore(cells, list) {
@@ -59,6 +56,7 @@ function due(cells, {blockAt, protectedAt = () => false, target = null, near = 4
     if (!b) continue; // unloaded: not dug now, but still ours (kept for the report on respawn/end)
     if (b.name !== c.name) { cells.delete(k); continue; }
     if (protectedAt(c.x, c.z, c.y)) { cells.delete(k); continue; }
+    if ((c.tries || 0) >= MAX_TRIES) continue; // given up: recorded, not tried
     if (target && Math.hypot(c.x - target.x, c.z - target.z) <= near) continue;
     if (feet && within && Math.hypot(c.x + 0.5 - feet.x, c.y - feet.y, c.z + 0.5 - feet.z) > within) continue;
     if (feet && c.x === Math.floor(feet.x) && c.z === Math.floor(feet.z) && c.y < feet.y) continue;

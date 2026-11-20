@@ -48,7 +48,15 @@ const assert = require('node:assert');
     assert.strictEqual(s.get('1,70,1').tries, 1, 'a stop is no failed try');
     P.retry(s, s.get('1,70,1'));
     P.retry(s, s.get('1,70,1'));
-    assert.strictEqual(s.size, 0, 'the third failure gives it up');
+    // K24: given up, it stays recorded at the cap (a standing block, counted and listed for the owner's removal plan)
+    assert.strictEqual(s.get('1,70,1')?.tries, 3, 'the third failure gives up trying, the cell stays recorded');
+    P.retry(s, s.get('1,70,1'));
+    assert.strictEqual(s.get('1,70,1').tries, 3, 'at the cap');
+    const at = (name) => () => ({name, boundingBox: name === 'air' ? 'empty' : 'block'});
+    assert.deepStrictEqual(P.due(s, {blockAt: at('dirt')}), [], 'not tried again');
+    assert.strictEqual(s.size, 1, 'and still recorded');
+    P.due(s, {blockAt: at('air')});
+    assert.strictEqual(s.size, 0, 'gone from the world: gone from the record');
     const fake = {scaffoldFile: path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'scaffold-')), '.scaffold-bot1.json'), pillars: new Map(), stray: new Map()};
     P.record(fake.pillars, 2, 64, 2, 'dirt');
     P.record(fake.stray, 3, 64, 3, 'cobblestone', 2);
