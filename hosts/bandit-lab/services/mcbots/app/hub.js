@@ -77,6 +77,7 @@ function cleanSnapshot(s) {
     inventory: list(s.inventory, 80, (q) => str(q, 60)),
     awayChests: list(s.awayChests, 20, (q) => str(q, 40)),
     inventoryKinds: int(s.inventoryKinds),
+    scaffold: int(s.scaffold), // its pillar and stray cells still to dig back (K19)
     armour: list(s.armour, 4, (a) => optStr(a, 48)),
     lastError: str(s.lastError, 300),
     lastErrorAgoS: num(s.lastErrorAgoS),

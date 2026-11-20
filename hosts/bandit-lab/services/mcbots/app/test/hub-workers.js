@@ -162,6 +162,11 @@ const {BotRunner} = require('../bots');
   r.current = {id: 9, type: 'mine', args: {block: 'stone', count: 8}, progress: '2/8', startedAt: Date.now() - 5000, t: {doing: 'mining stone 2/8 near 1 2 3', done: 2, total: 8}};
   let sn = r.snapshot();
   assert.deepStrictEqual([sn.activity, sn.job.done, sn.job.total, sn.job.type], ['mining stone 2/8 near 1 2 3', 2, 8, 'mine']);
+  // K19: the scaffold debt (recorded pillar cells + stray cells) shows, from a worker too
+  r.pillars.set('1,64,1', {}).set('1,65,1', {});
+  r.stray.set('9,70,9', {});
+  assert.strictEqual(r.snapshot().scaffold, 3);
+  r.pillars.clear(); r.stray.clear();
   r.dead = true;
   assert.strictEqual(r.activity(), 'dead - respawning');
   r.dead = false;
@@ -180,6 +185,7 @@ const {BotRunner} = require('../bots');
   const cs = cleanSnapshot({...sn, tool: {name: 5, max: -1, left: 'x'}, queueIds: [1, 'a', -3], activity: 'x'.repeat(999)});
   assert.deepStrictEqual([cs.tool, cs.queueIds, cs.activity.length, cs.job.done, cs.job.total], [{name: '', max: 0, left: null}, [1, 0, 0], 200, 2, 8]);
   assert.deepStrictEqual(cleanSnapshot(null).queueIds, []);
+  assert.deepStrictEqual([cleanSnapshot({scaffold: 7}).scaffold, cleanSnapshot({scaffold: 'x'}).scaffold, cleanSnapshot({}).scaffold], [7, 0, 0], 'a worker bot\'s scaffold debt reaches /api/state (K19)');
   // a worker bot's night shelter reaches the hub, or the agents order it out of its hole (bot2/bot3, 2026-10-15)
   assert.deepStrictEqual([cleanSnapshot({sheltered: true}).sheltered, cleanSnapshot({sheltered: 'yes'}).sheltered], [true, false]);
   assert.deepStrictEqual([cleanSnapshot({safeTrip: true}).safeTrip, cleanSnapshot({safeTrip: 'yes'}).safeTrip, cleanSnapshot({}).safeTrip], [true, null, null], 'the keeper sends a worker bot out by it');
