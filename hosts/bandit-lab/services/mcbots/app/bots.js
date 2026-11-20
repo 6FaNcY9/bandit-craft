@@ -2261,8 +2261,9 @@ async function unpillar(r, job, target = null) {
   for (const c of cells) {
     guard(job);
     if (failed >= TIDY_FAILS) return;
-    // A failed top cell left the same block on this one: digging it would leave a floating stub (K15, 2026-11-19).
-    if (blockAt(c.x, c.y + 1, c.z)?.name === c.name) continue;
+    // A recorded cell still on top (a failed one goes to r.stray): digging this one would leave a floating stub (K15, 2026-11-19).
+    const up = pillars.key(c.x, c.y + 1, c.z);
+    if (r.pillars.has(up) || r.stray?.has(up)) continue;
     r.pillars.delete(pillars.key(c.x, c.y, c.z));
     try {
       await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);

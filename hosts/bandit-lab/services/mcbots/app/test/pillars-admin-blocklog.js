@@ -94,8 +94,8 @@ const assert = require('node:assert');
   const {Vec3} = require('vec3');
   const P = require('../pillars');
   // Every recorded cell is dirt that needs a tool the bot lacks: each dig attempt fails at once, with a message.
-  const runner = (cells, into = 'pillars') => {
-    const world = new Set(cells.map(([x, y, z]) => P.key(x, y, z)));
+  const runner = (cells, into = 'pillars', foreign = []) => {
+    const world = new Set([...cells, ...foreign].map(([x, y, z]) => P.key(x, y, z)));
     const msgs = [], r = {pillars: new Map(), stray: new Map(), protectedAreas: [], emit: (k, m) => msgs.push(m),
       bot: {entity: {position: new Vec3(0.5, 64, 0.5)}, inventory: {items: () => []}, registry: {items: {}},
         blockAt: (p) => (world.has(P.key(p.x, p.y, p.z)) ? {name: 'dirt', boundingBox: 'block', harvestTools: {999: true}} : {name: 'air', boundingBox: 'empty'})}};
@@ -114,6 +114,9 @@ const assert = require('node:assert');
   assert.deepStrictEqual(msgs.length, 1, 'only the top cell is tried');
   assert.deepStrictEqual([...r.pillars.keys()].sort(), ['20,64,0', '20,65,0'], 'the cells under a failed top stay recorded');
   assert.strictEqual(r.stray.get('20,66,0').tries, 1, 'the failed top is kept for a later job end');
+  ({r, msgs} = runner([[12, 64, 0]], 'pillars', [[12, 65, 0]])); // the same dirt on top, but not ours (a shaft's support, natural dirt)
+  await unpillar(r, job);
+  assert.ok(/^pillar at 12 64 0 left standing/.test(msgs[0]), 'a pillar under a same-named block that is not recorded is dug');
   ({r, msgs} = runner([[5, 64, 0], [6, 65, 3], [7, 66, 6]]));
   await unpillar(r, job);
   assert.deepStrictEqual([msgs.length, [...r.pillars.keys()]], [2, ['5,64,0']], 'the pass stops after 2 failed digs, the rest stays recorded');
