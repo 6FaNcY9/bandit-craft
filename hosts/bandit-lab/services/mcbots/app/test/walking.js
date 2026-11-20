@@ -192,6 +192,27 @@ const assert = require('node:assert');
   r.noPlace = true;
   assert.ok(mv.exclusionPlace(cell) >= 100, 'the tidy walk places none');
 }
+{ // job-end tidy: no higher than 2 above where the job ended, never onto its own scaffold (K24): bot21 walked up its old dirt
+  // at the outpost's south wall to y 79 and dropped into the open shaft top (main server 2026-11-20 05:52, 06:09 CET)
+  const {safeMovements} = require('../bots');
+  const {Movements} = require('mineflayer-pathfinder');
+  const {Vec3} = require('vec3');
+  const EventEmitter = require('node:events');
+  const registry = require('minecraft-data')('26.1');
+  const bot = Object.assign(new EventEmitter(), {registry, entity: {position: new Vec3(0, 70, 0)}, pathfinder: {}, blockAt: () => ({name: 'air', boundingBox: 'empty'})});
+  const moves = [{x: 1, y: 70, z: 0}, {x: 2, y: 72, z: 0}, {x: 3, y: 73, z: 0}, {x: 4, y: 71, z: 0}, {x: 5, y: 71, z: 0}];
+  const own = Movements.prototype.getNeighbors;
+  Movements.prototype.getNeighbors = () => moves;
+  try {
+    const r = {tidyTop: null, pillars: new Map([['4,70,0', {}]]), stray: new Map([['5,70,0', {}]])};
+    const mv = safeMovements(bot, [], r);
+    assert.strictEqual(mv.getNeighbors({}).length, 5, 'a job walk goes anywhere');
+    r.tidyTop = 72;
+    assert.deepStrictEqual(mv.getNeighbors({}).map((m) => m.x), [1, 2], 'the tidy: not above y 72, not onto a recorded cell');
+  } finally {
+    Movements.prototype.getNeighbors = own;
+  }
+}
 
 (async () => { // parkour: no jump over a deep gap, a shallow gap is still jumped (five falls at the tower, 2026-11-17)
   const {safeMovements} = require('../bots');

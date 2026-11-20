@@ -1080,6 +1080,9 @@ class BotRunner {
     this.digOnly = TIDY_DIG;
     // Nor does it place a block: bot2's unpillar climbed its own 40-high pillar again and the next job started up there (K15, 2026-11-19).
     this.noPlace = true;
+    // Nor does it climb: no higher than 2 above where the job ended, never onto its own scaffold (safeMovements). bot21 walked
+    // up its old dirt at the outpost to y 79 and dropped into the open shaft top (K24, main server 2026-11-20).
+    this.tidyTop = this.bot?.entity ? Math.floor(this.bot.entity.position.y) + 2 : null;
     // A few of the floating leftovers an earlier death or failed dig left within reach, so the world tidies as the bots
     // work; first, so a pillar this job end fails to dig waits for a later one instead of a second try from the same spot.
     if (!job.cancelled && this.online) await clearStray(this, job).catch(() => {});
@@ -1094,6 +1097,7 @@ class BotRunner {
     this.current = null;
     this.digOnly = null;
     this.noPlace = false;
+    this.tidyTop = null;
     this.digBox = null;
     const spare = this.online && !this.dead && this.prefs?.chest ? ownSpare(this) : [];
     if (shouldEmpty(job, this.queue, this.prefs, spare.length)) {
@@ -1256,6 +1260,13 @@ function safeMovements(bot, areas, runner = null) {
   // Nothing on a chest's lid: towers over the storage room's chests were dug away 400 times (main server 2026-10-19).
   const lid = (blk) => (/(^|_)chest$|shulker_box$/.test(bot.blockAt(blk.position.offset(0, -1, 0))?.name || '') ? 100 : 0);
   mv.exclusionAreasPlace = [veto, lid, () => (runner?.noPlace ? 100 : 0)];
+  // The job-end tidy's walk (BotRunner tidyTop): no node above tidyTop, none standing on a recorded scaffold cell (K24).
+  const neighbors = mv.getNeighbors.bind(mv);
+  const own = (x, y, z) => !!(runner.pillars?.has(pillars.key(x, y, z)) || runner.stray?.has(pillars.key(x, y, z)));
+  mv.getNeighbors = (node) => {
+    const out = neighbors(node);
+    return runner?.tidyTop == null ? out : out.filter((m) => m.y <= runner.tidyTop && !own(m.x, m.y - 1, m.z));
+  };
   // An unloaded cell is the library's stand-in without a position: it threw here and took the hub down (2026-11-07). Never there.
   for (const k of ['exclusionAreasBreak', 'exclusionAreasPlace']) mv[k] = mv[k].map((f) => (blk) => (blk?.position ? f(blk) : 100));
   const spawner = bot.registry.blocksByName.spawner?.id;
@@ -2267,6 +2278,7 @@ async function unpillar(r, job, target = null) {
   for (const c of cells) {
     guard(job);
     if (failed >= TIDY_FAILS) return;
+    if (outOfTidyReach(r, c)) continue;
     // A recorded cell still on top (a failed one goes to r.stray): digging this one would leave a floating stub (K15, 2026-11-19).
     const up = pillars.key(c.x, c.y + 1, c.z);
     if (r.pillars.has(up) || r.stray?.has(up)) continue;
@@ -2286,6 +2298,8 @@ async function unpillar(r, job, target = null) {
 // ("Took to long to decide path") and was left up at y 94 (K15, main server 2026-11-19).
 const UNPILLAR_REACH = 32;
 const TIDY_FAILS = 2; // failed digs per job-end pass; the rest waits for a later job end (K15)
+const TIDY_REACH_UP = 5; // standing at most at tidyTop, a cell higher than this above it is out of reach: kept, not tried (K24)
+const outOfTidyReach = (r, c) => r.tidyTop != null && c.y > r.tidyTop + TIDY_REACH_UP;
 const STRAY_REACH = 40; // blocks from the bot: a dead life's leftover scaffold is dug when a later job ends this close, never a trek across the world
 const STRAY_PER_JOB = 16; // at most this many per job end, so a finish stays quick; a tall column comes down top-down over the next few finishes
 
@@ -2302,6 +2316,7 @@ async function clearStray(r, job) {
   for (const c of cells) {
     guard(job);
     if (failed >= TIDY_FAILS) return;
+    if (outOfTidyReach(r, c)) continue;
     r.stray.delete(pillars.key(c.x, c.y, c.z));
     try {
       await digAt(r, job, new Vec3(c.x, c.y, c.z), (n) => n === c.name);

@@ -120,6 +120,13 @@ const assert = require('node:assert');
   ({r, msgs} = runner([[5, 64, 0], [6, 65, 3], [7, 66, 6]]));
   await unpillar(r, job);
   assert.deepStrictEqual([msgs.length, [...r.pillars.keys()]], [2, ['5,64,0']], 'the pass stops after 2 failed digs, the rest stays recorded');
+  // K24: at the job end a cell more than 5 above the tidy's top stays recorded, untried (bot21 walked up its old dirt, 2026-11-20)
+  for (const [into, tidy] of [['pillars', unpillar], ['stray', clearStray]]) {
+    ({r, msgs} = runner([[3, 72, 0]], into));
+    r.tidyTop = 66;
+    await tidy(r, job);
+    assert.deepStrictEqual([msgs.length, [...r[into].values()].map((c) => c.tries || 0)], [0, [0]], `${into}: out of reach from y 66, kept untried`);
+  }
   ({r, msgs} = runner([[5, 64, 0], [6, 65, 3], [7, 66, 6]], 'stray'));
   await clearStray(r, job);
   assert.deepStrictEqual([...r.stray.values()].map((c) => c.tries || 0).sort(), [0, 1, 1], 'clearStray too stops after 2 failed digs');
