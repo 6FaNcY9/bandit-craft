@@ -30,7 +30,14 @@ state live under `C:\bandit-ai\runtime`; logs rotate `watch.log` at 5 MiB to
 `watch.log.1`.
 
 Install from **Windows PowerShell as administrator**, logged in as the gaming
-account (or pass its local account name with `-UserName`). No download, archive
+account (or pass its local account name with `-UserName`). Several people who
+game on the same PC each get a watcher: `-UserName yassi,vino` registers
+`bandit-ai-watch-yassi` and `bandit-ai-watch-vino`, gives both accounts the same
+read/`runtime` rights, and removes watcher tasks of accounts no longer listed
+(including the single `bandit-ai-watch` of older installs). The first name is
+the tunnel's SSH account (`tools/winpc/pcs.nix`). With fast user switching only
+the watcher in the console session publishes `gpu.json` and runs the server; a
+watcher in another session stops just its own server. No download, archive
 extraction or model hashing runs in the foreground. Allow about two minutes for
 local setup; OpenSSH installation and low-priority BITS downloads continue in a
 hidden SYSTEM task, including after logout. That timing has not been measured on
@@ -57,6 +64,16 @@ real public keys for the two placeholders:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\bandit-install.ps1" -UserName yassi -TunnelPublicKey 'ssh-ed25519 AAAA... lab-tunnel' -CoordinatorPublicKey 'ssh-ed25519 AAAA... coordinator'
 ```
+
+Once the PC manager owns the keys (`C:\bandit-ai\agent\keys.json` exists) the
+key parameters may be left out; a rerun that only changes the accounts is:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\bandit-install.ps1" -UserName yassi,vino
+```
+
+Afterwards rerun `install-agent.ps1` (or `pc-admin run`) with the same accounts in
+`-WatcherUser`, or its next rerun narrows `runtime` to the saved account again.
 
 **Paste-the-file**, including a fresh PC without SSH: open Notepad, paste the
 entire repository `install.ps1`, and save it as `bandit-install.ps1` on the
@@ -96,8 +113,8 @@ provisioning until the owner explicitly moves it aside.
 Uninstall (stopping the watcher leaves its last server running):
 
 ```powershell
-Stop-ScheduledTask bandit-ai-watch
-Unregister-ScheduledTask bandit-ai-watch -Confirm:$false
+Get-ScheduledTask 'bandit-ai-watch*' | Stop-ScheduledTask
+Get-ScheduledTask 'bandit-ai-watch*' | Unregister-ScheduledTask -Confirm:$false
 Remove-Item C:\bandit-ai\watch.ps1
 # If desired, stop only the bandit-ai server PID shown by this query:
 Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" | Select-Object ProcessId,ExecutablePath,CommandLine

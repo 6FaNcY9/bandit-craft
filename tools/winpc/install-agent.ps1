@@ -3,7 +3,8 @@ param(
     [string]$Fqdn,
     [int]$Port = 8443,
     [object]$Access,
-    [string]$WatcherUser,
+    # The account(s) the watcher runs as (one per person who games on this PC); each may write runtime\.
+    [string[]]$WatcherUser = @(),
     # Part 0, the PC's SSH keys (all five together, or none to keep the saved ones): the lab's tunnel
     # key, the laptop's finger-gated pc-admin key, Claude's read-only diag key, and their addresses.
     [string]$TunnelPublicKey,
@@ -45,7 +46,7 @@ function Assert-NoLinks([string]$Path) {
         $cursor = $parent
     }
 }
-function Set-ExactAcl([string]$Path, [string]$ReadSid = '', [string]$Rights = 'ReadAndExecute') {
+function Set-ExactAcl([string]$Path, [string[]]$ReadSid = @(), [string]$Rights = 'ReadAndExecute') {
     $item = Get-Item -LiteralPath $Path -Force
     $acl = if ($item.PSIsContainer) { New-Object Security.AccessControl.DirectorySecurity } else { New-Object Security.AccessControl.FileSecurity }
     $acl.SetAccessRuleProtection($true, $false)
@@ -55,8 +56,8 @@ function Set-ExactAcl([string]$Path, [string]$ReadSid = '', [string]$Rights = 'R
     foreach ($sid in 'S-1-5-32-544','S-1-5-18') {
         $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), 'FullControl', $inherit, 'None', 'Allow')))
     }
-    if ($ReadSid) {
-        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($ReadSid)), $Rights, $inherit, 'None', 'Allow')))
+    foreach ($sid in @($ReadSid | Where-Object { $_ })) {
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), $Rights, $inherit, 'None', 'Allow')))
     }
     Set-Acl -LiteralPath $Path -AclObject $acl
 }
@@ -104,7 +105,7 @@ function Write-AtomicBytes([string]$Path, [byte[]]$Bytes) {
         Move-Item -LiteralPath $tmp -Destination $Path -Force
     } finally { if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue } }
 }
-function Protect-Tree([string]$Path, [string]$ReadSid = '') {
+function Protect-Tree([string]$Path, [string[]]$ReadSid = @()) {
     Assert-NoLinks $Path
     Set-ExactAcl $Path $ReadSid
     foreach ($item in Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop) {
@@ -268,8 +269,9 @@ function Install-Agent {
     if ($Fqdn -notmatch '^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$' -or $Fqdn -notmatch '\.') { throw 'Fqdn is invalid.' }
     $Fqdn = $Fqdn.ToLowerInvariant()
     if ($Port -lt 1 -or $Port -gt 65535) { throw 'Port is invalid.' }
-    $watcherSid = if ($WatcherUser) { ([Security.Principal.NTAccount]$WatcherUser).Translate([Security.Principal.SecurityIdentifier]).Value } else { $saved.watcherSid }
-    if ($watcherSid -notmatch '^S-1-5-21-[0-9-]+$') { throw 'WatcherUser is required (the account the watcher runs as).' }
+    # A config from before several watcher accounts holds one SID as a string; @() reads both.
+    $watcherSid = @(if ($WatcherUser) { foreach ($u in $WatcherUser) { ([Security.Principal.NTAccount]$u).Translate([Security.Principal.SecurityIdentifier]).Value } } else { $saved.watcherSid })
+    if (-not $watcherSid.Count -or @($watcherSid | Where-Object { $_ -notmatch '^S-1-5-21-[0-9-]+$' }).Count) { throw 'WatcherUser is required (the account(s) the watcher runs as).' }
     $accessMap = Resolve-Access $Access
     $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
     if (-not (Test-Path -LiteralPath $tailscale -PathType Leaf)) { throw "Tailscale not found at $tailscale" }
@@ -286,7 +288,7 @@ function Install-Agent {
     foreach ($p in @($agent,$state,$control,"$agent\run")) { Assert-NoLinks $p }
     Protect-Tree $agent
     Protect-Tree $control $watcherSid
-    Write-AtomicBytes "$agent\config.json" ([Text.Encoding]::ASCII.GetBytes((@{ fqdn=$Fqdn; port=$Port; tailscale=$tailscale; watcherSid=$watcherSid } | ConvertTo-Json -Compress)))
+    Write-AtomicBytes "$agent\config.json" ([Text.Encoding]::ASCII.GetBytes((@{ fqdn=$Fqdn; port=$Port; tailscale=$tailscale; watcherSid=@($watcherSid) } | ConvertTo-Json -Compress)))
     Write-AtomicBytes "$agent\access.json" ([Text.Encoding]::ASCII.GetBytes(($accessMap | ConvertTo-Json -Compress)))
     Set-ExactAcl "$agent\config.json"
     Set-ExactAcl "$agent\access.json"
